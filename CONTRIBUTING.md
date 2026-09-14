@@ -29,7 +29,6 @@ of change goes.
   ever computed by `MediaScanner.photoId()`.
 - No new dependency without a reason in the pull request, and never one that sends data anywhere.
 - The design stays flat: 2 dp corners, one accent colour, hairlines instead of shadows, no text smaller than 14.
-- No attribution to code generators in commits, comments or documentation.
 
 ## Security rules every change keeps
 
