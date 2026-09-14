@@ -67,6 +67,10 @@ one per phone. No photo backup, no Google account, no ads, no analytics.
    [opensolr-photos.apk](https://github.com/phpcip/opensolr-photos/releases/latest/download/opensolr-photos.apk).
 2. Allow your browser to install it when Android asks.
 3. Open **Opensolr Photos**, sign in, pick your folders. The first sync starts on its own.
+4. **Xiaomi, Redmi, POCO, Huawei, OnePlus, Oppo, Vivo:** these phones stop background apps to save
+   battery, which stops a sync halfway. Open the phone's settings for the app, set battery to
+   **No restrictions** (Xiaomi: *Battery saver* → *No restrictions*, and turn on *Autostart*). The sync
+   resumes where it stopped, so nothing is lost, but without this it only advances while the app is open.
 
 The APK is signed with the Opensolr Photos release key. SHA-256 of the signing certificate:
 

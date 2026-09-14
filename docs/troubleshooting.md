@@ -29,6 +29,12 @@ index from it first.
 Open the Sync screen. If a sync is running, they are on their way. Otherwise check that the photo's folder
 is ticked under **Folders being indexed**, then **Force Re-Sync**.
 
+**The sync stops when I leave the app (Xiaomi, Redmi, POCO, Huawei, OnePlus, Oppo, Vivo).**
+These phones kill background apps to save battery. The sync resumes where it stopped the next time it
+runs, so nothing is lost, but it only advances while the app is open. Fix it once: phone settings for
+the app, battery set to **No restrictions** (Xiaomi: *Battery saver* → *No restrictions*, and *Autostart*
+on). Details per brand: https://dontkillmyapp.com
+
 **"A sync is already running."**
 Only one sync runs at a time. It finishes on its own; watch it on the Sync screen.
 
