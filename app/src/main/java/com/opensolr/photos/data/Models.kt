@@ -43,7 +43,28 @@ data class AccountLimits(
     val bandwidthUsedMb: Double,
     val indexedDocs: Long,
     val refreshedAt: Long,
+    /** What the plan costs per [recurrence], 0 when free or corporate. */
+    val price: Double = 0.0,
+    /** The billing period as the platform names it: "1 Month", "1 Year", "3 Months". */
+    val recurrence: String = "",
 ) {
+
+    /**
+     * The plan as shown to the owner: the price and its period when there is one, "€2,815 / month",
+     * otherwise the plan's name.
+     */
+    val planLabel: String get() {
+        if (price <= 0.0) return plan.ifBlank { "Opensolr" }
+        val amount = java.text.NumberFormat.getIntegerInstance(java.util.Locale.US).format(Math.round(price))
+        val period = recurrence.trim().lowercase().let { r ->
+            when {
+                r.isBlank() -> "month"
+                r.startsWith("1 ") -> r.removePrefix("1 ")
+                else -> r
+            }
+        }
+        return "€$amount / $period"
+    }
 
     /**
      * AI requests one new photo costs: one, for its words and their vector together
@@ -110,6 +131,9 @@ data class AccountLimits(
             bandwidthUsedMb = if (json.has("bandwidth_used_mb")) json.optDouble("bandwidth_used_mb") else previous?.bandwidthUsedMb ?: 0.0,
             indexedDocs = if (json.has("indexed_docs")) json.optLong("indexed_docs") else previous?.indexedDocs ?: 0L,
             refreshedAt = if (json.has("refreshed_at")) json.optLong("refreshed_at") else System.currentTimeMillis(),
+            // The platform formats the price with thousands separators ("2,815.20"): a number again here.
+            price = if (json.has("price")) json.optString("price").replace(",", "").toDoubleOrNull() ?: previous?.price ?: 0.0 else previous?.price ?: 0.0,
+            recurrence = if (json.has("recurrence")) json.optString("recurrence") else previous?.recurrence ?: "",
         )
     }
 }

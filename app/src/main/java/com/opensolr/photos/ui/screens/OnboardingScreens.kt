@@ -135,7 +135,7 @@ fun WelcomeScreen(state: UiState, viewModel: AppViewModel) {
             }
 
             SectionLabel("What your plan covers")
-            InfoRow("Plan", account.plan.ifBlank { "Opensolr" })
+            InfoRow("Plan", account.planLabel, onOpen = { Actions.openUrl(context, Actions.DASHBOARD_URL) })
             InfoRow("Search by meaning", if (account.vectorAllowed) "Included" else "Not included")
             InfoRow(
                 "Photos you can add per month",

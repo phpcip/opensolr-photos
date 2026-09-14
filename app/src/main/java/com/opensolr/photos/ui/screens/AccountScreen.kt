@@ -52,7 +52,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
 
         SectionLabel("Signed in")
         InfoRow("Email", state.email ?: "")
-        account?.let { InfoRow("Plan", it.plan.ifBlank { "Opensolr" }) }
+        account?.let { InfoRow("Plan", it.planLabel, onOpen = { Actions.openUrl(context, Actions.DASHBOARD_URL) }) }
         state.indexName?.let { InfoRow("This phone's index", it) }
         state.environment?.takeIf { it.isNotBlank() }?.let { InfoRow("Environment", it) }
         Spacer(Modifier.height(24.dp))

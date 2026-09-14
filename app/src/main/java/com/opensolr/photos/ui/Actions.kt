@@ -20,6 +20,7 @@ import java.util.TimeZone
 object Actions {
 
     const val PRICING_URL = "https://opensolr.com/pricing"
+    const val DASHBOARD_URL = "https://opensolr.com/admin/solr_manager/dashboard"
     const val PROJECT_URL = "https://opensolr.com/opensolr-photos"
 
     /**

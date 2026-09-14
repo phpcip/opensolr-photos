@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
@@ -23,6 +24,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.ui.res.painterResource
+import com.opensolr.photos.R
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -128,12 +131,20 @@ fun Notice(text: String, modifier: Modifier = Modifier, title: String? = null) {
  * A "label: value" row with a hairline under it.
  */
 @Composable
-fun InfoRow(label: String, value: String) {
+fun InfoRow(label: String, value: String, onOpen: (() -> Unit)? = null) {
     val p = LocalPalette.current
     Column(Modifier.fillMaxWidth()) {
-        Row(Modifier.fillMaxWidth().padding(vertical = 13.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.Top) {
+        Row(Modifier.fillMaxWidth().padding(vertical = 13.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
             Text(label, style = MaterialTheme.typography.bodyMedium, color = p.muted, modifier = Modifier.padding(end = 16.dp))
-            Text(value, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = p.ink, maxLines = 3, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(value, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = p.ink, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                // A small "open" arrow: the row leads somewhere (the account on opensolr.com).
+                if (onOpen != null) {
+                    IconButton(onClick = onOpen, modifier = Modifier.size(28.dp).padding(start = 6.dp)) {
+                        Icon(painterResource(R.drawable.ic_open), contentDescription = "Open on opensolr.com", tint = p.accent, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
         }
         HorizontalDivider(color = p.hairline, thickness = 1.dp)
     }
