@@ -24,6 +24,8 @@ import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -54,7 +56,6 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.opensolr.photos.R
 import com.opensolr.photos.search.PhotoPin
-import com.opensolr.photos.ui.AccentButton
 import com.opensolr.photos.ui.Actions
 import com.opensolr.photos.ui.AppViewModel
 import com.opensolr.photos.ui.Notice
@@ -167,6 +168,17 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
                 "${Actions.formatCount(state.pins.size.toLong())} with a place",
                 style = MaterialTheme.typography.bodySmall, color = p.muted,
             )
+            // Search this area: the visible map becomes a radius filter on the photos.
+            IconButton(onClick = {
+                // Radius = distance from the centre to the farthest visible corner, rounded up.
+                val box = mapView.boundingBox
+                val center = GeoPoint(box.centerLatitude, box.centerLongitude)
+                val corner = GeoPoint(box.latNorth, box.lonEast)
+                val km = max(0.5, ceil(center.distanceToAsDouble(corner) / 100.0) / 10.0)
+                viewModel.searchNear(center.latitude, center.longitude, km)
+            }) {
+                Icon(Icons.Filled.Search, contentDescription = "Search this area", tint = p.accent, modifier = Modifier.size(22.dp))
+            }
             IconButton(onClick = { fitted = false; viewModel.loadPins() }, enabled = !state.pinsLoading) {
                 Icon(painterResource(R.drawable.ic_reload), contentDescription = "Reload", tint = p.accent, modifier = Modifier.size(20.dp))
             }
@@ -186,21 +198,6 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
         Box(Modifier.fillMaxSize()) {
             // clipToBounds: osmdroid paints tiles beyond its bounds otherwise, over the header.
             AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize().clipToBounds())
-            AccentButton(
-                "Search this area",
-                onClick = {
-                    // Radius = distance from the centre to the farthest visible corner, rounded up.
-                    val box = mapView.boundingBox
-                    val center = GeoPoint(box.centerLatitude, box.centerLongitude)
-                    val corner = GeoPoint(box.latNorth, box.lonEast)
-                    val km = max(0.5, ceil(center.distanceToAsDouble(corner) / 100.0) / 10.0)
-                    viewModel.searchNear(center.latitude, center.longitude, km)
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(horizontal = 20.dp, vertical = 20.dp)
-                    .fillMaxWidth(),
-            )
         }
     }
 
