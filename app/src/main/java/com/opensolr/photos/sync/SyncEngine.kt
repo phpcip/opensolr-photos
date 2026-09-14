@@ -222,7 +222,8 @@ class SyncEngine(private val context: Context) {
                 else
                     "$n indexed without being read into words: the monthly AI requests of your plan are used up. They are read at the first sync after the allowance resets, or now after an upgrade."
             }
-            return report("ok", added, deleted, failed, localCount, indexCount, message, recreated)
+            val indexAfter = try { solr.count().toInt() } catch (e: Exception) { indexCount - deleted + added }
+            return report("ok", added, deleted, failed, localCount, indexCount, message, recreated, indexAfter)
         } catch (e: CancellationException) {
             throw e
         } catch (e: SignInRequiredException) {
@@ -512,7 +513,8 @@ class SyncEngine(private val context: Context) {
         indexCount: Int = 0,
         message: String = "",
         recreated: Boolean = false,
-    ) = SyncReport(System.currentTimeMillis(), status, added, deleted, failed, localCount, indexCount, message, recreated)
+        indexAfter: Int = indexCount,
+    ) = SyncReport(System.currentTimeMillis(), status, added, deleted, failed, localCount, indexCount, message, recreated, indexAfter)
 
     /**
      * Solr date format in UTC.

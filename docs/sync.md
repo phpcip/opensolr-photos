@@ -123,8 +123,9 @@ A run never has to start over: the next Re-Sync compares ids again and only adds
 ## The Sync screen
 
 - **Status**: running with phase and progress, waiting for network, or the outcome of the last run.
-- **Last sync**: finish time (mm/dd/yyyy hh:mm:ss), result, photos in your folders, added, removed,
-  skipped, and a note if the index had to be recreated.
+- **Last sync**: what the run did (*3 synced · 1 removed*) for a few seconds after it finishes, then the
+  finish time (mm/dd/yyyy hh:mm:ss), the result, the photos in your folders, the photos in your index as
+  they are now (`indexAfter`), and a note if the index had to be recreated.
 - **Force Re-Sync.**
 - **Automatic Re-Sync**: every week or every month.
 - **Folders being indexed**, and Change folders.

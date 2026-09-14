@@ -133,6 +133,7 @@ enum class SyncSchedule(val days: Long) {
  * @property failed      photos that could not be read and were skipped
  * @property localCount  photos found in the chosen folders
  * @property indexCount  documents the index held before the run
+ * @property indexAfter  documents the index holds after the run (what the Sync screen shows)
  * @property message     human-readable detail for failures
  * @property recreated   true when the index had disappeared and was created again
  */
@@ -146,6 +147,7 @@ data class SyncReport(
     val indexCount: Int,
     val message: String,
     val recreated: Boolean,
+    val indexAfter: Int = 0,
 ) {
 
     /**
@@ -161,6 +163,7 @@ data class SyncReport(
         .put("index_count", indexCount)
         .put("message", message)
         .put("recreated", recreated)
+        .put("index_after", indexAfter)
         .toString()
 
     companion object {
@@ -181,6 +184,7 @@ data class SyncReport(
                     indexCount = json.optInt("index_count"),
                     message = json.optString("message"),
                     recreated = json.optBoolean("recreated"),
+                    indexAfter = json.optInt("index_after"),
                 )
             }
         } catch (e: Exception) {

@@ -17,6 +17,12 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.StrokeCap
@@ -74,13 +80,26 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
         Spacer(Modifier.height(20.dp))
 
         state.lastReport?.let { report ->
+            // What the last run did, shown briefly after it finishes, then gone: the rows below
+            // always say what is true now, not what one run changed.
+            var showOutcome by remember(report.finishedAt) { mutableStateOf(System.currentTimeMillis() - report.finishedAt < OUTCOME_VISIBLE_MS) }
+            LaunchedEffect(report.finishedAt) {
+                if (showOutcome) { delay(OUTCOME_VISIBLE_MS); showOutcome = false }
+            }
+            if (showOutcome && report.status == "ok") {
+                val parts = buildList {
+                    if (report.added > 0) add("${Actions.formatCount(report.added.toLong())} synced")
+                    if (report.deleted > 0) add("${Actions.formatCount(report.deleted.toLong())} removed")
+                    if (report.failed > 0) add("${Actions.formatCount(report.failed.toLong())} skipped")
+                }
+                Text(if (parts.isEmpty()) "Nothing to sync" else parts.joinToString(" · "), style = MaterialTheme.typography.bodyMedium, color = p.accent)
+                Spacer(Modifier.height(14.dp))
+            }
             SectionLabel("Last sync")
             InfoRow("Finished", Actions.formatDate(report.finishedAt))
             InfoRow("Result", resultLabel(report.status))
             InfoRow("Photos in your folders", Actions.formatCount(report.localCount.toLong()))
-            InfoRow("Added to the index", Actions.formatCount(report.added.toLong()))
-            InfoRow("Removed from the index", Actions.formatCount(report.deleted.toLong()))
-            if (report.failed > 0) InfoRow("Skipped (unreadable)", Actions.formatCount(report.failed.toLong()))
+            InfoRow("Photos in your index", Actions.formatCount(report.indexAfter.toLong()))
             if (report.message.isNotBlank()) {
                 Spacer(Modifier.height(14.dp))
                 Notice(report.message)
@@ -138,6 +157,9 @@ private fun ScheduleOption(label: String, selected: Boolean, onSelect: () -> Uni
 /**
  * One line summing up the state when nothing runs.
  */
+/** How long the outcome of a finished run stays on screen. */
+private const val OUTCOME_VISIBLE_MS = 8000L
+
 private fun statusLine(state: UiState): String {
     val report = state.lastReport ?: return "No sync has run yet."
     return when (report.status) {
