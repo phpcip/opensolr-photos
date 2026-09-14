@@ -8,7 +8,8 @@
 
 Opensolr Photos is a free, open source Android app that turns the photo folders on your phone into a
 search engine. Type *dog on the beach*, *birthday cake* or *snow in the mountains*, narrow it down by year,
-folder, camera or place, and tap a result to open it in Google Photos or your phone's own gallery.
+folder, camera, city or country, see them on a map, and tap a result to open it in Google Photos or your
+phone's own gallery.
 
 The search engine behind it is **your own Opensolr Index**, created by the app in your Opensolr account,
 one per phone. No photo backup, no Google account, no ads, no analytics.
@@ -25,9 +26,12 @@ one per phone. No photo backup, no Google account, no ads, no analytics.
 | | |
 |---|---|
 | **Search by meaning** | Every photo is read into words describing what it shows. On a plan with vector search, your query is matched on meaning too, so *puppy* finds the photos read as *dog*. |
-| **Filters** | Year, folder, camera, orientation, and photos with a location. The filter values come from your own photos. |
+| **Filters** | Year, folder, camera make and model, city, region, country, orientation, a radius around a point, and photos with a location. The filter values come from your own photos. |
+| **Your own tags and words** | Press and hold a photo, edit its tags (a name, an event) and the words that describe it. Your words always win over what Opensolr saw, and they live in your index. |
+| **Autocomplete and spelling** | As you type, the words your photos were read into, the cameras and the places are offered; a misspelt search gets a *Did you mean*. |
+| **A map** | Every photo with a GPS position, grouped into thumbnail markers on OpenStreetMap. Tap a group to see its photos, or *Search this area*. The place is written into the index in words (city, region, country). |
 | **Opens in your gallery** | Tap a result: it opens in Google Photos or your phone's gallery app. Press and hold for the details and the words Opensolr saw. |
-| **Keeps itself in step** | Re-Sync every week or every month, or force one. New photos are added, deleted photos leave the index. |
+| **Keeps itself in step** | A sync runs on its own a minute after your photos change; a weekly or monthly Re-Sync stands behind it, and Force Re-Sync is one tap away. New photos are added, edited photos are read again, deleted photos leave the index, and you can pick photos to have them read again. |
 | **One index per phone** | `photos_<ANDROID_ID>__dense` in your Opensolr account. Reinstall on the same phone and it finds its index again. |
 | **Plan limits, in plain numbers** | Right after sign-in, and on the account screen: photos per month, disk space, search bandwidth, and where to upgrade. |
 
@@ -43,8 +47,10 @@ one per phone. No photo backup, no Google account, no ads, no analytics.
    [schema](docs/index-schema.md) that ships in [`solr/conf`](solr/conf).
 4. **Sync.** For every photo not yet in the index, the app makes a 640 px copy, asks Opensolr's
    `image_clip` endpoint what it shows, turns those words into a vector with `batch_embed`, reads the
-   camera metadata on the phone, and writes the document straight into the index ([sync](docs/sync.md)).
-5. **Search** goes straight to the index: words, meaning, filters ([search](docs/search.md)).
+   camera metadata on the phone, turns the GPS position into a place with `nearby_places`, and writes the
+   document straight into the index ([sync](docs/sync.md)).
+5. **Search** goes straight to the index through Opensolr's `{!hybrid}` parser: words and meaning
+   blended, filters, autocomplete, spelling, the map ([search](docs/search.md), [map](docs/map.md)).
 
 ## Requirements
 
@@ -75,7 +81,9 @@ The APK is signed with the Opensolr Photos release key. SHA-256 of the signing c
 </p>
 
 - **Originals never leave the phone.** Only a 640 px re-encoded copy is sent to be read, with no EXIF, and
-  it is not stored.
+  it is not stored. A photo's GPS position, rounded, is sent once to be turned into a place name.
+- **The map** draws OpenStreetMap tiles, requested only while the map screen is open. That is the only
+  host besides Opensolr the app ever talks to.
 - **The index is yours**: labels, a search vector, date, camera, place, path. It lives in your Opensolr
   account, you can see it, back it up or empty it in the Opensolr control panel.
 - **Your password is only ever typed into the browser.** The app stores the account API key encrypted with
@@ -90,7 +98,8 @@ Full account: [privacy and security](docs/privacy-and-security.md).
 | [How it works](docs/how-it-works.md) | The whole picture, component by component |
 | [Sign-in](docs/sign-in.md) | OAuth 2.0 with PKCE, step by step, and what is checked where |
 | [Sync and Re-Sync](docs/sync.md) | The algorithm, the ids, the schedule, index recreation, limits |
-| [Search](docs/search.md) | How a query is built, filters, facets, opening photos |
+| [Search](docs/search.md) | How a query is built, filters, facets, autocomplete, spelling, opening photos |
+| [Map](docs/map.md) | Markers, groups, Search this area, what the map sends |
 | [Index schema](docs/index-schema.md) | Every field, the analyzer, the vector field, the configset |
 | [Plan limits](docs/plan-limits.md) | What counts against your plan and what the app does at a limit |
 | [Privacy and security](docs/privacy-and-security.md) | Data flows, storage, network, threat model |

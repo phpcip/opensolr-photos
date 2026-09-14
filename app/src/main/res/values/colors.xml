@@ -3,5 +3,5 @@
     <color name="paper">#FFFFFFFF</color>
     <color name="ink">#FF111111</color>
     <color name="accent">#FFC05520</color>
-    <color name="launcher_background">#FF111111</color>
+    <color name="launcher_background">#FFC05520</color>
 </resources>

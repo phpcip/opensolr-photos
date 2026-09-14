@@ -44,15 +44,87 @@
     <httpCaching never304="true"/>
   </requestDispatcher>
 
+  <!-- Autocomplete: every CLIP label, camera make and model and place name of every photo,
+       matched anywhere in the term as the user types ("cat" finds "tabby cat"). Rebuilt on
+       every commit so a fresh sync shows up. -->
+  <searchComponent name="suggest" class="solr.SuggestComponent">
+    <lst name="suggester">
+      <str name="name">labels</str>
+      <str name="lookupImpl">AnalyzingInfixLookupFactory</str>
+      <str name="dictionaryImpl">DocumentDictionaryFactory</str>
+      <str name="field">suggest</str>
+      <str name="suggestAnalyzerFieldType">text_spell</str>
+      <str name="indexPath">suggest_labels</str>
+      <str name="highlight">false</str>
+      <str name="buildOnStartup">true</str>
+      <str name="buildOnCommit">true</str>
+    </lst>
+  </searchComponent>
+
+  <requestHandler name="/suggest" class="solr.SearchHandler" startup="lazy">
+    <lst name="defaults">
+      <str name="suggest">true</str>
+      <str name="suggest.dictionary">labels</str>
+      <str name="suggest.count">8</str>
+      <str name="wt">json</str>
+    </lst>
+    <arr name="components">
+      <str>suggest</str>
+    </arr>
+  </requestHandler>
+
+  <!-- "Did you mean": the words of the query checked against labels, camera names and places. -->
+  <searchComponent name="spellcheck" class="solr.SpellCheckComponent">
+    <str name="queryAnalyzerFieldType">text_spell</str>
+    <lst name="spellchecker">
+      <str name="name">default</str>
+      <str name="field">spell</str>
+      <str name="classname">solr.DirectSolrSpellChecker</str>
+      <str name="distanceMeasure">internal</str>
+      <float name="accuracy">0.5</float>
+      <int name="maxEdits">2</int>
+      <int name="minPrefix">1</int>
+      <int name="maxInspections">5</int>
+      <int name="minQueryLength">3</int>
+      <float name="maxQueryFrequency">0.01</float>
+    </lst>
+  </searchComponent>
+
   <requestHandler name="/select" class="solr.SearchHandler">
     <lst name="defaults">
       <str name="echoParams">none</str>
       <str name="wt">json</str>
       <int name="rows">60</int>
       <str name="df">text</str>
+      <str name="spellcheck">false</str>
+      <str name="spellcheck.dictionary">default</str>
+      <str name="spellcheck.count">5</str>
+      <str name="spellcheck.onlyMorePopular">false</str>
+      <str name="spellcheck.collate">true</str>
+      <str name="spellcheck.maxCollations">1</str>
+      <str name="spellcheck.maxCollationTries">5</str>
+      <str name="spellcheck.collateExtendedResults">false</str>
     </lst>
+    <arr name="last-components">
+      <str>spellcheck</str>
+    </arr>
   </requestHandler>
 
   <requestHandler name="/update" class="solr.UpdateRequestHandler"/>
+
+  <!-- The version of this configuration, as seen by the app. It lives in the config itself,
+       so it always says what the index is actually running. The app compares it with the
+       version bundled in the APK: older = the index must be rebuilt, newer = update the app.
+       Raise config_version whenever any file in solr/conf changes (and IndexManager.CONFIG_VERSION
+       with it). -->
+  <requestHandler name="/opensolr-photos-config" class="solr.SearchHandler">
+    <lst name="invariants">
+      <str name="q">*:*</str>
+      <int name="rows">0</int>
+      <str name="echoParams">all</str>
+      <str name="wt">json</str>
+      <int name="config_version">4</int>
+    </lst>
+  </requestHandler>
 
 </config>

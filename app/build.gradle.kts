@@ -21,8 +21,8 @@ android {
         applicationId = "com.opensolr.photos"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
     }
 
     signingConfigs {
@@ -32,6 +32,13 @@ android {
                 storePassword = signingProperties.getProperty("storePassword")
                 keyAlias = signingProperties.getProperty("keyAlias")
                 keyPassword = signingProperties.getProperty("keyPassword")
+                // Every APK signature scheme, so each Android version verifies the release with the
+                // scheme it trusts most: v1 (JAR) for the oldest, v2 and v3 for 7.0+ / 9.0+, v4 for
+                // incremental installs on 11+. Fewer "unverified" prompts at install time.
+                enableV1Signing = true
+                enableV2Signing = true
+                enableV3Signing = true
+                enableV4Signing = true
             }
         }
     }
@@ -98,4 +105,5 @@ dependencies {
     implementation(libs.androidx.exifinterface)
     implementation(libs.okhttp)
     implementation(libs.coil.compose)
+    implementation(libs.osmdroid)
 }

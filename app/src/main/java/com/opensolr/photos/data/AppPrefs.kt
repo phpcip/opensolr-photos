@@ -118,6 +118,37 @@ class AppPrefs(context: Context) {
         }
 
     /**
+     * True once the owner agreed to rebuild the index for a newer configuration. The next
+     * sync copies the index into the cache, uploads the configuration, empties the index
+     * and writes every photo again; then the flag is cleared.
+     */
+    var rebuildApproved: Boolean
+        get() = prefs.getBoolean(KEY_REBUILD, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_REBUILD, value).commit()
+        }
+
+    /**
+     * Photo ids the user asked to read again ("Re-sync selected"). The next sync reads them
+     * with CLIP regardless of the cache, then clears the set.
+     */
+    var resyncIds: Set<String>
+        get() = prefs.getStringSet(KEY_RESYNC_IDS, emptySet())?.toSet() ?: emptySet()
+        set(value) {
+            prefs.edit().putStringSet(KEY_RESYNC_IDS, value.toSet()).commit()
+        }
+
+    /**
+     * Keys of the plan warnings already posted as notifications (see PlanWatch), so each is
+     * posted once.
+     */
+    var warnedKeys: Set<String>
+        get() = prefs.getStringSet(KEY_WARNED, emptySet())?.toSet() ?: emptySet()
+        set(value) {
+            prefs.edit().putStringSet(KEY_WARNED, value.toSet()).commit()
+        }
+
+    /**
      * A message for the next screen the user sees (sign-in needed, sign-in cancelled...).
      */
     var pendingNotice: String?
@@ -183,6 +214,9 @@ class AppPrefs(context: Context) {
         private const val KEY_FOLDERS_CHOSEN = "folders_chosen"
         private const val KEY_SCHEDULE = "schedule"
         private const val KEY_REPORT = "last_report"
+        private const val KEY_REBUILD = "rebuild_approved"
+        private const val KEY_RESYNC_IDS = "resync_ids"
+        private const val KEY_WARNED = "warned_keys"
         private const val KEY_NOTICE = "notice"
         private const val KEY_AUTH_VERIFIER = "auth_verifier"
         private const val KEY_AUTH_STATE = "auth_state"

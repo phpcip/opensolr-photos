@@ -102,12 +102,14 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
 
         SectionLabel("Automatic Re-Sync")
         Spacer(Modifier.height(4.dp))
+        ScheduleOption("Every day", state.schedule == SyncSchedule.DAILY) { viewModel.setSchedule(SyncSchedule.DAILY) }
+        HorizontalDivider(color = p.hairline)
         ScheduleOption("Every week", state.schedule == SyncSchedule.WEEKLY) { viewModel.setSchedule(SyncSchedule.WEEKLY) }
         HorizontalDivider(color = p.hairline)
         ScheduleOption("Every month", state.schedule == SyncSchedule.MONTHLY) { viewModel.setSchedule(SyncSchedule.MONTHLY) }
         HorizontalDivider(color = p.hairline)
         Spacer(Modifier.height(8.dp))
-        Text("Runs when the phone is online and the battery is not low.", style = MaterialTheme.typography.bodySmall, color = p.muted)
+        Text("A sync already runs on its own a minute after your photos change. This one is the safety net for what the phone cannot notice: photos waiting to be read after the monthly AI allowance resets, places to look up again, an index changed on opensolr.com. Runs when the phone is online and the battery is not low.", style = MaterialTheme.typography.bodySmall, color = p.muted)
         Spacer(Modifier.height(28.dp))
 
         SectionLabel("Folders being indexed")
@@ -139,10 +141,16 @@ private fun ScheduleOption(label: String, selected: Boolean, onSelect: () -> Uni
 private fun statusLine(state: UiState): String {
     val report = state.lastReport ?: return "No sync has run yet."
     return when (report.status) {
-        "ok" -> "Your index is in step with your photos."
+        "ok" -> when {
+            report.localCount == 0 -> "No photos were found in the folders you chose."
+            report.added + report.deleted == 0 && report.failed > 0 -> "No photo could be read. Nothing was indexed."
+            else -> "Your index is in step with your photos."
+        }
         "stopped_quota" -> "Paused: the monthly AI requests of your plan are used up."
         "stopped_plan_limit" -> "Paused: the index reached its disk space or bandwidth."
         "sign_in_required" -> "Paused: sign in to Opensolr again."
+        "rebuild_required" -> "Waiting: your index must be rebuilt for the new version. Open the app's photos screen to start it."
+        "update_app" -> "Paused: update Opensolr Photos to keep syncing."
         else -> "The last sync did not finish. It is tried again at the next Re-Sync."
     }
 }
@@ -155,5 +163,7 @@ private fun resultLabel(status: String): String = when (status) {
     "stopped_quota" -> "Paused, AI requests used up"
     "stopped_plan_limit" -> "Paused, plan limit reached"
     "sign_in_required" -> "Sign-in needed"
+    "rebuild_required" -> "Rebuild needed"
+    "update_app" -> "App update needed"
     else -> "Did not finish"
 }

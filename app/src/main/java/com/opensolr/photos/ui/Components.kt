@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -96,6 +97,9 @@ fun Notice(text: String, modifier: Modifier = Modifier, title: String? = null) {
     Row(
         modifier
             .fillMaxWidth()
+            // As tall as its text, even inside a bounded column: the accent rule matches the
+            // text and never stretches to the bottom of the screen.
+            .height(IntrinsicSize.Min)
             .background(p.paper, Corner)
             .padding(0.dp)
     ) {

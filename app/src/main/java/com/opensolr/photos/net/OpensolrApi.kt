@@ -29,6 +29,18 @@ import javax.crypto.spec.SecretKeySpec
 data class ClipResult(val text: String, val labels: List<String>, val model: String)
 
 /**
+ * Where a GPS position is, in words, from Opensolr's nearby_places.
+ */
+data class PlaceInfo(
+    val city: String,
+    val region: String?,
+    val province: String?,
+    val community: String?,
+    val country: String?,
+    val countryCode: String,
+)
+
+/**
  * An Opensolr environment that runs vector search.
  */
 data class VectorRegion(val environment: String, val country: String, val solrVersion: String)
@@ -164,6 +176,41 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         }))
         if (!json.optBoolean("status")) throw ServiceException(platformMessage(json.toString()))
         AccountLimits.fromJson(json.optJSONObject("msg") ?: JSONObject(), previous)
+    }
+
+    /**
+     * The nearest named place of up to 50 GPS positions in one call. The result maps each
+     * position key (as passed in [coords], "lat,lon" with four decimals) to its place, to
+     * null when nothing is known there, and leaves it absent when the server could not
+     * answer for it.
+     */
+    suspend fun nearbyPlaces(session: Session, coords: List<String>): Map<String, PlaceInfo?> = withContext(Dispatchers.IO) {
+        if (coords.isEmpty()) return@withContext emptyMap()
+        val json = parseObject(post(MANAGEMENT + "nearby_places", form(session) {
+            add("coords", coords.take(50).joinToString(";") + if (coords.size == 1) ";" else "")
+            add("within", "25")
+        }))
+        if (!json.optBoolean("status")) throw ServiceException(platformMessage(json.toString()))
+        val results = json.optJSONObject("results") ?: throw ServiceException("nearby_places returned no results")
+        val out = HashMap<String, PlaceInfo?>()
+        results.keys().forEach { key ->
+            val entry = results.optJSONObject(key) ?: return@forEach
+            if (!entry.optBoolean("status")) {
+                if (entry.optString("msg") == "ERROR_GEO_NO_DATA") out[key] = null
+                return@forEach
+            }
+            val nearest = entry.optJSONObject("nearest") ?: run { out[key] = null; return@forEach }
+            val city = nearest.optString("city").ifBlank { nearest.optString("place") }
+            out[key] = if (city.isBlank()) null else PlaceInfo(
+                city = city,
+                region = nearest.optString("region").ifBlank { null },
+                province = nearest.optString("province").ifBlank { null },
+                community = nearest.optString("community").ifBlank { null },
+                country = nearest.optString("country").ifBlank { null },
+                countryCode = nearest.optString("country_code"),
+            )
+        }
+        out
     }
 
     /**

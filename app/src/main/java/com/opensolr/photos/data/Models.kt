@@ -118,6 +118,7 @@ data class AccountLimits(
  * How often the scheduled Re-Sync runs.
  */
 enum class SyncSchedule(val days: Long) {
+    DAILY(1),
     WEEKLY(7),
     MONTHLY(30),
 }

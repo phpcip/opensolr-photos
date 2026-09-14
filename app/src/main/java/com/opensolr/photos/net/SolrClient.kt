@@ -38,13 +38,13 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
      * Every document id in the index, fetched [pageSize] at a time with start/rows, sorted by id
      * so that consecutive pages line up. [onPage] reports how many ids arrived so far.
      */
-    suspend fun allIds(pageSize: Int = 1000, onPage: suspend (Int) -> Unit = {}): Set<String> {
+    suspend fun allIds(pageSize: Int = 1000, query: String = "*:*", onPage: suspend (Int) -> Unit = {}): Set<String> {
         val ids = HashSet<String>()
         var start = 0
         while (true) {
             val json = select(
                 listOf(
-                    "q" to "*:*",
+                    "q" to query,
                     "fl" to "id",
                     "sort" to "id asc",
                     "start" to start.toString(),
@@ -77,6 +77,82 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
         true
     } catch (e: ServiceException) {
         if (e.message?.contains("HTTP 400") == true) false else throw e
+    }
+
+    /**
+     * Autocomplete: labels that contain what the user typed so far, best first.
+     */
+    suspend fun suggest(prefix: String, count: Int = 8): List<String> = withContext(Dispatchers.IO) {
+        val form = FormBody.Builder()
+            .add("suggest.q", prefix)
+            // The suggester returns one entry per photo carrying the label; ask for more and
+            // keep the distinct labels.
+            .add("suggest.count", (count.coerceIn(1, 20) * 10).toString())
+            .add("wt", "json")
+            .build()
+        val json = JSONObject(execute(request("/suggest").post(form).build()))
+        val dict = json.optJSONObject("suggest")?.optJSONObject("labels") ?: return@withContext emptyList()
+        val entry = dict.keys().asSequence().firstOrNull()?.let { dict.optJSONObject(it) } ?: return@withContext emptyList()
+        val array = entry.optJSONArray("suggestions") ?: return@withContext emptyList()
+        (0 until array.length()).mapNotNull { array.optJSONObject(it)?.optString("term")?.takeIf { t -> t.isNotBlank() } }
+            .distinctBy { it.lowercase() }.take(count)
+    }
+
+    /**
+     * Ids of the photos that have a GPS position but no place words yet (their lookup
+     * failed or the schema did not have the fields at the time), to be written again.
+     */
+    suspend fun idsWithoutPlace(): Set<String> = allIds(query = "has_location:true AND -city:[* TO *]")
+
+    /**
+     * Ids of the photos indexed without CLIP words (the monthly AI allowance was used up when
+     * they were written), to be read once the allowance is back.
+     */
+    suspend fun idsWithoutWords(): Set<String> = allIds(query = "*:* AND -clip_model:[* TO *]")
+
+    /**
+     * Every document in the index with the stored [fields], [pageSize] at a time, handed to
+     * [onDoc] one by one. Used to rebuild the phone's cache from the index.
+     */
+    suspend fun allDocs(fields: String, pageSize: Int = 200, onDoc: suspend (JSONObject) -> Unit) {
+        var start = 0
+        while (true) {
+            val json = select(
+                listOf(
+                    "q" to "*:*",
+                    "fl" to fields,
+                    "sort" to "id asc",
+                    "start" to start.toString(),
+                    "rows" to pageSize.toString(),
+                )
+            )
+            val docs = json.getJSONObject("response").getJSONArray("docs")
+            for (i in 0 until docs.length()) onDoc(docs.getJSONObject(i))
+            if (docs.length() < pageSize) break
+            start += pageSize
+        }
+    }
+
+    /**
+     * The configuration version the index is running, read from the /opensolr-photos-config
+     * handler. 0 when the index has no such handler (a configuration from before versions
+     * existed), which counts as older than anything.
+     */
+    suspend fun configVersion(): Int = withContext(Dispatchers.IO) {
+        try {
+            val json = JSONObject(execute(request("/opensolr-photos-config?wt=json").get().build()))
+            json.optJSONObject("responseHeader")?.optJSONObject("params")?.optString("config_version")?.toIntOrNull() ?: 0
+        } catch (e: ServiceException) {
+            if (e.message?.contains("HTTP 404") == true) 0 else throw e
+        }
+    }
+
+    /**
+     * Empties the index: every document goes, the index itself stays. Used only by a rebuild,
+     * after the documents were copied into the phone's cache.
+     */
+    suspend fun deleteAll() = withContext(Dispatchers.IO) {
+        execute(request("/update?commit=true&wt=json").post("{\"delete\":{\"query\":\"*:*\"}}".toRequestBody(JSON)).build())
     }
 
     /**

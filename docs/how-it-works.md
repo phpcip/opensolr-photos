@@ -16,14 +16,18 @@ Opensolr Index. The app talks to each of them over HTTPS and to nothing else.
 - Makes a small upright JPEG copy (640 px on the long edge) for the reader. The copy is re-encoded from
   pixels, so it carries no metadata.
 - Writes the documents into the index and searches it directly.
-- Runs sync in the background with WorkManager, one sync at a time.
+- Runs sync in the background with WorkManager, one sync at a time, and watches MediaStore so a sync runs
+  on its own when photos change.
+- Draws the map with osmdroid on OpenStreetMap tiles, the only host besides Opensolr it talks to.
 
 ### opensolr.com
 
 Account and index management:
 
 - the sign-in pages (`/app/authorize`) and the code exchange (`/app/token`), see [sign-in](sign-in.md);
-- creating the index, uploading its configuration, reading its address and password, plan limits.
+- creating the index, uploading its configuration, reading its address and password, plan limits;
+- `nearby_places`: up to 50 GPS positions in, the nearest named place of each out (city, region, province,
+  community, country), answered from a permanent store so a position is looked up once for everyone.
 
 ### api.opensolr.com
 
@@ -68,10 +72,13 @@ reinstalled and differs on every other phone. So:
 | opensolr.com | `POST /solr_manager/api/upload_zip_config_files` | New index, or an index without this schema |
 | opensolr.com | `POST /solr_manager/api/get_core_info` | Address and credentials of the index |
 | opensolr.com | `POST /solr_manager/api/get_account_summary` | Plan limits and usage |
+| opensolr.com | `POST /solr_manager/api/nearby_places` | Once per round of new photos with a position |
 | api.opensolr.com | `POST /solr_manager/api/image_clip` | Once per new photo |
 | api.opensolr.com | `POST /solr_manager/api/batch_embed` | Once per 20 new photos (vector search plans) |
 | api.opensolr.com | `POST /solr_manager/api/embed` | Once per typed search (vector search plans) |
-| your index | `POST /select` | Listing ids, searching, counting |
+| your index | `POST /select` | Listing ids, searching (with spellcheck), map pins |
+| your index | `POST /suggest` | Autocomplete |
+| tile.openstreetmap.org | `GET` tiles | Only while the map is open |
 | your index | `POST /update` | Adding, deleting, committing |
 
 Credentials always travel in the request body, never in a URL.
@@ -85,6 +92,7 @@ Credentials always travel in the request body, never in a URL.
 | `index` | `IndexManager`: index name, find, create, upload config, refresh credentials |
 | `media` | `MediaScanner` (folders, photos, the id function), `PhotoReader` (EXIF, the 640 px copy) |
 | `net` | `OpensolrApi` (REST API), `SolrClient` (direct Solr), typed errors |
-| `search` | `SearchRepository`: query, filters, facets, parsing |
+| `search` | `SearchRepository`: query, filters, facets, suggest, spellcheck, map pins, parsing |
+| `ui/map` | `PhotoClusterOverlay`: grouping and drawing the markers on the osmdroid map |
 | `sync` | `SyncEngine` (the algorithm), `SyncWorker`, `SyncScheduler`, `Notifier` |
 | `ui` | Compose screens, `AppViewModel`, theme |

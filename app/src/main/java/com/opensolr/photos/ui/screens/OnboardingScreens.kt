@@ -176,6 +176,8 @@ fun PermissionsScreen(state: UiState, viewModel: AppViewModel) {
         add(photoPermission)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) add(Manifest.permission.ACCESS_MEDIA_LOCATION)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
+        // Coarse position only, read once, to create the index on the nearest Opensolr server.
+        add(Manifest.permission.ACCESS_COARSE_LOCATION)
     }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         val granted = result[photoPermission] == true ||
@@ -200,12 +202,13 @@ fun PermissionsScreen(state: UiState, viewModel: AppViewModel) {
     ) {
         Text("Allow access to your photos", style = MaterialTheme.typography.displaySmall, color = p.ink)
         Spacer(Modifier.height(16.dp))
-        Text("Three permissions, and only the first one is required.", style = MaterialTheme.typography.bodyLarge, color = p.muted)
+        Text("Four permissions, and only the first one is required.", style = MaterialTheme.typography.bodyLarge, color = p.muted)
         Spacer(Modifier.height(24.dp))
         SectionLabel("What they are for")
         InfoRow("Photos", "To find and read the photos in the folders you pick")
         InfoRow("Photo locations", "To let you filter by where a photo was taken")
         InfoRow("Notifications", "To show sync progress and plan alerts")
+        InfoRow("Your location", "To create your index on the Opensolr server nearest to you")
         state.permissionError?.let {
             Spacer(Modifier.height(20.dp))
             Notice(it)

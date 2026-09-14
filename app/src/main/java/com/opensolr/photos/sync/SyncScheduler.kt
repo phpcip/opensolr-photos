@@ -1,6 +1,7 @@
 package com.opensolr.photos.sync
 
 import android.content.Context
+import android.provider.MediaStore
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
@@ -40,6 +41,7 @@ object SyncScheduler {
     private const val TAG = "opensolr-sync"
     private const val NOW = "opensolr-sync-now"
     private const val PERIODIC = "opensolr-sync-periodic"
+    private const val MEDIA = "opensolr-sync-media"
 
     private val constraints = Constraints.Builder()
         .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -56,6 +58,27 @@ object SyncScheduler {
             .addTag(NOW)
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(NOW, ExistingWorkPolicy.KEEP, request)
+    }
+
+    /**
+     * Watches the phone's photos: a sync runs on its own a minute after a photo is added,
+     * changed or deleted (at most five minutes later when changes keep coming). The trigger
+     * is one-shot by design of Android, so [SyncWorker] arms it again after every run.
+     */
+    fun watchMedia(context: Context) {
+        val request = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .addContentUriTrigger(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true)
+                    .setTriggerContentUpdateDelay(60, TimeUnit.SECONDS)
+                    .setTriggerContentMaxDelay(5, TimeUnit.MINUTES)
+                    .build()
+            )
+            .addTag(TAG)
+            .addTag(MEDIA)
+            .build()
+        WorkManager.getInstance(context).enqueueUniqueWork(MEDIA, ExistingWorkPolicy.KEEP, request)
     }
 
     /**
@@ -89,6 +112,7 @@ object SyncScheduler {
     fun status(context: Context): Flow<SyncStatus> =
         WorkManager.getInstance(context).getWorkInfosByTagFlow(TAG).map { infos ->
             val running = infos.firstOrNull { it.state == WorkInfo.State.RUNNING }
+            // The media watch sits ENQUEUED permanently; only a forced run counts as queued.
             val queuedNow = infos.any { it.state == WorkInfo.State.ENQUEUED && NOW in it.tags }
             SyncStatus(
                 running = running != null,

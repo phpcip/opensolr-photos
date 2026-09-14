@@ -15,6 +15,8 @@ import com.opensolr.photos.net.ClipResult
 import com.opensolr.photos.net.OpensolrApi
 import com.opensolr.photos.net.OpensolrException
 import com.opensolr.photos.net.PhotoRejectedException
+import com.opensolr.photos.net.PlaceInfo
+import com.opensolr.photos.net.ServiceException
 import com.opensolr.photos.net.PlanLimitException
 import com.opensolr.photos.net.QuotaExceededException
 import com.opensolr.photos.net.RateLimitedException
@@ -60,6 +62,12 @@ class SyncEngine(private val context: Context) {
      */
     private class Prepared(val photo: LocalPhoto, val doc: JSONObject, var vector: FloatArray?)
 
+    /** True once this run hit the monthly AI allowance: no more CLIP calls, photos get their metadata only. */
+    private var quotaHit = false
+
+    /** Photos written this run without CLIP words, because the allowance was used up. */
+    private var withoutWords = 0
+
     /**
      * Runs one sync and returns what happened. Never throws except for cancellation.
      */
@@ -71,6 +79,8 @@ class SyncEngine(private val context: Context) {
         var deleted = 0
         var failed = 0
         var recreated = false
+        quotaHit = false
+        withoutWords = 0
 
         try {
             onProgress(Progress("Checking your index", 0, 0))
@@ -80,15 +90,59 @@ class SyncEngine(private val context: Context) {
             var connection = initialConnection
             var solr = SolrClient(connection)
 
+            if (outcome == IndexManager.Outcome.CONFIG_NEWER) {
+                return report("update_app", message = "Your index was set up by a newer version of Opensolr Photos. Update the app to keep syncing.")
+            }
+            val rebuild = outcome == IndexManager.Outcome.NEEDS_REBUILD
+            if (rebuild && !prefs.rebuildApproved) {
+                return report("rebuild_required", message = "This version of Opensolr Photos comes with a newer index configuration. Your index must be rebuilt before syncing continues.")
+            }
+
             onProgress(Progress("Looking for photos", 0, 0))
             val local = MediaScanner.scan(context, prefs.folders)
             localCount = local.size
 
             onProgress(Progress("Comparing with your index", 0, 0))
-            val remote = withFreshPassword(session, { connection = it; solr = SolrClient(it) }) {
+            var remote = withFreshPassword(session, { connection = it; solr = SolrClient(it) }) {
                 solr.allIds { onProgress(Progress("Comparing with your index", it, 0)) }
             }
             indexCount = remote.size
+
+            // Photos the index knows but the phone's cache does not (a reinstall, a cache lost):
+            // copy their documents from the index into the cache, so nothing is ever read by
+            // CLIP twice. A document whose file changed since is left out, so the photo is
+            // read again below.
+            val changedSinceIndexed = HashSet<String>()
+            val toPull = remote.filter { it in local && !cache.has(it) }.toHashSet()
+            if (toPull.isNotEmpty()) {
+                onProgress(Progress("Reading your index", 0, toPull.size))
+                var pulled = 0
+                solr.allDocs(PULL_FIELDS) { doc ->
+                    val id = doc.optString("id")
+                    val photo = local[id] ?: return@allDocs
+                    if (id !in toPull) return@allDocs
+                    val indexedModified = doc.optString("modified_at")
+                    val localModified = if (photo.modifiedSec > 0) isoUtc(photo.modifiedSec * 1000L) else ""
+                    if (indexedModified == localModified && doc.optLong("size_bytes") == photo.sizeBytes) {
+                        doc.remove("_version_")
+                        doc.remove("score")
+                        cache.put(id, photo.sizeBytes, photo.modifiedSec, doc.toString(), null)
+                    } else {
+                        changedSinceIndexed += id
+                    }
+                    pulled++
+                    onProgress(Progress("Reading your index", pulled, toPull.size))
+                }
+            }
+
+            if (rebuild) {
+                // The cache now holds everything the index knew. New configuration in, every
+                // document out, every photo written again below.
+                onProgress(Progress("Rebuilding your index", 0, 0))
+                indexes.applyConfig(session, connection) { onProgress(Progress("Rebuilding your index", 0, 0)) }
+                solr.deleteAll()
+                remote = emptySet()
+            }
 
             val toDelete = remote - local.keys
             if (toDelete.isNotEmpty()) {
@@ -100,41 +154,75 @@ class SyncEngine(private val context: Context) {
                 }
             }
 
-            val toAdd = local.values.filter { it.id !in remote }
+            // Photos whose place lookup did not succeed last time are written again (from the
+            // cache, so without AI requests) so the place words get another chance.
+            val withoutPlace = if (rebuild) emptySet() else withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { solr.idsWithoutPlace() }
+            // Photos indexed without their words (the AI allowance was used up at the time) are
+            // read by CLIP now, if the allowance is back.
+            val needWords = if (rebuild) emptySet() else solr.idsWithoutWords()
+            // Photos the user asked to read again, and photos edited in place (same path, so
+            // the same id, but a different size or time): both go through CLIP again.
+            val forced = prefs.resyncIds
+            val toAdd = if (rebuild) local.values.toList() else local.values.filter {
+                it.id !in remote || it.id in withoutPlace || it.id in forced || it.id in needWords || it.id in changedSinceIndexed || cache.isStale(it.id, it.sizeBytes, it.modifiedSec)
+            }
+            val phase = if (rebuild) "Rebuilding your index" else "Indexing photos"
             var vectorAllowed = prefs.account?.vectorAllowed ?: false
-            onProgress(Progress("Indexing photos", 0, toAdd.size))
+            // Without vector search on the plan, photos are not read into words either: they
+            // are indexed by what the phone knows and found by those words.
+            if (!vectorAllowed) quotaHit = true
+            onProgress(Progress(phase, 0, toAdd.size))
 
             for (chunk in toAdd.chunked(CHUNK)) {
                 val prepared = ArrayList<Prepared>(chunk.size)
                 for (photo in chunk) {
                     try {
-                        prepare(session, connection, photo, vectorAllowed)?.let { prepared += it } ?: failed++
+                        prepare(session, connection, photo, vectorAllowed, photo.id in forced || photo.id in needWords)?.let { prepared += it } ?: failed++
                     } catch (e: PhotoRejectedException) {
                         failed++
                     }
                 }
+                addPlaces(session, prepared.map { it.doc })
 
-                if (vectorAllowed) {
+                if (vectorAllowed && !quotaHit) {
                     try {
                         embed(session, connection, prepared)
                     } catch (e: VectorNotAllowedException) {
+                        // The plan has no vector search: everything is indexed and found by words.
                         vectorAllowed = false
                         prefs.account = prefs.account?.copy(vectorAllowed = false)
+                    } catch (e: QuotaExceededException) {
+                        // Allowance used up mid-run: the rest of the run goes on without vectors.
+                        quotaHit = true
                     }
                 }
 
                 if (prepared.isNotEmpty()) {
                     solr.add(JSONArray().apply { prepared.forEach { put(documentFor(it)) } })
-                    prepared.forEach { cache.put(it.photo.id, it.photo.sizeBytes, it.photo.modifiedSec, it.doc.toString(), it.vector) }
+                    // A document without words is not "learned": it stays out of the cache so
+                    // the photo is read again once the allowance is back.
+                    prepared.filter { it.doc.has("clip_model") }.forEach { cache.put(it.photo.id, it.photo.sizeBytes, it.photo.modifiedSec, it.doc.toString(), it.vector) }
                     added += prepared.size
                 }
-                onProgress(Progress("Indexing photos", added + failed, toAdd.size))
+                onProgress(Progress(phase, added + failed, toAdd.size))
             }
 
             solr.commit()
+            if (rebuild) prefs.rebuildApproved = false
+            if (forced.isNotEmpty()) prefs.resyncIds = emptySet()
             cache.removeAllExcept(local.keys)
             refreshAccount(session, connection)
-            return report("ok", added, deleted, failed, localCount, indexCount, "", recreated)
+            var message = ""
+            if (withoutWords > 0) {
+                // Nothing broke: the photos are in the index and found by their date, camera,
+                // place, file name and tags; the words come when the plan allows them.
+                val n = "$withoutWords photo${if (withoutWords == 1) "" else "s"}"
+                message = if (!vectorAllowed)
+                    "$n indexed by date, camera, place, file name and your tags only: your plan does not include photo recognition. Upgrade to have them read into words."
+                else
+                    "$n indexed without being read into words: the monthly AI requests of your plan are used up. They are read at the first sync after the allowance resets, or now after an upgrade."
+            }
+            return report("ok", added, deleted, failed, localCount, indexCount, message, recreated)
         } catch (e: CancellationException) {
             throw e
         } catch (e: SignInRequiredException) {
@@ -168,23 +256,122 @@ class SyncEngine(private val context: Context) {
      * Builds the document of one photo, from the cache when the file is unchanged, otherwise by
      * reading its metadata and asking CLIP what it shows. Returns null when the file cannot be read.
      */
-    private suspend fun prepare(session: Session, connection: IndexConnection, photo: LocalPhoto, vectorAllowed: Boolean): Prepared? {
-        val cached = cache.get(photo.id, photo.sizeBytes, photo.modifiedSec)
+    private suspend fun prepare(session: Session, connection: IndexConnection, photo: LocalPhoto, vectorAllowed: Boolean, force: Boolean = false): Prepared? {
+        val cached = if (force) null else cache.get(photo.id, photo.sizeBytes, photo.modifiedSec)
         if (cached != null) {
             val doc = JSONObject(cached.docJson).put("media_id", photo.mediaId)
-            return Prepared(photo, doc, if (vectorAllowed) cached.vector else null)
+            val changed = applyEdits(photo.id, doc)
+            return Prepared(photo, doc, if (vectorAllowed && !changed) cached.vector else null)
         }
         val metadata = PhotoReader.readMetadata(context, photo)
         val jpeg = PhotoReader.shrinkForClip(context, photo.uri, metadata.rotationDegrees) ?: return null
-        val clip = retrying { api.imageClip(session, connection.indexName, jpeg) }
-        return Prepared(photo, buildDocument(photo, metadata, clip), null)
+        // Over the monthly allowance the photo is still indexed, with everything the phone knows
+        // (date, camera, place, file name, the owner's tags) and no words; it is read into words
+        // at a later sync. One 429 is enough to stop asking for the rest of the run.
+        val clip = if (quotaHit) null else try {
+            retrying { api.imageClip(session, connection.indexName, jpeg) }
+        } catch (e: QuotaExceededException) {
+            quotaHit = true
+            null
+        }
+        if (clip == null) withoutWords++
+        val doc = buildDocument(photo, metadata, clip)
+        applyEdits(photo.id, doc)
+        return Prepared(photo, doc, null)
     }
+
+    /**
+     * Puts the owner's edits into a document: their tags, and their own wording of what the
+     * photo shows when they changed it. The owner's words always win over CLIP's. Returns
+     * true when the document changed, so its vector has to be computed again.
+     */
+    private fun applyEdits(id: String, doc: JSONObject): Boolean {
+        // No edits on this phone: the document stays as it is. It may carry tags written by
+        // an earlier install and copied back from the index, and those are kept.
+        val edits = cache.getEdits(id) ?: return false
+        val before = doc.optString("meaning") + "|" + doc.optJSONArray("custom_tags")?.toString()
+        if (edits.tags.isEmpty()) doc.remove("custom_tags") else doc.put("custom_tags", JSONArray(edits.tags))
+        edits.meaning?.let { doc.put("meaning", it) }
+        return before != doc.optString("meaning") + "|" + doc.optJSONArray("custom_tags")?.toString()
+    }
+
+    /**
+     * Puts the place of each photo's GPS position into its document (city, region, province,
+     * community, country) where it is not there yet. Positions are grouped per ~100 m cell,
+     * cells already known are served from the cache, and the unknown ones go to Opensolr in
+     * one call. A lookup that fails leaves the document without a place, and the next
+     * Re-Sync tries again.
+     */
+    private suspend fun addPlaces(session: Session, docs: List<JSONObject>) {
+        val wanting = docs.filter { !it.has("city") && it.optBoolean("has_location") }
+        if (wanting.isEmpty()) return
+        val keyOf = HashMap<JSONObject, String>()
+        val unknown = LinkedHashSet<String>()
+        val places = HashMap<String, PlaceInfo?>()
+        wanting.forEach { doc ->
+            val parts = doc.optString("location").split(',')
+            val lat = parts.getOrNull(0)?.trim()?.toDoubleOrNull() ?: return@forEach
+            val lon = parts.getOrNull(1)?.trim()?.toDoubleOrNull() ?: return@forEach
+            val key = String.format(Locale.US, "%.4f,%.4f", lat, lon)
+            keyOf[doc] = key
+            if (key in places) return@forEach
+            val known = cache.getPlace(key)
+            if (known != null) places[key] = if (known.isEmpty()) null else placeFromJson(JSONObject(known)) else unknown += key
+        }
+        if (unknown.isNotEmpty()) {
+            try {
+                unknown.chunked(50).forEach { batch ->
+                    val found = retrying { api.nearbyPlaces(session, batch) }
+                    found.forEach { (key, place) ->
+                        places[key] = place
+                        cache.putPlace(key, place?.let { placeToJson(it).toString() } ?: "")
+                    }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: ServiceException) {
+            }
+        }
+        wanting.forEach { doc ->
+            val place = keyOf[doc]?.let { places[it] } ?: return@forEach
+            doc.put("city", place.city)
+            place.region?.let { doc.put("region", it) }
+            place.province?.let { doc.put("province", it) }
+            place.community?.let { doc.put("community", it) }
+            place.country?.let { doc.put("country", it) }
+            doc.put("country_code", place.countryCode)
+        }
+    }
+
+    /**
+     * A place as kept in the cache.
+     */
+    private fun placeToJson(place: PlaceInfo): JSONObject = JSONObject()
+        .put("city", place.city)
+        .putOpt("region", place.region)
+        .putOpt("province", place.province)
+        .putOpt("community", place.community)
+        .putOpt("country", place.country)
+        .put("country_code", place.countryCode)
+
+    /**
+     * Inverse of [placeToJson].
+     */
+    private fun placeFromJson(json: JSONObject): PlaceInfo = PlaceInfo(
+        city = json.optString("city"),
+        region = json.optString("region").ifBlank { null },
+        province = json.optString("province").ifBlank { null },
+        community = json.optString("community").ifBlank { null },
+        country = json.optString("country").ifBlank { null },
+        countryCode = json.optString("country_code"),
+    )
 
     /**
      * Fills in the vectors of the prepared photos that do not have one yet, in one call.
      */
     private suspend fun embed(session: Session, connection: IndexConnection, prepared: List<Prepared>) {
-        val missing = prepared.filter { it.vector == null }
+        // Photos without words (allowance used up) get their vector together with their words later.
+        val missing = prepared.filter { it.vector == null && it.doc.has("clip_model") }
         if (missing.isEmpty()) return
         val vectors = retrying { api.batchEmbed(session, connection.indexName, missing.map { meaningOf(it.doc) }) }
         missing.forEachIndexed { i, item ->
@@ -206,7 +393,7 @@ class SyncEngine(private val context: Context) {
     /**
      * The Solr document of a photo. Field names match solr/conf/schema.xml.
      */
-    private fun buildDocument(photo: LocalPhoto, meta: PhotoMetadata, clip: ClipResult): JSONObject {
+    private fun buildDocument(photo: LocalPhoto, meta: PhotoMetadata, clip: ClipResult?): JSONObject {
         val sideways = meta.rotationDegrees == 90 || meta.rotationDegrees == 270
         val width = if (sideways) photo.height else photo.width
         val height = if (sideways) photo.width else photo.height
@@ -243,16 +430,22 @@ class SyncEngine(private val context: Context) {
             put("has_location", hasLocation)
             if (hasLocation) put("location", "${meta.latitude},${meta.longitude}")
             meta.altitude?.let { put("altitude", it) }
-            put("meaning", clip.text.ifBlank { clip.labels.joinToString(", ") })
-            put("labels", JSONArray(clip.labels))
-            put("clip_model", clip.model)
+            // Every CLIP term as its own value (a label that itself carries commas is split
+            // too), so autocomplete and the label facet see single terms. Without CLIP (allowance
+            // used up) the document carries no words and no clip_model, which marks it for later.
+            if (clip != null) {
+                val labels = clip.labels.flatMap { it.split(',') }.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+                put("meaning", clip.text.ifBlank { labels.joinToString(", ") })
+                put("labels", JSONArray(labels))
+                put("clip_model", clip.model)
+            }
         }
     }
 
     /**
-     * The text embedded for a photo: its CLIP words.
+     * The text embedded for a photo: what it shows, then the owner's tags.
      */
-    private fun meaningOf(doc: JSONObject): String = doc.optString("meaning").ifBlank { "photo" }
+    private fun meaningOf(doc: JSONObject): String = embeddingText(doc)
 
     /**
      * Runs [block], waiting out rate limits (the server says how long) a few times before giving up.
@@ -288,13 +481,9 @@ class SyncEngine(private val context: Context) {
         try {
             val limits = api.accountSummary(session, connection.indexName, prefs.account)
             prefs.account = limits
-            if (limits.diskFull || limits.bandwidthFull) {
-                val what = if (limits.diskFull) "disk space" else "search bandwidth"
-                Notifier.planLimit(
-                    context, "Your photo index is out of $what",
-                    "Your Opensolr plan's $what is used up. Upgrade to keep syncing and searching your photos."
-                )
-            }
+            // One notification per situation: 90% and 100% of disk, bandwidth and AI requests,
+            // and a plan without photo recognition.
+            PlanWatch.notifyNew(context, prefs, limits)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -334,5 +523,18 @@ class SyncEngine(private val context: Context) {
     companion object {
         /** Photos per round: CLIP one by one, then one embedding call and one index write. */
         private const val CHUNK = 20
+
+        /** Stored fields copied from the index into the cache (everything but the vector). */
+        const val PULL_FIELDS = "*"
+
+        /**
+         * The text a photo's vector is made of: what it shows (CLIP's words, or the owner's
+         * own wording), followed by the owner's tags. One place, shared with the edit path.
+         */
+        fun embeddingText(doc: JSONObject): String {
+            val tags = doc.optJSONArray("custom_tags")?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() } } ?: emptyList()
+            val meaning = doc.optString("meaning").ifBlank { doc.optString("file_name").substringBeforeLast('.') }
+            return if (tags.isEmpty()) meaning else meaning + ", " + tags.joinToString(", ")
+        }
     }
 }

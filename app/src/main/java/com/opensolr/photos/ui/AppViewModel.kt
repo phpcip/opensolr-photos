@@ -18,9 +18,13 @@ import com.opensolr.photos.net.IndexLimitException
 import com.opensolr.photos.net.OpensolrApi
 import com.opensolr.photos.net.SignInRequiredException
 import com.opensolr.photos.search.FacetValue
+import com.opensolr.photos.search.NearFilter
+import com.opensolr.photos.search.PhotoPin
 import com.opensolr.photos.search.PhotoHit
+import com.opensolr.photos.search.EditRepository
 import com.opensolr.photos.search.SearchFilters
 import com.opensolr.photos.search.SearchRepository
+import com.opensolr.photos.sync.PlanWatch
 import com.opensolr.photos.sync.SyncScheduler
 import com.opensolr.photos.sync.SyncStatus
 import kotlinx.coroutines.Dispatchers
@@ -36,7 +40,7 @@ import java.security.MessageDigest
 /**
  * The screens of the app.
  */
-enum class Screen { SignIn, Welcome, Permissions, Folders, Setup, Search, Sync, Account }
+enum class Screen { SignIn, Welcome, Permissions, Folders, Setup, Search, Sync, Account, Map }
 
 /**
  * Everything the UI draws, in one immutable value.
@@ -56,6 +60,8 @@ data class UiState(
     val setupError: String? = null,
     val setupNeedsUpgrade: Boolean = false,
     val query: String = "",
+    val suggestions: List<String> = emptyList(),
+    val didYouMean: String? = null,
     val filters: SearchFilters = SearchFilters(),
     val hits: List<PhotoHit> = emptyList(),
     val numFound: Long = 0,
@@ -74,7 +80,25 @@ data class UiState(
     val accountRefreshing: Boolean = false,
     val accountError: String? = null,
     val foldersReturnTo: Screen = Screen.Setup,
+    val pins: List<PhotoPin> = emptyList(),
+    val pinsLoading: Boolean = false,
+    val pinsError: String? = null,
+    val mapFocus: MapFocus? = null,
+    val selecting: Boolean = false,
+    val selectedIds: Set<String> = emptySet(),
+    val rebuildRequired: Boolean = false,
+    /** Counts fresh searches, so the grid scrolls back to the top for each. */
+    val searchGeneration: Int = 0,
+    val editSaving: Boolean = false,
+    val editError: String? = null,
+    /** What the plan's limits mean right now, for the account screen. */
+    val planWarnings: List<PlanWatch.Warning> = emptyList(),
 )
+
+/**
+ * Where the map opens: a point and a zoom level, or null to fit every pin.
+ */
+data class MapFocus(val lat: Double, val lon: Double, val zoom: Double)
 
 /**
  * Holds the app state and runs every user action.
@@ -86,11 +110,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val api = OpensolrApi()
     private val indexes = IndexManager(application, prefs, api)
     private val searches = SearchRepository(application)
+    private val edits = EditRepository(application)
 
     private val _state = MutableStateFlow(initialState())
     val state: StateFlow<UiState> = _state.asStateFlow()
 
     private var searchJob: Job? = null
+    private var suggestJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -103,6 +129,73 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         if (_state.value.screen == Screen.Search) search(reset = true)
         if (_state.value.screen == Screen.Setup) runSetup()
+        // The photo watch is one-shot; make sure one is armed whenever the app is set up.
+        if (prefs.session != null && prefs.connection != null) {
+            SyncScheduler.watchMedia(context)
+            checkConfigVersion()
+        }
+    }
+
+    /**
+     * Compares the configuration the index runs with the one this app ships, at start. An
+     * older index asks the owner to rebuild it; a newer one asks for an app update.
+     */
+    private fun checkConfigVersion() {
+        val connection = prefs.connection ?: return
+        viewModelScope.launch {
+            try {
+                val version = indexes.configVersionOf(connection)
+                when {
+                    version < IndexManager.CONFIG_VERSION -> _state.update { it.copy(rebuildRequired = !prefs.rebuildApproved) }
+                    version > IndexManager.CONFIG_VERSION -> _state.update { it.copy(notice = "Your index was set up by a newer version of Opensolr Photos. Update the app to keep syncing.") }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+            }
+        }
+    }
+
+    /**
+     * The owner agreed to rebuild the index for the new configuration: the next sync does it,
+     * and it starts now.
+     */
+    fun approveRebuild() {
+        prefs.rebuildApproved = true
+        _state.update { it.copy(rebuildRequired = false) }
+        SyncScheduler.runNow(context)
+    }
+
+    /**
+     * "Later": search keeps working on the old configuration, syncing waits.
+     */
+    fun postponeRebuild() {
+        _state.update { it.copy(rebuildRequired = false) }
+    }
+
+    /**
+     * Saves the owner's tags and wording of a photo, on the phone and in the index, and
+     * refreshes the photo in the results.
+     */
+    fun saveEdits(hit: PhotoHit, tags: List<String>, meaning: String?, onDone: () -> Unit) {
+        _state.update { it.copy(editSaving = true, editError = null) }
+        viewModelScope.launch {
+            try {
+                val doc = edits.save(hit.id, tags, meaning)
+                val updated = hit.copy(
+                    meaning = doc.optString("meaning"),
+                    customTags = doc.optJSONArray("custom_tags")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList(),
+                )
+                _state.update { s -> s.copy(editSaving = false, hits = s.hits.map { if (it.id == hit.id) updated else it }) }
+                onDone()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: SignInRequiredException) {
+                signedOut("Your Opensolr sign-in stopped working. Sign in again.")
+            } catch (e: Exception) {
+                _state.update { it.copy(editSaving = false, editError = e.message ?: "The edit could not be saved.") }
+            }
+        }
     }
 
     /**
@@ -123,6 +216,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             notice = notice,
             email = session?.email,
             account = prefs.account,
+            planWarnings = prefs.account?.let { PlanWatch.evaluate(it) } ?: emptyList(),
             selectedFolders = prefs.folders,
             schedule = prefs.schedule,
             lastReport = prefs.lastReport,
@@ -247,6 +341,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val (connection, _) = indexes.ensure(session) { step -> _state.update { it.copy(setupStep = step) } }
                 SyncScheduler.applySchedule(context, prefs.schedule)
+                SyncScheduler.watchMedia(context)
                 SyncScheduler.runNow(context)
                 _state.update { it.copy(screen = Screen.Search, indexName = connection.indexName, environment = connection.environment) }
                 refreshAccount()
@@ -266,6 +361,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun onQueryChange(query: String) {
         _state.update { it.copy(query = query) }
+        // Autocomplete from the labels, a short pause after the last keystroke.
+        suggestJob?.cancel()
+        if (query.trim().length < 2) {
+            _state.update { it.copy(suggestions = emptyList()) }
+            return
+        }
+        suggestJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(200)
+            val found = searches.suggest(query)
+            _state.update { if (it.query == query) it.copy(suggestions = found) else it }
+        }
+    }
+
+    /**
+     * The user picked an autocomplete entry or the spelling suggestion: search for it.
+     */
+    fun applySuggestion(text: String) {
+        suggestJob?.cancel()
+        _state.update { it.copy(query = text, suggestions = emptyList()) }
+        search(reset = true)
     }
 
     /**
@@ -276,7 +391,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (!reset && (current.searching || current.endReached)) return
         searchJob?.cancel()
         val start = if (reset) 0 else current.hits.size
-        _state.update { it.copy(searching = true, searchError = null) }
+        suggestJob?.cancel()
+        _state.update { it.copy(searching = true, searchError = null, suggestions = emptyList(), searchGeneration = if (reset) it.searchGeneration + 1 else it.searchGeneration) }
         searchJob = viewModelScope.launch {
             try {
                 val page = searches.search(current.query, current.filters, start)
@@ -289,6 +405,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         facets = if (reset || it.facets.isEmpty()) page.facets else it.facets,
                         smart = page.smart,
                         searchNotice = page.notice,
+                        didYouMean = if (reset) page.didYouMean else it.didYouMean,
                         endReached = hits.size >= page.numFound || page.hits.isEmpty(),
                     )
                 }
@@ -300,6 +417,44 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _state.update { it.copy(searching = false, searchError = e.message ?: "Search failed.") }
             }
         }
+    }
+
+    /**
+     * Opens the map with the photos of the current search that have a GPS position. With
+     * [focus] the map opens on that point instead of fitting every pin.
+     */
+    fun openMap(focus: MapFocus? = null) {
+        _state.update { it.copy(screen = Screen.Map, mapFocus = focus) }
+        loadPins()
+    }
+
+    /**
+     * Loads (or reloads) the pins of the map for the current query and filters.
+     */
+    fun loadPins() {
+        val current = _state.value
+        _state.update { it.copy(pinsLoading = true, pinsError = null) }
+        viewModelScope.launch {
+            try {
+                val pins = searches.pins(current.query, current.filters)
+                _state.update { it.copy(pins = pins, pinsLoading = false) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: SignInRequiredException) {
+                signedOut("Your Opensolr sign-in stopped working. Sign in again.")
+            } catch (e: Exception) {
+                _state.update { it.copy(pinsLoading = false, pinsError = e.message ?: "The map could not be loaded.") }
+            }
+        }
+    }
+
+    /**
+     * Radius search: keeps the query and filters, adds "within [radiusKm] of [lat],[lon]", and
+     * returns to the photos.
+     */
+    fun searchNear(lat: Double, lon: Double, radiusKm: Double) {
+        _state.update { it.copy(screen = Screen.Search, filters = it.filters.copy(near = NearFilter(lat, lon, radiusKm))) }
+        search(reset = true)
     }
 
     /**
@@ -315,6 +470,39 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * user is asked to be patient instead.
      */
     fun forceResync() {
+        if (_state.value.sync.busy || com.opensolr.photos.sync.SyncWorker.running.get()) {
+            _state.update { it.copy(showBusyDialog = true) }
+            return
+        }
+        SyncScheduler.runNow(context)
+    }
+
+    /**
+     * Enters or leaves photo selection on the grid.
+     */
+    fun setSelecting(on: Boolean) {
+        _state.update { it.copy(selecting = on, selectedIds = if (on) it.selectedIds else emptySet()) }
+    }
+
+    /**
+     * Ticks or unticks a photo while selecting.
+     */
+    fun toggleSelected(id: String) {
+        _state.update {
+            val next = if (id in it.selectedIds) it.selectedIds - id else it.selectedIds + id
+            it.copy(selectedIds = next)
+        }
+    }
+
+    /**
+     * Re-sync selected: the chosen photos are read again by CLIP at the next sync, which
+     * starts right away, regardless of what the cache knows about them.
+     */
+    fun resyncSelected() {
+        val ids = _state.value.selectedIds
+        if (ids.isEmpty()) return
+        prefs.resyncIds = prefs.resyncIds + ids
+        _state.update { it.copy(selecting = false, selectedIds = emptySet()) }
         if (_state.value.sync.busy || com.opensolr.photos.sync.SyncWorker.running.get()) {
             _state.update { it.copy(showBusyDialog = true) }
             return
@@ -349,7 +537,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val limits = api.accountSummary(session, connection.indexName, prefs.account)
                 prefs.account = limits
-                _state.update { it.copy(account = limits, accountRefreshing = false) }
+                val warnings = PlanWatch.notifyNew(context, prefs, limits)
+                _state.update { it.copy(account = limits, accountRefreshing = false, planWarnings = warnings) }
             } catch (e: SignInRequiredException) {
                 signedOut("Your Opensolr sign-in stopped working. Sign in again.")
             } catch (e: Exception) {
@@ -388,7 +577,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun back() {
         val current = _state.value
         when (current.screen) {
-            Screen.Sync, Screen.Account -> _state.update { it.copy(screen = Screen.Search) }
+            Screen.Map -> _state.update { it.copy(screen = Screen.Search) }
+            // Back to the photos always reloads them: a sync may have finished meanwhile.
+            Screen.Sync, Screen.Account -> {
+                _state.update { it.copy(screen = Screen.Search) }
+                search(reset = true)
+            }
             Screen.Folders -> if (current.foldersReturnTo == Screen.Sync) _state.update { it.copy(screen = Screen.Sync) }
             else -> Unit
         }
@@ -400,12 +594,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun onSyncFinished() {
         val report = prefs.lastReport
-        _state.update { it.copy(lastReport = report, account = prefs.account, indexName = prefs.connection?.indexName, environment = prefs.connection?.environment) }
+        _state.update { it.copy(lastReport = report, account = prefs.account, planWarnings = prefs.account?.let { a -> PlanWatch.evaluate(a) } ?: emptyList(), indexName = prefs.connection?.indexName, environment = prefs.connection?.environment) }
         if (report?.status == "sign_in_required") {
             signedOut(prefs.pendingNotice ?: "Your Opensolr sign-in stopped working. Sign in again.")
             prefs.pendingNotice = null
             return
         }
+        if (report?.status == "rebuild_required") _state.update { it.copy(rebuildRequired = true) }
+        if (report?.status == "update_app") _state.update { it.copy(notice = report.message) }
         if (_state.value.screen == Screen.Search) search(reset = true)
     }
 

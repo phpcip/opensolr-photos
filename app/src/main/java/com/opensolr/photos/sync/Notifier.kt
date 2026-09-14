@@ -77,8 +77,9 @@ object Notifier {
      * The plan ran out of something: disk space, search bandwidth or AI requests. Tapping
      * opens the pricing page.
      */
-    fun planLimit(context: Context, title: String, text: String) = post(
-        context, ALERT_LIMIT,
+    fun planLimit(context: Context, title: String, text: String, key: String = "") = post(
+        // One notification per situation (key), so a disk warning does not replace an AI one.
+        context, if (key.isEmpty()) ALERT_LIMIT else ALERT_LIMIT + 1 + (key.hashCode() and 0x7fff),
         NotificationCompat.Builder(context, CHANNEL_ALERTS)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)

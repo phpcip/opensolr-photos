@@ -30,17 +30,33 @@
   <field name="focal_length" type="pfloat" indexed="true" stored="true"/>
   <field name="flash" type="boolean" indexed="true" stored="true"/>
 
+  <!-- Where the photo was taken, in words (from the GPS position through Opensolr's
+       nearby_places): the nearest named place and its administrative parents. -->
+  <field name="city" type="string" indexed="true" stored="true"/>
+  <field name="region" type="string" indexed="true" stored="true"/>
+  <field name="province" type="string" indexed="true" stored="true"/>
+  <field name="community" type="string" indexed="true" stored="true"/>
+  <field name="country" type="string" indexed="true" stored="true"/>
+  <field name="country_code" type="string" indexed="true" stored="true"/>
+  <field name="place_text" type="text_photo" indexed="true" stored="false" multiValued="true"/>
   <field name="has_location" type="boolean" indexed="true" stored="true"/>
   <field name="location" type="location" indexed="true" stored="true"/>
   <field name="altitude" type="pfloat" indexed="true" stored="true"/>
 
   <field name="meaning" type="text_photo" indexed="true" stored="true"/>
   <field name="labels" type="string" indexed="true" stored="true" multiValued="true"/>
+  <!-- Words the owner added to the photo by hand. They outrank the CLIP words in search. -->
+  <field name="custom_tags" type="string" indexed="true" stored="true" multiValued="true"/>
+  <!-- The tags as words, for search: "luminita" finds the tag "Luminița". -->
+  <field name="custom_tags_text" type="text_photo" indexed="true" stored="false" multiValued="true"/>
   <field name="embeddings" type="knn_vector" indexed="true" stored="false"/>
   <field name="clip_model" type="string" indexed="true" stored="true"/>
   <field name="embed_model" type="string" indexed="true" stored="true"/>
   <field name="indexed_at" type="pdate" indexed="true" stored="true"/>
 
+  <!-- Every word autocomplete offers: CLIP labels, camera make and model, place names. -->
+  <field name="suggest" type="string" indexed="false" stored="true" multiValued="true"/>
+  <field name="spell" type="text_spell" indexed="true" stored="false" multiValued="true"/>
   <field name="text" type="text_photo" indexed="true" stored="false" multiValued="true"/>
   <field name="file_name_text" type="text_photo" indexed="true" stored="false"/>
   <field name="folder_text" type="text_photo" indexed="true" stored="false"/>
@@ -55,6 +71,34 @@
   <copyField source="folder" dest="text"/>
   <copyField source="camera_make" dest="text"/>
   <copyField source="camera_model" dest="text"/>
+  <copyField source="city" dest="place_text"/>
+  <copyField source="region" dest="place_text"/>
+  <copyField source="province" dest="place_text"/>
+  <copyField source="community" dest="place_text"/>
+  <copyField source="country" dest="place_text"/>
+  <copyField source="city" dest="text"/>
+  <copyField source="region" dest="text"/>
+  <copyField source="country" dest="text"/>
+  <copyField source="custom_tags" dest="custom_tags_text"/>
+  <copyField source="custom_tags" dest="text"/>
+  <copyField source="custom_tags" dest="spell"/>
+  <copyField source="custom_tags" dest="suggest"/>
+  <copyField source="labels" dest="spell"/>
+  <copyField source="file_name" dest="spell"/>
+  <copyField source="camera_make" dest="spell"/>
+  <copyField source="camera_model" dest="spell"/>
+  <copyField source="city" dest="spell"/>
+  <copyField source="region" dest="spell"/>
+  <copyField source="province" dest="spell"/>
+  <copyField source="community" dest="spell"/>
+  <copyField source="country" dest="spell"/>
+  <copyField source="labels" dest="suggest"/>
+  <copyField source="camera_make" dest="suggest"/>
+  <copyField source="camera_model" dest="suggest"/>
+  <copyField source="city" dest="suggest"/>
+  <copyField source="region" dest="suggest"/>
+  <copyField source="province" dest="suggest"/>
+  <copyField source="country" dest="suggest"/>
 
   <dynamicField name="*_s" type="string" indexed="true" stored="true"/>
   <dynamicField name="*_ss" type="string" indexed="true" stored="true" multiValued="true"/>
@@ -73,6 +117,16 @@
   <fieldType name="pdate" class="solr.DatePointField" docValues="true"/>
   <fieldType name="location" class="solr.LatLonPointSpatialField" docValues="true"/>
   <fieldType name="knn_vector" class="solr.DenseVectorField" vectorDimension="1024" similarityFunction="cosine"/>
+
+  <!-- Words as typed, lower-cased and accent-folded, unstemmed: what the spellchecker
+       compares against and what the suggester analyses the labels with. -->
+  <fieldType name="text_spell" class="solr.TextField" positionIncrementGap="100">
+    <analyzer>
+      <tokenizer class="solr.StandardTokenizerFactory"/>
+      <filter class="solr.LowerCaseFilterFactory"/>
+      <filter class="solr.ASCIIFoldingFilterFactory"/>
+    </analyzer>
+  </fieldType>
 
   <fieldType name="text_photo" class="solr.TextField" positionIncrementGap="100">
     <analyzer type="index">

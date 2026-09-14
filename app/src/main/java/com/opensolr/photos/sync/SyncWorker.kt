@@ -44,6 +44,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             return Result.success(workDataOf(KEY_STATUS to report.status))
         } finally {
             running.set(false)
+            // Arm the photo watch again: its trigger is consumed by the run it started.
+            if (AppPrefs(applicationContext).session != null) SyncScheduler.watchMedia(applicationContext)
         }
     }
 

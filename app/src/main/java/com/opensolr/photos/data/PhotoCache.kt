@@ -28,7 +28,7 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
     data class Entry(val docJson: String, val vector: FloatArray?)
 
     /**
-     * Creates the single table.
+     * Creates the tables: the photos, and the places already looked up for a position.
      */
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -39,14 +39,83 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
                 "doc_json TEXT NOT NULL, " +
                 "vector BLOB)"
         )
+        db.execSQL("CREATE TABLE IF NOT EXISTS places (key TEXT PRIMARY KEY NOT NULL, place_json TEXT NOT NULL)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS edits (id TEXT PRIMARY KEY NOT NULL, tags_json TEXT NOT NULL, meaning TEXT, updated INTEGER NOT NULL)")
     }
 
     /**
-     * Schema changes simply start the cache over; it only ever saves AI requests.
+     * Versions 2 and 3 only add tables; the photos (paid AI answers) are kept.
      */
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        db.execSQL("DROP TABLE IF EXISTS photos")
-        onCreate(db)
+        if (oldVersion < 2) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS places (key TEXT PRIMARY KEY NOT NULL, place_json TEXT NOT NULL)")
+        }
+        if (oldVersion < 3) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS edits (id TEXT PRIMARY KEY NOT NULL, tags_json TEXT NOT NULL, meaning TEXT, updated INTEGER NOT NULL)")
+        }
+    }
+
+    /**
+     * What the owner wrote about a photo: their tags, and their own wording of what the
+     * photo shows when they changed it (null = keep what Opensolr saw).
+     */
+    data class Edits(val tags: List<String>, val meaning: String?)
+
+    /**
+     * The owner's edits of [id], or null when there are none.
+     */
+    fun getEdits(id: String): Edits? {
+        readableDatabase.query("edits", arrayOf("tags_json", "meaning"), "id = ?", arrayOf(id), null, null, null, "1").use { cursor ->
+            if (!cursor.moveToFirst()) return null
+            val array = org.json.JSONArray(cursor.getString(0))
+            val tags = (0 until array.length()).map { array.getString(it) }
+            return Edits(tags, if (cursor.isNull(1)) null else cursor.getString(1))
+        }
+    }
+
+    /**
+     * Stores the owner's edits of [id]; no tags and no wording removes the row.
+     */
+    fun putEdits(id: String, edits: Edits) {
+        if (edits.tags.isEmpty() && edits.meaning == null) {
+            writableDatabase.delete("edits", "id = ?", arrayOf(id))
+            return
+        }
+        val values = ContentValues().apply {
+            put("id", id)
+            put("tags_json", org.json.JSONArray(edits.tags).toString())
+            if (edits.meaning == null) putNull("meaning") else put("meaning", edits.meaning)
+            put("updated", System.currentTimeMillis())
+        }
+        writableDatabase.insertWithOnConflict("edits", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    /**
+     * True when [id] has a cached document (of any size or time).
+     */
+    fun has(id: String): Boolean {
+        readableDatabase.query("photos", arrayOf("id"), "id = ?", arrayOf(id), null, null, null, "1").use { return it.moveToFirst() }
+    }
+
+    /**
+     * The place already looked up for [key] (a rounded "lat,lon"), as JSON; null when unknown.
+     * An empty string means the position was looked up and has no place.
+     */
+    fun getPlace(key: String): String? {
+        readableDatabase.query("places", arrayOf("place_json"), "key = ?", arrayOf(key), null, null, null, "1").use { cursor ->
+            return if (cursor.moveToFirst()) cursor.getString(0) else null
+        }
+    }
+
+    /**
+     * Remembers the place of [key].
+     */
+    fun putPlace(key: String, placeJson: String) {
+        val values = ContentValues().apply {
+            put("key", key)
+            put("place_json", placeJson)
+        }
+        writableDatabase.insertWithOnConflict("places", null, values, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
     /**
@@ -63,6 +132,17 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
             if (!cursor.moveToFirst()) return null
             val blob = if (cursor.isNull(1)) null else cursor.getBlob(1)
             return Entry(cursor.getString(0), blob?.let { toFloats(it) })
+        }
+    }
+
+    /**
+     * True when [id] was cached for a different [sizeBytes] or [modified] time: the file was
+     * edited in place, so the photo must be read again. False when unknown or unchanged.
+     */
+    fun isStale(id: String, sizeBytes: Long, modified: Long): Boolean {
+        readableDatabase.query("photos", arrayOf("size_bytes", "modified"), "id = ?", arrayOf(id), null, null, null, "1").use { cursor ->
+            if (!cursor.moveToFirst()) return false
+            return cursor.getLong(0) != sizeBytes || cursor.getLong(1) != modified
         }
     }
 
@@ -106,7 +186,9 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
      * Forgets everything (used on sign-out).
      */
     fun clear() {
+        // The owner's edits are their work, not account data: they stay.
         writableDatabase.delete("photos", null, null)
+        writableDatabase.delete("places", null, null)
     }
 
     /**
@@ -128,6 +210,6 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
 
     companion object {
         private const val NAME = "photo_cache.db"
-        private const val VERSION = 1
+        private const val VERSION = 3
     }
 }

@@ -58,6 +58,12 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
         Spacer(Modifier.height(24.dp))
 
         if (account != null) {
+            // What the limits mean right now, before the numbers.
+            state.planWarnings.forEach { warning ->
+                Notice(warning.text, title = warning.title)
+                Spacer(Modifier.height(10.dp))
+            }
+            if (state.planWarnings.isNotEmpty()) Spacer(Modifier.height(10.dp))
             SectionLabel("Limits and usage")
             UsageRow(
                 "Disk space",
@@ -87,7 +93,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
             Spacer(Modifier.height(20.dp))
 
             Notice(
-                "If your index goes over its disk space or its search bandwidth, it stops taking new photos and answering searches. If the AI requests of the month run out, new photos wait until next month. Upgrade at opensolr.com/pricing to lift any of these limits.",
+                "If your index goes over its disk space or its search bandwidth, it stops taking new photos and answering searches. If the AI requests of the month run out, or the plan has no photo recognition, new photos are still indexed by date, camera, place, file name and your tags, without being read into words, and search matches words only. You are warned here and with a notification at 90% and at the limit. Upgrade at opensolr.com/pricing to lift any of these limits.",
                 title = "When a limit is reached",
             )
             Spacer(Modifier.height(14.dp))
