@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 780" role="img" aria-label="Sign-in sequence: app, browser and opensolr.com, OAuth 2.0 authorization code with PKCE">
+  <rect x="0.5" y="0.5" width="1199" height="779" fill="#ffffff" stroke="#d9d4cc"/>
+  <g font-family="'Space Grotesk', 'Segoe UI', Helvetica, Arial, sans-serif">
+    <rect x="40" y="36" width="220" height="64" rx="2" fill="#ffffff" stroke="#111111" stroke-width="1.5"/>
+    <text x="150" y="66" font-size="20" font-weight="700" fill="#111111" text-anchor="middle">The app</text>
+    <text x="150" y="88" font-size="16" fill="#4a4540" text-anchor="middle">holds the verifier</text>
+
+    <rect x="490" y="36" width="220" height="64" rx="2" fill="#ffffff" stroke="#111111" stroke-width="1.5"/>
+    <text x="600" y="66" font-size="20" font-weight="700" fill="#111111" text-anchor="middle">Browser</text>
+    <text x="600" y="88" font-size="16" fill="#4a4540" text-anchor="middle">Custom Tab</text>
+
+    <rect x="940" y="36" width="220" height="64" rx="2" fill="#ffffff" stroke="#c05520" stroke-width="2"/>
+    <text x="1050" y="66" font-size="20" font-weight="700" fill="#c05520" text-anchor="middle">opensolr.com</text>
+    <text x="1050" y="88" font-size="16" fill="#4a4540" text-anchor="middle">/app/*</text>
+
+    <line x1="150" y1="100" x2="150" y2="740" stroke="#d9d4cc" stroke-width="1.5" stroke-dasharray="6 6"/>
+    <line x1="600" y1="100" x2="600" y2="740" stroke="#d9d4cc" stroke-width="1.5" stroke-dasharray="6 6"/>
+    <line x1="1050" y1="100" x2="1050" y2="740" stroke="#d9d4cc" stroke-width="1.5" stroke-dasharray="6 6"/>
+
+    <text x="375" y="146" font-size="16" fill="#111111" text-anchor="middle">1 · open /app/authorize</text>
+    <text x="375" y="166" font-size="16" fill="#4a4540" text-anchor="middle">code_challenge (S256), state</text>
+    <line x1="150" y1="180" x2="588" y2="180" stroke="#111111" stroke-width="1.5"/>
+    <path d="M598 180 L586 174 L586 186 Z" fill="#111111"/>
+
+    <text x="825" y="222" font-size="16" fill="#111111" text-anchor="middle">2 · GET /app/authorize</text>
+    <line x1="600" y1="236" x2="1038" y2="236" stroke="#111111" stroke-width="1.5"/>
+    <path d="M1048 236 L1036 230 L1036 242 Z" fill="#111111"/>
+
+    <text x="825" y="278" font-size="16" fill="#111111" text-anchor="middle">3 · 303 to the login when signed out</text>
+    <line x1="1050" y1="292" x2="612" y2="292" stroke="#111111" stroke-width="1.5"/>
+    <path d="M602 292 L614 286 L614 298 Z" fill="#111111"/>
+
+    <text x="825" y="334" font-size="16" fill="#111111" text-anchor="middle">4 · login, reCAPTCHA, two-factor</text>
+    <line x1="600" y1="348" x2="1038" y2="348" stroke="#111111" stroke-width="1.5"/>
+    <path d="M1048 348 L1036 342 L1036 354 Z" fill="#111111"/>
+
+    <text x="825" y="390" font-size="16" fill="#111111" text-anchor="middle">5 · approval page, cannot be framed</text>
+    <line x1="1050" y1="404" x2="612" y2="404" stroke="#111111" stroke-width="1.5"/>
+    <path d="M602 404 L614 398 L614 410 Z" fill="#111111"/>
+
+    <text x="825" y="446" font-size="16" fill="#111111" text-anchor="middle">6 · POST Allow, with CSRF token</text>
+    <line x1="600" y1="460" x2="1038" y2="460" stroke="#111111" stroke-width="1.5"/>
+    <path d="M1048 460 L1036 454 L1036 466 Z" fill="#111111"/>
+
+    <text x="825" y="502" font-size="16" fill="#111111" text-anchor="middle">7 · 303 /app/callback?code&amp;state</text>
+    <text x="825" y="522" font-size="16" fill="#4a4540" text-anchor="middle">one-time code, valid 60 seconds</text>
+    <line x1="1050" y1="536" x2="612" y2="536" stroke="#111111" stroke-width="1.5"/>
+    <path d="M602 536 L614 530 L614 542 Z" fill="#111111"/>
+
+    <text x="375" y="578" font-size="16" fill="#111111" text-anchor="middle">8 · verified App Link opens the app</text>
+    <line x1="600" y1="592" x2="162" y2="592" stroke="#111111" stroke-width="1.5"/>
+    <path d="M152 592 L164 586 L164 598 Z" fill="#111111"/>
+
+    <text x="600" y="634" font-size="16" font-weight="700" fill="#c05520" text-anchor="middle">9 · POST /app/token   code + code_verifier + state checked in the app</text>
+    <line x1="150" y1="648" x2="1038" y2="648" stroke="#c05520" stroke-width="2"/>
+    <path d="M1048 648 L1036 642 L1036 654 Z" fill="#c05520"/>
+
+    <text x="600" y="690" font-size="16" font-weight="700" fill="#c05520" text-anchor="middle">10 · email, API key, plan limits</text>
+    <line x1="1050" y1="704" x2="162" y2="704" stroke="#c05520" stroke-width="2"/>
+    <path d="M152 704 L164 698 L164 710 Z" fill="#c05520"/>
+
+    <text x="40" y="760" font-size="16" fill="#4a4540">The password is only ever typed into the browser. Without the verifier, a code seen by anyone else is worthless.</text>
+  </g>
+</svg>

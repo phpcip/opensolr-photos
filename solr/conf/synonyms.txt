@@ -1,0 +1,6 @@
+photo, picture, image, pic
+sea, ocean
+car, automobile
+kid, child
+dog, puppy
+cat, kitten

@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Opensolr Photos</string>
+    <string name="channel_sync_name">Sync progress</string>
+    <string name="channel_sync_description">Shows progress while your photos are being indexed.</string>
+    <string name="channel_alerts_name">Account alerts</string>
+    <string name="channel_alerts_description">Plan limits reached, sign-in needed, index recreated.</string>
+</resources>

@@ -1,0 +1,4 @@
+-keep class com.opensolr.photos.sync.SyncWorker { <init>(...); }
+-dontwarn org.conscrypt.**
+-dontwarn org.bouncycastle.**
+-dontwarn org.openjsse.**

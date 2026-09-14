@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560" role="img" aria-label="The five steps of every sync">
+  <rect x="0.5" y="0.5" width="1199" height="559" fill="#ffffff" stroke="#d9d4cc"/>
+  <g font-family="'Space Grotesk', 'Segoe UI', Helvetica, Arial, sans-serif">
+    <text x="40" y="52" font-size="16" font-weight="700" letter-spacing="1.5" fill="#4a4540">EVERY SYNC, FORCED OR SCHEDULED</text>
+
+    <text x="40" y="112" font-size="30" font-weight="700" fill="#c05520">01</text>
+    <text x="110" y="100" font-size="19" font-weight="700" fill="#111111">Make sure the index is there</text>
+    <text x="110" y="126" font-size="16" fill="#4a4540">Reuse it, create it, or recreate it if it vanished. The schema is checked and uploaded if missing.</text>
+    <line x1="40" y1="148" x2="1160" y2="148" stroke="#d9d4cc" stroke-width="1.5"/>
+
+    <text x="40" y="202" font-size="30" font-weight="700" fill="#c05520">02</text>
+    <text x="110" y="190" font-size="19" font-weight="700" fill="#111111">Scan the chosen folders</text>
+    <text x="110" y="216" font-size="16" fill="#4a4540">Through MediaStore. Every photo gets its id: md5 of its absolute path.</text>
+    <line x1="40" y1="238" x2="1160" y2="238" stroke="#d9d4cc" stroke-width="1.5"/>
+
+    <text x="40" y="292" font-size="30" font-weight="700" fill="#c05520">03</text>
+    <text x="110" y="280" font-size="19" font-weight="700" fill="#111111">Download the index's ids</text>
+    <text x="110" y="306" font-size="16" fill="#4a4540">q=*:*, fl=id, sort=id asc, 1000 rows per page, start advancing until a short page.</text>
+    <line x1="40" y1="328" x2="1160" y2="328" stroke="#d9d4cc" stroke-width="1.5"/>
+
+    <text x="40" y="382" font-size="30" font-weight="700" fill="#c05520">04</text>
+    <text x="110" y="370" font-size="19" font-weight="700" fill="#111111">Delete what left the phone</text>
+    <text x="110" y="396" font-size="16" fill="#4a4540">Ids in the index but not on the phone, deleted 500 at a time.</text>
+    <line x1="40" y1="418" x2="1160" y2="418" stroke="#d9d4cc" stroke-width="1.5"/>
+
+    <text x="40" y="472" font-size="30" font-weight="700" fill="#c05520">05</text>
+    <text x="110" y="460" font-size="19" font-weight="700" fill="#111111">Add what is new</text>
+    <text x="110" y="486" font-size="16" fill="#4a4540">20 photos per round: cache or image_clip, one batch_embed, one /update. Then a commit and fresh plan usage.</text>
+    <line x1="40" y1="508" x2="1160" y2="508" stroke="#d9d4cc" stroke-width="1.5"/>
+
+    <text x="40" y="540" font-size="16" fill="#4a4540">Only one sync ever runs at a time. Force Re-Sync while one is running tells you to be patient instead of starting another.</text>
+  </g>
+</svg>

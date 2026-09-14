@@ -1,0 +1,132 @@
+<p align="center">
+  <img src="docs/images/banner.svg" alt="Opensolr Photos: find any photo on your phone by what is in it" width="100%">
+</p>
+
+# Opensolr Photos
+
+**Find any photo on your phone by what is in it.**
+
+Opensolr Photos is a free, open source Android app that turns the photo folders on your phone into a
+search engine. Type *dog on the beach*, *birthday cake* or *snow in the mountains*, narrow it down by year,
+folder, camera or place, and tap a result to open it in Google Photos or your phone's own gallery.
+
+The search engine behind it is **your own Opensolr Index**, created by the app in your Opensolr account,
+one per phone. No photo backup, no Google account, no ads, no analytics.
+
+**[Download the APK](https://github.com/phpcip/opensolr-photos/releases/latest/download/opensolr-photos.apk)** ·
+[Website](https://opensolr.com/opensolr-photos) ·
+[Documentation](docs/README.md) ·
+[Releases](https://github.com/phpcip/opensolr-photos/releases)
+
+---
+
+## What it does
+
+| | |
+|---|---|
+| **Search by meaning** | Every photo is read into words describing what it shows. On a plan with vector search, your query is matched on meaning too, so *puppy* finds the photos read as *dog*. |
+| **Filters** | Year, folder, camera, orientation, and photos with a location. The filter values come from your own photos. |
+| **Opens in your gallery** | Tap a result: it opens in Google Photos or your phone's gallery app. Press and hold for the details and the words Opensolr saw. |
+| **Keeps itself in step** | Re-Sync every week or every month, or force one. New photos are added, deleted photos leave the index. |
+| **One index per phone** | `photos_<ANDROID_ID>__dense` in your Opensolr account. Reinstall on the same phone and it finds its index again. |
+| **Plan limits, in plain numbers** | Right after sign-in, and on the account screen: photos per month, disk space, search bandwidth, and where to upgrade. |
+
+## How it works
+
+<p align="center">
+  <img src="docs/images/how-it-works.svg" alt="How a photo becomes searchable" width="100%">
+</p>
+
+1. **Sign in** with your Opensolr account, in the phone's browser ([sign-in](docs/sign-in.md)).
+2. **Pick folders.** DCIM, where the camera saves, is proposed.
+3. **The app sets up this phone's index**: creates it if it does not exist and uploads the
+   [schema](docs/index-schema.md) that ships in [`solr/conf`](solr/conf).
+4. **Sync.** For every photo not yet in the index, the app makes a 640 px copy, asks Opensolr's
+   `image_clip` endpoint what it shows, turns those words into a vector with `batch_embed`, reads the
+   camera metadata on the phone, and writes the document straight into the index ([sync](docs/sync.md)).
+5. **Search** goes straight to the index: words, meaning, filters ([search](docs/search.md)).
+
+## Requirements
+
+- Android 8.0 (API 26) or newer.
+- An [Opensolr](https://opensolr.com) account. [Create one](https://opensolr.com/register).
+- For search by meaning: a plan that includes vector search. Without it, photos are still read into words
+  and searchable by those words.
+- Each new photo uses two AI requests of your plan (one on plans without vector search). Photos already
+  indexed never cost anything again. Details: [plan limits](docs/plan-limits.md).
+
+## Install
+
+1. On your phone, download
+   [opensolr-photos.apk](https://github.com/phpcip/opensolr-photos/releases/latest/download/opensolr-photos.apk).
+2. Allow your browser to install it when Android asks.
+3. Open **Opensolr Photos**, sign in, pick your folders. The first sync starts on its own.
+
+The APK is signed with the Opensolr Photos release key. SHA-256 of the signing certificate:
+
+```
+1A:54:DA:CE:0D:5D:7E:80:DF:76:D7:A2:87:AB:3F:DB:C4:B9:CE:7C:EF:9C:17:2E:32:91:59:37:3A:19:41:51
+```
+
+## Your data
+
+<p align="center">
+  <img src="docs/images/data-boundaries.svg" alt="Where each piece of data lives" width="100%">
+</p>
+
+- **Originals never leave the phone.** Only a 640 px re-encoded copy is sent to be read, with no EXIF, and
+  it is not stored.
+- **The index is yours**: labels, a search vector, date, camera, place, path. It lives in your Opensolr
+  account, you can see it, back it up or empty it in the Opensolr control panel.
+- **Your password is only ever typed into the browser.** The app stores the account API key encrypted with
+  an Android Keystore key, and excludes its data from phone backups.
+
+Full account: [privacy and security](docs/privacy-and-security.md).
+
+## Documentation
+
+| Page | What is in it |
+|---|---|
+| [How it works](docs/how-it-works.md) | The whole picture, component by component |
+| [Sign-in](docs/sign-in.md) | OAuth 2.0 with PKCE, step by step, and what is checked where |
+| [Sync and Re-Sync](docs/sync.md) | The algorithm, the ids, the schedule, index recreation, limits |
+| [Search](docs/search.md) | How a query is built, filters, facets, opening photos |
+| [Index schema](docs/index-schema.md) | Every field, the analyzer, the vector field, the configset |
+| [Plan limits](docs/plan-limits.md) | What counts against your plan and what the app does at a limit |
+| [Privacy and security](docs/privacy-and-security.md) | Data flows, storage, network, threat model |
+| [Building from source](docs/building.md) | Toolchain, signing, debug builds |
+| [Troubleshooting](docs/troubleshooting.md) | Common situations and what to do |
+
+## Build from source
+
+```bash
+git clone https://github.com/phpcip/opensolr-photos.git
+cd opensolr-photos
+./gradlew assembleDebug
+```
+
+JDK 17 or newer and the Android SDK (platform 36) are needed. Release builds and signing:
+[building](docs/building.md).
+
+## Project layout
+
+```
+app/src/main/java/com/opensolr/photos/
+  auth/     browser sign-in (PKCE) and the callback activity
+  data/     preferences, Keystore encryption, the photo cache, models
+  index/    finding, creating and setting up the phone's index
+  media/    MediaStore scanning, EXIF, the 640 px copy
+  net/      Opensolr REST API and direct Solr client
+  search/   query building and result parsing
+  sync/     the sync engine, WorkManager worker, schedule, notifications
+  ui/       Jetpack Compose screens and theme
+solr/conf/  schema.xml, solrconfig.xml and analyzer files uploaded to the index
+docs/       documentation and diagrams
+```
+
+## License
+
+[MIT](LICENSE) © Opensolr SRL. Space Grotesk font: SIL Open Font License, see
+[third_party/space-grotesk/OFL.txt](third_party/space-grotesk/OFL.txt).
+
+Security issues: see [SECURITY.md](SECURITY.md).

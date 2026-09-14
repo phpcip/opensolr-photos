@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1220 470" role="img" aria-label="What a sync does with the phone's index: reuse, create, or recreate">
+  <rect x="0.5" y="0.5" width="1219" height="469" fill="#ffffff" stroke="#d9d4cc"/>
+  <g font-family="'Space Grotesk', 'Segoe UI', Helvetica, Arial, sans-serif">
+    <rect x="30" y="178" width="170" height="74" rx="2" fill="#ffffff" stroke="#111111" stroke-width="1.5"/>
+    <text x="115" y="212" font-size="19" font-weight="700" fill="#111111" text-anchor="middle">Sync starts</text>
+    <text x="115" y="236" font-size="16" fill="#4a4540" text-anchor="middle">forced or scheduled</text>
+
+    <line x1="204" y1="215" x2="236" y2="215" stroke="#111111" stroke-width="1.5"/>
+    <path d="M244 215 L232 208 L232 222 Z" fill="#111111"/>
+
+    <rect x="246" y="150" width="300" height="130" rx="2" fill="#ffffff" stroke="#c05520" stroke-width="2"/>
+    <text x="396" y="194" font-size="19" font-weight="700" fill="#111111" text-anchor="middle">Is this phone's index</text>
+    <text x="396" y="220" font-size="19" font-weight="700" fill="#111111" text-anchor="middle">in the account?</text>
+    <text x="396" y="252" font-size="16" fill="#4a4540" text-anchor="middle">photos_&lt;ANDROID_ID&gt;__dense</text>
+
+    <path d="M550 190 L590 190 L590 110 L620 110" fill="none" stroke="#111111" stroke-width="1.5"/>
+    <path d="M628 110 L616 103 L616 117 Z" fill="#111111"/>
+    <text x="598" y="150" font-size="16" font-weight="700" fill="#111111">yes</text>
+
+    <path d="M550 240 L590 240 L590 320 L620 320" fill="none" stroke="#c05520" stroke-width="2"/>
+    <path d="M628 320 L616 313 L616 327 Z" fill="#c05520"/>
+    <text x="598" y="292" font-size="16" font-weight="700" fill="#c05520">no</text>
+
+    <rect x="630" y="50" width="270" height="120" rx="2" fill="#ffffff" stroke="#111111" stroke-width="1.5"/>
+    <text x="650" y="88" font-size="19" font-weight="700" fill="#111111">Reuse it</text>
+    <text x="650" y="116" font-size="16" fill="#4a4540">Schema missing? upload it.</text>
+    <text x="650" y="142" font-size="16" fill="#4a4540">Read address and password.</text>
+
+    <rect x="630" y="260" width="270" height="120" rx="2" fill="#ffffff" stroke="#c05520" stroke-width="2"/>
+    <text x="650" y="298" font-size="19" font-weight="700" fill="#111111">Create it</text>
+    <text x="650" y="326" font-size="16" fill="#4a4540">Pick a vector environment,</text>
+    <text x="650" y="352" font-size="16" fill="#4a4540">create, upload the config.</text>
+
+    <line x1="904" y1="110" x2="936" y2="110" stroke="#111111" stroke-width="1.5"/>
+    <path d="M944 110 L932 103 L932 117 Z" fill="#111111"/>
+    <line x1="904" y1="320" x2="936" y2="320" stroke="#c05520" stroke-width="2"/>
+    <path d="M944 320 L932 313 L932 327 Z" fill="#c05520"/>
+
+    <rect x="946" y="50" width="244" height="120" rx="2" fill="#ffffff" stroke="#111111" stroke-width="1.5"/>
+    <text x="966" y="88" font-size="19" font-weight="700" fill="#111111">Re-Sync</text>
+    <text x="966" y="116" font-size="16" fill="#4a4540">Only the differences:</text>
+    <text x="966" y="142" font-size="16" fill="#4a4540">add new, delete gone.</text>
+
+    <rect x="946" y="260" width="244" height="120" rx="2" fill="#ffffff" stroke="#111111" stroke-width="1.5"/>
+    <text x="966" y="298" font-size="19" font-weight="700" fill="#111111">Full sync</text>
+    <text x="966" y="326" font-size="16" fill="#4a4540">Known photos come back</text>
+    <text x="966" y="352" font-size="16" fill="#4a4540">from the phone's cache.</text>
+
+    <text x="30" y="424" font-size="17" fill="#111111">Created again after it vanished? The user is told the index was emptied and is being refilled.</text>
+    <text x="30" y="452" font-size="17" fill="#c05520">A network error, a server error or a refused key never creates anything: the next sync tries again.</text>
+  </g>
+</svg>
