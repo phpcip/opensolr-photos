@@ -15,7 +15,7 @@ one per phone. No photo backup, no Google account, no ads, no analytics.
 
 **[Download the APK](https://github.com/phpcip/opensolr-photos/releases/latest/download/opensolr-photos.apk)** ·
 [Website](https://opensolr.com/opensolr-photos) ·
-[Documentation](docs/README.md) ·
+[Documentation](https://opensolr.com/opensolr-photos-docs) ·
 [Releases](https://github.com/phpcip/opensolr-photos/releases)
 
 ---
@@ -94,7 +94,9 @@ Full account: [privacy and security](docs/privacy-and-security.md).
 | [Index schema](docs/index-schema.md) | Every field, the analyzer, the vector field, the configset |
 | [Plan limits](docs/plan-limits.md) | What counts against your plan and what the app does at a limit |
 | [Privacy and security](docs/privacy-and-security.md) | Data flows, storage, network, threat model |
+| [Project structure](docs/project-structure.md) | A developer tour: every folder, every package, where to change what |
 | [Building from source](docs/building.md) | Toolchain, signing, debug builds |
+| [Contributing](CONTRIBUTING.md) | How changes get in, conventions, and how to become a contributor |
 | [Troubleshooting](docs/troubleshooting.md) | Common situations and what to do |
 
 ## Build from source

@@ -13,7 +13,9 @@
 | [Index schema](index-schema.md) | Every field of the index, the analyzer, the vector field |
 | [Plan limits](plan-limits.md) | AI requests, disk space, bandwidth, indexes, and what happens at a limit |
 | [Privacy and security](privacy-and-security.md) | What is stored where, what travels, how it is protected |
+| [Project structure](project-structure.md) | A developer tour: every folder, every package, where to change what |
 | [Building from source](building.md) | Toolchain, debug and release builds, signing |
+| [Contributing](../CONTRIBUTING.md) | How changes get in, conventions, and how to become a contributor |
 | [Troubleshooting](troubleshooting.md) | Common situations and what to do about them |
 
 Website: [opensolr.com/opensolr-photos](https://opensolr.com/opensolr-photos)
