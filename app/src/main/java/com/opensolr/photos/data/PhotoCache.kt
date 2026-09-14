@@ -136,6 +136,19 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
     }
 
     /**
+     * The last document known for [id], whatever size or time the file had then: the
+     * starting point of a rewrite, so no field the index already holds is lost. Null when
+     * the photo was never cached.
+     */
+    fun getLatest(id: String): Entry? {
+        readableDatabase.query("photos", arrayOf("doc_json", "vector"), "id = ?", arrayOf(id), null, null, null, "1").use { cursor ->
+            if (!cursor.moveToFirst()) return null
+            val blob = if (cursor.isNull(1)) null else cursor.getBlob(1)
+            return Entry(cursor.getString(0), blob?.let { toFloats(it) })
+        }
+    }
+
+    /**
      * True when [id] was cached for a different [sizeBytes] or [modified] time: the file was
      * edited in place, so the photo must be read again. False when unknown or unchanged.
      */

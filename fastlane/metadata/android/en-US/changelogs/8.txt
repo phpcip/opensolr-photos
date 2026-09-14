@@ -1,0 +1,1 @@
+Every document written to the index is complete, so tags are never lost when a photo is read again. Photos without words are only picked up when the plan allows it. Words are never written without their vector. A warning when the month's AI requests cover fewer photos than there are to read.

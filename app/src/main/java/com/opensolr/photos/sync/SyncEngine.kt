@@ -23,6 +23,7 @@ import com.opensolr.photos.net.RateLimitedException
 import com.opensolr.photos.net.SignInRequiredException
 import com.opensolr.photos.net.SolrAuthException
 import com.opensolr.photos.net.SolrClient
+import com.opensolr.photos.ui.Actions
 import com.opensolr.photos.net.VectorNotAllowedException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -30,6 +31,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.Locale
+import java.util.Date
 import java.util.TimeZone
 
 /**
@@ -68,6 +70,9 @@ class SyncEngine(private val context: Context) {
     /** Photos written this run without CLIP words, because the allowance was used up. */
     private var withoutWords = 0
 
+    /** The warning of this run that the month's allowance covers fewer photos than there are to read, if any. */
+    private var shortAllowance = ""
+
     /**
      * Runs one sync and returns what happened. Never throws except for cancellation.
      */
@@ -81,6 +86,7 @@ class SyncEngine(private val context: Context) {
         var recreated = false
         quotaHit = false
         withoutWords = 0
+        shortAllowance = ""
 
         try {
             onProgress(Progress("Checking your index", 0, 0))
@@ -126,11 +132,15 @@ class SyncEngine(private val context: Context) {
                     if (id !in toPull) return@allDocs
                     val indexedModified = doc.optString("modified_at")
                     val localModified = if (photo.modifiedSec > 0) isoUtc(photo.modifiedSec * 1000L) else ""
+                    doc.remove("_version_")
+                    doc.remove("score")
                     if (indexedModified == localModified && doc.optLong("size_bytes") == photo.sizeBytes) {
-                        doc.remove("_version_")
-                        doc.remove("score")
                         cache.put(id, photo.sizeBytes, photo.modifiedSec, doc.toString(), null)
                     } else {
+                        // The file changed since: cached under the size and time the index knew,
+                        // so it does not pass as current, but the rewrite below starts from it
+                        // and keeps every field the index holds (the owner's tags first of all).
+                        cache.put(id, doc.optLong("size_bytes"), secondsOf(indexedModified), doc.toString(), null)
                         changedSinceIndexed += id
                     }
                     pulled++
@@ -160,9 +170,19 @@ class SyncEngine(private val context: Context) {
             // Photos whose place lookup did not succeed last time are written again (from the
             // cache, so without AI requests) so the place words get another chance.
             val withoutPlace = if (rebuild) emptySet() else withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { solr.idsWithoutPlace() }
-            // Photos indexed without their words (the AI allowance was used up at the time) are
-            // read by CLIP now, if the allowance is back.
-            val needWords = if (rebuild) emptySet() else solr.idsWithoutWords()
+            // The plan as it is now, not as it was at the last look: an upgrade since then
+            // (vector search, a new AI allowance) takes effect in this very run.
+            refreshAccount(session, connection)
+            val limits = prefs.account
+            var vectorAllowed = limits?.vectorAllowed ?: false
+            // Without vector search on the plan, photos are not read into words either: they
+            // are indexed by what the phone knows and found by those words. Same when the
+            // month's AI requests are already used up. Nothing is decoded or asked for then.
+            val aiAvailable = vectorAllowed && (limits == null || limits.maxAiRequests <= 0 || limits.aiRequestsUsed < limits.maxAiRequests)
+            if (!aiAvailable) quotaHit = true
+            // Photos indexed without their words (no AI at the time) are read by CLIP now, and
+            // only now: when the plan allows it. Otherwise they stay as they are, untouched.
+            val needWords = if (rebuild || !aiAvailable) emptySet() else solr.idsWithoutWords()
             // Photos the user asked to read again, and photos edited in place (same path, so
             // the same id, but a different size or time): both go through CLIP again.
             val forced = prefs.resyncIds
@@ -170,13 +190,14 @@ class SyncEngine(private val context: Context) {
                 it.id !in remote || it.id in withoutPlace || it.id in forced || it.id in needWords || it.id in changedSinceIndexed || cache.isStale(it.id, it.sizeBytes, it.modifiedSec)
             }
             val phase = if (rebuild) "Rebuilding your index" else "Indexing photos"
-            // The plan as it is now, not as it was at the last look: an upgrade since then
-            // (vector search, a new AI allowance) takes effect in this very run.
-            refreshAccount(session, connection)
-            var vectorAllowed = prefs.account?.vectorAllowed ?: false
-            // Without vector search on the plan, photos are not read into words either: they
-            // are indexed by what the phone knows and found by those words.
-            if (!vectorAllowed) quotaHit = true
+            // Photos this run will ask CLIP about: not known to the cache as current, or asked
+            // to be read again. When the month's allowance covers fewer than that, say so once:
+            // the rest stays without words until the allowance resets.
+            if (aiAvailable && limits != null) {
+                val toRead = toAdd.count { it.id in forced || it.id in needWords || cache.get(it.id, it.sizeBytes, it.modifiedSec) == null }
+                val left = limits.photosLeftThisMonth
+                if (left != null && left < toRead) shortAllowance = warnShortAllowance(left, toRead)
+            }
             onProgress(Progress(phase, 0, toAdd.size))
 
             for (chunk in toAdd.chunked(CHUNK)) {
@@ -203,6 +224,16 @@ class SyncEngine(private val context: Context) {
                     }
                 }
 
+                // Words without a vector are not written: the photo goes in complete otherwise
+                // and is picked up as "without words" at the next run with allowance, where CLIP
+                // answers from its cache. So an index never holds a half-read photo.
+                prepared.filter { it.doc.has("clip_model") && it.vector == null && !it.doc.has("embeddings") }.forEach {
+                    it.doc.remove("labels")
+                    it.doc.remove("clip_model")
+                    if (cache.getEdits(it.photo.id)?.meaning == null) it.doc.remove("meaning")
+                    withoutWords++
+                }
+
                 if (prepared.isNotEmpty()) {
                     solr.add(JSONArray().apply { prepared.forEach { put(documentFor(it)) } })
                     // A document without words is not "learned": it stays out of the cache so
@@ -219,7 +250,8 @@ class SyncEngine(private val context: Context) {
             cache.removeAllExcept(local.keys)
             refreshAccount(session, connection)
             var message = ""
-            if (withoutWords > 0) {
+            if (shortAllowance.isNotEmpty()) message = shortAllowance
+            else if (withoutWords > 0) {
                 // Nothing broke: the photos are in the index and found by their date, camera,
                 // place, file name and tags; the words come when the plan allows them.
                 val n = "$withoutWords photo${if (withoutWords == 1) "" else "s"}"
@@ -268,22 +300,45 @@ class SyncEngine(private val context: Context) {
         if (cached != null) {
             val doc = JSONObject(cached.docJson).put("media_id", photo.mediaId)
             val changed = applyEdits(photo.id, doc)
+            // The owner's words changed: the vector has to be made again from them.
+            if (changed) {
+                doc.remove("embeddings")
+                doc.remove("embed_model")
+            }
             return Prepared(photo, doc, if (vectorAllowed && !changed) cached.vector else null)
         }
+        // A document written to the index is always the whole document. The rewrite starts
+        // from the last one known (the cache; filled from the index at start), so a field only
+        // the index holds, the owner's tags first of all, is never dropped on the way.
+        val previous = cache.getLatest(photo.id)?.let { JSONObject(it.docJson) }
         val metadata = PhotoReader.readMetadata(context, photo)
-        val jpeg = PhotoReader.shrinkForClip(context, photo.uri, metadata.rotationDegrees) ?: return null
-        // Over the monthly allowance the photo is still indexed, with everything the phone knows
-        // (date, camera, place, file name, the owner's tags) and no words; it is read into words
-        // at a later sync. One 429 is enough to stop asking for the rest of the run.
-        val clip = if (quotaHit) null else try {
-            retrying { api.imageClip(session, connection.indexName, jpeg) }
-        } catch (e: QuotaExceededException) {
-            quotaHit = true
-            null
+        // Over the monthly allowance, or on a plan without photo recognition, the photo is
+        // indexed with everything the phone knows and no words; it is read into words at a
+        // later sync. Nothing is decoded then. One 429 is enough to stop asking for the rest
+        // of the run.
+        val clip = if (quotaHit) null else {
+            val jpeg = PhotoReader.shrinkForClip(context, photo.uri, metadata.rotationDegrees) ?: return null
+            try {
+                retrying { api.imageClip(session, connection.indexName, jpeg) }
+            } catch (e: QuotaExceededException) {
+                quotaHit = true
+                null
+            }
         }
-        if (clip == null) withoutWords++
         val doc = buildDocument(photo, metadata, clip)
-        applyEdits(photo.id, doc)
+        previous?.let { old ->
+            // Freshly read again: the old words and vector are replaced, never mixed with new ones.
+            val stale = if (clip != null) setOf("labels", "meaning", "clip_model", "embeddings", "embed_model") else emptySet()
+            old.keys().forEach { key ->
+                if (!doc.has(key) && key !in stale && key !in NEVER_CARRIED) doc.put(key, old.get(key))
+            }
+        }
+        if (!doc.has("clip_model")) withoutWords++
+        val changed = applyEdits(photo.id, doc)
+        if (changed) {
+            doc.remove("embeddings")
+            doc.remove("embed_model")
+        }
         return Prepared(photo, doc, null)
     }
 
@@ -378,7 +433,7 @@ class SyncEngine(private val context: Context) {
      */
     private suspend fun embed(session: Session, connection: IndexConnection, prepared: List<Prepared>) {
         // Photos without words (allowance used up) get their vector together with their words later.
-        val missing = prepared.filter { it.vector == null && it.doc.has("clip_model") }
+        val missing = prepared.filter { it.vector == null && it.doc.has("clip_model") && !it.doc.has("embeddings") }
         if (missing.isEmpty()) return
         val vectors = retrying { api.batchEmbed(session, connection.indexName, missing.map { meaningOf(it.doc) }) }
         missing.forEachIndexed { i, item ->
@@ -525,12 +580,39 @@ class SyncEngine(private val context: Context) {
     /**
      * Solr date format in UTC.
      */
+    /**
+     * Seconds since the epoch of an ISO instant as the index stores it, 0 when unreadable.
+     */
+    private fun secondsOf(iso: String): Long = try {
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.parse(iso)?.time?.div(1000L) ?: 0L
+    } catch (e: Exception) {
+        0L
+    }
+
+    /**
+     * Warns, once a month, that the remaining allowance covers [left] of the [toRead] photos
+     * waiting to be read, and returns the sentence for the sync report.
+     */
+    private fun warnShortAllowance(left: Int, toRead: Int): String {
+        val month = SimpleDateFormat("yyyy-MM", Locale.US).format(Date())
+        val text = "Your plan's AI requests cover $left of the ${Actions.formatCount(toRead.toLong())} photos waiting to be read this month. The others are indexed by date, camera, place, file name and your tags, and read at the first sync after the allowance resets, or now after an upgrade at opensolr.com/pricing."
+        val key = "ai_short_$month"
+        if (key !in prefs.warnedKeys) {
+            Notifier.planLimit(context, "Only $left photos can be read this month", text, key)
+            prefs.warnedKeys = prefs.warnedKeys + key
+        }
+        return text
+    }
+
     private fun isoUtc(millis: Long): String =
         SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(millis)
 
     companion object {
         /** Photos per round: CLIP one by one, then one embedding call and one index write. */
         private const val CHUNK = 20
+
+        /** Fields of an old document that never travel into a new one: Solr's own, and the write time. */
+        private val NEVER_CARRIED = setOf("_version_", "score", "indexed_at")
 
         /** Stored fields copied from the index into the cache (everything but the vector). */
         const val PULL_FIELDS = "*"
