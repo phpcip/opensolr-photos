@@ -125,8 +125,10 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             last >= gridState.layoutInfo.totalItemsCount - 12
         }
     }
-    // A fresh search starts at the top of the grid.
+    // A fresh search shows its best matches first: back to the top when it starts, and again
+    // when its results arrive (a lazy grid otherwise follows the item that used to be on top).
     LaunchedEffect(state.searchGeneration) { gridState.scrollToItem(0) }
+    LaunchedEffect(state.resultsGeneration) { gridState.scrollToItem(0) }
     LaunchedEffect(nearEnd, state.hits.size) {
         if (nearEnd && state.hits.isNotEmpty() && !state.endReached && !state.searching) viewModel.search(reset = false)
     }

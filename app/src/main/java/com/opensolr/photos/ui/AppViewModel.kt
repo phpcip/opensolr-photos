@@ -89,6 +89,8 @@ data class UiState(
     val rebuildRequired: Boolean = false,
     /** Counts fresh searches, so the grid scrolls back to the top for each. */
     val searchGeneration: Int = 0,
+    /** Counts fresh result pages that arrived, so the grid scrolls to the top once they are in. */
+    val resultsGeneration: Int = 0,
     val editSaving: Boolean = false,
     val editError: String? = null,
     /** What the plan's limits mean right now, for the account screen. */
@@ -406,6 +408,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         smart = page.smart,
                         searchNotice = page.notice,
                         didYouMean = if (reset) page.didYouMean else it.didYouMean,
+                        resultsGeneration = if (reset) it.resultsGeneration + 1 else it.resultsGeneration,
                         endReached = hits.size >= page.numFound || page.hits.isEmpty(),
                     )
                 }
