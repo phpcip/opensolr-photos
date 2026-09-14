@@ -23,6 +23,14 @@ Every phone uses one index. Delete an index you no longer use in the Opensolr co
 This phone's index belongs to a different Opensolr account. Sign in with that account, or delete that
 index from it first.
 
+## Updates
+
+**"Version X is available" on the Photos screen.**
+Once a day the app compares itself with the latest release on GitHub. **Download** opens the release
+page in the browser; install the APK over the current one. Same signing key, so the index, the sign-in
+and your edits stay. **Not now** hides the notice until a newer version comes out. Phones that got the
+app from IzzyOnDroid or Obtainium update through those instead.
+
 ## Sync
 
 **Photos are missing from search.**

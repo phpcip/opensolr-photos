@@ -17,6 +17,7 @@ import com.opensolr.photos.media.PhotoFolder
 import com.opensolr.photos.net.AccountIndex
 import com.opensolr.photos.net.IndexLimitException
 import com.opensolr.photos.net.OpensolrApi
+import com.opensolr.photos.net.UpdateCheck
 import com.opensolr.photos.net.SignInRequiredException
 import com.opensolr.photos.search.FacetValue
 import com.opensolr.photos.search.NearFilter
@@ -96,6 +97,8 @@ data class UiState(
     val editError: String? = null,
     /** What the plan's limits mean right now, for the account screen. */
     val planWarnings: List<PlanWatch.Warning> = emptyList(),
+    /** A newer release on GitHub, when the daily check found one and it was not dismissed. */
+    val update: UpdateCheck.Update? = null,
     /** Photo indexes of other phones, offered when this phone has none: "which one is your device?" */
     val deviceChoices: List<AccountIndex> = emptyList(),
 )
@@ -139,6 +142,27 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             SyncScheduler.watchMedia(context)
             checkConfigVersion()
         }
+        checkForUpdate()
+    }
+
+    /**
+     * Once a day, asks GitHub whether a newer release exists and shows it on the Photos screen.
+     * The notice only says where to download; the app never installs anything itself.
+     */
+    private fun checkForUpdate() {
+        if (System.currentTimeMillis() - prefs.updateCheckedAt < UPDATE_CHECK_INTERVAL_MS) return
+        viewModelScope.launch {
+            val update = UpdateCheck.latest() ?: return@launch
+            prefs.updateCheckedAt = System.currentTimeMillis()
+            if (prefs.updateDismissed == update.version) return@launch
+            _state.update { it.copy(update = update) }
+        }
+    }
+
+    /** "Not now" on the update notice: hides it until a newer version than this one appears. */
+    fun dismissUpdate() {
+        prefs.updateDismissed = _state.value.update?.version
+        _state.update { it.copy(update = null) }
     }
 
     /**
@@ -665,6 +689,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     companion object {
+        /** How often the latest release is asked for. */
+        private const val UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L
         private val CODE_PATTERN = Regex("^[A-Za-z0-9_-]{43}$")
     }
 }

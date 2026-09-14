@@ -247,6 +247,19 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp), color = p.accent, trackColor = p.chip)
         }
 
+        // A newer release on GitHub: a link to its page, the install is the user's and Android's.
+        state.update?.let { update ->
+            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
+                Notice(
+                    update.notes.ifBlank { "Download it from the releases page; it installs over this one and keeps everything." },
+                    title = "Version ${update.version} is available",
+                )
+                Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    AccentButton("Download", onClick = { Actions.openUrl(context, update.pageUrl) }, modifier = Modifier.weight(1f))
+                    GhostButton("Not now", onClick = { viewModel.dismissUpdate() }, modifier = Modifier.weight(1f))
+                }
+            }
+        }
         // While the index is rebuilt for a newer configuration, search is unavailable.
         if (state.sync.running && state.sync.phase in REBUILD_PHASES) {
             Notice(

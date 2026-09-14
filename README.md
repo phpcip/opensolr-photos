@@ -32,6 +32,7 @@ one per phone. No photo backup, no Google account, no ads, no analytics.
 | **A map** | Every photo with a GPS position, grouped into thumbnail markers on OpenStreetMap. Tap a group to see its photos, or *Search this area*. The place is written into the index in words (city, region, country). |
 | **Opens in your gallery** | Tap a result: it opens in Google Photos or your phone's gallery app. Press and hold for the details and the words Opensolr saw. |
 | **Keeps itself in step** | A sync runs on its own a minute after your photos change; a weekly or monthly Re-Sync stands behind it, and Force Re-Sync is one tap away. New photos are added, edited photos are read again, deleted photos leave the index, and you can pick photos to have them read again. |
+| **Tells you about new versions** | Once a day the app looks at the latest release on GitHub. A newer one shows up on the Photos screen with what is new and a Download button; nothing is installed behind your back. |
 | **One index per phone** | `photos_<ANDROID_ID>__dense` in your Opensolr account. Reinstall on the same phone and it finds its index again. |
 | **Plan limits, in plain numbers** | Right after sign-in, and on the account screen: photos per month, disk space, search bandwidth, and where to upgrade. |
 

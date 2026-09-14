@@ -1,0 +1,1 @@
+Tells you when a newer version is on GitHub, with what is new and a Download button. Search this area on the map is now a magnifier in the header, so the zoom buttons are no longer covered.

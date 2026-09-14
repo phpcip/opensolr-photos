@@ -158,6 +158,20 @@ class AppPrefs(context: Context) {
             prefs.edit().putStringSet(KEY_WARNED, value.toSet()).commit()
         }
 
+    /** When the latest GitHub release was last asked for, so it is asked at most once a day. */
+    var updateCheckedAt: Long
+        get() = prefs.getLong(KEY_UPDATE_CHECKED, 0L)
+        set(value) {
+            prefs.edit().putLong(KEY_UPDATE_CHECKED, value).apply()
+        }
+
+    /** The version whose update notice the user dismissed with "Not now"; shown again only for a newer one. */
+    var updateDismissed: String?
+        get() = prefs.getString(KEY_UPDATE_DISMISSED, null)
+        set(value) {
+            prefs.edit().putString(KEY_UPDATE_DISMISSED, value).apply()
+        }
+
     /**
      * A message for the next screen the user sees (sign-in needed, sign-in cancelled...).
      */
@@ -229,6 +243,8 @@ class AppPrefs(context: Context) {
         private const val KEY_WARNED = "warned_keys"
         private const val KEY_CHOSEN_INDEX = "chosen_index"
         private const val KEY_NOTICE = "notice"
+        private const val KEY_UPDATE_CHECKED = "update_checked_at"
+        private const val KEY_UPDATE_DISMISSED = "update_dismissed"
         private const val KEY_AUTH_VERIFIER = "auth_verifier"
         private const val KEY_AUTH_STATE = "auth_state"
         private const val KEY_AUTH_STARTED = "auth_started"
