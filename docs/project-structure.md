@@ -43,7 +43,7 @@ Everything below lives under `app/src/main/java/com/opensolr/photos/`. The packa
 ### `net/` — talking to Opensolr
 
 - `Http.kt` — the one shared HTTP client, with its timeouts and no redirects.
-- `OpensolrApi.kt` — one function per Opensolr call: token exchange, index list, create, config upload, connection details, account summary, `image_clip`, `batch_embed`, `embed`. It also turns the platform's refusals into typed errors.
+- `OpensolrApi.kt` — one function per Opensolr call: token exchange, index list, create, config upload, connection details, account summary, `image_index`, `batch_embed`, `embed`. It also turns the platform's refusals into typed errors.
 - `SolrClient.kt` — talks straight to the phone's index: search, list every id, add, delete, commit, check the schema.
 - `Errors.kt` — the exceptions, named after what the app has to do about them (sign in again, quota used up, plan limit, rate limited, photo rejected...).
 

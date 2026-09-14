@@ -46,10 +46,10 @@ data class AccountLimits(
 ) {
 
     /**
-     * AI requests one new photo costs: one to read it into words, plus one to turn the words
-     * into a search vector when the plan includes vector search.
+     * AI requests one new photo costs: one, for its words and their vector together
+     * (image_index). Editing a photo's tags or words costs one more, for the new vector.
      */
-    val requestsPerPhoto: Int get() = if (vectorAllowed) 2 else 1
+    val requestsPerPhoto: Int get() = 1
 
     /**
      * How many photos the monthly AI allowance covers, or null when the plan has no cap.

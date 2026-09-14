@@ -1,0 +1,1 @@
+Photos are read five at a time through Opensolr's new image_index endpoint: words and search vector in one call, one AI request per photo instead of two. On the free plan that is 100 photos a month instead of 50.

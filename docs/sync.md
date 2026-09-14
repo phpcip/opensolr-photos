@@ -17,12 +17,16 @@ There is one algorithm. A **first Sync** and a **Re-Sync** only differ in what t
 5. **Add** every photo that is on the phone but not in the index, plus every photo that must be written
    again — edited in place (same id, different size or modification time than the cache holds), chosen for
    *Re-sync selected*, or carrying a position without place words yet — 20 per round:
-   - take the document from the phone's cache when the file is unchanged, otherwise read the EXIF, make
-     the 640 px copy and send it to `image_clip`;
+   - take the document from the phone's cache when the file is unchanged, otherwise read the EXIF and
+     make the 640 px copy;
+   - one `image_index` call per 5 copies: words and vector for each, or nothing for that photo (it is
+     then indexed without words and read again at a later sync). A batch the month's allowance cannot
+     cover is retried one photo at a time, so the last requests of the month are not wasted;
    - one `nearby_places` call for the round's positions that have no place yet (up to 50 at a time,
      rounded to four decimals and remembered on the phone), writing city, region, province, community and
      country into each document;
-   - one `batch_embed` call for the round's labels (plans with vector search);
+   - one `batch_embed` call for photos whose tags or words you edited (their vector is made from your
+     words);
    - one `POST /update` with the round's documents (`commitWithin=10000`, so they appear in search within
      ten seconds while the rest continue).
 

@@ -29,6 +29,11 @@ import javax.crypto.spec.SecretKeySpec
 data class ClipResult(val text: String, val labels: List<String>, val model: String)
 
 /**
+ * One photo read by image_index: what it shows, and the vector of those words.
+ */
+data class ImageReading(val clip: ClipResult, val vector: FloatArray, val embedModel: String)
+
+/**
  * Where a GPS position is, in words, from Opensolr's nearby_places.
  */
 data class PlaceInfo(
@@ -268,6 +273,40 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
             val array = json.optJSONArray("labels") ?: JSONArray()
             val labels = (0 until array.length()).mapNotNull { array.optJSONObject(it)?.optString("label")?.takeIf { l -> l.isNotBlank() } }
             ClipResult(json.optString("text"), labels, json.optString("model"))
+        }
+    }
+
+    /**
+     * What each of up to 5 photos shows AND the vector of those words, in one call
+     * (image_index): one AI request per photo instead of two, and never words without
+     * their vector. The result has one slot per photo, in order: the reading, or null when
+     * that photo was refused or could not be read (the others are unaffected).
+     */
+    suspend fun imageIndex(session: Session, name: String, jpegs: List<ByteArray>): List<ImageReading?> = withContext(Dispatchers.IO) {
+        val body = JSONObject()
+            .put("email", session.email)
+            .put("api_key", session.apiKey)
+            .put("index_name", name)
+            .put("top_k", 12)
+            .put("images", JSONArray(jpegs.map { Base64.encodeToString(it, Base64.NO_WRAP) }))
+        val request = Request.Builder().url(AI + "image_index").post(body.toString().toRequestBody(JSON)).build()
+        http.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            classify(response.code, text, response.header("Retry-After"))
+            if (response.code in 400..499) throw PhotoRejectedException("The photos were refused: " + platformMessage(text))
+            if (response.code >= 500) throw ServiceException("The Opensolr AI service answered HTTP ${response.code}")
+            val json = parseObject(text)
+            if (!json.optBoolean("status")) throw ServiceException(platformMessage(text))
+            val results = json.optJSONArray("results") ?: throw ServiceException("The Opensolr AI service answered without results")
+            if (results.length() != jpegs.size) throw ServiceException("The Opensolr AI service answered ${results.length()} readings for ${jpegs.size} photos")
+            (0 until results.length()).map { i ->
+                val item = results.optJSONObject(i) ?: return@map null
+                if (!item.optBoolean("status")) return@map null
+                val vector = item.optJSONArray("embedding")?.takeIf { it.length() > 0 } ?: return@map null
+                val array = item.optJSONArray("labels") ?: JSONArray()
+                val labels = (0 until array.length()).mapNotNull { array.optJSONObject(it)?.optString("label")?.takeIf { l -> l.isNotBlank() } }
+                ImageReading(ClipResult(item.optString("text"), labels, item.optString("model")), toFloats(vector), item.optString("embed_model"))
+            }
         }
     }
 

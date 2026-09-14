@@ -12,6 +12,7 @@ import com.opensolr.photos.media.MediaScanner
 import com.opensolr.photos.media.PhotoMetadata
 import com.opensolr.photos.media.PhotoReader
 import com.opensolr.photos.net.ClipResult
+import com.opensolr.photos.net.ImageReading
 import com.opensolr.photos.net.OpensolrApi
 import com.opensolr.photos.net.OpensolrException
 import com.opensolr.photos.net.PhotoRejectedException
@@ -62,7 +63,40 @@ class SyncEngine(private val context: Context) {
     /**
      * A photo ready to be written: its document, and its vector once embedded.
      */
-    private class Prepared(val photo: LocalPhoto, val doc: JSONObject, var vector: FloatArray?)
+    private class Prepared(val photo: LocalPhoto, val doc: JSONObject, var vector: FloatArray?) {
+        /** Set while the photo waits to be read by Opensolr: its 640 px copy and the document it was rebuilt from. */
+        var pending: Pending? = null
+
+        /** The photo's reading came back (or did not): the document takes the words and vector, or stays without. */
+        fun finishReading() {
+            val p = pending ?: return
+            val reading = p.reading
+            if (reading != null) {
+                val labels = reading.clip.labels.flatMap { it.split(',') }.map { it.trim() }.filter { it.isNotEmpty() }.distinct()
+                doc.put("meaning", reading.clip.text.ifBlank { labels.joinToString(", ") })
+                doc.put("labels", JSONArray(labels))
+                doc.put("clip_model", reading.clip.model)
+                doc.put("embed_model", reading.embedModel)
+                vector = reading.vector
+                // The owner's own wording wins over what Opensolr saw, and a photo with the
+                // owner's words or tags gets its vector from those (embed() below), not from
+                // CLIP's words alone.
+                p.ownMeaning?.let { doc.put("meaning", it) }
+                if (p.ownMeaning != null || doc.has("custom_tags")) {
+                    vector = null
+                    doc.remove("embed_model")
+                }
+            }
+        }
+    }
+
+    /**
+     * A photo waiting for its reading: the copy that goes to Opensolr, and the owner's own
+     * wording of what it shows, if any, to put back after the words arrive.
+     */
+    private class Pending(val jpeg: ByteArray, val ownMeaning: String?) {
+        var reading: ImageReading? = null
+    }
 
     /** True once this run hit the monthly AI allowance: no more CLIP calls, photos get their metadata only. */
     private var quotaHit = false
@@ -204,11 +238,25 @@ class SyncEngine(private val context: Context) {
                 val prepared = ArrayList<Prepared>(chunk.size)
                 for (photo in chunk) {
                     try {
-                        prepare(session, connection, photo, vectorAllowed, photo.id in forced || photo.id in needWords)?.let { prepared += it } ?: failed++
+                        prepare(photo, vectorAllowed, photo.id in forced || photo.id in needWords)?.let { prepared += it } ?: failed++
                     } catch (e: PhotoRejectedException) {
                         failed++
                     }
                 }
+                // Photos not known yet go to Opensolr READ_BATCH at a time: words and vector in
+                // one call, one AI request per photo. On a plan without vector search, or once
+                // the allowance is used up, nothing is sent and they stay without words.
+                if (!quotaHit) {
+                    try {
+                        readPending(session, connection, prepared)
+                    } catch (e: VectorNotAllowedException) {
+                        vectorAllowed = false
+                        prefs.account = prefs.account?.copy(vectorAllowed = false)
+                        quotaHit = true
+                    }
+                }
+                prepared.forEach { it.finishReading() }
+                withoutWords += prepared.count { it.pending != null && !it.doc.has("clip_model") }
                 addPlaces(session, prepared.map { it.doc })
 
                 if (vectorAllowed && !quotaHit) {
@@ -295,7 +343,7 @@ class SyncEngine(private val context: Context) {
      * Builds the document of one photo, from the cache when the file is unchanged, otherwise by
      * reading its metadata and asking CLIP what it shows. Returns null when the file cannot be read.
      */
-    private suspend fun prepare(session: Session, connection: IndexConnection, photo: LocalPhoto, vectorAllowed: Boolean, force: Boolean = false): Prepared? {
+    private fun prepare(photo: LocalPhoto, vectorAllowed: Boolean, force: Boolean = false): Prepared? {
         val cached = if (force) null else cache.get(photo.id, photo.sizeBytes, photo.modifiedSec)
         if (cached != null) {
             val doc = JSONObject(cached.docJson).put("media_id", photo.mediaId)
@@ -312,34 +360,64 @@ class SyncEngine(private val context: Context) {
         // the index holds, the owner's tags first of all, is never dropped on the way.
         val previous = cache.getLatest(photo.id)?.let { JSONObject(it.docJson) }
         val metadata = PhotoReader.readMetadata(context, photo)
+        val doc = buildDocument(photo, metadata, null)
         // Over the monthly allowance, or on a plan without photo recognition, the photo is
         // indexed with everything the phone knows and no words; it is read into words at a
-        // later sync. Nothing is decoded then. One 429 is enough to stop asking for the rest
-        // of the run.
-        val clip = if (quotaHit) null else {
-            val jpeg = PhotoReader.shrinkForClip(context, photo.uri, metadata.rotationDegrees) ?: return null
-            try {
-                retrying { api.imageClip(session, connection.indexName, jpeg) }
-            } catch (e: QuotaExceededException) {
-                quotaHit = true
-                null
-            }
-        }
-        val doc = buildDocument(photo, metadata, clip)
+        // later sync. Nothing is decoded then.
+        val jpeg = if (quotaHit) null else PhotoReader.shrinkForClip(context, photo.uri, metadata.rotationDegrees) ?: return null
         previous?.let { old ->
             // Freshly read again: the old words and vector are replaced, never mixed with new ones.
-            val stale = if (clip != null) setOf("labels", "meaning", "clip_model", "embeddings", "embed_model") else emptySet()
+            val stale = if (jpeg != null) setOf("labels", "meaning", "clip_model", "embeddings", "embed_model") else emptySet()
             old.keys().forEach { key ->
                 if (!doc.has(key) && key !in stale && key !in NEVER_CARRIED) doc.put(key, old.get(key))
             }
         }
-        if (!doc.has("clip_model")) withoutWords++
         val changed = applyEdits(photo.id, doc)
         if (changed) {
             doc.remove("embeddings")
             doc.remove("embed_model")
         }
-        return Prepared(photo, doc, null)
+        return Prepared(photo, doc, null).also { p ->
+            if (jpeg != null) p.pending = Pending(jpeg, cache.getEdits(photo.id)?.meaning)
+        }
+    }
+
+    /**
+     * Sends the photos of [prepared] that wait for a reading to Opensolr, READ_BATCH at a
+     * time. A batch the allowance cannot cover is retried one photo at a time, so the last
+     * requests of the month are not wasted; the first refusal stops the run's reading.
+     */
+    private suspend fun readPending(session: Session, connection: IndexConnection, prepared: List<Prepared>) {
+        val waiting = prepared.filter { it.pending != null }
+        for (batch in waiting.chunked(READ_BATCH)) {
+            if (quotaHit) return
+            val readings = try {
+                retrying { api.imageIndex(session, connection.indexName, batch.map { it.pending!!.jpeg }) }
+            } catch (e: PhotoRejectedException) {
+                // The whole batch refused (a bad picture, or an endpoint answer the app does not
+                // expect): these photos go in without words and are read again at the next sync.
+                continue
+            } catch (e: ServiceException) {
+                continue
+            } catch (e: QuotaExceededException) {
+                if (batch.size == 1) {
+                    quotaHit = true
+                    return
+                }
+                // Fewer requests left than photos in the batch: one by one until the refusal.
+                for (item in batch) {
+                    if (quotaHit) return
+                    try {
+                        item.pending!!.reading = retrying { api.imageIndex(session, connection.indexName, listOf(item.pending!!.jpeg)) }.firstOrNull()
+                    } catch (e: QuotaExceededException) {
+                        quotaHit = true
+                        return
+                    }
+                }
+                continue
+            }
+            batch.forEachIndexed { i, item -> item.pending!!.reading = readings.getOrNull(i) }
+        }
     }
 
     /**
@@ -608,8 +686,11 @@ class SyncEngine(private val context: Context) {
         SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(millis)
 
     companion object {
-        /** Photos per round: CLIP one by one, then one embedding call and one index write. */
+        /** Photos per round: read READ_BATCH at a time, then one index write. */
         private const val CHUNK = 20
+
+        /** Photos per image_index call, the most the endpoint takes. */
+        private const val READ_BATCH = 5
 
         /** Fields of an old document that never travel into a new one: Solr's own, and the write time. */
         private val NEVER_CARRIED = setOf("_version_", "score", "indexed_at")

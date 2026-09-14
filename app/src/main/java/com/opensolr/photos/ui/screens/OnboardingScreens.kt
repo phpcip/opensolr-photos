@@ -147,7 +147,7 @@ fun WelcomeScreen(state: UiState, viewModel: AppViewModel) {
             InfoRow("Indexes on the account", "${account.indexesUsed} of ${account.indexLimit}")
             Spacer(Modifier.height(16.dp))
             Text(
-                "Each new photo uses ${account.requestsPerPhoto} AI request${if (account.requestsPerPhoto > 1) "s" else ""}: one to read it into words${if (account.vectorAllowed) ", one to turn those words into a search vector" else ""}. Photos already indexed cost nothing again.",
+                "Each new photo uses one AI request: it is read into words and those words become its search vector, in one go. Photos already indexed cost nothing again; editing a photo's tags or words costs one request for its new vector.",
                 style = MaterialTheme.typography.bodyMedium, color = p.muted,
             )
             Spacer(Modifier.height(20.dp))

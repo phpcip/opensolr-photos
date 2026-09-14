@@ -46,10 +46,10 @@ one per phone. No photo backup, no Google account, no ads, no analytics.
 2. **Pick folders.** DCIM, where the camera saves, is proposed.
 3. **The app sets up this phone's index**: creates it if it does not exist and uploads the
    [schema](docs/index-schema.md) that ships in [`solr/conf`](solr/conf).
-4. **Sync.** For every photo not yet in the index, the app makes a 640 px copy, asks Opensolr's
-   `image_clip` endpoint what it shows, turns those words into a vector with `batch_embed`, reads the
-   camera metadata on the phone, turns the GPS position into a place with `nearby_places`, and writes the
-   document straight into the index ([sync](docs/sync.md)).
+4. **Sync.** For every photo not yet in the index, the app makes a 640 px copy and sends it, five at a
+   time, to Opensolr's `image_index` endpoint, which answers what each photo shows and the search vector
+   of those words in one go. The app reads the camera metadata on the phone, turns the GPS position into a
+   place with `nearby_places`, and writes the document straight into the index ([sync](docs/sync.md)).
 5. **Search** goes straight to the index through Opensolr's `{!hybrid}` parser: words and meaning
    blended, filters, autocomplete, spelling, the map ([search](docs/search.md), [map](docs/map.md)).
 
@@ -59,8 +59,8 @@ one per phone. No photo backup, no Google account, no ads, no analytics.
 - An [Opensolr](https://opensolr.com) account. [Create one](https://opensolr.com/register).
 - For search by meaning: a plan that includes vector search. Without it, photos are still read into words
   and searchable by those words.
-- Each new photo uses two AI requests of your plan (one on plans without vector search). Photos already
-  indexed never cost anything again. Details: [plan limits](docs/plan-limits.md).
+- Each new photo uses one AI request of your plan. Photos already indexed never cost anything again;
+  editing a photo's tags or words costs one request for its new vector. Details: [plan limits](docs/plan-limits.md).
 
 ## Install
 
