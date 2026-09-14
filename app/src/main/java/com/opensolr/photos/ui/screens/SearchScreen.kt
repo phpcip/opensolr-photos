@@ -299,7 +299,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         state.searchNotice?.let { Notice(it, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
         // Words-only search, said once per typed search rather than silently.
         if (state.query.isNotBlank() && state.searchNotice == null && state.hits.isNotEmpty() && state.account?.vectorAllowed == false) {
-            Notice("Your plan has no photo recognition: results match the date, camera, place, file name and your tags only.", modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+            Notice("Your plan has no photo recognition: results match the date, camera, place, file name and your tags only. Pick a plan with AI at opensolr.com/pricing to find photos by what is in them.", modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
         }
         state.searchError?.let { Notice(it, title = "Search did not work", modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
 

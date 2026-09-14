@@ -128,8 +128,8 @@ fun WelcomeScreen(state: UiState, viewModel: AppViewModel) {
         if (account != null) {
             if (!account.vectorAllowed) {
                 Notice(
-                    "Your plan does not include vector search. Photos are still read into words and you can search those words, but search by meaning needs a plan with vector search.",
-                    title = "Words only on this plan",
+                    "On this plan Opensolr does not look at what is in your photos. They are indexed by date, camera, place, file name and the tags you add, and that is all a search can match: \"dog on the beach\" finds nothing unless you tagged it. To have every photo read and searchable by meaning, pick a plan with AI at opensolr.com/pricing. Photos already on the phone are read at the next sync after the upgrade.",
+                    title = "Photos are not recognised on this plan",
                 )
                 Spacer(Modifier.height(20.dp))
             }

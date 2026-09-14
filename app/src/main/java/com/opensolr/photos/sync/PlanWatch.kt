@@ -42,7 +42,7 @@ object PlanWatch {
             out += Warning(
                 "no_recognition",
                 "Photos are not recognised on your plan",
-                "New photos are indexed by their date, camera, place, file name and your tags, and found by those words only. Opensolr does not read what is in them, and search by meaning is off. Upgrade at opensolr.com/pricing to have every photo read.",
+                "Opensolr does not look at what is in your photos on this plan. They are indexed by date, camera, place, file name and your tags, and that is all a search can match. Pick a plan with AI at opensolr.com/pricing to have every photo read and found by what is in it.",
                 urgent = false,
             )
         }
