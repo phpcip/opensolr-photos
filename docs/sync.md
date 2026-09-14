@@ -60,6 +60,11 @@ Consequences worth knowing:
   configuration, empties the index (`delete *:*`) and writes every photo again from the cache: no CLIP, a
   vector only where the cache had none. Newer: `update_app`, the index is left alone. Raise both version
   numbers whenever anything in `solr/conf` changes.
+- **Not found, this phone never had one, and the account holds photo indexes of other phones:**
+  `Outcome.NEEDS_CHOICE`. The app asks *which one of these is your device?* with the phones' names
+  (`device_name` from `get_index_list`, sent at `create_index` as maker + model + the phone's own name);
+  the pick is stored in `AppPrefs.chosenIndexName` and used from then on, or *none of these* stores the
+  phone's own name and creates it. The name is never derived again once chosen.
 - **Not found, and this phone never had one:** first setup. The app picks the nearest environment: with the
   optional coarse-location permission, a phone in the Americas (longitude between -170 and -30) gets
   `CHICAGO-96`, everyone else `FINLAND9`; without a position the time zone decides the same way. If the

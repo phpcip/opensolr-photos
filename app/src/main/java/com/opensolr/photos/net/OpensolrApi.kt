@@ -41,6 +41,18 @@ data class PlaceInfo(
 )
 
 /**
+ * An index of the account, with the phone it belongs to when it is an Opensolr Photos index.
+ *
+ * @property deviceName  how the phone called itself when the index was created, or null
+ * @property numDocs     photos in it, as last counted by the platform
+ * @property lastIndex   epoch seconds of the last write the platform recorded, 0 when unknown
+ */
+data class AccountIndex(val name: String, val deviceName: String?, val deviceId: String?, val numDocs: Int, val lastIndex: Long, val created: Long) {
+    /** True for an index this app created on some phone. */
+    val isPhotos: Boolean get() = Regex("^photos_[a-f0-9]{1,32}__dense$").matches(name)
+}
+
+/**
  * An Opensolr environment that runs vector search.
  */
 data class VectorRegion(val environment: String, val country: String, val solrVersion: String)
@@ -82,12 +94,28 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
     /**
      * Names of every index in the account.
      */
-    suspend fun indexNames(session: Session): List<String> = withContext(Dispatchers.IO) {
+    suspend fun indexNames(session: Session): List<String> = indexes(session).map { it.name }
+
+    /**
+     * Every index in the account, with the phone behind the Opensolr Photos ones.
+     */
+    suspend fun indexes(session: Session): List<AccountIndex> = withContext(Dispatchers.IO) {
         val text = post(MANAGEMENT + "get_index_list", form(session))
         val trimmed = text.trim()
         if (!trimmed.startsWith("[")) throw ServiceException(platformMessage(trimmed))
         val array = JSONArray(trimmed)
-        (0 until array.length()).mapNotNull { array.optJSONObject(it)?.optString("index_name")?.takeIf { name -> name.isNotBlank() } }
+        (0 until array.length()).mapNotNull { i ->
+            val o = array.optJSONObject(i) ?: return@mapNotNull null
+            val name = o.optString("index_name").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            AccountIndex(
+                name = name,
+                deviceName = o.optString("device_name").ifBlank { null },
+                deviceId = o.optString("device_id").ifBlank { null },
+                numDocs = o.optInt("num_docs"),
+                lastIndex = o.optLong("last_index"),
+                created = o.optLong("created"),
+            )
+        }
     }
 
     /**
@@ -107,12 +135,18 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
     /**
      * Creates the index [name] in [environment].
      */
-    suspend fun createIndex(session: Session, name: String, environment: String) = withContext(Dispatchers.IO) {
+    suspend fun createIndex(session: Session, name: String, environment: String, deviceName: String = "", deviceId: String = "") = withContext(Dispatchers.IO) {
         val url = (MANAGEMENT + "create_index").toHttpUrl().newBuilder()
             .addQueryParameter("core_name", name)
             .addQueryParameter("region", environment)
             .build()
-        val json = parseObject(post(url.toString(), form(session) { add("core_name", name) }))
+        // The phone the index is for, kept by the platform so a new phone can be asked
+        // "which one of these is your device?".
+        val json = parseObject(post(url.toString(), form(session) {
+            add("core_name", name)
+            if (deviceName.isNotBlank()) add("device_name", deviceName.take(120))
+            if (deviceId.isNotBlank()) add("device_id", deviceId.take(40))
+        }))
         if (!json.optBoolean("status")) {
             val msg = json.optString("msg")
             when {

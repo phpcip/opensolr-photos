@@ -14,6 +14,7 @@ import com.opensolr.photos.data.SyncSchedule
 import com.opensolr.photos.index.IndexManager
 import com.opensolr.photos.media.MediaScanner
 import com.opensolr.photos.media.PhotoFolder
+import com.opensolr.photos.net.AccountIndex
 import com.opensolr.photos.net.IndexLimitException
 import com.opensolr.photos.net.OpensolrApi
 import com.opensolr.photos.net.SignInRequiredException
@@ -95,6 +96,8 @@ data class UiState(
     val editError: String? = null,
     /** What the plan's limits mean right now, for the account screen. */
     val planWarnings: List<PlanWatch.Warning> = emptyList(),
+    /** Photo indexes of other phones, offered when this phone has none: "which one is your device?" */
+    val deviceChoices: List<AccountIndex> = emptyList(),
 )
 
 /**
@@ -341,7 +344,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(setupStep = "Connecting to Opensolr", setupError = null, setupNeedsUpgrade = false) }
         viewModelScope.launch {
             try {
-                val (connection, _) = indexes.ensure(session) { step -> _state.update { it.copy(setupStep = step) } }
+                val (connection, outcome) = indexes.ensure(session) { step -> _state.update { it.copy(setupStep = step) } }
+                if (outcome == IndexManager.Outcome.NEEDS_CHOICE) {
+                    // The owner says which phone this is before anything is created.
+                    _state.update { it.copy(deviceChoices = indexes.choices, setupStep = "Which one of these is your device?") }
+                    return@launch
+                }
                 SyncScheduler.applySchedule(context, prefs.schedule)
                 SyncScheduler.watchMedia(context)
                 SyncScheduler.runNow(context)
@@ -356,6 +364,43 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _state.update { it.copy(setupError = e.message ?: "The index could not be set up.") }
             }
         }
+    }
+
+    /**
+     * A sync found that this phone has no index while the account has photo indexes: fetch
+     * them and ask which one is this device.
+     */
+    private fun askDeviceChoice() {
+        val session = prefs.session ?: return
+        viewModelScope.launch {
+            try {
+                val others = api.indexes(session).filter { it.isPhotos }
+                if (others.isNotEmpty()) _state.update { it.copy(deviceChoices = others) } else chooseNewDevice()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+            }
+        }
+    }
+
+    /**
+     * "This device is that one": the phone carries on with the photos of the chosen index.
+     */
+    fun chooseDevice(index: AccountIndex) {
+        prefs.chosenIndexName = index.name
+        prefs.connection = null
+        _state.update { it.copy(deviceChoices = emptyList(), screen = Screen.Setup) }
+        runSetup()
+    }
+
+    /**
+     * "None of these": a new index for this phone.
+     */
+    fun chooseNewDevice() {
+        prefs.chosenIndexName = indexes.ownIndexName
+        prefs.connection = null
+        _state.update { it.copy(deviceChoices = emptyList(), screen = Screen.Setup) }
+        runSetup()
     }
 
     /**
@@ -604,6 +649,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         if (report?.status == "rebuild_required") _state.update { it.copy(rebuildRequired = true) }
+        if (report?.status == "device_choice") askDeviceChoice()
         if (report?.status == "update_app") _state.update { it.copy(notice = report.message) }
         if (_state.value.screen == Screen.Search) search(reset = true)
     }

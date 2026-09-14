@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
+import android.os.Build
 import android.location.Location
 import android.location.LocationManager
 import androidx.core.content.ContextCompat
@@ -11,6 +12,7 @@ import android.provider.Settings
 import com.opensolr.photos.data.AppPrefs
 import com.opensolr.photos.data.IndexConnection
 import com.opensolr.photos.data.Session
+import com.opensolr.photos.net.AccountIndex
 import com.opensolr.photos.net.IndexMissingException
 import com.opensolr.photos.net.OpensolrApi
 import com.opensolr.photos.net.OpensolrException
@@ -49,18 +51,47 @@ class IndexManager(
         NEEDS_REBUILD,
         /** The index runs a newer configuration than this app: the app must be updated. */
         CONFIG_NEWER,
+        /** This phone has no index, but the account has photo indexes: the owner must say
+         *  which of those phones this one is, or that it is a new one. See [choices]. */
+        NEEDS_CHOICE,
     }
 
+    /** The account's photo indexes offered when [Outcome.NEEDS_CHOICE] was returned. */
+    var choices: List<AccountIndex> = emptyList()
+        private set
+
     /**
-     * photos_<ANDROID_ID>__dense.
+     * The identifier Android gives this app on this phone: the same across reinstalls and
+     * updates, different after a factory reset or on another phone.
+     */
+    val deviceId: String
+        @SuppressLint("HardwareIds")
+        get() = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+            .orEmpty().lowercase().filter { it in 'a'..'z' || it in '0'..'9' }.take(32)
+
+    /**
+     * The phone as the owner would recognise it: maker and model, then the name the phone
+     * carries in its settings when it adds something ("Samsung SM-S918B Galaxy S23 Ultra").
+     */
+    val deviceName: String
+        get() {
+            val maker = Build.MANUFACTURER.orEmpty().trim().replaceFirstChar { it.uppercase() }
+            val model = Build.MODEL.orEmpty().trim()
+            val base = listOf(maker, model).filter { it.isNotBlank() }.joinToString(" ")
+            val named = try { Settings.Global.getString(context.contentResolver, "device_name").orEmpty().trim() } catch (e: Exception) { "" }
+            val extra = named.takeIf { it.isNotBlank() && !base.contains(it, ignoreCase = true) && !it.contains(model, ignoreCase = true) }
+            return listOfNotNull(base.ifBlank { null }, extra).joinToString(" ").take(120).ifBlank { "Android phone" }
+        }
+
+    /**
+     * The index this phone uses: the one chosen once (created here, or picked as "this
+     * device"), else the name derived from the phone's identifier.
      */
     val indexName: String
-        @SuppressLint("HardwareIds")
-        get() {
-            val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
-                .orEmpty().lowercase().filter { it in 'a'..'z' || it in '0'..'9' }.take(32)
-            return "photos_${androidId}__dense"
-        }
+        get() = prefs.chosenIndexName ?: ownIndexName
+
+    /** The name this phone would create for itself. */
+    val ownIndexName: String get() = "photos_${deviceId}__dense"
 
     /**
      * Makes sure the index exists, carries this app's schema, and that its connection is saved.
@@ -72,7 +103,9 @@ class IndexManager(
     suspend fun ensure(session: Session, onStep: suspend (String) -> Unit = {}): Pair<IndexConnection, Outcome> {
         onStep("Looking for this phone's index")
         val name = indexName
-        if (name in api.indexNames(session)) {
+        val account = api.indexes(session)
+        if (account.any { it.name == name }) {
+            if (prefs.chosenIndexName == null) prefs.chosenIndexName = name
             val connection = connectionWithRetry(session, name)
             prefs.connection = connection
             // The configuration version lives in the index; compared with the one in the APK.
@@ -84,10 +117,21 @@ class IndexManager(
             }
         }
 
+        // A phone with no index of its own, on an account that already holds photos of other
+        // phones (or of this one before a reset): the owner decides before anything is created.
+        if (prefs.chosenIndexName == null) {
+            val others = account.filter { it.isPhotos }
+            if (others.isNotEmpty()) {
+                choices = others
+                return IndexConnection(name, "", "", "", "") to Outcome.NEEDS_CHOICE
+            }
+        }
+
         val hadIndex = prefs.knownIndexName == name
         prefs.connection = null
         onStep("Creating this phone's index")
-        api.createIndex(session, name, pickRegion(api.vectorRegions(session), lastKnownLocation()))
+        api.createIndex(session, name, pickRegion(api.vectorRegions(session), lastKnownLocation()), deviceName, deviceId)
+        prefs.chosenIndexName = name
         onStep("Setting up the index")
         val connection = connectionWithRetry(session, name)
         api.uploadConfig(session, name, configZip())

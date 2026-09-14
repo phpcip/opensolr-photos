@@ -139,6 +139,16 @@ class AppPrefs(context: Context) {
         }
 
     /**
+     * The index this phone uses, decided once: the one it created, or the one the owner
+     * picked as "this device" on a phone that had none. Null until decided.
+     */
+    var chosenIndexName: String?
+        get() = prefs.getString(KEY_CHOSEN_INDEX, null)
+        set(value) {
+            prefs.edit().putString(KEY_CHOSEN_INDEX, value).commit()
+        }
+
+    /**
      * Keys of the plan warnings already posted as notifications (see PlanWatch), so each is
      * posted once.
      */
@@ -217,6 +227,7 @@ class AppPrefs(context: Context) {
         private const val KEY_REBUILD = "rebuild_approved"
         private const val KEY_RESYNC_IDS = "resync_ids"
         private const val KEY_WARNED = "warned_keys"
+        private const val KEY_CHOSEN_INDEX = "chosen_index"
         private const val KEY_NOTICE = "notice"
         private const val KEY_AUTH_VERIFIER = "auth_verifier"
         private const val KEY_AUTH_STATE = "auth_state"

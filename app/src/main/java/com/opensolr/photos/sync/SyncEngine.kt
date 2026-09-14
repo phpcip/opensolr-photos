@@ -90,6 +90,9 @@ class SyncEngine(private val context: Context) {
             var connection = initialConnection
             var solr = SolrClient(connection)
 
+            if (outcome == IndexManager.Outcome.NEEDS_CHOICE) {
+                return report("device_choice", message = "Open Opensolr Photos and say which one of your devices this phone is.")
+            }
             if (outcome == IndexManager.Outcome.CONFIG_NEWER) {
                 return report("update_app", message = "Your index was set up by a newer version of Opensolr Photos. Update the app to keep syncing.")
             }

@@ -5,7 +5,19 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -55,6 +67,11 @@ fun AppRoot(viewModel: AppViewModel) {
         }
     }
 
+    // A phone without photos of its own, on an account that has some: which phone is this?
+    if (state.deviceChoices.isNotEmpty()) {
+        DeviceChoiceDialog(state, viewModel)
+    }
+
     // A newer index configuration ships with this version: the index is rebuilt only with
     // the owner's consent, because search is unavailable while it happens.
     if (state.rebuildRequired) {
@@ -81,4 +98,48 @@ fun AppRoot(viewModel: AppViewModel) {
             textContentColor = p.muted,
         )
     }
+}
+
+/**
+ * "Which one of these is your device?": the account's photo indexes by phone name. Picking one
+ * carries on with its photos; the discreet last choice starts a new one.
+ */
+@Composable
+private fun DeviceChoiceDialog(state: UiState, viewModel: AppViewModel) {
+    val p = LocalPalette.current
+    AlertDialog(
+        onDismissRequest = {},
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = { viewModel.chooseNewDevice() }) { Text("None of these, this is a new device", color = p.muted) } },
+        title = { Text("Which one of these is your device?") },
+        text = {
+            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
+                state.deviceChoices.forEach { choice ->
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { viewModel.chooseDevice(choice) }
+                            .padding(vertical = 12.dp)
+                    ) {
+                        Text(choice.deviceName ?: "Unknown phone", style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold), color = p.ink)
+                        val details = buildList {
+                            if (choice.numDocs > 0) add("${Actions.formatCount(choice.numDocs.toLong())} photos")
+                            if (choice.lastIndex > 0) add("last synced " + Actions.formatDate(choice.lastIndex * 1000L).substringBefore(' '))
+                            else if (choice.created > 0) add("since " + Actions.formatDate(choice.created * 1000L).substringBefore(' '))
+                        }
+                        if (details.isNotEmpty()) Text(details.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = p.muted)
+                    }
+                    HorizontalDivider(color = p.hairline)
+                }
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "This keeps your photos and the resources of your Opensolr account tied to this phone.",
+                    style = MaterialTheme.typography.bodySmall, color = p.muted,
+                )
+            }
+        },
+        containerColor = p.paper,
+        titleContentColor = p.ink,
+        textContentColor = p.muted,
+    )
 }
