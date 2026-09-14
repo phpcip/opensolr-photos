@@ -170,6 +170,9 @@ class SyncEngine(private val context: Context) {
                 it.id !in remote || it.id in withoutPlace || it.id in forced || it.id in needWords || it.id in changedSinceIndexed || cache.isStale(it.id, it.sizeBytes, it.modifiedSec)
             }
             val phase = if (rebuild) "Rebuilding your index" else "Indexing photos"
+            // The plan as it is now, not as it was at the last look: an upgrade since then
+            // (vector search, a new AI allowance) takes effect in this very run.
+            refreshAccount(session, connection)
             var vectorAllowed = prefs.account?.vectorAllowed ?: false
             // Without vector search on the plan, photos are not read into words either: they
             // are indexed by what the phone knows and found by those words.

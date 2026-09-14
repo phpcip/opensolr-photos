@@ -1,0 +1,1 @@
+Every sync checks the plan first, so an upgrade to vector search or a new AI allowance takes effect in that very run. Plainer wording for plans without photo recognition.
