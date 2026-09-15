@@ -1,0 +1,1 @@
+Ten photos now cost one AI request instead of ten; the plan numbers on the account screen say so.

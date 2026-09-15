@@ -70,21 +70,22 @@ data class AccountLimits(
     }
 
     /**
-     * AI requests one new photo costs: one, for its words and their vector together
-     * (image_index). Editing a photo's tags or words costs one more, for the new vector.
+     * Photos one AI request covers on a photo index: ten. Reading a photo (words and vector,
+     * through photos_ingest) counts a tenth of a request; editing its tags or words costs one
+     * whole request, for the new vector.
      */
-    val requestsPerPhoto: Int get() = 1
+    val photosPerRequest: Int get() = 10
 
     /**
      * How many photos the monthly AI allowance covers, or null when the plan has no cap.
      */
-    val photosPerMonth: Int? get() = if (maxAiRequests <= 0) null else maxAiRequests / requestsPerPhoto
+    val photosPerMonth: Int? get() = if (maxAiRequests <= 0) null else maxAiRequests * photosPerRequest
 
     /**
      * How many more photos this month's remaining allowance covers, or null when uncapped.
      */
     val photosLeftThisMonth: Int? get() =
-        if (maxAiRequests <= 0) null else ((maxAiRequests - aiRequestsUsed).coerceAtLeast(0)) / requestsPerPhoto
+        if (maxAiRequests <= 0) null else ((maxAiRequests - aiRequestsUsed).coerceAtLeast(0)) * photosPerRequest
 
     /**
      * True once disk space of the index is used up.

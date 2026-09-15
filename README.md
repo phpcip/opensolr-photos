@@ -61,7 +61,7 @@ one per phone. No photo backup, no Google account, no ads, no analytics.
 - An [Opensolr](https://opensolr.com) account. [Create one](https://opensolr.com/register).
 - For search by meaning: a plan that includes vector search. Without it, photos are still read into words
   and searchable by those words.
-- Each new photo uses one AI request of your plan. Photos already indexed never cost anything again;
+- Ten new photos use one AI request of your plan. Photos already indexed never cost anything again;
   editing a photo's tags or words costs one request for its new vector. Details: [plan limits](docs/plan-limits.md).
 
 ## Install
