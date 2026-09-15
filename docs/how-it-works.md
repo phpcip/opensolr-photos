@@ -36,7 +36,7 @@ The AI endpoints:
 - `photos_ingest` takes up to five photos at once and indexes them completely on the server: EXIF from
   the copy, the words CLIP sees (the same model and vocabulary as Opensolr's image search), the search
   vector of those words, the place of the GPS position, your tags and words kept from the index, and
-  the write into your index. One AI request per photo that needed the models. The copies are not stored.
+  the write into your index. A tenth of an AI request per photo that needed the models. The copies are not stored.
 - `batch_embed` turns texts into search vectors; the app uses it only when you edit a photo's tags or
   words. `embed` turns a typed query into one.
 
