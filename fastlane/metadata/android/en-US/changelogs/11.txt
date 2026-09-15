@@ -1,0 +1,1 @@
+Battery: a change outside your folders no longer starts a sync, watch-started syncs stay 15 minutes apart, a first sync of hundreds of photos waits for the charger, and the app paces its calls under your API rate limits instead of waiting awake.

@@ -21,6 +21,7 @@ import com.opensolr.photos.net.ServiceException
 import com.opensolr.photos.net.PlanLimitException
 import com.opensolr.photos.net.QuotaExceededException
 import com.opensolr.photos.net.RateLimitedException
+import com.opensolr.photos.net.RetryLaterException
 import com.opensolr.photos.net.SignInRequiredException
 import com.opensolr.photos.net.SolrAuthException
 import com.opensolr.photos.net.SolrClient
@@ -48,7 +49,11 @@ import java.util.TimeZone
  * A first Sync is simply the case where step 3 returns nothing. Photos already paid for are
  * taken from [PhotoCache], so a recreated or emptied index is refilled without AI requests.
  */
-class SyncEngine(private val context: Context) {
+class SyncEngine(private val context: Context, private val unlimited: Boolean = false) {
+
+    /** Times of the API calls of this run, for pacing under the account's per-minute and per-hour limits. */
+    private val callTimes = ArrayDeque<Long>()
+
 
     /**
      * Progress of a run. [total] is 0 while the size of the work is not yet known.
@@ -156,7 +161,9 @@ class SyncEngine(private val context: Context) {
             // CLIP twice. A document whose file changed since is left out, so the photo is
             // read again below.
             val changedSinceIndexed = HashSet<String>()
-            val toPull = remote.filter { it in local && !cache.has(it) }.toHashSet()
+            // What the cache holds, once: every comparison below is done from memory.
+            var stamps = cache.allStamps()
+            val toPull = remote.filter { it in local && it !in stamps }.toHashSet()
             if (toPull.isNotEmpty()) {
                 onProgress(Progress("Reading your index", 0, toPull.size))
                 var pulled = 0
@@ -180,6 +187,7 @@ class SyncEngine(private val context: Context) {
                     pulled++
                     onProgress(Progress("Reading your index", pulled, toPull.size))
                 }
+                stamps = cache.allStamps()
             }
 
             if (rebuild) {
@@ -221,16 +229,23 @@ class SyncEngine(private val context: Context) {
             // the same id, but a different size or time): both go through CLIP again.
             val forced = prefs.resyncIds
             val toAdd = if (rebuild) local.values.toList() else local.values.filter {
-                it.id !in remote || it.id in withoutPlace || it.id in forced || it.id in needWords || it.id in changedSinceIndexed || cache.isStale(it.id, it.sizeBytes, it.modifiedSec)
+                it.id !in remote || it.id in withoutPlace || it.id in forced || it.id in needWords || it.id in changedSinceIndexed || stamps[it.id].let { st -> st != null && (st.sizeBytes != it.sizeBytes || st.modified != it.modifiedSec) }
             }
             val phase = if (rebuild) "Rebuilding your index" else "Indexing photos"
             // Photos this run will ask CLIP about: not known to the cache as current, or asked
             // to be read again. When the month's allowance covers fewer than that, say so once:
             // the rest stays without words until the allowance resets.
+            val toRead = if (!aiAvailable) 0 else toAdd.count { it.id in forced || it.id in needWords || stamps[it.id].let { st -> st == null || st.sizeBytes != it.sizeBytes || st.modified != it.modifiedSec } }
             if (aiAvailable && limits != null) {
-                val toRead = toAdd.count { it.id in forced || it.id in needWords || cache.get(it.id, it.sizeBytes, it.modifiedSec) == null }
                 val left = limits.photosLeftThisMonth
                 if (left != null && left < toRead) shortAllowance = warnShortAllowance(left, toRead)
+            }
+            // Reading thousands of photos takes hours of background work: on battery, that
+            // waits for the charger. The run that follows carries the charger tag and reads
+            // everything; small runs are never held back.
+            if (!unlimited && toRead > CHARGER_THRESHOLD && !isCharging()) {
+                return report("waiting_charger", 0, deleted, 0, localCount, indexCount,
+                    "${Actions.formatCount(toRead.toLong())} photos are waiting to be read. That takes a while, so it runs when the phone is charging.", recreated)
             }
             onProgress(Progress(phase, 0, toAdd.size))
 
@@ -312,6 +327,9 @@ class SyncEngine(private val context: Context) {
             return report("ok", added, deleted, failed, localCount, indexCount, message, recreated, indexAfter)
         } catch (e: CancellationException) {
             throw e
+        } catch (e: RetryLaterException) {
+            commitQuietly()
+            return report("retry_later", added, deleted, failed, localCount, indexCount, e.message ?: "", recreated)
         } catch (e: SignInRequiredException) {
             prefs.pendingNotice = "Your Opensolr sign-in stopped working. Sign in again to keep your photos in sync."
             Notifier.signInRequired(context)
@@ -591,15 +609,46 @@ class SyncEngine(private val context: Context) {
      * Runs [block], waiting out rate limits (the server says how long) a few times before giving up.
      */
     private suspend fun <T> retrying(block: suspend () -> T): T {
-        var attempt = 0
-        while (true) {
-            try {
-                return block()
-            } catch (e: RateLimitedException) {
-                if (++attempt > 6) throw e
-                delay(e.retryAfterSeconds.coerceIn(5, 120) * 1000L)
-            }
+        pace()
+        try {
+            return block()
+        } catch (e: RateLimitedException) {
+            // Refused anyway: the run stops here and the scheduler starts it again later, so
+            // the phone sleeps in between instead of counting seconds inside the job.
+            throw RetryLaterException(e.retryAfterSeconds)
         }
+    }
+
+    /**
+     * Keeps this run under the account's API rate limits: before a call, when the calls of
+     * the last minute or hour are close to the limit, waits just long enough for the oldest
+     * to fall out of the window. With five photos per call the limits are far away in normal
+     * use; this is for an account whose limits were lowered, or a much faster server.
+     */
+    private suspend fun pace() {
+        val limits = prefs.account ?: return
+        val now = System.currentTimeMillis()
+        while (callTimes.isNotEmpty() && now - callTimes.first() > HOUR_MS) callTimes.removeFirst()
+        val lastMinute = callTimes.count { now - it <= MINUTE_MS }
+        var waitMs = 0L
+        if (lastMinute >= (limits.maxPerMinute * PACE_SHARE).toInt().coerceAtLeast(1)) {
+            val oldestInMinute = callTimes.first { now - it <= MINUTE_MS }
+            waitMs = maxOf(waitMs, MINUTE_MS - (now - oldestInMinute) + 500)
+        }
+        if (callTimes.size >= (limits.maxPerHour * PACE_SHARE).toInt().coerceAtLeast(1)) {
+            waitMs = maxOf(waitMs, HOUR_MS - (now - callTimes.first()) + 500)
+        }
+        // A wait past a minute is not worth holding the phone awake for: stop and come back.
+        if (waitMs > MINUTE_MS) throw RetryLaterException(waitMs / 1000)
+        if (waitMs > 0) delay(waitMs)
+        callTimes.addLast(System.currentTimeMillis())
+    }
+
+    /** True while the phone is plugged in. */
+    private fun isCharging(): Boolean {
+        val status = context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
+            ?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1) ?: -1
+        return status == android.os.BatteryManager.BATTERY_STATUS_CHARGING || status == android.os.BatteryManager.BATTERY_STATUS_FULL
     }
 
     /**
@@ -691,6 +740,14 @@ class SyncEngine(private val context: Context) {
 
         /** Photos per image_index call, the most the endpoint takes. */
         private const val READ_BATCH = 5
+
+        /** More photos to read than this, and a run on battery waits for the charger. */
+        private const val CHARGER_THRESHOLD = 500
+
+        /** Share of a rate limit this run keeps under, so a call is never refused. */
+        private const val PACE_SHARE = 0.8
+        private const val MINUTE_MS = 60 * 1000L
+        private const val HOUR_MS = 60 * 60 * 1000L
 
         /** Fields of an old document that never travel into a new one: Solr's own, and the write time. */
         private val NEVER_CARRIED = setOf("_version_", "score", "indexed_at")

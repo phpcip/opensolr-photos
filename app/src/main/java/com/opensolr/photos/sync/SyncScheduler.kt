@@ -42,6 +42,11 @@ object SyncScheduler {
     private const val NOW = "opensolr-sync-now"
     private const val PERIODIC = "opensolr-sync-periodic"
     private const val MEDIA = "opensolr-sync-media"
+    private const val LATER = "opensolr-sync-later"
+    private const val CHARGING = "opensolr-sync-charging"
+
+    /** How long two syncs started by the photo watch stay apart. */
+    const val WATCH_MIN_INTERVAL_MS = 15 * 60 * 1000L
 
     private val constraints = Constraints.Builder()
         .setRequiredNetworkType(NetworkType.CONNECTED)
@@ -75,11 +80,52 @@ object SyncScheduler {
                     .setTriggerContentMaxDelay(5, TimeUnit.MINUTES)
                     .build()
             )
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .addTag(TAG)
             .addTag(MEDIA)
             .build()
         WorkManager.getInstance(context).enqueueUniqueWork(MEDIA, ExistingWorkPolicy.KEEP, request)
     }
+
+    /**
+     * Runs a sync in [delayMs] from now, once. Used when the photo watch fired sooner than the
+     * minimum interval allows: the change is not lost, it is picked up when the interval is over.
+     */
+    fun runLater(context: Context, delayMs: Long) {
+        val request = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setConstraints(constraints)
+            .setInitialDelay(delayMs.coerceAtLeast(1000L), TimeUnit.MILLISECONDS)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+            .addTag(TAG)
+            .addTag(LATER)
+            .build()
+        WorkManager.getInstance(context).enqueueUniqueWork(LATER, ExistingWorkPolicy.KEEP, request)
+    }
+
+    /**
+     * Runs a sync as soon as the phone is charging. Used when there are so many photos to read
+     * that the run would drain the battery.
+     */
+    fun runWhenCharging(context: Context) {
+        val request = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setConstraints(
+                Constraints.Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .setRequiresCharging(true)
+                    .build()
+            )
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+            .addTag(TAG)
+            .addTag(CHARGING)
+            .build()
+        WorkManager.getInstance(context).enqueueUniqueWork(CHARGING, ExistingWorkPolicy.KEEP, request)
+    }
+
+    /** True when this run was started by the photo watch. */
+    fun isWatchRun(tags: Set<String>): Boolean = MEDIA in tags
+
+    /** True when this run waited for the charger, or was asked for by the owner: it may read any number of photos. */
+    fun mayReadUnlimited(tags: Set<String>): Boolean = CHARGING in tags
 
     /**
      * Sets the scheduled Re-Sync to run every week or every month, replacing any previous schedule.

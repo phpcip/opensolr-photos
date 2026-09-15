@@ -174,6 +174,8 @@ private fun statusLine(state: UiState): String {
         "rebuild_required" -> "Waiting: your index must be rebuilt for the new version. Open the app's photos screen to start it."
         "update_app" -> "Paused: update Opensolr Photos to keep syncing."
         "device_choice" -> "Waiting: open the app and say which one of your devices this phone is."
+        "waiting_charger" -> "Waiting for the charger: " + report.message
+        "retry_later" -> "Paused for a moment: Opensolr asked the app to slow down. It continues on its own."
         else -> "The last sync did not finish. It is tried again at the next Re-Sync."
     }
 }
@@ -189,5 +191,7 @@ private fun resultLabel(status: String): String = when (status) {
     "rebuild_required" -> "Rebuild needed"
     "update_app" -> "App update needed"
     "device_choice" -> "Device not chosen yet"
+    "waiting_charger" -> "Waiting for the charger"
+    "retry_later" -> "Continues shortly"
     else -> "Did not finish"
 }

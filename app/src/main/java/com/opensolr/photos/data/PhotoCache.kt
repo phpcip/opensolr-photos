@@ -136,6 +136,22 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
     }
 
     /**
+     * The size and modification time every cached photo was stored with, in one query: the
+     * sync compares thousands of photos against these from memory instead of asking the
+     * database once per photo.
+     */
+    fun allStamps(): Map<String, Stamp> {
+        val out = HashMap<String, Stamp>()
+        readableDatabase.query("photos", arrayOf("id", "size_bytes", "modified"), null, null, null, null, null).use { cursor ->
+            while (cursor.moveToNext()) out[cursor.getString(0)] = Stamp(cursor.getLong(1), cursor.getLong(2))
+        }
+        return out
+    }
+
+    /** What a cached photo was stored as: the file's size and modification time then. */
+    data class Stamp(val sizeBytes: Long, val modified: Long)
+
+    /**
      * The last document known for [id], whatever size or time the file had then: the
      * starting point of a rewrite, so no field the index already holds is lost. Null when
      * the photo was never cached.

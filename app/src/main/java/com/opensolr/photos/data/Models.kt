@@ -47,6 +47,9 @@ data class AccountLimits(
     val price: Double = 0.0,
     /** The billing period as the platform names it: "1 Month", "1 Year", "3 Months". */
     val recurrence: String = "",
+    /** The account's API rate limits, so the app paces itself instead of being refused. */
+    val maxPerMinute: Int = 120,
+    val maxPerHour: Int = 1200,
 ) {
 
     /**
@@ -134,6 +137,8 @@ data class AccountLimits(
             // The platform formats the price with thousands separators ("2,815.20"): a number again here.
             price = if (json.has("price")) json.optString("price").replace(",", "").toDoubleOrNull() ?: previous?.price ?: 0.0 else previous?.price ?: 0.0,
             recurrence = if (json.has("recurrence")) json.optString("recurrence") else previous?.recurrence ?: "",
+            maxPerMinute = if (json.has("max_per_minute")) json.optInt("max_per_minute").coerceAtLeast(1) else previous?.maxPerMinute ?: 120,
+            maxPerHour = if (json.has("max_per_hour")) json.optInt("max_per_hour").coerceAtLeast(1) else previous?.maxPerHour ?: 1200,
         )
     }
 }

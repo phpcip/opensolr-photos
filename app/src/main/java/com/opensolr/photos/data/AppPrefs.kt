@@ -158,6 +158,13 @@ class AppPrefs(context: Context) {
             prefs.edit().putStringSet(KEY_WARNED, value.toSet()).commit()
         }
 
+    /** When a sync started by the photo watch last ran, so a stream of changes does not run one every few minutes. */
+    var lastWatchSyncAt: Long
+        get() = prefs.getLong(KEY_WATCH_SYNC, 0L)
+        set(value) {
+            prefs.edit().putLong(KEY_WATCH_SYNC, value).apply()
+        }
+
     /** When the latest GitHub release was last asked for, so it is asked at most once a day. */
     var updateCheckedAt: Long
         get() = prefs.getLong(KEY_UPDATE_CHECKED, 0L)
@@ -244,6 +251,7 @@ class AppPrefs(context: Context) {
         private const val KEY_CHOSEN_INDEX = "chosen_index"
         private const val KEY_NOTICE = "notice"
         private const val KEY_UPDATE_CHECKED = "update_checked_at"
+        private const val KEY_WATCH_SYNC = "watch_sync_at"
         private const val KEY_UPDATE_DISMISSED = "update_dismissed"
         private const val KEY_AUTH_VERIFIER = "auth_verifier"
         private const val KEY_AUTH_STATE = "auth_state"

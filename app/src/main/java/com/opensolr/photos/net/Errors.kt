@@ -61,3 +61,9 @@ class PhotoRejectedException(message: String) : OpensolrException(message)
  * Anything else: a server error, an unexpected answer, a platform message the app does not know.
  */
 class ServiceException(message: String) : OpensolrException(message)
+
+/**
+ * The run should stop now and be started again a little later by the scheduler: the API is
+ * rate limiting, and waiting inside a background job keeps the phone awake for nothing.
+ */
+class RetryLaterException(val afterSeconds: Long) : OpensolrException("Opensolr asked to slow down; the sync continues shortly.")
