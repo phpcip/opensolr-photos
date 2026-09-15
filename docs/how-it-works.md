@@ -18,7 +18,11 @@ Opensolr Index. The app talks to each of them over HTTPS and to nothing else.
 - Writes the documents into the index and searches it directly.
 - Runs sync in the background with WorkManager, one sync at a time, and watches MediaStore so a sync runs
   on its own when photos change.
-- Draws the map with osmdroid on OpenStreetMap tiles, the only host besides Opensolr it talks to.
+- Draws the map with osmdroid on OpenStreetMap tiles. Besides Opensolr, those tiles and `api.github.com`
+  (the update check) are the only hosts it ever contacts.
+- Keeps the answers the index already gave and reuses them for as long as you set on the account screen, so
+  a repeated search costs no bandwidth. Reads only; anything the app writes clears them at once. See
+  [the search cache](search.md#search-cache).
 
 ### opensolr.com
 
@@ -85,16 +89,22 @@ reinstalled and differs on every other phone. So:
 | your index | `GET /opensolr-photos-config` | Every sync: the index's configuration version |
 | your index | `POST /suggest` | Autocomplete |
 | tile.openstreetmap.org | `GET` tiles | Only while the map is open |
+| api.github.com | `GET /repos/phpcip/opensolr-photos/releases/latest` | Is there a newer release: once a day, and on **Check for updates**. Unauthenticated, carries nothing about you |
 | your index | `POST /update` | Deleting, committing, saving an edit, emptying the index before a configuration reset |
 
 Credentials always travel in the request body, never in a URL.
+
+The reads of your index — searching, facets, albums, duplicate groups, `/suggest`, tag suggestions, map
+pins — can be answered from the phone's [search cache](search.md#search-cache) instead of going out at all.
+`/update`, the document read back before an edit is written, the configuration check and the sync's walk
+over the index are never cached.
 
 ## Code map
 
 | Package | Responsibility |
 |---|---|
 | `auth` | `AuthFlow` builds the PKCE request and opens the Custom Tab; `AuthCallbackActivity` receives the App Link |
-| `data` | `AppPrefs` (settings, session), `SecureStore` (Keystore AES-GCM), `PhotoCache` (SQLite), models |
+| `data` | `AppPrefs` (settings, session, cache seconds), `SecureStore` (Keystore AES-GCM), `PhotoCache` (SQLite), `SearchCache` (the answers the index gave), models |
 | `index` | `IndexManager`: index name, find, create, upload config, refresh credentials |
 | `media` | `MediaScanner` (folders, photos, the id function), `PhotoReader` (EXIF, the 640 px copy) |
 | `net` | `OpensolrApi` (REST API), `SolrClient` (direct Solr), typed errors |

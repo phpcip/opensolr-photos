@@ -10,7 +10,7 @@ The app shows your plan's numbers right after sign-in, and keeps showing them, w
 | **AI requests per month** | `photos_ingest`: 1 per 10 new photos read (words and vector together, a tenth of a request each). `batch_embed`: 1 per photo whose tags or words you edited. `embed`: 1 per typed search. | A request is only counted when the model actually ran. The same picture, or the same query, answered from Opensolr's cache is free. Photos in the phone's cache are never sent again. |
 | **Vector search** | Search by meaning | Without it, photos are still read into words (1 request per photo) and searchable by those words. |
 | **Disk space** | The documents in the index | Descriptions only, never pictures. |
-| **Search bandwidth per month** | Every search and every sync request to the index | Resets monthly. |
+| **Search bandwidth per month** | Every search and every sync request to the index | Resets monthly. Reads of the index (searches, facets, albums, duplicate groups, autocomplete, tag suggestions, map photos) are cached on the phone and reused for as long as you set on the account screen, so a repeated question is not paid for twice. See [Search](search.md#search-cache). |
 | **Indexes** | One per phone | Creating the phone's index fails when the account has no room left. |
 
 **Photos per month** on the account screen is the monthly AI allowance divided by the requests one photo

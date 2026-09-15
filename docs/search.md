@@ -128,7 +128,9 @@ downloaded to draw the grid.
   Country* (with *Show on map*, which opens the app's [map](map.md) on the photo, and *Photos nearby*, a
   5 km radius search), and the words Opensolr read the photo into.
 - **Reload**: swipe down on the grid, tap the reload icon next to the count, or come back from another
-  screen; the results are read again from the index.
+  screen; the results are read again from the index. The swipe and the icon are asked for by hand
+  (`AppViewModel.forceRefresh`), so they empty the [search cache](#search-cache) first and always reach
+  the index.
 - **Duplicates**: the duplicates icon on the count line switches the grid to groups of alike photos
   ([duplicates](duplicates.md)).
 - **Select**: the *Select* button turns selection on. The bar at the bottom then works on the ticked
@@ -164,6 +166,33 @@ them back. If that delete fails, the next sync removes them anyway.
 `SyncEngine.applyEdits` puts the edits over CLIP's words every time a photo is written again, so the owner's
 words always win. With no local edits (a reinstall) the document copied back from the index keeps the tags
 it carried.
+
+## Search cache
+
+Answers from the index are kept on the phone (`data/SearchCache.kt`, its own SQLite file) and reused, so
+the same question does not spend the plan's search bandwidth twice. The owner sets the seconds on the
+account screen: at least 60, at most a day, 60 by default (`AppPrefs.cacheSeconds`), with a **Clear cache**
+button that says how many answers are held. The cache is this phone's own; there is nothing to clear
+anywhere else.
+
+The key is the request itself: index name, handler and every parameter with its value, order-independent,
+hashed. Two requests share an entry only when the index would answer them identically. At most 400 answers
+are kept, the oldest dropped first, and an answer over 2 MB is served but not stored.
+
+| Cached | Never cached |
+|---|---|
+| `/select` through `SearchRepository.select`: searches and their pages, the facets behind the filters, albums, the documents of duplicate groups, tag suggestions, map photos | Writing and deleting (`/update`), the document read back in `EditRepository.save` before it is written over, `IndexManager.configVersion`/`hasPhotoSchema`, and the sync's walk over the index (`forEachSizePage`, `forEachDoc`, `idsWithout*`, `count`) |
+| `/suggest`: autocomplete, keyed on the lowercased prefix | |
+| The duplicate-group facet, per slider stop (`cachedDuplicateGroups`) | |
+
+The uncached paths are uncached on purpose: a stale document in `EditRepository.save` would write old
+fields back over the owner's own words, and stale ids in the sync's comparison would delete the wrong
+photos.
+
+Everything the app writes clears the cache at once, whatever the seconds say: saving tags
+(`saveEdits`), deleting photos, `resetIndex`, and every finished sync (`onSyncFinished`). The deliberate
+gestures clear it too: `forceRefresh` (swipe down on the grid, the reload icon) and `openAlbums(force =
+true)` (swipe down in Albums).
 
 ## Why the request is a POST
 

@@ -39,13 +39,14 @@ Everything below lives under `app/src/main/java/com/opensolr/photos/`. The packa
 - `AppPrefs.kt` — every setting and saved value, in one private preferences file. If you need to remember something new between runs, add a property here.
 - `SecureStore.kt` — encrypts and decrypts the two secrets with a Keystore key. `AppPrefs` calls it; nothing else should store a secret any other way.
 - `PhotoCache.kt` — the SQLite table of documents and vectors already paid for, so a photo is never read twice.
+- `SearchCache.kt` — a SQLite table of answers the index already gave, keyed by the request itself and reused for as many seconds as the owner chose (`AppPrefs.cacheSeconds`). Only the reads in `SearchRepository` go through it; writes, the document read back before an edit, the schema checks and the sync's walk never do. See [the search cache](search.md#search-cache).
 
 ### `net/` — talking to Opensolr
 
 - `Http.kt` — the one shared HTTP client, with its timeouts and no redirects.
 - `OpensolrApi.kt` — one function per Opensolr call: token exchange, index list, create, config upload, connection details, account summary, `image_index`, `batch_embed`, `embed`. It also turns the platform's refusals into typed errors.
 - `SolrClient.kt` — talks straight to the phone's index: search, list every id, add, delete, empty, commit, check the schema and its configuration version, autocomplete, duplicate groups.
-- `UpdateCheck.kt` — once a day, compares the app with the latest release on GitHub.
+- `UpdateCheck.kt` — compares the app with the latest release on GitHub: once a day in the background, and on demand from the account screen. `check()` returns a `Result`, so a failed check is never reported as "up to date".
 - `Errors.kt` — the exceptions, named after what the app has to do about them (sign in again, quota used up, plan limit, rate limited, photo rejected...).
 
 ### `media/` — photos on the phone
@@ -72,7 +73,7 @@ Everything below lives under `app/src/main/java/com/opensolr/photos/`. The packa
 
 ### `search/` — finding photos
 
-- `SearchRepository.kt` — builds the Solr request from the text and the filters (words, meaning, facets) and parses the answer into results; also the albums facet, the duplicate groups, autocomplete and the tag suggestions of the edit sheet.
+- `SearchRepository.kt` — builds the Solr request from the text and the filters (words, meaning, facets) and parses the answer into results; also the albums facet, the duplicate groups, autocomplete and the tag suggestions of the edit sheet. Every read it makes passes through `SearchCache` first, and anything the app writes empties that cache.
 - `EditRepository.kt` — saves a photo's tags and words: local edits, the document read back, a new vector, the write.
 
 ### `ui/` — the screens

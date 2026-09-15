@@ -9,7 +9,7 @@
 | [How it works](how-it-works.md) | The whole picture: components, hosts, every call the app makes |
 | [Sign-in](sign-in.md) | OAuth 2.0 authorization code flow with PKCE, step by step |
 | [Sync and Re-Sync](sync.md) | The algorithm, photo ids, schedule, Force Re-Sync, index recreation and reset |
-| [Search](search.md) | The header, query building, grouping, filters, autocomplete, deleting, editing tags |
+| [Search](search.md) | The header, query building, grouping, filters, autocomplete, deleting, editing tags, the search cache |
 | [Map](map.md) | Markers, groups, Search this area, what the map sends |
 | [Albums](albums.md) | The sections, the one facet request, covers and names |
 | [Duplicates](duplicates.md) | The 13 slider stops, the keys behind them, Select 1 of each duplicate |

@@ -18,11 +18,18 @@
 use the app. The app has no analytics, no advertising, no crash reporting and no third-party SDKs that talk
 to the network.
 
+The one other host it ever contacts is `api.github.com`, for the latest release of the app: once a day, and
+whenever you tap **Check for updates** on the account screen. The request is unauthenticated and carries
+nothing about you or your photos.
+
 ## What stays on the phone
 
 - The API key and the index password, each encrypted with AES-256-GCM under a key generated inside the
   Android Keystore. The key material never leaves the Keystore.
 - The photo cache (documents and vectors already paid for), in the app's private storage.
+- The search cache: answers the index already gave (searches, facets, albums, duplicate groups,
+  suggestions), reused for as long as the owner set on the account screen and cleared with one button
+  there. It never leaves the phone. See [the search cache](search.md#search-cache).
 - Settings: chosen folders, schedule, last sync report.
 
 `allowBackup` is off and the data-extraction rules exclude every domain from cloud backup and from

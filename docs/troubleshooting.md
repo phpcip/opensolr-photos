@@ -83,6 +83,12 @@ It was deleted or moved. The next Re-Sync removes it from the index.
 **Newly synced photos do not show up yet.**
 The index makes new photos searchable within about 10 seconds. Pull down on the grid to reload.
 
+**The results look out of date.**
+Answers from the index are kept on the phone and reused for as long as you set on the account screen (at
+least a minute). Pull down on the grid, or tap the reload icon: both always ask the index. Your own edits,
+the photos you delete and every finished sync clear them straight away, and **Clear cache** on the account
+screen throws away everything held. See [the search cache](search.md#search-cache).
+
 **"No duplicates of this kind in your index."**
 No two photos share the key of this slider stop. Move the slider to a looser stop, such as *Same first
 word*. See [duplicates](duplicates.md).
