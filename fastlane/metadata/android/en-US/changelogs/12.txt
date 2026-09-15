@@ -1,0 +1,1 @@
+Photos are indexed on the server: the phone uploads each new photo once, with its EXIF and your tags, and Opensolr does the reading, the place, the vector and the index write. No second trip through the phone.

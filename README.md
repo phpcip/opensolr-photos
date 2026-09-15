@@ -46,10 +46,12 @@ one per phone. No photo backup, no Google account, no ads, no analytics.
 2. **Pick folders.** DCIM, where the camera saves, is proposed.
 3. **The app sets up this phone's index**: creates it if it does not exist and uploads the
    [schema](docs/index-schema.md) that ships in [`solr/conf`](solr/conf).
-4. **Sync.** For every photo not yet in the index, the app makes a 640 px copy and sends it, five at a
-   time, to Opensolr's `image_index` endpoint, which answers what each photo shows and the search vector
-   of those words in one go. The app reads the camera metadata on the phone, turns the GPS position into a
-   place with `nearby_places`, and writes the document straight into the index ([sync](docs/sync.md)).
+4. **Sync.** For every photo not yet in the index, the app makes a 640 px copy carrying the original's
+   EXIF and hands it, five at a time, to Opensolr's `photos_ingest` endpoint, together with your tags and
+   words for it when this phone has them. The server does the rest: reads the EXIF, asks CLIP what the
+   photo shows, turns those words into a search vector, turns the GPS position into a place, keeps the
+   tags and words already in the index, and writes the complete document into your index itself. The
+   phone's part ends with the upload ([sync](docs/sync.md)).
 5. **Search** goes straight to the index through Opensolr's `{!hybrid}` parser: words and meaning
    blended, filters, autocomplete, spelling, the map ([search](docs/search.md), [map](docs/map.md)).
 
@@ -85,8 +87,9 @@ The APK is signed with the Opensolr Photos release key. SHA-256 of the signing c
   <img src="docs/images/data-boundaries.svg" alt="Where each piece of data lives" width="100%">
 </p>
 
-- **Originals never leave the phone.** Only a 640 px re-encoded copy is sent to be read, with no EXIF, and
-  it is not stored. A photo's GPS position, rounded, is sent once to be turned into a place name.
+- **Originals never leave the phone.** Only a 640 px re-encoded copy is sent to be indexed, carrying the
+  original's EXIF (time, camera, position) so the server can read it; the copy is processed in memory and
+  not stored. The position, rounded, is turned into a place name on the server.
 - **The map** draws OpenStreetMap tiles, requested only while the map screen is open. That is the only
   host besides Opensolr the app ever talks to.
 - **The index is yours**: labels, a search vector, date, camera, place, path. It lives in your Opensolr

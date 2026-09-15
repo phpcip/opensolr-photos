@@ -33,9 +33,10 @@ Account and index management:
 
 The AI endpoints:
 
-- `image_index` reads up to five pictures at once: for each, the words CLIP sees in it (the same model
-  and vocabulary as Opensolr's image search, without the text-reading steps) and the search vector of
-  those words, in one answer. One AI request per picture. The pictures are not stored.
+- `photos_ingest` takes up to five photos at once and indexes them completely on the server: EXIF from
+  the copy, the words CLIP sees (the same model and vocabulary as Opensolr's image search), the search
+  vector of those words, the place of the GPS position, your tags and words kept from the index, and
+  the write into your index. One AI request per photo that needed the models. The copies are not stored.
 - `batch_embed` turns texts into search vectors; the app uses it only when you edit a photo's tags or
   words. `embed` turns a typed query into one.
 
@@ -74,8 +75,8 @@ reinstalled and differs on every other phone. So:
 | opensolr.com | `POST /solr_manager/api/upload_zip_config_files` | New index, or an index without this schema |
 | opensolr.com | `POST /solr_manager/api/get_core_info` | Address and credentials of the index |
 | opensolr.com | `POST /solr_manager/api/get_account_summary` | Plan limits and usage |
-| opensolr.com | `POST /solr_manager/api/nearby_places` | Once per round of new photos with a position |
-| api.opensolr.com | `POST /solr_manager/api/image_index` | Once per 5 new photos |
+| opensolr.com | `POST /solr_manager/api/nearby_places` | Called by the server, per batch of photos with a position |
+| api.opensolr.com | `POST /solr_manager/api/photos_ingest` | Once per 5 new photos |
 | api.opensolr.com | `POST /solr_manager/api/batch_embed` | Once per round with edited photos |
 | api.opensolr.com | `POST /solr_manager/api/embed` | Once per typed search (vector search plans) |
 | your index | `POST /select` | Listing ids, searching (with spellcheck), map pins |

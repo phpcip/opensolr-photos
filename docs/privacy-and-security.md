@@ -8,7 +8,7 @@
 
 | Data | Goes to | Kept there? |
 |---|---|---|
-| A 640 px JPEG copy of each new photo, re-encoded from pixels, five per call | api.opensolr.com `image_index` | No |
+| A 640 px JPEG copy of each new photo, re-encoded from pixels and carrying the original's EXIF, with the file's name, folder and size, and your tags and words for it when this phone has them, five per call | api.opensolr.com `photos_ingest` | No: processed in memory, the document it produces goes into your index |
 | The words and tags of a photo you edited | api.opensolr.com `batch_embed` | No |
 | Your typed searches | api.opensolr.com `embed` (vector search plans), then your index `/select` | Not by the app; the query goes to your own index like any search on it |
 | Labels, vector, EXIF fields, path, folder, file name, size | Your Opensolr Index | Yes, until the photo leaves the phone or you empty the index |

@@ -92,6 +92,33 @@ object PhotoReader {
     }
 
     /**
+     * The copy of [photo] that goes to Opensolr for indexing: the 640 px upright JPEG, carrying
+     * the original's EXIF (when, which camera, where, exposure), so the server reads it there
+     * and the phone does nothing else with it. Orientation is set upright because the pixels
+     * already are. Null when the file cannot be decoded.
+     */
+    fun copyForIngest(context: Context, photo: LocalPhoto): ByteArray? {
+        val exif = openExif(context, photo.uri)
+        val jpeg = shrinkForClip(context, photo.uri, exif?.rotationDegrees ?: 0) ?: return null
+        if (exif == null) return jpeg
+        val file = java.io.File.createTempFile("ingest", ".jpg", context.cacheDir)
+        try {
+            file.writeBytes(jpeg)
+            val out = ExifInterface(file.absolutePath)
+            for (tag in CARRIED_EXIF) {
+                exif.getAttribute(tag)?.let { out.setAttribute(tag, it) }
+            }
+            out.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
+            out.saveAttributes()
+            return file.readBytes()
+        } catch (e: Exception) {
+            return jpeg
+        } finally {
+            file.delete()
+        }
+    }
+
+    /**
      * Reads the EXIF metadata of [photo]. GPS is only readable when the user granted
      * "access media location"; without it Android removes the coordinates, and the photo is
      * indexed without a place.
@@ -125,6 +152,15 @@ object PhotoReader {
      * Opens the EXIF block, asking for the original bytes (with location) when the permission
      * allows it and falling back to the redacted stream otherwise.
      */
+    /** The EXIF tags that travel with the copy: time, camera, exposure, position. */
+    private val CARRIED_EXIF = listOf(
+        ExifInterface.TAG_DATETIME_ORIGINAL, ExifInterface.TAG_DATETIME, ExifInterface.TAG_OFFSET_TIME_ORIGINAL, ExifInterface.TAG_OFFSET_TIME,
+        ExifInterface.TAG_MAKE, ExifInterface.TAG_MODEL, ExifInterface.TAG_LENS_MODEL,
+        ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY, ExifInterface.TAG_EXPOSURE_TIME, ExifInterface.TAG_F_NUMBER, ExifInterface.TAG_FOCAL_LENGTH, ExifInterface.TAG_FLASH,
+        ExifInterface.TAG_GPS_LATITUDE, ExifInterface.TAG_GPS_LATITUDE_REF, ExifInterface.TAG_GPS_LONGITUDE, ExifInterface.TAG_GPS_LONGITUDE_REF,
+        ExifInterface.TAG_GPS_ALTITUDE, ExifInterface.TAG_GPS_ALTITUDE_REF,
+    )
+
     private fun openExif(context: Context, uri: Uri): ExifInterface? {
         val resolver = context.contentResolver
         val canReadLocation = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q &&

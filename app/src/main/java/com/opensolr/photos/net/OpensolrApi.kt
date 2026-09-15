@@ -29,6 +29,15 @@ import javax.crypto.spec.SecretKeySpec
 data class ClipResult(val text: String, val labels: List<String>, val model: String)
 
 /**
+ * One photo handed to photos_ingest: the copy with its EXIF, and the owner's edits when
+ * this phone holds them (null = the server keeps what the index already has).
+ */
+data class IngestItem(val photo: com.opensolr.photos.media.LocalPhoto, val jpeg: ByteArray, val tags: List<String>?, val meaning: String?)
+
+/** What the server did with one photo: whether it got words (and a vector), and a place. */
+data class IngestResult(val words: Boolean, val place: Boolean)
+
+/**
  * One photo read by image_index: what it shows, and the vector of those words.
  */
 data class ImageReading(val clip: ClipResult, val vector: FloatArray, val embedModel: String)
@@ -311,6 +320,58 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
     }
 
     /**
+     * Hands up to 5 photos to Opensolr to be indexed completely there (photos_ingest): the
+     * server reads the EXIF from the copy, asks CLIP and the embedder, finds the place, keeps
+     * the owner's tags and words, and writes the document into the index itself. The phone's
+     * part ends with this call. One slot per photo, in order; null when that photo was
+     * refused (the others are unaffected).
+     */
+    suspend fun photosIngest(session: Session, name: String, items: List<IngestItem>): List<IngestResult?> = withContext(Dispatchers.IO) {
+        val photos = JSONArray()
+        items.forEach { item ->
+            val p = item.photo
+            photos.put(JSONObject().apply {
+                put("id", p.id)
+                put("path", p.absolutePath)
+                put("folder", p.folder)
+                put("file_name", p.fileName)
+                put("media_id", p.mediaId)
+                put("mime", p.mime)
+                put("size_bytes", p.sizeBytes)
+                if (p.modifiedSec > 0) put("modified_at", isoUtc(p.modifiedSec * 1000L))
+                put("width", p.width)
+                put("height", p.height)
+                put("image", Base64.encodeToString(item.jpeg, Base64.NO_WRAP))
+                // Present only when this phone has the owner's edits for the photo: then they win.
+                item.tags?.let { put("tags", JSONArray(it)) }
+                item.meaning?.let { put("meaning", it) }
+            })
+        }
+        val body = JSONObject()
+            .put("email", session.email)
+            .put("api_key", session.apiKey)
+            .put("index_name", name)
+            .put("top_k", 12)
+            .put("photos", photos)
+        val request = Request.Builder().url(AI + "photos_ingest").post(body.toString().toRequestBody(JSON)).build()
+        http.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            classify(response.code, text, response.header("Retry-After"))
+            if (response.code in 400..499) throw PhotoRejectedException("The photos were refused: " + platformMessage(text))
+            if (response.code >= 500) throw ServiceException("The Opensolr AI service answered HTTP ${response.code}")
+            val json = parseObject(text)
+            if (!json.optBoolean("status")) throw ServiceException(platformMessage(text))
+            val results = json.optJSONArray("results") ?: throw ServiceException("The Opensolr AI service answered without results")
+            if (results.length() != items.size) throw ServiceException("The Opensolr AI service answered ${results.length()} results for ${items.size} photos")
+            (0 until results.length()).map { i ->
+                val item = results.optJSONObject(i) ?: return@map null
+                if (!item.optBoolean("status")) return@map null
+                IngestResult(item.optBoolean("words"), item.optBoolean("place"))
+            }
+        }
+    }
+
+    /**
      * Search vectors for up to 50 texts at once, in the same order.
      */
     suspend fun batchEmbed(session: Session, name: String, texts: List<String>): List<FloatArray> = withContext(Dispatchers.IO) {
@@ -408,6 +469,10 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
      * JSON number array to floats.
      */
     private fun toFloats(array: JSONArray): FloatArray = FloatArray(array.length()) { array.getDouble(it).toFloat() }
+
+    /** ISO 8601 UTC of a millisecond time, as the index stores dates. */
+    private fun isoUtc(millis: Long): String =
+        java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.format(millis)
 
     /**
      * Lower-case hex HMAC-SHA256, as get_account_summary expects.
