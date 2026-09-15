@@ -1,5 +1,10 @@
 package com.opensolr.photos.ui.screens
 
+import android.app.Activity
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -15,7 +20,16 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.requiredSize
+import androidx.compose.ui.unit.sp
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -25,9 +39,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,6 +60,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -56,6 +74,12 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
+import kotlin.math.roundToInt
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -120,11 +144,40 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     var details by remember { mutableStateOf<PhotoHit?>(null) }
     var editing by remember { mutableStateOf<PhotoHit?>(null) }
     val gridState = rememberLazyGridState()
+    // Two ways to cut the grid, both from what is already on screen. Browsing, the results come
+    // back newest first, so the cut is the day or the month: "Today", "Yesterday", "September".
+    // On a typed search the order is the score - Fresh only boosts it - so the cut is the biggest
+    // drop in score, where the vector's near misses begin.
+    val rows = remember(state.hits, state.query, state.duplicateGroups) {
+        buildRows(state.hits, byDate = state.query.isBlank(), groups = state.duplicateGroups)
+    }
     // The search box is out of the way until asked for: the magnifier in the header opens it.
     // Active filters keep it on screen, so the filters button next to it stays reachable.
     var searchOpen by remember { mutableStateOf(false) }
-    val searchBarVisible = searchOpen || state.filters.count > 0
+    // Only the magnifier shows and hides the search line (Cip, 2026-09-15): applied filters
+    // stay visible on their own row of pills, so they no longer hold the line open.
+    val searchBarVisible = searchOpen
     val searchFocus = remember { FocusRequester() }
+    // Deleting is Android's job: from Android 11 the system shows its own confirmation and does
+    // the removing, and only when it comes back OK are the photos dropped from the index too.
+    var pendingDelete by remember { mutableStateOf(emptySet<String>()) }
+    var confirmDelete by remember { mutableStateOf(false) }
+    val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) viewModel.removeDeleted(pendingDelete)
+        pendingDelete = emptySet()
+    }
+    val deleteSelected = {
+        val chosen = state.hits.filter { it.id in state.selectedIds }
+        val sender = Actions.deleteRequest(context, Actions.contentUris(context, chosen))
+        pendingDelete = chosen.map { it.id }.toSet()
+        if (sender != null) {
+            deleteLauncher.launch(IntentSenderRequest.Builder(sender).build())
+        } else {
+            // Below Android 11 nothing asks on the app's behalf, so the app asked first.
+            viewModel.removeDeleted(pendingDelete)
+            pendingDelete = emptySet()
+        }
+    }
 
     val nearEnd by remember {
         derivedStateOf {
@@ -140,17 +193,47 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         if (nearEnd && state.hits.isNotEmpty() && !state.endReached && !state.searching) viewModel.search(reset = false)
     }
 
+    Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
+        // The header is the menu and only the menu (Cip, 2026-09-15): the app's logo first (the
+        // Opensolr dashboard in the default browser), then every screen and action, each a small
+        // bordered button with its label. No title; "15 selected" lives over the photos.
         Row(
-            Modifier.fillMaxWidth().padding(start = 20.dp, end = 8.dp, top = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(
-                if (state.selecting) "${state.selectedIds.size} selected" else "Photos",
-                style = MaterialTheme.typography.headlineMedium, color = p.ink, modifier = Modifier.weight(1f),
-            )
-            // Search lives here as a single icon; tapping again puts it away and clears the query.
-            IconButton(onClick = {
+            // Order, left to right (Cip, 2026-09-16): Opensolr, Me, Sync, Map, Albums, Select, Search.
+            HeaderItem("Opensolr", onClick = { Actions.openUrl(context, OPENSOLR_DASHBOARD_URL) }) {
+                // The launcher icon drawn small: its artwork sits in the middle two thirds of
+                // the adaptive canvas, so the canvas is drawn larger than the clipped square.
+                Box(Modifier.size(20.dp).clip(Corner).background(p.accent), contentAlignment = Alignment.Center) {
+                    Icon(painterResource(R.drawable.ic_launcher_foreground), contentDescription = "Opensolr dashboard", tint = p.onAccent, modifier = Modifier.requiredSize(32.dp))
+                }
+            }
+            HeaderItem("Me", onClick = { viewModel.open(Screen.Account) }) {
+                Icon(Icons.Filled.AccountCircle, contentDescription = "Opensolr account", tint = p.ink, modifier = Modifier.size(20.dp))
+            }
+            HeaderItem("Sync", active = state.sync.busy, onClick = { viewModel.open(Screen.Sync) }) {
+                SyncIcon(running = state.sync.busy)
+            }
+            HeaderItem("Map", onClick = { viewModel.openMap() }) {
+                Icon(painterResource(R.drawable.ic_map), contentDescription = "Map", tint = p.ink, modifier = Modifier.size(20.dp))
+            }
+            HeaderItem("Albums", onClick = { viewModel.openAlbums() }) {
+                Icon(painterResource(R.drawable.ic_albums), contentDescription = "Albums", tint = p.ink, modifier = Modifier.size(20.dp))
+            }
+            // Selection: tap photos, then share, delete or re-sync them.
+            HeaderItem(if (state.selecting) "Done" else "Select", active = state.selecting, onClick = { viewModel.setSelecting(!state.selecting) }) {
+                Icon(
+                    if (state.selecting) Icons.Filled.Close else Icons.Filled.CheckCircle,
+                    contentDescription = if (state.selecting) "Stop selecting" else "Select photos",
+                    tint = if (state.selecting) p.accent else p.ink,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            // Search: tapping again puts the line away and clears the query. In the accent while
+            // open, and while closed with filters applied: something is narrowing the photos.
+            HeaderItem("Search", active = searchOpen || state.filters.count > 0, onClick = {
                 if (searchOpen) {
                     searchOpen = false
                     keyboard?.hide()
@@ -159,22 +242,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                     searchOpen = true
                 }
             }) {
-                Icon(Icons.Filled.Search, contentDescription = if (searchOpen) "Close search" else "Search", tint = if (searchOpen) p.accent else p.ink)
-            }
-            // Selection: tap photos, then re-sync them (read again by CLIP).
-            IconButton(onClick = { viewModel.setSelecting(!state.selecting) }) {
-                Icon(
-                    if (state.selecting) Icons.Filled.Close else Icons.Filled.CheckCircle,
-                    contentDescription = if (state.selecting) "Stop selecting" else "Select photos",
-                    tint = if (state.selecting) p.accent else p.ink,
-                )
-            }
-            IconButton(onClick = { viewModel.openMap() }) {
-                Icon(painterResource(R.drawable.ic_map), contentDescription = "Map", tint = p.ink)
-            }
-            SyncIndicator(running = state.sync.busy, onClick = { viewModel.open(Screen.Sync) })
-            IconButton(onClick = { viewModel.open(Screen.Account) }) {
-                Icon(Icons.Filled.AccountCircle, contentDescription = "Opensolr account", tint = p.ink)
+                Icon(Icons.Filled.Search, contentDescription = if (searchOpen) "Close search" else "Search", tint = if (searchOpen || state.filters.count > 0) p.accent else p.ink, modifier = Modifier.size(20.dp))
             }
         }
 
@@ -231,15 +299,17 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 }
                 // Filters sit on the same line, as a divider plus an icon rather than a button.
                 Box(Modifier.size(width = 1.dp, height = 20.dp).background(p.hairline))
+                // Slightly bigger and tappable over the line's full height (Cip, 2026-09-15).
                 Row(
                     Modifier
+                        .fillMaxHeight()
                         .combinedClickableCompat { showFilters = true }
-                        .padding(horizontal = 10.dp),
+                        .padding(horizontal = 12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
                         Icons.AutoMirrored.Filled.List, contentDescription = "Filters",
-                        tint = if (state.filters.count > 0) p.accent else p.muted, modifier = Modifier.size(18.dp),
+                        tint = if (state.filters.count > 0) p.accent else p.muted, modifier = Modifier.size(22.dp),
                     )
                     if (state.filters.count > 0) {
                         Spacer(Modifier.size(4.dp))
@@ -287,20 +357,65 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         }
 
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            // While selecting, this line says how many are picked: the header stays the menu.
             val countText = when {
+                state.selecting -> "${Actions.formatCount(state.selectedIds.size.toLong())} selected"
                 state.searching && state.hits.isEmpty() -> "Searching…"
-                else -> "${Actions.formatCount(state.numFound)} photo${if (state.numFound == 1L) "" else "s"}" +
-                    if (state.smart) " · matched by meaning and words" else ""
+                state.duplicatesMode ->
+                    "${Actions.formatCount(state.hits.size.toLong())} photos in ${state.duplicateGroups.size} group${if (state.duplicateGroups.size == 1) "" else "s"}"
+                else -> "${Actions.formatCount(state.numFound)} photo${if (state.numFound == 1L) "" else "s"}"
             }
             Text(countText, style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.weight(1f))
+            // Photos of the same thing, grouped. On when it is what the grid is showing.
+            IconButton(onClick = { viewModel.showDuplicates() }, modifier = Modifier.size(32.dp)) {
+                Icon(
+                    painterResource(R.drawable.ic_duplicates),
+                    contentDescription = if (!state.duplicatesMode) "Photos of the same thing" else "Back to all photos",
+                    tint = if (state.duplicatesMode) p.accent else p.muted,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            // Fresh: recent photos are boosted among the matches, nothing is dropped or resorted.
+            if (state.query.isNotBlank()) {
+                IconButton(onClick = { viewModel.setFreshBias(!state.freshBias) }, modifier = Modifier.size(32.dp)) {
+                    Icon(
+                        painterResource(R.drawable.ic_newest),
+                        contentDescription = if (state.freshBias) "Stop favouring recent photos" else "Favour recent photos",
+                        tint = if (state.freshBias) p.accent else p.muted,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
             // Reloads the results from the index, for photos a sync added in the meantime.
-            IconButton(onClick = { viewModel.search(reset = true) }, enabled = !state.searching, modifier = Modifier.size(32.dp)) {
+            // Reload keeps the view: duplicates stay duplicates, on the same slider stop.
+            IconButton(onClick = { viewModel.refresh() }, enabled = !state.searching, modifier = Modifier.size(32.dp)) {
                 Icon(painterResource(R.drawable.ic_reload), contentDescription = "Reload", tint = p.accent, modifier = Modifier.size(20.dp))
             }
+        }
+        // The kind of duplicates, 0..10 (Cip, 2026-09-15): from the loosest (the same first word)
+        // through the same photo by its EXIF (green, the middle) to the strictest (EXIF and the
+        // first five words, red). Every stop is one facet request, asked a moment after the move.
+        if (state.duplicatesMode) {
+            DuplicateLevelSlider(
+                level = state.duplicateLevel,
+                onLevel = { viewModel.setDuplicateLevel(it) },
+                canSelect = state.duplicateGroups.isNotEmpty(),
+                onSelectOneOfEach = { viewModel.selectOneOfEachDuplicate() },
+            )
         }
         if (state.searching) {
             LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp), color = p.accent, trackColor = p.chip)
         }
+
+        // What the photos on screen have in common, one tap away from being a filter. Browsing,
+        // these are the index's own counts; on a typed search they come from the words-only
+        // request, so nothing the vector dragged in can suggest a filter.
+        if (!state.selecting) {
+            SuggestedFacets(state, onPick = { field, value -> viewModel.setFilters(state.filters.toggled(field, value)) })
+        }
+
+        // What the photos on screen have in common, straight from the facets the same /select
+        // already returned: one tap narrows to it. Nothing here costs an extra request.
 
         // A newer release on GitHub: a link to its page, the install is the user's and Android's.
         state.update?.let { update ->
@@ -318,24 +433,10 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         // While the index is rebuilt for a newer configuration, search is unavailable.
         if (state.sync.running && state.sync.phase in REBUILD_PHASES) {
             Notice(
-                "Your index is being rebuilt for the new version of Opensolr Photos. Search is unavailable until the re-sync is done" +
+                "Search is unavailable while your index is rebuilt" +
                     (if (state.sync.total > 0) ": ${Actions.formatCount(state.sync.done.toLong())} of ${Actions.formatCount(state.sync.total.toLong())} photos written." else "."),
                 title = "Rebuilding your index",
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-            )
-        }
-        if (state.selecting) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                AccentButton(
-                    "Re-sync ${state.selectedIds.size} photo${if (state.selectedIds.size == 1) "" else "s"}",
-                    onClick = { viewModel.resyncSelected() },
-                    enabled = state.selectedIds.isNotEmpty(),
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            Text(
-                "The chosen photos are read again by Opensolr, so what changed in them is reflected in the words they are found by. Each one counts as new AI requests.",
-                style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.padding(horizontal = 20.dp),
             )
         }
         // "Did you mean": the spellchecker's correction, one tap away.
@@ -354,7 +455,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         state.searchNotice?.let { Notice(it, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
         // Words-only search, said once per typed search rather than silently.
         if (state.query.isNotBlank() && state.searchNotice == null && state.hits.isNotEmpty() && state.account?.vectorAllowed == false) {
-            Notice("Your plan has no photo recognition: results match the date, camera, place, file name and your tags only. Pick a plan with AI at opensolr.com/pricing to find photos by what is in them.", modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
+            Notice("Words only: your plan has no photo recognition.", modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
         }
         state.searchError?.let { Notice(it, title = "Search did not work", modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
 
@@ -368,7 +469,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         val pullState = rememberPullToRefreshState()
         PullToRefreshBox(
             isRefreshing = pulled && state.searching,
-            onRefresh = { pulled = true; viewModel.search(reset = true) },
+            onRefresh = { pulled = true; viewModel.refresh() },
             state = pullState,
             modifier = Modifier.fillMaxSize(),
             indicator = {
@@ -385,31 +486,69 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 columns = GridCells.Adaptive(112.dp),
                 state = gridState,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(start = 2.dp, end = 2.dp, bottom = 24.dp),
+                // Room under the last row for the dock, so it never covers a photo.
+                contentPadding = PaddingValues(start = 2.dp, end = 2.dp, bottom = if (state.selecting) 96.dp else 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                itemsIndexed(state.hits, key = { _, hit -> hit.id }) { _, hit ->
-                    val selected = hit.id in state.selectedIds
-                    Box {
-                        Thumbnail(
-                            hit = hit,
-                            modifier = Modifier.combinedClickable(
-                                onClick = { if (state.selecting) viewModel.toggleSelected(hit.id) else Actions.openPhoto(context, hit) },
-                                onLongClick = { if (state.selecting) viewModel.toggleSelected(hit.id) else details = hit },
-                            ),
-                        )
-                        if (state.selecting) {
-                            Box(
+                items(
+                    rows,
+                    key = { row -> row.key },
+                    span = { row -> if (row is GridRow.Heading) GridItemSpan(maxLineSpan) else GridItemSpan(1) },
+                ) { row ->
+                    when (row) {
+                        is GridRow.Heading -> {
+                            // Google Photos style: the tick on a heading takes the whole group.
+                            // A long press on it starts selecting with that group already ticked.
+                            val allPicked = state.selecting && row.ids.isNotEmpty() && state.selectedIds.containsAll(row.ids)
+                            Row(
                                 Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(6.dp)
-                                    .size(22.dp)
-                                    .background(if (selected) p.accent else p.paper, Corner)
-                                    .border(1.dp, if (selected) p.accent else p.hairline, Corner),
-                                contentAlignment = Alignment.Center,
+                                    .fillMaxWidth()
+                                    .combinedClickable(
+                                        onClick = { if (state.selecting) viewModel.toggleSelectedGroup(row.ids) },
+                                        onLongClick = { viewModel.toggleSelectedGroup(row.ids) },
+                                    )
+                                    .padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
-                                if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = p.onAccent, modifier = Modifier.size(16.dp))
+                                Text(row.text, style = MaterialTheme.typography.labelLarge, color = p.ink, modifier = Modifier.weight(1f))
+                                if (state.selecting) {
+                                    Box(
+                                        Modifier
+                                            .size(22.dp)
+                                            .background(if (allPicked) p.accent else p.paper, Corner)
+                                            .border(1.dp, if (allPicked) p.accent else p.hairline, Corner),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        if (allPicked) Icon(Icons.Filled.Check, contentDescription = null, tint = p.onAccent, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+                        }
+                        is GridRow.Photo -> {
+                            val hit = row.hit
+                            val selected = hit.id in state.selectedIds
+                            Box {
+                                Thumbnail(
+                                    hit = hit,
+                                    modifier = Modifier.combinedClickable(
+                                        onClick = { if (state.selecting) viewModel.toggleSelected(hit.id) else Actions.openPhoto(context, hit) },
+                                        onLongClick = { if (state.selecting) viewModel.toggleSelected(hit.id) else details = hit },
+                                    ),
+                                )
+                                if (state.selecting) {
+                                    Box(
+                                        Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(6.dp)
+                                            .size(22.dp)
+                                            .background(if (selected) p.accent else p.paper, Corner)
+                                            .border(1.dp, if (selected) p.accent else p.hairline, Corner),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = p.onAccent, modifier = Modifier.size(16.dp))
+                                    }
+                                }
                             }
                         }
                     }
@@ -418,10 +557,40 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         }
     }
 
+    // What to do with the selected photos, floating over the grid instead of pushing it down.
+    if (state.selecting) {
+        SelectionDock(
+            count = state.selectedIds.size,
+            modifier = Modifier.align(Alignment.BottomCenter),
+            onShare = { Actions.sharePhotos(context, state.hits.filter { it.id in state.selectedIds }) },
+            // The app always asks first (Cip, 2026-09-16); from Android 11 the system's own
+            // confirmation follows.
+            onDelete = { confirmDelete = true },
+            onResync = { viewModel.resyncSelected() },
+        )
+    }
+    }
+
+    // The app's own warning before anything is removed, on every Android version.
+    if (confirmDelete) {
+        val chosen = state.selectedIds.size
+        AlertDialog(
+            onDismissRequest = { confirmDelete = false },
+            title = { Text("Delete $chosen photo${if (chosen == 1) "" else "s"}?") },
+            text = { Text("They are removed from this phone and from your index. This cannot be undone.") },
+            confirmButton = { TextButton(onClick = { confirmDelete = false; deleteSelected() }) { Text("Delete", color = p.accent) } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel", color = p.ink) } },
+            containerColor = p.paper,
+            titleContentColor = p.ink,
+            textContentColor = p.muted,
+        )
+    }
+
     if (showFilters) {
         FilterSheet(
             facets = state.facets,
             current = state.filters,
+            count = state.numFound,
             onChange = { viewModel.setFilters(it) },
             onDismiss = { showFilters = false },
         )
@@ -436,10 +605,262 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
 }
 
 /**
- * The discreet sync indicator: a refresh icon that turns while a sync runs. Tapping opens Sync.
+ * The pills above the grid: what the photos matching a typed search have in common, one tap
+ * from a filter. Only on a typed search (Cip, 2026-09-15): browsing shows no pills at all.
+ *
+ * They come from [UiState.queryFacets] - a second, words-only request - because the facets of
+ * the hybrid query cover every candidate the vector leg brought along, near misses included.
+ * When the words match nothing, there is nothing to suggest and the strip stays away.
  */
 @Composable
-private fun SyncIndicator(running: Boolean, onClick: () -> Unit) {
+private fun SuggestedFacets(state: UiState, onPick: (String, String) -> Unit) {
+    if (state.query.isBlank()) return
+    val source = state.queryFacets
+    val picks = remember(source, state.filters) {
+        val lists = STRIP_FIELDS.map { field ->
+            (source[field] ?: emptyList())
+                .asSequence()
+                // On the words-only facets the count is over that smaller set, where a value
+                // shared by all still narrows.
+                .filter { it.count >= 2 && it.value !in state.filters.values(field) }
+                .sortedByDescending { it.count }
+                .take(PER_FIELD)
+                .map { field to it }
+                .toList()
+        }
+        // Round robin, so the first pills are the best value of each field rather than three of one.
+        (0 until PER_FIELD).flatMap { rank -> lists.mapNotNull { it.getOrNull(rank) } }.take(10)
+    }
+    if (picks.isEmpty()) return
+    LazyRow(
+        Modifier.fillMaxWidth().padding(top = 2.dp, bottom = 6.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        items(picks, key = { (field, value) -> "$field:${value.value}" }) { (field, value) ->
+            // No count: the words-only facets do not count the same photos the grid shows.
+            Pill(
+                label = facetLabel(field, value.value),
+                onClick = { onPick(field, value.value) },
+            )
+        }
+    }
+}
+
+/** The fields the pills draw from, in the order one of each is offered. */
+private val STRIP_FIELDS = listOf("custom_tags", "labels", "city", "country", "year", "camera_model")
+/** How many values one field may put on the strip. */
+private const val PER_FIELD = 3
+
+/**
+ * A soft round pill: a suggestion in grey, or an applied filter in the accent with a cross that
+ * takes it off. Quieter than the square chips of the filter sheet.
+ */
+@Composable
+private fun Pill(label: String, onClick: () -> Unit, accent: Boolean = false, trailingClose: Boolean = false) {
+    val p = LocalPalette.current
+    val shape = RoundedCornerShape(50)
+    Row(
+        Modifier
+            .clip(shape)
+            .background(p.chip)
+            .combinedClickableCompat(onClick)
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = if (accent) p.accent else p.muted, maxLines = 1)
+        if (trailingClose) {
+            Spacer(Modifier.size(5.dp))
+            Icon(Icons.Filled.Close, contentDescription = "Remove", tint = if (accent) p.accent else p.muted, modifier = Modifier.size(12.dp))
+        }
+    }
+}
+
+/**
+ * The actions for the selected photos: a small bar of icons floating above the grid, each with
+ * a word under it. Nothing is explained here; what the actions do is said where it is decided
+ * (the system's own delete confirmation, and the Sync screen for a re-sync).
+ */
+@Composable
+private fun SelectionDock(
+    count: Int,
+    modifier: Modifier = Modifier,
+    onShare: () -> Unit,
+    onDelete: () -> Unit,
+    onResync: () -> Unit,
+) {
+    val p = LocalPalette.current
+    Row(
+        modifier
+            .padding(horizontal = 24.dp)
+            .navigationBarsPadding()
+            .padding(bottom = 14.dp)
+            .clip(Corner)
+            .background(p.paper)
+            .border(1.dp, p.hairline, Corner)
+            .padding(horizontal = 6.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        DockAction(R.drawable.ic_share, "Share", enabled = count > 0, onClick = onShare)
+        DockAction(R.drawable.ic_delete, "Delete", enabled = count > 0, onClick = onDelete)
+        DockAction(R.drawable.ic_sync, if (count > 0) "Re-sync $count" else "Re-sync", enabled = count > 0, accent = true, onClick = onResync)
+    }
+}
+
+/**
+ * One icon of the dock with its word, greyed out while nothing is selected.
+ */
+@Composable
+private fun DockAction(icon: Int, label: String, enabled: Boolean, accent: Boolean = false, onClick: () -> Unit) {
+    val p = LocalPalette.current
+    val tint = when {
+        !enabled -> p.hairline
+        accent -> p.accent
+        else -> p.ink
+    }
+    Column(
+        Modifier
+            .clip(Corner)
+            .then(if (enabled) Modifier.combinedClickableCompat(onClick) else Modifier)
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(painterResource(icon), contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.size(4.dp))
+        Text(label, style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1)
+    }
+}
+
+/**
+ * What the grid lays out: a full-width date heading, or one photo.
+ */
+private sealed interface GridRow {
+    /** The key the lazy grid keeps items by; headings carry their own text. */
+    val key: String
+
+    /** A full-width heading, with the photos of its group so its tick can take them all. */
+    data class Heading(val text: String, val ids: List<String>) : GridRow {
+        override val key: String get() = "h:$text"
+    }
+
+    data class Photo(val hit: PhotoHit) : GridRow {
+        override val key: String get() = hit.id
+    }
+}
+
+/**
+ * Turns the results into grid rows with headings over their groups.
+ *
+ * [byDate] cuts on the day or the month, for results that come back in date order; photos with
+ * no date land under the last heading seen, or under none at the top. Otherwise the cut is on
+ * the score: the hybrid query returns the strong matches first and the vector's near misses
+ * after them, so the biggest fall in score is where "Also similar" begins.
+ */
+private fun buildRows(hits: List<PhotoHit>, byDate: Boolean, groups: List<Int> = emptyList()): List<GridRow> {
+    if (hits.isEmpty()) return emptyList()
+    if (groups.isNotEmpty()) {
+        // Photos of the same thing: the groups come laid out one after another.
+        val rows = ArrayList<GridRow>(hits.size + groups.size)
+        var from = 0
+        groups.forEachIndexed { index, size ->
+            val group = hits.drop(from).take(size)
+            if (group.isEmpty()) return@forEachIndexed
+            rows += GridRow.Heading("${group.size} of the same · ${index + 1}", group.map { it.id })
+            group.forEach { rows += GridRow.Photo(it) }
+            from += size
+        }
+        return rows
+    }
+    if (!byDate) {
+        val cut = scoreCut(hits) ?: return hits.map { GridRow.Photo(it) }
+        val rows = ArrayList<GridRow>(hits.size + 2)
+        rows += GridRow.Heading("Best matches", hits.take(cut).map { it.id })
+        hits.take(cut).forEach { rows += GridRow.Photo(it) }
+        rows += GridRow.Heading("Also similar", hits.drop(cut).map { it.id })
+        hits.drop(cut).forEach { rows += GridRow.Photo(it) }
+        return rows
+    }
+    val groups = LinkedHashMap<String, MutableList<PhotoHit>>()
+    val loose = ArrayList<PhotoHit>()
+    hits.forEach { hit ->
+        val heading = Actions.solrDateMillis(hit.takenAt)?.let { Actions.dateHeading(it) }
+        if (heading == null && groups.isEmpty()) loose += hit
+        else if (heading == null) groups.values.last() += hit
+        else groups.getOrPut(heading) { ArrayList() } += hit
+    }
+    val rows = ArrayList<GridRow>(hits.size + groups.size)
+    loose.forEach { rows += GridRow.Photo(it) }
+    groups.forEach { (heading, photos) ->
+        rows += GridRow.Heading(heading, photos.map { it.id })
+        photos.forEach { rows += GridRow.Photo(it) }
+    }
+    return rows
+}
+
+/**
+ * Where the strong matches end, or null when there is no honest place to cut: too few results,
+ * no scores (an index on the older configuration answers without them), or a list that fades
+ * evenly. The cut is the biggest fall between one score and the next, and it only counts when
+ * what follows scores below [ALSO_SIMILAR_SHARE] of the best hit.
+ */
+private fun scoreCut(hits: List<PhotoHit>): Int? {
+    if (hits.size < MIN_HITS_TO_CUT) return null
+    val top = hits.first().score
+    if (top <= 0.0) return null
+    var cut = -1
+    var biggest = 0.0
+    for (i in MIN_BEST_MATCHES until hits.size) {
+        val fall = hits[i - 1].score - hits[i].score
+        if (fall > biggest && hits[i].score < top * ALSO_SIMILAR_SHARE) {
+            biggest = fall
+            cut = i
+        }
+    }
+    return cut.takeIf { it > 0 }
+}
+
+/** Fewer results than this are a short enough list to read without a heading. */
+private const val MIN_HITS_TO_CUT = 8
+/** "Best matches" is never shorter than this, so a single strong hit does not stand alone. */
+private const val MIN_BEST_MATCHES = 3
+/** A photo below this share of the best score is what the vector brought along, not a match. */
+private const val ALSO_SIMILAR_SHARE = 0.6
+
+/**
+ * One button of the header menu: a small bordered cell with its icon over a short label,
+ * sharing the row's width equally with the others. [active] draws it in the accent.
+ */
+@Composable
+private fun RowScope.HeaderItem(label: String, active: Boolean = false, onClick: () -> Unit, icon: @Composable () -> Unit) {
+    val p = LocalPalette.current
+    Column(
+        Modifier
+            .weight(1f)
+            .clip(Corner)
+            .border(1.dp, if (active) p.accent else p.hairline, Corner)
+            .combinedClickableCompat { onClick() }
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) { icon() }
+        Spacer(Modifier.height(3.dp))
+        Text(
+            label,
+            fontSize = 10.sp,
+            lineHeight = 12.sp,
+            color = if (active) p.accent else p.ink,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Clip,
+        )
+    }
+}
+
+/**
+ * The sync icon of the header: a refresh icon that turns while a sync runs.
+ */
+@Composable
+private fun SyncIcon(running: Boolean) {
     val p = LocalPalette.current
     val transition = rememberInfiniteTransition(label = "sync")
     val angle by transition.animateFloat(
@@ -447,20 +868,85 @@ private fun SyncIndicator(running: Boolean, onClick: () -> Unit) {
         animationSpec = infiniteRepeatable(tween(1200, easing = LinearEasing), RepeatMode.Restart),
         label = "angle",
     )
-    IconButton(onClick = onClick) {
-        Icon(
-            painterResource(R.drawable.ic_sync),
-            contentDescription = if (running) "Sync in progress" else "Sync",
-            tint = if (running) p.accent else p.ink,
-            modifier = if (running) Modifier.rotate(angle) else Modifier,
-        )
-    }
+    Icon(
+        painterResource(R.drawable.ic_sync),
+        contentDescription = if (running) "Sync in progress" else "Sync",
+        tint = if (running) p.accent else p.ink,
+        modifier = Modifier.size(20.dp).then(if (running) Modifier.rotate(angle) else Modifier),
+    )
 }
 
 /**
- * Removable chips for the filters currently applied.
+ * The duplicates slider: eleven stops over SearchRepository.DUPLICATE_FIELDS, the name of the
+ * kind under it. Its colour tells where it stands: black at the loosest words-only stop,
+ * green at the EXIF-only stop in the middle, red at the strictest EXIF-plus-words stop. The
+ * thumb follows the finger at once; the level reaches [onLevel] on every stop crossed, and the
+ * view model waits for the finger to settle before asking the index.
  */
-@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DuplicateLevelSlider(level: Int, onLevel: (Int) -> Unit, canSelect: Boolean, onSelectOneOfEach: () -> Unit) {
+    val p = LocalPalette.current
+    var value by remember { mutableStateOf(level.toFloat()) }
+    LaunchedEffect(level) { if (value.roundToInt() != level) value = level.toFloat() }
+    val stop = value.roundToInt().coerceIn(0, DUPLICATE_KIND_NAMES.size - 1)
+    val colour = when {
+        stop <= 5 -> lerp(DUPLICATE_BLACK, DUPLICATE_GREEN, stop / 5f)
+        stop <= 10 -> lerp(DUPLICATE_GREEN, DUPLICATE_RED, (stop - 5) / 5f)
+        // File name and size are not on the words / EXIF scale: a neutral colour of their own.
+        else -> DUPLICATE_NEUTRAL
+    }
+    Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+        Slider(
+            value = value,
+            onValueChange = {
+                value = it
+                val rounded = it.roundToInt()
+                if (rounded != level) onLevel(rounded)
+            },
+            valueRange = 0f..(DUPLICATE_KIND_NAMES.size - 1).toFloat(),
+            steps = DUPLICATE_KIND_NAMES.size - 2,
+            colors = SliderDefaults.colors(
+                thumbColor = colour,
+                activeTrackColor = colour,
+                inactiveTrackColor = p.chip,
+                activeTickColor = colour,
+                inactiveTickColor = p.hairline,
+            ),
+        )
+        Text("$stop · ${DUPLICATE_KIND_NAMES[stop]}", style = MaterialTheme.typography.labelMedium, color = colour)
+        // One tap selects one photo of every group (the last of each, the first one stays
+        // unticked), for review; the selection dock then shares, deletes or re-syncs them.
+        TextButton(
+            onClick = onSelectOneOfEach,
+            enabled = canSelect,
+            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+            modifier = Modifier.height(30.dp),
+        ) {
+            Text("Select 1 of each duplicate", style = MaterialTheme.typography.labelMedium, color = if (canSelect) p.accent else p.muted)
+        }
+    }
+}
+
+/** What each stop of the duplicates slider groups, in the order of DUPLICATE_FIELDS. */
+private val DUPLICATE_KIND_NAMES = listOf(
+    "Same first word", "Same first 2 words", "Same first 3 words", "Same first 4 words", "Same first 5 words",
+    "Same photo (EXIF)",
+    "Same photo + first word", "Same photo + first 2 words", "Same photo + first 3 words", "Same photo + first 4 words",
+    "Same photo + first 5 words",
+    "Same file name", "Same file size",
+)
+private val DUPLICATE_BLACK = Color(0xFF111111)
+private val DUPLICATE_NEUTRAL = Color(0xFF495057)
+private val DUPLICATE_GREEN = Color(0xFF2F9E44)
+private val DUPLICATE_RED = Color(0xFFE03131)
+
+/** Where the logo of the header leads: the Opensolr dashboard, in the default browser. */
+private const val OPENSOLR_DASHBOARD_URL = "https://opensolr.com/admin/solr_manager"
+
+/**
+ * Removable chips for the filters currently applied, on ONE row that scrolls sideways, like the
+ * suggestion pills of a typed search (Cip, 2026-09-15): many filters never push the grid down.
+ */
 @Composable
 private fun ActiveFilterChips(filters: SearchFilters, onRemove: (SearchFilters) -> Unit, modifier: Modifier = Modifier) {
     val chips = buildList {
@@ -470,9 +956,12 @@ private fun ActiveFilterChips(filters: SearchFilters, onRemove: (SearchFilters) 
         if (filters.withLocation) add("With location" to filters.copy(withLocation = false))
         filters.near?.let { add(it.label to filters.copy(near = null)) }
     }
-    FlowRow(modifier, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        chips.forEach { (label, without) ->
-            Chip(label = label, selected = true, onClick = { onRemove(without) }, trailingClose = true)
+    LazyRow(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        // No key: the same label can be applied in two fields (a city and a word), and a
+        // repeated key would crash the row.
+        items(chips) { (label, without) ->
+            // Same round pills as the suggestions above the grid, in the accent, with a cross.
+            Pill(label = label, accent = true, trailingClose = true, onClick = { onRemove(without) })
         }
     }
 }
@@ -523,6 +1012,8 @@ private fun Thumbnail(hit: PhotoHit, modifier: Modifier = Modifier) {
  */
 @Composable
 private fun EmptyResults(state: UiState) {
+    // Duplicates say it themselves ("No duplicates of this kind"): nothing else to add there.
+    if (state.duplicatesMode) return
     val p = LocalPalette.current
     val text = when {
         state.sync.busy && state.query.isBlank() -> "Your photos are being indexed. They appear here as they are added."
@@ -533,13 +1024,51 @@ private fun EmptyResults(state: UiState) {
 }
 
 /**
- * Bottom sheet with every filter, built from the facets of the current results.
+ * The filter sheet's two actions, identical at its top and bottom: small and discreet, each
+ * with its icon. Done carries [count], the photos shown with the filters as they are now
+ * (every tap applies at once, so the results behind the sheet already are that set).
+ */
+@Composable
+private fun FilterActions(count: Long, onClear: () -> Unit, onDone: () -> Unit) {
+    val p = LocalPalette.current
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
+        OutlinedButton(
+            onClick = onClear,
+            modifier = Modifier.height(34.dp),
+            shape = Corner,
+            border = BorderStroke(1.dp, p.hairline),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = p.ink),
+            contentPadding = PaddingValues(horizontal = 12.dp),
+        ) {
+            Icon(Icons.Filled.Clear, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Clear all", style = MaterialTheme.typography.labelMedium)
+        }
+        Button(
+            onClick = onDone,
+            modifier = Modifier.height(34.dp),
+            shape = Corner,
+            colors = ButtonDefaults.buttonColors(containerColor = p.accent, contentColor = p.onAccent),
+            contentPadding = PaddingValues(horizontal = 12.dp),
+            elevation = null,
+        ) {
+            Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Done (${Actions.formatCount(count)})", style = MaterialTheme.typography.labelMedium)
+        }
+    }
+}
+
+/**
+ * Bottom sheet with every filter, built from the facets of the current results. [count] is
+ * the number of photos the current filters show.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun FilterSheet(
     facets: Map<String, List<FacetValue>>,
     current: SearchFilters,
+    count: Long,
     onChange: (SearchFilters) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -556,7 +1085,11 @@ private fun FilterSheet(
                 .navigationBarsPadding()
         ) {
             Text("Filters", style = MaterialTheme.typography.headlineSmall, color = p.ink)
-            Spacer(Modifier.height(16.dp))
+            // The same two actions at the top as at the bottom, small, so a long list of values
+            // never has to be scrolled through to clear or close (Cip, 2026-09-15).
+            Spacer(Modifier.height(8.dp))
+            FilterActions(count, onClear = { onChange(SearchFilters()) }, onDone = onDismiss)
+            Spacer(Modifier.height(12.dp))
 
             SearchFilters.FACETS.forEach { (field, title) ->
                 FacetSection(title, facets[field], draft.values(field), label = { facetLabel(field, it) }) { onChange(draft.toggled(field, it)) }
@@ -589,11 +1122,8 @@ private fun FilterSheet(
                 )
             }
             HorizontalDivider(color = p.hairline)
-            Spacer(Modifier.height(20.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                GhostButton("Clear all", onClick = { onChange(SearchFilters()) }, modifier = Modifier.weight(1f))
-                AccentButton("Done", onClick = onDismiss, modifier = Modifier.weight(1f))
-            }
+            Spacer(Modifier.height(12.dp))
+            FilterActions(count, onClear = { onChange(SearchFilters()) }, onDone = onDismiss)
             Spacer(Modifier.height(24.dp))
         }
     }
@@ -719,7 +1249,7 @@ private fun DetailsSheet(hit: PhotoHit, viewModel: AppViewModel, onDismiss: () -
 private const val FACET_PREVIEW = 12
 
 /** Sync phases during which the index is being rebuilt and search is unavailable. */
-private val REBUILD_PHASES = setOf("Reading your index", "Updating the index configuration", "Rebuilding your index")
+private val REBUILD_PHASES = setOf("Resetting your index", "Updating the index configuration", "Rebuilding your index")
 
 /**
  * A plain click without the long-press semantics.

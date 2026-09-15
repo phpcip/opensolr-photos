@@ -38,29 +38,34 @@
   <field name="community" type="string" indexed="true" stored="true"/>
   <field name="country" type="string" indexed="true" stored="true"/>
   <field name="country_code" type="string" indexed="true" stored="true"/>
-  <field name="place_text" type="text_photo" indexed="true" stored="false" multiValued="true"/>
+  <field name="place_text" type="text_general" indexed="true" stored="false" multiValued="true"/>
   <field name="has_location" type="boolean" indexed="true" stored="true"/>
   <field name="location" type="location" indexed="true" stored="true"/>
   <field name="altitude" type="pfloat" indexed="true" stored="true"/>
 
-  <field name="meaning" type="text_photo" indexed="true" stored="true"/>
+  <field name="meaning" type="text_general" indexed="true" stored="true"/>
   <field name="labels" type="string" indexed="true" stored="true" multiValued="true"/>
   <!-- Words the owner added to the photo by hand. They outrank the CLIP words in search. -->
   <field name="custom_tags" type="string" indexed="true" stored="true" multiValued="true"/>
   <!-- The tags as words, for search: "luminita" finds the tag "Luminița". -->
-  <field name="custom_tags_text" type="text_photo" indexed="true" stored="false" multiValued="true"/>
+  <field name="custom_tags_text" type="text_general" indexed="true" stored="false" multiValued="true"/>
   <field name="embeddings" type="knn_vector" indexed="true" stored="false"/>
   <field name="clip_model" type="string" indexed="true" stored="true"/>
+  <!-- Duplicate keys (dup_w1_hash .. dup_exif_w5_hash, made on the server): the app's duplicates
+       are one facet on the key the slider picks. docValues for the facet; not stored, nothing
+       shows them (schema 1.6 still returns docValues fields to fl=*, so a document read back and
+       rewritten keeps them). Never made of the owner's words. -->
+  <dynamicField name="*_hash" type="string" indexed="true" stored="false" docValues="true"/>
   <field name="embed_model" type="string" indexed="true" stored="true"/>
   <field name="indexed_at" type="pdate" indexed="true" stored="true"/>
 
   <!-- Every word autocomplete offers: CLIP labels, camera make and model, place names. -->
   <field name="suggest" type="string" indexed="false" stored="true" multiValued="true"/>
-  <field name="spell" type="text_spell" indexed="true" stored="false" multiValued="true"/>
-  <field name="text" type="text_photo" indexed="true" stored="false" multiValued="true"/>
-  <field name="file_name_text" type="text_photo" indexed="true" stored="false"/>
-  <field name="folder_text" type="text_photo" indexed="true" stored="false"/>
-  <field name="camera_text" type="text_photo" indexed="true" stored="false" multiValued="true"/>
+  <field name="spell" type="text_general" indexed="true" stored="false" multiValued="true"/>
+  <field name="text" type="text_general" indexed="true" stored="false" multiValued="true"/>
+  <field name="file_name_text" type="text_general" indexed="true" stored="false"/>
+  <field name="folder_text" type="text_general" indexed="true" stored="false"/>
+  <field name="camera_text" type="text_general" indexed="true" stored="false" multiValued="true"/>
 
   <copyField source="meaning" dest="text"/>
   <copyField source="file_name" dest="file_name_text"/>
@@ -107,7 +112,7 @@
   <dynamicField name="*_f" type="pfloat" indexed="true" stored="true"/>
   <dynamicField name="*_b" type="boolean" indexed="true" stored="true"/>
   <dynamicField name="*_dt" type="pdate" indexed="true" stored="true"/>
-  <dynamicField name="*_t" type="text_photo" indexed="true" stored="true"/>
+  <dynamicField name="*_t" type="text_general" indexed="true" stored="true"/>
 
   <fieldType name="string" class="solr.StrField" sortMissingLast="true" docValues="true"/>
   <fieldType name="boolean" class="solr.BoolField" sortMissingLast="true" docValues="true"/>
@@ -122,31 +127,49 @@
        compares against and what the suggester analyses the labels with. -->
   <fieldType name="text_spell" class="solr.TextField" positionIncrementGap="100">
     <analyzer>
-      <tokenizer class="solr.StandardTokenizerFactory"/>
+      <charFilter class="solr.HTMLStripCharFilterFactory"/>
+      <charFilter class="solr.MappingCharFilterFactory" mapping="mapping-ISOLatin1Accent.txt"/>
+      <tokenizer class="solr.ICUTokenizerFactory"/>
+      <filter class="solr.CJKWidthFilterFactory"/>
+      <filter class="solr.EnglishPossessiveFilterFactory"/>
+      <filter class="solr.ASCIIFoldingFilterFactory" preserveOriginal="false"/>
+      <filter class="solr.FlattenGraphFilterFactory"/>
       <filter class="solr.LowerCaseFilterFactory"/>
-      <filter class="solr.ASCIIFoldingFilterFactory"/>
+      <filter class="solr.LengthFilterFactory" min="1" max="500"/>
+      <filter class="solr.RemoveDuplicatesTokenFilterFactory"/>
     </analyzer>
   </fieldType>
 
-  <fieldType name="text_photo" class="solr.TextField" positionIncrementGap="100">
+  <!-- Every text field of the schema (Cip, 2026-09-16): the Opensolr text_general, without the
+       Snowball stemmer. -->
+  <fieldType name="text_general" class="solr.TextField" positionIncrementGap="100">
     <analyzer type="index">
-      <tokenizer class="solr.StandardTokenizerFactory"/>
-      <filter class="solr.StopFilterFactory" ignoreCase="true" words="stopwords.txt"/>
-      <filter class="solr.LowerCaseFilterFactory"/>
-      <filter class="solr.ASCIIFoldingFilterFactory"/>
+      <charFilter class="solr.HTMLStripCharFilterFactory"/>
+      <charFilter class="solr.MappingCharFilterFactory" mapping="mapping-ISOLatin1Accent.txt"/>
+      <tokenizer class="solr.ICUTokenizerFactory"/>
+      <filter class="solr.CJKWidthFilterFactory"/>
       <filter class="solr.EnglishPossessiveFilterFactory"/>
-      <filter class="solr.KeywordMarkerFilterFactory" protected="protwords.txt"/>
-      <filter class="solr.KStemFilterFactory"/>
+      <filter class="solr.ASCIIFoldingFilterFactory" preserveOriginal="false"/>
+      <filter class="solr.StopFilterFactory" ignoreCase="true" words="stopwords.txt"/>
+      <filter class="solr.WordDelimiterGraphFilterFactory" generateWordParts="1" generateNumberParts="1" catenateWords="1" catenateNumbers="1" catenateAll="1" splitOnCaseChange="1" splitOnNumerics="1" preserveOriginal="1" protected="protwords.txt"/>
+      <filter class="solr.FlattenGraphFilterFactory"/>
+      <filter class="solr.LowerCaseFilterFactory"/>
+      <filter class="solr.LengthFilterFactory" min="1" max="500"/>
+      <filter class="solr.RemoveDuplicatesTokenFilterFactory"/>
     </analyzer>
     <analyzer type="query">
-      <tokenizer class="solr.StandardTokenizerFactory"/>
-      <filter class="solr.StopFilterFactory" ignoreCase="true" words="stopwords.txt"/>
-      <filter class="solr.SynonymGraphFilterFactory" synonyms="synonyms.txt" ignoreCase="true" expand="true"/>
-      <filter class="solr.LowerCaseFilterFactory"/>
-      <filter class="solr.ASCIIFoldingFilterFactory"/>
+      <charFilter class="solr.HTMLStripCharFilterFactory"/>
+      <charFilter class="solr.MappingCharFilterFactory" mapping="mapping-ISOLatin1Accent.txt"/>
+      <tokenizer class="solr.ICUTokenizerFactory"/>
+      <filter class="solr.CJKWidthFilterFactory"/>
       <filter class="solr.EnglishPossessiveFilterFactory"/>
-      <filter class="solr.KeywordMarkerFilterFactory" protected="protwords.txt"/>
-      <filter class="solr.KStemFilterFactory"/>
+      <filter class="solr.ASCIIFoldingFilterFactory" preserveOriginal="false"/>
+      <filter class="solr.SynonymGraphFilterFactory" ignoreCase="true" synonyms="synonyms.txt" expand="true"/>
+      <filter class="solr.StopFilterFactory" ignoreCase="true" words="stopwords.txt"/>
+      <filter class="solr.WordDelimiterGraphFilterFactory" generateWordParts="1" generateNumberParts="1" catenateWords="1" catenateNumbers="1" catenateAll="1" splitOnCaseChange="1" splitOnNumerics="1" preserveOriginal="1" protected="protwords.txt"/>
+      <filter class="solr.LowerCaseFilterFactory"/>
+      <filter class="solr.LengthFilterFactory" min="1" max="500"/>
+      <filter class="solr.RemoveDuplicatesTokenFilterFactory"/>
     </analyzer>
   </fieldType>
 

@@ -93,7 +93,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
             Spacer(Modifier.height(20.dp))
 
             Notice(
-                "If your index goes over its disk space or its search bandwidth, it stops taking new photos and answering searches. If the AI requests of the month run out, or the plan has no photo recognition, new photos are still indexed by date, camera, place, file name and your tags, without being read into words, and search matches words only. You are warned here and with a notification at 90% and at the limit. Upgrade at opensolr.com/pricing to lift any of these limits.",
+                "Over disk or bandwidth, it stops. Out of AI requests, photos are indexed without words.",
                 title = "When a limit is reached",
             )
             Spacer(Modifier.height(14.dp))
@@ -110,7 +110,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
         SectionLabel("Advanced")
         Spacer(Modifier.height(10.dp))
         Text(
-            "Your photos' index is a regular Opensolr Index. In the Opensolr control panel you can empty it, back it up, or query it from anything else. You never need to for this app to work.",
+            "A regular Opensolr Index.",
             style = MaterialTheme.typography.bodyMedium, color = p.muted,
         )
         Spacer(Modifier.height(14.dp))

@@ -25,6 +25,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.opensolr.photos.ui.screens.AccountScreen
+import com.opensolr.photos.ui.screens.AlbumsScreen
 import com.opensolr.photos.ui.screens.FoldersScreen
 import com.opensolr.photos.ui.screens.MapScreen
 import com.opensolr.photos.ui.screens.PermissionsScreen
@@ -43,7 +44,7 @@ fun AppRoot(viewModel: AppViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val p = LocalPalette.current
 
-    BackHandler(enabled = state.screen == Screen.Sync || state.screen == Screen.Account || state.screen == Screen.Map ||
+    BackHandler(enabled = state.screen == Screen.Sync || state.screen == Screen.Account || state.screen == Screen.Map || state.screen == Screen.Albums ||
         (state.screen == Screen.Folders && state.foldersReturnTo == Screen.Sync)) {
         viewModel.back()
     }
@@ -64,6 +65,7 @@ fun AppRoot(viewModel: AppViewModel) {
             Screen.Sync -> SyncScreen(state, viewModel)
             Screen.Account -> AccountScreen(state, viewModel)
             Screen.Map -> MapScreen(state, viewModel)
+            Screen.Albums -> AlbumsScreen(state, viewModel)
         }
     }
 
@@ -72,15 +74,15 @@ fun AppRoot(viewModel: AppViewModel) {
         DeviceChoiceDialog(state, viewModel)
     }
 
-    // A newer index configuration ships with this version: the index is rebuilt only with
-    // the owner's consent, because search is unavailable while it happens.
+    // A new index configuration ships with this version: the owner is told plainly that the
+    // index is reset and fully re-synced, and it happens only with their consent.
     if (state.rebuildRequired) {
         AlertDialog(
             onDismissRequest = { viewModel.postponeRebuild() },
-            confirmButton = { TextButton(onClick = { viewModel.approveRebuild() }) { Text("Rebuild now") } },
+            confirmButton = { TextButton(onClick = { viewModel.approveRebuild() }) { Text("Reset and re-sync") } },
             dismissButton = { TextButton(onClick = { viewModel.postponeRebuild() }) { Text("Later") } },
-            title = { Text("Your index must be rebuilt") },
-            text = { Text("This version of Opensolr Photos comes with a newer index configuration. Your index has to be rebuilt: it takes a while, and search is unavailable until the re-sync is done. Nothing is read by AI again, and your tags and edits are kept.") },
+            title = { Text("Your index will be reset") },
+            text = { Text("This version of Opensolr Photos comes with a new index configuration. Your index will now be reset and every photo synced again: a full re-sync. It takes a while, search is unavailable until it is done, and reading the photos again counts toward your plan's AI requests. Your tags and edits are kept.") },
             containerColor = p.paper,
             titleContentColor = p.ink,
             textContentColor = p.muted,
@@ -92,7 +94,7 @@ fun AppRoot(viewModel: AppViewModel) {
             onDismissRequest = { viewModel.dismissBusyDialog() },
             confirmButton = { TextButton(onClick = { viewModel.dismissBusyDialog() }) { Text("OK") } },
             title = { Text("A sync is already running") },
-            text = { Text("Your photos are being synced right now. Please be patient, it finishes on its own, and a new sync is not needed.") },
+            text = { Text("A sync is already running.") },
             containerColor = p.paper,
             titleContentColor = p.ink,
             textContentColor = p.muted,

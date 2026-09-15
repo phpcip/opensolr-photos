@@ -95,6 +95,56 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
     }
 
     /**
+     * Walks every document in the index with the stored [fields], [pageSize] at a time, cursor
+     * paging (a deep page costs the same as the first), handing each document to [onDoc].
+     */
+    suspend fun forEachDoc(fields: String, pageSize: Int = 1000, onDoc: suspend (JSONObject) -> Unit) {
+        var cursor = "*"
+        while (true) {
+            val json = select(
+                listOf(
+                    "q" to "*:*",
+                    "fl" to fields,
+                    "sort" to "id asc",
+                    "rows" to pageSize.toString(),
+                    "cursorMark" to cursor,
+                )
+            )
+            val docs = json.getJSONObject("response").getJSONArray("docs")
+            for (i in 0 until docs.length()) onDoc(docs.getJSONObject(i))
+            val next = json.optString("nextCursorMark")
+            if (docs.length() < pageSize || next.isEmpty() || next == cursor) break
+            cursor = next
+        }
+    }
+
+    /**
+     * Groups of duplicates of one kind, in one request: a facet on the duplicate key [field]
+     * (one of SearchRepository.DUPLICATE_FIELDS) keeping values held by two photos or more,
+     * with the ids of each. Biggest group first. An index on a configuration without the
+     * duplicate keys answers 400.
+     */
+    suspend fun duplicateGroups(field: String): List<List<String>> {
+        val facet = JSONObject().put(
+            "groups",
+            JSONObject()
+                .put("type", "terms")
+                .put("field", field)
+                .put("mincount", 2)
+                .put("limit", -1)
+                .put("sort", "count desc")
+                .put("facet", JSONObject().put("ids", JSONObject().put("type", "terms").put("field", "id").put("limit", -1))),
+        )
+        val json = select(listOf("q" to "*:*", "rows" to "0", "json.facet" to facet.toString()))
+        val buckets = json.optJSONObject("facets")?.optJSONObject("groups")?.optJSONArray("buckets") ?: return emptyList()
+        return (0 until buckets.length()).mapNotNull { i ->
+            val ids = buckets.optJSONObject(i)?.optJSONObject("ids")?.optJSONArray("buckets") ?: return@mapNotNull null
+            (0 until ids.length()).mapNotNull { k -> ids.optJSONObject(k)?.optString("val")?.takeIf { it.isNotEmpty() } }
+                .takeIf { it.size >= 2 }
+        }
+    }
+
+    /**
      * Number of documents in the index.
      */
     suspend fun count(): Long =
@@ -195,12 +245,14 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
     }
 
     /**
-     * Deletes the documents with [ids].
+     * Deletes the documents with [ids]. [now] commits on the spot instead of within ten
+     * seconds: what a person just deleted must not come back on the next refresh.
      */
-    suspend fun delete(ids: Collection<String>) = withContext(Dispatchers.IO) {
+    suspend fun delete(ids: Collection<String>, now: Boolean = false) = withContext(Dispatchers.IO) {
         if (ids.isEmpty()) return@withContext
         val body = JSONObject().put("delete", JSONArray(ids)).toString()
-        execute(request("/update?commitWithin=10000&wt=json").post(body.toRequestBody(JSON)).build())
+        val query = if (now) "/update?commit=true&wt=json" else "/update?commitWithin=10000&wt=json"
+        execute(request(query).post(body.toRequestBody(JSON)).build())
     }
 
     /**

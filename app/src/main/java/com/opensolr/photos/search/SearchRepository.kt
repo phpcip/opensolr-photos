@@ -39,7 +39,9 @@ data class SearchFilters(
     companion object {
         /** The facet fields, in the order the filter sheet shows them, with their titles. */
         val FACETS = listOf(
-            "year" to "Year", "folder" to "Folder", "city" to "City", "region" to "Region", "country" to "Country",
+            // No "region": between City and Country it said the same thing a third time
+            // (Cip, 2026-09-15). The field is still indexed and still searched by words.
+            "year" to "Year", "folder" to "Folder", "city" to "City", "country" to "Country",
             "camera_make" to "Camera make", "camera_model" to "Camera model", "custom_tags" to "My tags",
             "labels" to "Meaning", "orientation" to "Orientation",
         )
@@ -70,6 +72,25 @@ data class PhotoPin(val hit: PhotoHit, val lat: Double, val lon: Double)
 /**
  * One photo in the results.
  */
+/**
+ * One album: the photos holding [value] in [field], shown as [title]. [covers] are the media
+ * ids of its newest photos, newest first, for the stacked cover.
+ */
+data class Album(val field: String, val value: String, val title: String, val count: Int, val covers: List<Long>)
+
+/**
+ * What the tag field offers: the owner's own tags ([mine]) and, under them, words CLIP read
+ * the photos into ([fromMeanings]).
+ */
+data class TagSuggestions(val mine: List<String>, val fromMeanings: List<String>) {
+    val isEmpty: Boolean get() = mine.isEmpty() && fromMeanings.isEmpty()
+}
+
+/**
+ * A kind of album (tags, things, places, cameras, years) and its albums, biggest first.
+ */
+data class AlbumSection(val title: String, val albums: List<Album>)
+
 data class PhotoHit(
     val id: String,
     val mediaId: Long,
@@ -94,6 +115,8 @@ data class PhotoHit(
     val country: String? = null,
     val labels: List<String> = emptyList(),
     val customTags: List<String> = emptyList(),
+    /** The hybrid score, for cutting the strong matches off the vector's near misses; 0 when unsorted by relevance. */
+    val score: Double = 0.0,
 ) {
     /** The GPS position parsed from Solr's "lat,lon", or null without one. */
     val latLon: Pair<Double, Double>? get() = parseLatLon(location)
@@ -148,20 +171,61 @@ class SearchRepository(private val context: Context) {
     /**
      * Runs a search. [start] is the offset of the first result.
      */
-    suspend fun search(query: String, filters: SearchFilters, start: Int, rows: Int = PAGE): SearchPage =
+    suspend fun search(query: String, filters: SearchFilters, start: Int, rows: Int = PAGE, freshBias: Boolean = false): SearchPage =
         try {
-            search(query, filters, start, rows, legacy = false)
+            search(query, filters, start, rows, legacy = false, freshBias = freshBias)
         } catch (e: ServiceException) {
             // An index still on an older configuration (rebuild postponed) lacks the newest
             // fields and answers 400 to them; search it with what it has.
-            if (e.message?.contains("HTTP 400") == true) search(query, filters, start, rows, legacy = true) else throw e
+            if (e.message?.contains("HTTP 400") == true) search(query, filters, start, rows, legacy = true, freshBias = freshBias) else throw e
         }
+
+    /**
+     * The facet values of the words alone: the same query run without the vector leg, for its
+     * counts only (rows = 0). What comes back describes the photos whose tags, words, place,
+     * file name or camera really do match what was typed - never what the vector dragged along -
+     * so the suggestions above the grid can be trusted. Empty when the words match nothing.
+     */
+    suspend fun queryFacets(query: String, filters: SearchFilters): Map<String, List<FacetValue>> =
+        try {
+            facetsOnly(query, filters, legacy = false)
+        } catch (e: ServiceException) {
+            if (e.message?.contains("HTTP 400") == true) {
+                try {
+                    facetsOnly(query, filters, legacy = true)
+                } catch (e2: Exception) {
+                    emptyMap()
+                }
+            } else emptyMap()
+        } catch (e: Exception) {
+            // Suggestions are a nicety; a search must never fail because of them.
+            emptyMap()
+        }
+
+    /**
+     * One words-only request that asks for no documents, just the facets.
+     */
+    private suspend fun facetsOnly(query: String, filters: SearchFilters, legacy: Boolean): Map<String, List<FacetValue>> {
+        if (query.isBlank()) return emptyMap()
+        val (params, _, _) = queryParams(query, filters, legacy, wordsOnly = true)
+        params += "fl" to "id"
+        params += "start" to "0"
+        params += "rows" to "0"
+        params += "facet" to "true"
+        params += "facet.mincount" to "1"
+        params += "facet.limit" to "20"
+        FACET_FIELDS.filter { !legacy || it !in SearchFilters.NEWER_FACETS }
+            .forEach { params += "facet.field" to "{!ex=$it key=$it}$it" }
+        val json = select(params)
+        if (json.getJSONObject("response").optLong("numFound") == 0L) return emptyMap()
+        return parse(json, false, null).facets
+    }
 
     /**
      * One search request; [legacy] leaves out the fields an older configuration lacks.
      */
-    private suspend fun search(query: String, filters: SearchFilters, start: Int, rows: Int, legacy: Boolean): SearchPage {
-        val (params, smart, notice) = queryParams(query, filters, legacy)
+    private suspend fun search(query: String, filters: SearchFilters, start: Int, rows: Int, legacy: Boolean, freshBias: Boolean): SearchPage {
+        val (params, smart, notice) = queryParams(query, filters, legacy, freshBias = freshBias)
         val text = query.trim().take(300)
         if (text.isNotEmpty()) {
             // Spellcheck the typed words; the collation is offered as "did you mean".
@@ -179,6 +243,143 @@ class SearchRepository(private val context: Context) {
         params += "f.year.facet.sort" to "index"
         val page = parse(select(params), smart, notice)
         return page.copy(didYouMean = collation(page, text))
+    }
+
+    /**
+     * Duplicates of one kind, [level] 0..10 on the slider (see DUPLICATE_FIELDS): photos that
+     * share the chosen duplicate key, made on the server from CLIP's words and the EXIF. The
+     * groups are known from ONE facet request, never a walk over the index; only the photos
+     * of those groups are then fetched, for the grid and the photo sheet.
+     *
+     * Returns the photos laid out group after group, with the size of each group.
+     */
+    suspend fun duplicates(level: Int): Pair<List<PhotoHit>, List<Int>> {
+        val session = prefs.session ?: throw ServiceException("Sign in to search")
+        val connection = prefs.connection ?: throw ServiceException("Your index is not set up yet. Open Sync and start a sync.")
+        val field = DUPLICATE_FIELDS[level.coerceIn(0, DUPLICATE_FIELDS.size - 1)]
+        val groups = try {
+            try {
+                SolrClient(connection).duplicateGroups(field)
+            } catch (e: SolrAuthException) {
+                SolrClient(IndexManager(context, prefs, api).refreshConnection(session)).duplicateGroups(field)
+            }
+        } catch (e: ServiceException) {
+            // An index whose rebuild was postponed has no duplicate keys yet.
+            if (e.message?.contains("HTTP 400") == true) throw ServiceException("Finding duplicates needs your index reset for this version of the app. Open the app's photos screen to start it.")
+            throw e
+        }
+        if (groups.isEmpty()) return emptyList<PhotoHit>() to emptyList()
+
+        // The documents themselves, in batches, then laid out in the order of their group.
+        val wanted = groups.flatten()
+        val found = HashMap<String, PhotoHit>(wanted.size)
+        wanted.chunked(200).forEach { batch ->
+            val params = ArrayList<Pair<String, String>>()
+            params += "q" to "*:*"
+            params += "fq" to "{!terms f=id separator=| v=\$dupIds}"
+            params += "dupIds" to batch.joinToString("|")
+            params += "fl" to FIELDS
+            params += "rows" to batch.size.toString()
+            parse(select(params), false, null).hits.forEach { found[it.id] = it }
+        }
+        val hits = ArrayList<PhotoHit>(wanted.size)
+        val sizes = ArrayList<Int>(groups.size)
+        groups.forEach { group ->
+            val present = group.mapNotNull { found[it] }
+            if (present.size >= 2) {
+                hits += present
+                sizes += present.size
+            }
+        }
+        return hits to sizes
+    }
+
+    /**
+     * The albums, made from what the index already knows, in ONE request: a JSON facet per
+     * kind (the owner's tags, CLIP's twelve most used words, cities, countries, camera models,
+     * years), each value held by at least [ALBUM_MIN] photos, with the three newest photos of
+     * each album (by taken_at) for its cover. Nothing is read by AI, nothing but counts and
+     * ids come back. The current search and filters do not apply: albums are the whole library.
+     */
+    suspend fun albums(): List<AlbumSection> {
+        // The cover: the album's photos by media id, newest taken first, three of them.
+        val cover = JSONObject()
+            .put("type", "terms").put("field", "media_id").put("limit", 3).put("sort", "t desc")
+            .put("facet", JSONObject().put("t", "max(taken_at)"))
+        fun kind(field: String, limit: Int, sort: String = "count desc", extra: JSONObject.() -> Unit = {}) = JSONObject()
+            .put("type", "terms").put("field", field).put("mincount", ALBUM_MIN).put("limit", limit).put("sort", sort)
+            .put("facet", JSONObject().put("cover", cover).apply(extra))
+        val facet = JSONObject()
+            .put("tags", kind("custom_tags", 100))
+            .put("things", kind("labels", ALBUM_THINGS))
+            .put("cities", kind("city", 50))
+            .put("countries", kind("country", 50))
+            // The make of each model, for a name like "Nikon Z6" rather than a bare "Z6".
+            .put("cameras", kind("camera_model", 30) { put("make", JSONObject().put("type", "terms").put("field", "camera_make").put("limit", 1)) })
+            .put("years", kind("year", -1, sort = "index desc"))
+        val facets = select(listOf("q" to "*:*", "rows" to "0", "json.facet" to facet.toString())).optJSONObject("facets") ?: JSONObject()
+
+        fun albumsOf(key: String, field: String, title: (JSONObject, String) -> String = { _, v -> v }): List<Album> {
+            val buckets = facets.optJSONObject(key)?.optJSONArray("buckets") ?: return emptyList()
+            return (0 until buckets.length()).mapNotNull { i ->
+                val b = buckets.optJSONObject(i) ?: return@mapNotNull null
+                val value = b.opt("val")?.toString()?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+                val covers = b.optJSONObject("cover")?.optJSONArray("buckets")?.let { c ->
+                    (0 until c.length()).mapNotNull { k -> c.optJSONObject(k)?.optLong("val", -1L)?.takeIf { it >= 0 } }
+                } ?: emptyList()
+                Album(field, value, title(b, value), b.optInt("count"), covers)
+            }
+        }
+        val cameraTitle = { b: JSONObject, model: String ->
+            val make = b.optJSONObject("make")?.optJSONArray("buckets")?.optJSONObject(0)?.optString("val").orEmpty().trim()
+            if (make.isEmpty() || model.lowercase().startsWith(make.lowercase())) model else "$make $model"
+        }
+        return listOf(
+            AlbumSection("My tags", albumsOf("tags", "custom_tags")),
+            AlbumSection("Things", albumsOf("things", "labels")),
+            AlbumSection("Places", albumsOf("cities", "city") + albumsOf("countries", "country")),
+            AlbumSection("Cameras", albumsOf("cameras", "camera_model", cameraTitle)),
+            AlbumSection("Years", albumsOf("years", "year")),
+        ).filter { it.albums.isNotEmpty() }
+    }
+
+    /**
+     * Suggestions while tagging a photo, in ONE request: the owner's own tags first, then words
+     * CLIP read the photos into, each ordered by how many photos carry it. With nothing typed,
+     * the five most used of each; while typing, the ones containing [typed] anywhere, any case
+     * (eight tags, five words). Tags already on the photo ([exclude]) are never offered, and a
+     * word already offered as a tag is not repeated below.
+     */
+    suspend fun tagSuggestions(typed: String, exclude: Collection<String>): TagSuggestions {
+        val text = typed.trim().take(50)
+        val tagLimit = if (text.isEmpty()) 5 else 8
+        val wordLimit = 5
+        val skip = exclude.map { it.lowercase() }.toSet()
+        val params = ArrayList<Pair<String, String>>()
+        params += "q" to "*:*"
+        params += "rows" to "0"
+        params += "facet" to "true"
+        params += "facet.mincount" to "1"
+        params += "facet.sort" to "count"
+        params += "facet.field" to "{!key=mine}custom_tags"
+        params += "facet.field" to "{!key=words}labels"
+        // Room for the values dropped below (already on the photo, already offered as a tag).
+        params += "f.custom_tags.facet.limit" to (tagLimit + skip.size).toString()
+        params += "f.labels.facet.limit" to (wordLimit + tagLimit + skip.size).toString()
+        if (text.isNotEmpty()) {
+            // The typed text is a parameter value, never spliced into a query.
+            params += "facet.contains" to text
+            params += "facet.contains.ignoreCase" to "true"
+        }
+        val fields = select(params).optJSONObject("facet_counts")?.optJSONObject("facet_fields")
+        fun valuesOf(key: String): List<String> {
+            val pairs = fields?.optJSONArray(key) ?: return emptyList()
+            return (0 until pairs.length() / 2).map { pairs.optString(it * 2) }.filter { it.isNotBlank() }
+        }
+        val mine = valuesOf("mine").filter { it.lowercase() !in skip }.take(tagLimit)
+        val offered = skip + mine.map { it.lowercase() }
+        val words = valuesOf("words").filter { it.lowercase() !in offered }.distinctBy { it.lowercase() }.take(wordLimit)
+        return TagSuggestions(mine, words)
     }
 
     /**
@@ -234,7 +435,13 @@ class SearchRepository(private val context: Context) {
      * The query and filter parameters shared by the results grid and the map. Returns the
      * parameters, whether vectors were used, and a notice for the user when they were not.
      */
-    private suspend fun queryParams(query: String, filters: SearchFilters, legacy: Boolean = false): Triple<ArrayList<Pair<String, String>>, Boolean, String?> {
+    private suspend fun queryParams(
+        query: String,
+        filters: SearchFilters,
+        legacy: Boolean = false,
+        wordsOnly: Boolean = false,
+        freshBias: Boolean = false,
+    ): Triple<ArrayList<Pair<String, String>>, Boolean, String?> {
         val session = prefs.session ?: throw ServiceException("Sign in to search")
         val connection = prefs.connection ?: throw ServiceException("Your index is not set up yet. Open Sync and start a sync.")
         val text = query.trim().take(300)
@@ -251,7 +458,7 @@ class SearchRepository(private val context: Context) {
             // The lexical leg: the owner's tags outrank CLIP's words, which outrank the rest.
             // Same edismax shape and the same mm as Opensolr's own site search ("flexible").
             params += "lexicalRaw" to "{!edismax qf=\"${if (legacy) LEGACY_QF else QF}\" mm=\"$MM\" v=\$uq}"
-            val vector = if (prefs.account?.vectorAllowed == true) {
+            val vector = if (!wordsOnly && prefs.account?.vectorAllowed == true) {
                 try {
                     api.embedQuery(session, connection.indexName, text)
                 } catch (e: QuotaExceededException) {
@@ -266,15 +473,26 @@ class SearchRepository(private val context: Context) {
                 }
             } else null
 
-            if (vector != null) {
+            val matched = if (vector != null) {
                 smart = true
                 // Opensolr's {!hybrid} parser, exactly as search.opensolr.com runs it: both legs
                 // scored on their own, normalised per query and blended (alpha = the vector's
                 // share), candidates from either leg (union).
                 params += "vectorQuery" to "{!knn f=embeddings topK=$KNN_TOP_K}" + vector.joinToString(",", "[", "]")
-                params += "q" to "{!hybrid lexical=\$lexicalRaw vector=\$vectorQuery mode=union alpha=$HYBRID_ALPHA topN=$KNN_TOP_K}"
+                "{!hybrid lexical=\$lexicalRaw vector=\$vectorQuery mode=union alpha=$HYBRID_ALPHA topN=$KNN_TOP_K}"
             } else {
-                params += "q" to "{!bool should=\$lexicalRaw}"
+                "{!bool should=\$lexicalRaw}"
+            }
+            if (freshBias) {
+                // Fresh: recency multiplies the score of the fused query, the way the Fresh toggle
+                // works on search.opensolr.com. It reorders, it never filters, and nothing is lost
+                // the way a sort by date would lose the best matches among the noise. A bf would
+                // reach the lexical leg only, so the boost wraps the whole query instead.
+                params += "freshBias" to FRESH_BIAS
+                params += "matchedQuery" to matched
+                params += "q" to "{!boost b=\$freshBias v=\$matchedQuery}"
+            } else {
+                params += "q" to matched
             }
         }
 
@@ -329,6 +547,7 @@ class SearchRepository(private val context: Context) {
                 country = d.optString("country").ifBlank { null },
                 labels = d.optJSONArray("labels")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList(),
                 customTags = d.optJSONArray("custom_tags")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList(),
+                score = d.optDouble("score", 0.0),
             )
         }
 
@@ -359,6 +578,7 @@ class SearchRepository(private val context: Context) {
 
     companion object {
         const val PAGE = 60
+        /** How many of a photo's words have to match, in order, for two photos to be the same shot. */
         /** Every field the filter sheet facets on. Only these may appear in an fq. */
         private val FACET_FIELDS = SearchFilters.FACETS.map { it.first }.toSet()
         /** Most pins the map asks for at once. */
@@ -372,11 +592,34 @@ class SearchRepository(private val context: Context) {
          * further toward meaning (0.85) because product catalogues have no hand-written tags.
          */
         private const val HYBRID_ALPHA = "0.5"
+        /**
+         * Recency as a multiplier: 1.0 for a photo taken today, 0.5 a year later, 0.33 after two.
+         * 3.16e-11 is 1/(a year in ms); max(0, ...) guards a date in the future, which would make
+         * ms() negative and the reciprocal blow the whole query up.
+         */
+        private const val FRESH_BIAS = "recip(max(0,ms(NOW,taken_at)),3.16e-11,1,1)"
         /** Minimum-should-match of the lexical leg: Opensolr's "flexible" setting. */
         private const val MM = "2<65% 4<50% 8<40%"
         private const val QF = "custom_tags_text^5 meaning^3 text file_name_text folder_text camera_text place_text"
         private const val LEGACY_QF = "meaning^3 text file_name_text folder_text camera_text"
-        private const val LEGACY_FIELDS = "id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,labels"
-        private const val FIELDS = "id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,city,region,country,labels,custom_tags"
+        private const val LEGACY_FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,labels"
+        /**
+         * The duplicate keys the slider walks through, 0..10 (Cip, 2026-09-15): CLIP's first
+         * 1..5 words, the EXIF a simple edit keeps, then the EXIF together with the first 1..5
+         * words. Made on the server by photos_ingest; the schema's *_hash dynamic field.
+         */
+        val DUPLICATE_FIELDS = listOf(
+            "dup_w1_hash", "dup_w2_hash", "dup_w3_hash", "dup_w4_hash", "dup_w5_hash",
+            "dup_exif_hash",
+            "dup_exif_w1_hash", "dup_exif_w2_hash", "dup_exif_w3_hash", "dup_exif_w4_hash", "dup_exif_w5_hash",
+            // The same file name (without the folder: several folders can be indexed) and the
+            // same size in bytes, straight from the stored fields, which have docValues already.
+            "file_name", "size_bytes",
+        )
+        /** Photos an album needs before it is shown (Cip, 2026-09-15). */
+        private const val ALBUM_MIN = 3
+        /** CLIP words offered as albums: only the most used, never the whole vocabulary. */
+        private const val ALBUM_THINGS = 12
+        private const val FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,city,region,country,labels,custom_tags"
     }
 }

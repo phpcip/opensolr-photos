@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Duplicates: two pictures one behind the other, 2px stroke, the editorial style of the app. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M3.5,3.5 L15.5,3.5 L15.5,15.5 L3.5,15.5 Z"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineJoin="miter"
+        android:strokeLineCap="square"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M8.5,20.5 L20.5,20.5 L20.5,8.5"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineJoin="miter"
+        android:strokeLineCap="square"
+        android:fillColor="#00000000" />
+</vector>

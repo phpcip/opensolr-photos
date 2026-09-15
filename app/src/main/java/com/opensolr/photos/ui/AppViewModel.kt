@@ -42,7 +42,7 @@ import java.security.MessageDigest
 /**
  * The screens of the app.
  */
-enum class Screen { SignIn, Welcome, Permissions, Folders, Setup, Search, Sync, Account, Map }
+enum class Screen { SignIn, Welcome, Permissions, Folders, Setup, Search, Sync, Account, Map, Albums }
 
 /**
  * Everything the UI draws, in one immutable value.
@@ -88,6 +88,16 @@ data class UiState(
     val mapFocus: MapFocus? = null,
     val selecting: Boolean = false,
     val selectedIds: Set<String> = emptySet(),
+    /** "Fresh": recency multiplies the score, so recent photos rise without anything being lost. */
+    val freshBias: Boolean = false,
+    /** Facet values of the words alone, for the suggestions above a typed search's results. */
+    val queryFacets: Map<String, List<FacetValue>> = emptyMap(),
+    /** Looking at photos of the same thing: the size of each group, laid out in order over [hits]. */
+    val duplicateGroups: List<Int> = emptyList(),
+    /** True while the grid shows duplicates (even a kind with no groups at all). */
+    val duplicatesMode: Boolean = false,
+    /** The duplicates slider, 0..10 over SearchRepository.DUPLICATE_FIELDS; 4 = first five words. */
+    val duplicateLevel: Int = 4,
     val rebuildRequired: Boolean = false,
     /** Counts fresh searches, so the grid scrolls back to the top for each. */
     val searchGeneration: Int = 0,
@@ -101,6 +111,10 @@ data class UiState(
     val update: UpdateCheck.Update? = null,
     /** Photo indexes of other phones, offered when this phone has none: "which one is your device?" */
     val deviceChoices: List<AccountIndex> = emptyList(),
+    /** The albums screen: its sections, whether they are loading, and why they failed. */
+    val albums: List<com.opensolr.photos.search.AlbumSection> = emptyList(),
+    val albumsLoading: Boolean = false,
+    val albumsError: String? = null,
 )
 
 /**
@@ -125,6 +139,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private var searchJob: Job? = null
     private var suggestJob: Job? = null
+    private var facetsJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -430,6 +445,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Updates the search text without searching yet.
      */
+    /**
+     * Suggestions for the tag field of the edit sheet: the owner's tags, then words from the
+     * photos' meanings, matching [typed]. Empty when the index cannot be asked right now; a
+     * suggestion list must never get in the way of tagging.
+     */
+    suspend fun tagSuggestions(typed: String, onPhoto: Collection<String>): com.opensolr.photos.search.TagSuggestions =
+        try {
+            searches.tagSuggestions(typed, onPhoto)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            com.opensolr.photos.search.TagSuggestions(emptyList(), emptyList())
+        }
+
     fun onQueryChange(query: String) {
         _state.update { it.copy(query = query) }
         // Autocomplete from the labels, a short pause after the last keystroke.
@@ -463,10 +492,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         searchJob?.cancel()
         val start = if (reset) 0 else current.hits.size
         suggestJob?.cancel()
-        _state.update { it.copy(searching = true, searchError = null, suggestions = emptyList(), searchGeneration = if (reset) it.searchGeneration + 1 else it.searchGeneration) }
+        _state.update { it.copy(searching = true, searchError = null, suggestions = emptyList(), duplicateGroups = emptyList(), duplicatesMode = false, searchGeneration = if (reset) it.searchGeneration + 1 else it.searchGeneration) }
+        // The suggestions come from their own words-only request, next to this one.
+        if (reset) loadQueryFacets(current.query, current.filters)
         searchJob = viewModelScope.launch {
             try {
-                val page = searches.search(current.query, current.filters, start)
+                val page = searches.search(current.query, current.filters, start, freshBias = current.freshBias)
                 _state.update {
                     val hits = if (reset) page.hits else it.hits + page.hits
                     it.copy(
@@ -489,6 +520,45 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _state.update { it.copy(searching = false, searchError = e.message ?: "Search failed.") }
             }
         }
+    }
+
+    /**
+     * Opens the albums screen and loads the albums, one request to the index, every time it
+     * opens: a sync may have added photos since.
+     */
+    fun openAlbums() {
+        _state.update { it.copy(screen = Screen.Albums, albumsLoading = true, albumsError = null) }
+        viewModelScope.launch {
+            try {
+                val sections = searches.albums()
+                _state.update { it.copy(albums = sections, albumsLoading = false) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: SignInRequiredException) {
+                signedOut("Your Opensolr sign-in stopped working. Sign in again.")
+            } catch (e: Exception) {
+                _state.update { it.copy(albumsLoading = false, albumsError = e.message ?: "The albums could not be loaded.") }
+            }
+        }
+    }
+
+    /**
+     * Opens one album: the photos grid with that album's filter alone, nothing typed, nothing
+     * else filtered. The filter shows as a pill with its cross, like any other.
+     */
+    fun openAlbum(album: com.opensolr.photos.search.Album) {
+        _state.update {
+            it.copy(
+                screen = Screen.Search,
+                query = "",
+                filters = SearchFilters().toggled(album.field, album.value),
+                selecting = false,
+                selectedIds = emptySet(),
+                duplicateGroups = emptyList(),
+                duplicatesMode = false,
+            )
+        }
+        search(reset = true)
     }
 
     /**
@@ -550,6 +620,31 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Empties the index and syncs from nothing: the only way, from the phone, to have every
+     * photo read again after Opensolr got better at reading them (Cip, 2026-09-15 - otherwise
+     * a person stays on the old words for good, short of resetting the index on the website).
+     * The photos themselves and the tags the owner wrote are untouched; the words, the places
+     * and the vectors are made again, which counts as new AI requests.
+     */
+    fun resetIndex() {
+        if (_state.value.sync.busy || com.opensolr.photos.sync.SyncWorker.running.get()) {
+            _state.update { it.copy(showBusyDialog = true) }
+            return
+        }
+        viewModelScope.launch {
+            try {
+                val connection = prefs.connection ?: return@launch
+                com.opensolr.photos.net.SolrClient(connection).deleteAll()
+            } catch (e: Exception) {
+                _state.update { it.copy(notice = "The index could not be emptied: ${e.message ?: "try again"}") }
+                return@launch
+            }
+            _state.update { it.copy(hits = emptyList(), numFound = 0, duplicateGroups = emptyList(), duplicatesMode = false) }
+            SyncScheduler.runNow(context)
+        }
+    }
+
+    /**
      * Enters or leaves photo selection on the grid.
      */
     fun setSelecting(on: Boolean) {
@@ -563,6 +658,161 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update {
             val next = if (id in it.selectedIds) it.selectedIds - id else it.selectedIds + id
             it.copy(selectedIds = next)
+        }
+    }
+
+    /**
+     * The tick on a heading: selects every photo of that group, or drops them all when they
+     * are already selected. Selection switches on by itself, as tapping a photo does.
+     */
+    fun toggleSelectedGroup(ids: List<String>) {
+        if (ids.isEmpty()) return
+        _state.update {
+            val all = it.selectedIds.containsAll(ids)
+            val next = if (all) it.selectedIds - ids.toSet() else it.selectedIds + ids
+            it.copy(selecting = true, selectedIds = next)
+        }
+    }
+
+    /**
+     * Duplicates on or off. On, the grid shows the groups of the kind the slider is on
+     * ([UiState.duplicateLevel]); tapping it again (or searching) goes back to the ordinary
+     * results.
+     */
+    fun showDuplicates() {
+        if (_state.value.duplicatesMode) { clearDuplicates(); return }
+        _state.update { it.copy(duplicatesMode = true) }
+        loadDuplicates(debounceMs = 0)
+    }
+
+    /**
+     * The slider moved to [level] (0..10): the groups of that kind are asked for a short pause
+     * after the last move, so dragging across the slider does not send a request per step.
+     */
+    fun setDuplicateLevel(level: Int) {
+        val clamped = level.coerceIn(0, com.opensolr.photos.search.SearchRepository.DUPLICATE_FIELDS.size - 1)
+        if (clamped == _state.value.duplicateLevel && _state.value.duplicateGroups.isNotEmpty()) return
+        _state.update { it.copy(duplicateLevel = clamped) }
+        if (_state.value.duplicatesMode) loadDuplicates(debounceMs = 300)
+    }
+
+    /**
+     * One facet request for the groups of the current kind, replacing whatever is on the grid.
+     */
+    private fun loadDuplicates(debounceMs: Long) {
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            if (debounceMs > 0) kotlinx.coroutines.delay(debounceMs)
+            val level = _state.value.duplicateLevel
+            _state.update { it.copy(searching = true, searchError = null, suggestions = emptyList()) }
+            try {
+                val (hits, groups) = searches.duplicates(level)
+                _state.update {
+                    if (!it.duplicatesMode || it.duplicateLevel != level) it
+                    else it.copy(
+                        searching = false,
+                        hits = hits,
+                        duplicateGroups = groups,
+                        numFound = hits.size.toLong(),
+                        endReached = true,
+                        searchNotice = if (hits.isEmpty()) "No duplicates of this kind in your index." else null,
+                        resultsGeneration = it.resultsGeneration + 1,
+                    )
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: SignInRequiredException) {
+                signedOut("Your Opensolr sign-in stopped working. Sign in again.")
+            } catch (e: Exception) {
+                _state.update { it.copy(searching = false, searchError = e.message ?: "Looking for duplicates failed.") }
+            }
+        }
+    }
+
+    /**
+     * "Select 1 of each duplicate": selection on, with one photo of every group ticked - the
+     * last of each group, so the first stays - for the owner to review before sharing,
+     * deleting or re-syncing them from the selection dock.
+     */
+    fun selectOneOfEachDuplicate() {
+        val s = _state.value
+        if (!s.duplicatesMode || s.duplicateGroups.isEmpty()) return
+        val picked = LinkedHashSet<String>()
+        var at = 0
+        for (size in s.duplicateGroups) {
+            if (size >= 2 && at + size <= s.hits.size) picked += s.hits[at + size - 1].id
+            at += size
+        }
+        _state.update { it.copy(selecting = true, selectedIds = picked) }
+    }
+
+    /**
+     * A reload of what the grid shows (swipe down, the reload button, a finished sync, coming
+     * back to the photos): while duplicates are on, the duplicates of the slider's current kind
+     * again, never the ordinary results (Cip, 2026-09-16); otherwise the search.
+     */
+    fun refresh() {
+        if (_state.value.duplicatesMode) loadDuplicates(debounceMs = 0) else search(reset = true)
+    }
+
+    /** Back to the ordinary results after looking at duplicates. */
+    private fun clearDuplicates() {
+        if (!_state.value.duplicatesMode) return
+        _state.update { it.copy(duplicatesMode = false, duplicateGroups = emptyList(), searchNotice = null) }
+        search(reset = true)
+    }
+
+    /**
+     * "Fresh" on the results: recency boosts the score instead of replacing the order, so the
+     * matches stay the same and the recent ones rise. Runs the search again.
+     */
+    fun setFreshBias(on: Boolean) {
+        if (_state.value.freshBias == on) return
+        _state.update { it.copy(freshBias = on) }
+        search(reset = true)
+    }
+
+    /**
+     * The words-only facets behind the suggestions, fetched next to a fresh search and dropped
+     * as soon as the box is empty (browsing uses the facets of the results themselves).
+     */
+    private fun loadQueryFacets(query: String, filters: SearchFilters) {
+        facetsJob?.cancel()
+        if (query.isBlank()) {
+            _state.update { it.copy(queryFacets = emptyMap()) }
+            return
+        }
+        facetsJob = viewModelScope.launch {
+            val facets = searches.queryFacets(query, filters)
+            _state.update { if (it.query == query) it.copy(queryFacets = facets) else it }
+        }
+    }
+
+    /**
+     * Drops from the results the photos the phone no longer has, after a delete went through,
+     * and takes them out of the index as well.
+     */
+    fun removeDeleted(ids: Set<String>) {
+        if (ids.isEmpty()) return
+        _state.update {
+            it.copy(
+                hits = it.hits.filterNot { hit -> hit.id in ids },
+                selectedIds = it.selectedIds - ids,
+                selecting = false,
+                numFound = (it.numFound - ids.size).coerceAtLeast(0),
+            )
+        }
+        viewModelScope.launch {
+            try {
+                val connection = prefs.connection ?: return@launch
+                // Committed on the spot: with the usual ten-second commit the photo came
+                // straight back on the next refresh (Cip, 2026-09-15).
+                com.opensolr.photos.net.SolrClient(connection).delete(ids, now = true)
+            } catch (e: Exception) {
+                // The next sync notices the photos are gone and deletes them anyway.
+            }
+            // The index has changed: reload what is on screen from it (duplicates stay duplicates).
+            if (_state.value.screen == Screen.Search) refresh()
         }
     }
 
@@ -649,11 +899,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun back() {
         val current = _state.value
         when (current.screen) {
-            Screen.Map -> _state.update { it.copy(screen = Screen.Search) }
+            Screen.Map, Screen.Albums -> _state.update { it.copy(screen = Screen.Search) }
             // Back to the photos always reloads them: a sync may have finished meanwhile.
             Screen.Sync, Screen.Account -> {
                 _state.update { it.copy(screen = Screen.Search) }
-                search(reset = true)
+                // Duplicates stay duplicates, on the same slider stop.
+                refresh()
             }
             Screen.Folders -> if (current.foldersReturnTo == Screen.Sync) _state.update { it.copy(screen = Screen.Sync) }
             else -> Unit
@@ -675,7 +926,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (report?.status == "rebuild_required") _state.update { it.copy(rebuildRequired = true) }
         if (report?.status == "device_choice") askDeviceChoice()
         if (report?.status == "update_app") _state.update { it.copy(notice = report.message) }
-        if (_state.value.screen == Screen.Search) search(reset = true)
+        if (_state.value.screen == Screen.Search) refresh()
     }
 
     /**

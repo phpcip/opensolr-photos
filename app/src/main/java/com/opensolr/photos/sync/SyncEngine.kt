@@ -108,7 +108,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             }
             val rebuild = outcome == IndexManager.Outcome.NEEDS_REBUILD
             if (rebuild && !prefs.rebuildApproved) {
-                return report("rebuild_required", message = "This version of Opensolr Photos comes with a newer index configuration. Your index must be rebuilt before syncing continues.")
+                return report("rebuild_required", message = "This version of Opensolr Photos comes with a new index configuration. Your index must be reset and fully re-synced before syncing continues.")
             }
 
             onProgress(Progress("Looking for photos", 0, 0))
@@ -126,12 +126,22 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             if (!aiAvailable) quotaHit = true
 
             if (rebuild) {
-                // New configuration in, every document out, every photo handed to Opensolr
-                // again below; CLIP and the embedder answer from their caches, so it costs no
-                // AI requests, only the upload.
-                onProgress(Progress("Rebuilding your index", 0, 0))
-                indexes.applyConfig(session, connection) { onProgress(Progress("Rebuilding your index", 0, 0)) }
+                // A new configuration means a reset and a full re-sync, in this order and no
+                // other (Cip, 2026-09-15): the owner's tags and wording are kept on the phone,
+                // the index is emptied, and only THEN the new configuration goes up. Every
+                // photo is handed to Opensolr again below.
+                // Too many photos for the battery: wait for the charger before anything is
+                // emptied, so the index is never left empty while the phone waits.
+                if (!unlimited && local.size > CHARGER_THRESHOLD && !isCharging()) {
+                    throw ChargerNeededException(local.size)
+                }
+                onProgress(Progress("Resetting your index", 0, 0))
+                withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { keepOwnersEdits(solr) }
                 solr.deleteAll()
+                indexes.applyConfig(session, connection) { onProgress(Progress(it, 0, 0)) }
+                // The configuration is live and the index is empty: from here an interrupted run
+                // continues as an ordinary sync, and a later version asks the owner again.
+                prefs.rebuildApproved = false
             }
 
             // Photos that go through everything again whatever their size says: those the owner
@@ -148,6 +158,12 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             val sent = HashSet<String>()
             val pending = ArrayList<LocalPhoto>(READ_BATCH)
             var total = 0
+            // How many photos this run is expected to read. While the diff is still streaming
+            // the exact figure is not known, so the first page's estimate stands in for it -
+            // otherwise the progress would read "10 of 10", then "25 of 25", which says nothing
+            // (Cip, 2026-09-15). It is only ever raised, never lowered below what is done.
+            var expected = 0
+            suspend fun progress(phase: String) = onProgress(Progress(phase, added + failed, maxOf(total, expected)))
             suspend fun ingest(batch: List<LocalPhoto>) {
                 val items = ArrayList<IngestItem>(batch.size)
                 for (photo in batch) {
@@ -186,7 +202,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                         }
                     }
                 }
-                onProgress(Progress(phase, added + failed, total))
+                progress(phase)
             }
             suspend fun queue(photo: LocalPhoto) {
                 if (!sent.add(photo.id)) return
@@ -229,6 +245,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                             // so once; when there are too many to read on battery, wait for the
                             // charger before touching anything.
                             val atLeast = (local.size - indexCount).coerceAtLeast(0) + forced.size + needWords.size
+                            expected = atLeast + withoutPlace.size
                             if (aiAvailable && limits != null) {
                                 val left = limits.photosLeftThisMonth
                                 if (left != null && left < atLeast) shortAllowance = warnShortAllowance(left, atLeast)
@@ -253,7 +270,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                                 if (size != photo.sizeBytes || id in forced || id in needWords || id in withoutPlace) queue(photo)
                             }
                         }
-                        onProgress(Progress(if (total > 0) phase else "Comparing with your index", added + failed, total))
+                        progress(if (total > 0) phase else "Comparing with your index")
                     }
                     }
                 }
@@ -268,6 +285,8 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
 
             // New on the phone (or everything, on a rebuild).
             val newOnes = local.values.filter { it.id in unseen }
+            // The diff is over: what is left to read is exactly known, so the estimate goes.
+            expected = total + newOnes.size
             if (rebuild && !unlimited && newOnes.size > CHARGER_THRESHOLD && !isCharging()) {
                 throw ChargerNeededException(newOnes.size)
             }
@@ -371,6 +390,25 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
     }
 
     /** True while the phone is plugged in. */
+    /**
+     * Before a reset: the owner's tags and own wording that live only in the index (a
+     * reinstall, another phone's edits) are copied into this phone's edits, so the full
+     * re-sync hands them back to Opensolr with each photo. Edits already on the phone win.
+     * Wording counts as the owner's only when it differs from CLIP's labels joined, the same
+     * rule the server applies.
+     */
+    private suspend fun keepOwnersEdits(solr: SolrClient) {
+        solr.forEachDoc("id,custom_tags,meaning,labels") { doc ->
+            val id = doc.optString("id")
+            if (id.isEmpty() || cache.getEdits(id) != null) return@forEachDoc
+            val tags = doc.optJSONArray("custom_tags")?.let { a -> (0 until a.length()).map { a.optString(it).trim() }.filter { it.isNotEmpty() } } ?: emptyList()
+            val labels = doc.optJSONArray("labels")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList()
+            val meaning = doc.optString("meaning").trim()
+            val own = meaning.takeIf { it.isNotEmpty() && it != labels.joinToString(", ") }
+            if (tags.isNotEmpty() || own != null) cache.putEdits(id, PhotoCache.Edits(tags, own))
+        }
+    }
+
     private fun isCharging(): Boolean {
         val status = context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
             ?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1) ?: -1

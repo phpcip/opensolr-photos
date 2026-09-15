@@ -1,0 +1,1 @@
+Albums from your tags, what the photos show, places, cameras and years. Duplicates with a slider that finds them by words, by EXIF, by file name or by size, and selects one of each for review. Tag suggestions while you type. A new header menu, date headings, search that works while photos are indexed, and a clearer delete warning.

@@ -142,8 +142,8 @@ class IndexManager(
 
     /**
      * Uploads the app's configuration to the index and waits until the index runs it. Called
-     * by a rebuild, after the index's documents were copied into the phone's cache and
-     * before the index is emptied.
+     * by a rebuild only AFTER the index was emptied: documents written under the old schema
+     * never meet the new one (Cip, 2026-09-15).
      */
     suspend fun applyConfig(session: Session, connection: IndexConnection, onStep: suspend (String) -> Unit = {}) {
         onStep("Updating the index configuration")
@@ -250,7 +250,7 @@ class IndexManager(
          * raise both whenever any file in solr/conf changes. An index on a lower version is
          * rebuilt (with the owner's consent), one on a higher version asks for an app update.
          */
-        const val CONFIG_VERSION = 4
+        const val CONFIG_VERSION = 9
         /** Opensolr environment for phones in the Americas. */
         const val REGION_AMERICAS = "CHICAGO-96"
         /** Opensolr environment for everyone else. */

@@ -61,7 +61,7 @@ fun SignInScreen(state: UiState, viewModel: AppViewModel) {
         Text("Find any photo by what is in it.", style = MaterialTheme.typography.displaySmall, color = p.ink)
         Spacer(Modifier.height(16.dp))
         Text(
-            "Opensolr Photos reads every picture in the folders you choose into words, keeps them in your own Opensolr Index, and lets you search your phone like a search engine. Tap a result and it opens in your gallery.",
+            "Your photos, read into words and searchable. Tap a result to open it in your gallery.",
             style = MaterialTheme.typography.bodyLarge, color = p.muted,
         )
         Spacer(Modifier.height(32.dp))
@@ -128,7 +128,7 @@ fun WelcomeScreen(state: UiState, viewModel: AppViewModel) {
         if (account != null) {
             if (!account.vectorAllowed) {
                 Notice(
-                    "On this plan Opensolr does not look at what is in your photos. They are indexed by date, camera, place, file name and the tags you add, and that is all a search can match: \"dog on the beach\" finds nothing unless you tagged it. To have every photo read and searchable by meaning, pick a plan with AI at opensolr.com/pricing. Photos already on the phone are read at the next sync after the upgrade.",
+                    "Date, camera, place, file name and your tags only. A plan with AI reads the pictures themselves.",
                     title = "Photos are not recognised on this plan",
                 )
                 Spacer(Modifier.height(20.dp))
@@ -147,12 +147,12 @@ fun WelcomeScreen(state: UiState, viewModel: AppViewModel) {
             InfoRow("Indexes on the account", "${account.indexesUsed} of ${account.indexLimit}")
             Spacer(Modifier.height(16.dp))
             Text(
-                "Ten new photos use one AI request: each is read into words and those words become its search vector, in one go. Photos already indexed cost nothing again; editing a photo's tags or words costs one request for its new vector.",
+                "Ten new photos, one AI request. Indexed ones cost nothing again.",
                 style = MaterialTheme.typography.bodyMedium, color = p.muted,
             )
             Spacer(Modifier.height(20.dp))
             Notice(
-                "If you need more photos per month, or your index goes over its disk space or search bandwidth, upgrade your plan at opensolr.com/pricing.",
+                "More photos, disk or bandwidth: upgrade your plan.",
                 title = "Need more?",
             )
             Spacer(Modifier.height(12.dp))
@@ -227,7 +227,7 @@ fun FoldersScreen(state: UiState, viewModel: AppViewModel) {
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         ScreenHeader("Photo folders", onBack = if (state.foldersReturnTo == Screen.Sync) ({ viewModel.back() }) else null)
         Text(
-            "Choose the folders to index. A folder includes everything inside it. DCIM is where your camera saves photos.",
+            "Everything inside a folder is indexed. DCIM is your camera.",
             style = MaterialTheme.typography.bodyMedium, color = p.muted, modifier = Modifier.padding(horizontal = 4.dp),
         )
         Spacer(Modifier.height(16.dp))
@@ -283,7 +283,7 @@ fun SetupScreen(state: UiState, viewModel: AppViewModel) {
         Text("Setting up your photo index", style = MaterialTheme.typography.displaySmall, color = p.ink)
         Spacer(Modifier.height(16.dp))
         Text(
-            "This phone gets its own Opensolr Index. If it already has one, it is reused and only the differences are synced.",
+            "This phone gets its own index; an existing one is reused.",
             style = MaterialTheme.typography.bodyLarge, color = p.muted,
         )
         Spacer(Modifier.height(32.dp))

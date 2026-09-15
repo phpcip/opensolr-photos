@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +49,7 @@ import com.opensolr.photos.ui.theme.LocalPalette
 @Composable
 fun SyncScreen(state: UiState, viewModel: AppViewModel) {
     val p = LocalPalette.current
+    var confirmReset by remember { mutableStateOf(false) }
     Column(
         Modifier
             .fillMaxSize()
@@ -106,17 +109,22 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
             }
             if (report.recreated) {
                 Spacer(Modifier.height(14.dp))
-                Notice("Your index was missing from your Opensolr account, so a new, empty one was created and your photos were synced into it again.", title = "Index recreated")
+                Notice("It was missing from your account; your photos went into a new one.", title = "Index recreated")
             }
             Spacer(Modifier.height(20.dp))
         }
 
         AccentButton("Force Re-Sync", onClick = { viewModel.forceResync() }, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(8.dp))
-        Text(
-            "Re-Sync compares every photo in your folders with your index: photos you deleted are removed, new photos are added. Photos already indexed are not read again.",
-            style = MaterialTheme.typography.bodySmall, color = p.muted,
-        )
+        Spacer(Modifier.height(6.dp))
+        // Four words, not a paragraph (Cip, 2026-09-15).
+        Text("New and deleted photos only.", style = MaterialTheme.typography.bodySmall, color = p.muted)
+        Spacer(Modifier.height(14.dp))
+
+        // Everything out of the index and read again: the only way to pick up a better
+        // reading of the pictures without touching the account on opensolr.com.
+        GhostButton("Reset index", onClick = { confirmReset = true }, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(6.dp))
+        Text("Empties it, reads every photo again.", style = MaterialTheme.typography.bodySmall, color = p.muted)
         Spacer(Modifier.height(28.dp))
 
         SectionLabel("Automatic Re-Sync")
@@ -127,8 +135,8 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
         HorizontalDivider(color = p.hairline)
         ScheduleOption("Every month", state.schedule == SyncSchedule.MONTHLY) { viewModel.setSchedule(SyncSchedule.MONTHLY) }
         HorizontalDivider(color = p.hairline)
-        Spacer(Modifier.height(8.dp))
-        Text("A sync already runs on its own a minute after your photos change. This one is the safety net for what the phone cannot notice: photos waiting to be read after the monthly AI allowance resets, places to look up again, an index changed on opensolr.com. Runs when the phone is online and the battery is not low.", style = MaterialTheme.typography.bodySmall, color = p.muted)
+        Spacer(Modifier.height(6.dp))
+        Text("Safety net; photo changes sync anyway.", style = MaterialTheme.typography.bodySmall, color = p.muted)
         Spacer(Modifier.height(28.dp))
 
         SectionLabel("Folders being indexed")
@@ -136,6 +144,19 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
         Spacer(Modifier.height(14.dp))
         GhostButton("Change folders", onClick = { viewModel.openFolders(Screen.Sync) }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(40.dp))
+    }
+
+    if (confirmReset) {
+        AlertDialog(
+            onDismissRequest = { confirmReset = false },
+            title = { Text("Reset your index?") },
+            text = { Text("Every photo is emptied out of it and read again, which counts as new AI requests. Your tags are kept. Your photos are not touched.") },
+            confirmButton = { TextButton(onClick = { confirmReset = false; viewModel.resetIndex() }) { Text("Reset", color = p.accent) } },
+            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancel", color = p.ink) } },
+            containerColor = p.paper,
+            titleContentColor = p.ink,
+            textContentColor = p.muted,
+        )
     }
 }
 
@@ -171,7 +192,7 @@ private fun statusLine(state: UiState): String {
         "stopped_quota" -> "Paused: the monthly AI requests of your plan are used up."
         "stopped_plan_limit" -> "Paused: the index reached its disk space or bandwidth."
         "sign_in_required" -> "Paused: sign in to Opensolr again."
-        "rebuild_required" -> "Waiting: your index must be rebuilt for the new version. Open the app's photos screen to start it."
+        "rebuild_required" -> "Waiting: your index must be reset and fully re-synced for the new version. Open the app's photos screen to start it."
         "update_app" -> "Paused: update Opensolr Photos to keep syncing."
         "device_choice" -> "Waiting: open the app and say which one of your devices this phone is."
         "waiting_charger" -> "Waiting for the charger: " + report.message
@@ -188,7 +209,7 @@ private fun resultLabel(status: String): String = when (status) {
     "stopped_quota" -> "Paused, AI requests used up"
     "stopped_plan_limit" -> "Paused, plan limit reached"
     "sign_in_required" -> "Sign-in needed"
-    "rebuild_required" -> "Rebuild needed"
+    "rebuild_required" -> "Reset and full re-sync needed"
     "update_app" -> "App update needed"
     "device_choice" -> "Device not chosen yet"
     "waiting_charger" -> "Waiting for the charger"
