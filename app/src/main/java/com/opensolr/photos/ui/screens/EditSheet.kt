@@ -47,7 +47,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -85,8 +89,17 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
     var suggestions by remember(hit.id) { mutableStateOf(TagSuggestions(emptyList(), emptyList())) }
     // True while the suggestions are being asked for: a thin line under the field says so.
     var suggestionsLoading by remember(hit.id) { mutableStateOf(false) }
-    LaunchedEffect(newTag, tagFieldFocused, tags) {
-        if (!tagFieldFocused) { suggestionsLoading = false; return@LaunchedEffect }
+    // Closed by a touch outside the tag field and its list; opened again by typing or by going
+    // back into the field (Cip, 2026-09-16). Focus alone did not close them inside the sheet.
+    var suggestionsDismissed by remember(hit.id) { mutableStateOf(false) }
+    // Where the sheet content, the tag field row and the suggestion list are, to tell a touch
+    // inside them from a touch outside.
+    var sheetCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var tagRowCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var suggestionListCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    // Reopening the list (suggestionsDismissed back to false) asks for fresh suggestions too.
+    LaunchedEffect(newTag, tagFieldFocused, tags, suggestionsDismissed) {
+        if (!tagFieldFocused || suggestionsDismissed) { suggestionsLoading = false; return@LaunchedEffect }
         suggestionsLoading = true
         try {
             if (newTag.isNotEmpty()) delay(250)
@@ -118,8 +131,27 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
             Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
-                // Taps the fields, chips and suggestions do not use themselves clear the focus.
-                .pointerInput(Unit) { detectTapGestures(onTap = { focusManager.clearFocus() }) }
+                .onGloballyPositioned { sheetCoords = it }
+                // Every touch is seen here first (Initial pass, before the sheet or the scroll can
+                // take it): one outside the tag field row and the suggestion list closes the list
+                // and takes the focus away. Touches inside them work as before.
+                .pointerInput(Unit) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                        val sheet = sheetCoords
+                        fun inside(target: LayoutCoordinates?): Boolean =
+                            sheet != null && target != null && sheet.isAttached && target.isAttached &&
+                                sheet.localBoundingBoxOf(target, clipBounds = false).contains(down.position)
+                        if (inside(tagRowCoords)) {
+                            // Back into the tag field: the list opens again, whether or not the
+                            // field's focus changes (it may still hold it after a dismissal).
+                            suggestionsDismissed = false
+                        } else if (!inside(suggestionListCoords)) {
+                            suggestionsDismissed = true
+                            focusManager.clearFocus(force = true)
+                        }
+                    }
+                }
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
                 .imePadding()
@@ -150,11 +182,18 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                 }
                 Spacer(Modifier.height(10.dp))
             }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                Modifier.onGloballyPositioned { tagRowCoords = it },
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 OutlinedTextField(
                     value = newTag,
-                    onValueChange = { newTag = it },
-                    modifier = Modifier.weight(1f).onFocusChanged { tagFieldFocused = it.isFocused },
+                    onValueChange = { newTag = it; suggestionsDismissed = false },
+                    modifier = Modifier.weight(1f).onFocusChanged {
+                        tagFieldFocused = it.isFocused
+                        if (it.isFocused) suggestionsDismissed = false
+                    },
                     placeholder = { Text("Add a tag, e.g. Maria, holiday 2021", color = p.muted) },
                     singleLine = true,
                     shape = Corner,
@@ -167,14 +206,20 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
             // Discreet loading: a 2dp accent line under the field while suggestions are asked for;
             // the same height is kept when idle, so nothing below moves.
             Box(Modifier.fillMaxWidth().padding(top = 4.dp).height(2.dp)) {
-                if (tagFieldFocused && suggestionsLoading) {
+                if (tagFieldFocused && !suggestionsDismissed && suggestionsLoading) {
                     LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp), color = p.accent, trackColor = p.chip)
                 }
             }
             // The owner's own tags first, then words from the photos' meanings, under a divider.
-            if (tagFieldFocused && !suggestions.isEmpty) {
+            if (tagFieldFocused && !suggestionsDismissed && !suggestions.isEmpty) {
                 Spacer(Modifier.height(6.dp))
-                Column(Modifier.fillMaxWidth().background(p.paper, Corner).border(1.dp, p.hairline, Corner)) {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .onGloballyPositioned { suggestionListCoords = it }
+                        .background(p.paper, Corner)
+                        .border(1.dp, p.hairline, Corner)
+                ) {
                     if (suggestions.mine.isNotEmpty()) {
                         SuggestionHeading("Your tags")
                         suggestions.mine.forEach { SuggestionRow(it, onPick = { pick(it) }) }

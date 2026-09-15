@@ -6,19 +6,32 @@
 
 Search goes straight from the app to the phone's index, in one `POST /select`.
 
-The search box is not on screen until it is asked for: the magnifier in the header opens one compact
-line with the filters button on it, and tapping the magnifier again puts it away and clears the query.
-Active filters keep the line on screen, with their chips under it.
+## The header
+
+The top of the photos screen is one row of small bordered buttons, each an icon with a label, left to right:
+
+| Button | What it does |
+|---|---|
+| **Opensolr** | The app logo; opens [opensolr.com/admin/solr_manager](https://opensolr.com/admin/solr_manager) in the default browser |
+| **Me** | The account screen |
+| **Sync** | The Sync screen ([sync](sync.md)) |
+| **Map** | The [map](map.md) of the current search |
+| **Albums** | The [albums](albums.md) |
+| **Select** | Turns selection on; it reads **Done** while selecting |
+| **Search** | Opens the search line |
+
+The search box is not on screen until it is asked for: the magnifier opens one compact line with the
+filters button on it, and tapping the magnifier again puts it away and clears the query.
 
 ## Empty search box
 
-Every photo, newest first: `q=*:*`, `sort=taken_at desc, id asc`.
+Every photo, newest first: `q=*:*`, `sort=taken_at desc, id asc`. The grid is grouped under date headings:
+*Today*, *Yesterday*, the month's name for this year, month and year before that.
 
 ## Typed search
 
 What you type is trimmed to 300 characters and sent **only as the bound parameter `uq`**:
 
-```
 ```
 uq          = dog on the beach
 lexicalRaw  = {!edismax qf="custom_tags_text^5 meaning^3 text file_name_text folder_text camera_text place_text" mm="2<65% 4<50% 8<40%" v=$uq}
@@ -40,19 +53,35 @@ app blends evenly.
 
 Without vector search, or when the month's AI requests are used up, or when the vector service does not
 answer, the same request runs with `q={!bool should=$lexicalRaw}` and the app says so above the results.
-An index still on an older configuration (rebuild postponed) answers 400 to the newest fields; the app
+An index still on an older configuration (reset postponed) answers 400 to the newest fields; the app
 then retries once without them.
 
-`meaning` holds the labels CLIP gave the photo. `text` also collects the file name, the folder and the
-camera, so *pixel* or *screenshots* find what you would expect.
+`meaning` holds the labels CLIP gave the photo. `text` also collects the file name, the folder, the camera,
+the place and your tags, so *pixel* or *screenshots* find what you would expect.
+
+### When the grid regroups
+
+The grid's grouping follows the **last search that ran**, not the text being typed: typing alone never
+regroups the grid. A search runs on Enter, on a picked suggestion, on clearing the box, and on any filter.
+
+After a typed search the results are split into **Best matches** and **Also similar**, at the biggest fall
+in score among the results below 60% of the top score. The split is only made with at least 8 results, and
+*Best matches* always holds at least 3. The count line shows only *N photos*.
+
+Suggestion pills above the grid appear only after a typed search; they come from a separate facet request
+that returns words only.
 
 ## Filters
 
 Every filter is a set of chosen values per field, OR-ed within the field (`{!terms f=year tag=year
 separator=| v=$f_year}` with `f_year=2025|2026`) and AND-ed across fields. Values travel as bound
 parameters, so no value can change the query. Each field's facet excludes that field's own filter
-(`facet.field={!ex=year key=year}year`), so a section keeps offering all its values. Taps on the filter
-sheet apply at once; long lists show the twelve most frequent values with *Show all*.
+(`facet.field={!ex=year key=year}year`), so a section keeps offering all its values.
+
+On the filter sheet every tap applies at once; long lists show the twelve most frequent values with *Show
+all*. Small **Clear all** and **Done (N)** buttons, where N is the number of photos shown with the current
+filters, sit both at the top and at the bottom of the sheet. Active filters show as removable pills on one
+horizontally scrolling row.
 
 | Filter | Parameters |
 |---|---|
@@ -74,16 +103,18 @@ every choice offered has photos behind it. The radius filter is set from the [ma
 
 ## Autocomplete
 
-From the second character, the app POSTs `suggest.q` to the index's `/suggest` handler and shows up to
-eight distinct terms under the search box. The suggester (`AnalyzingInfixLookupFactory`, dictionary = the
-stored `suggest` field: labels, camera make and model, city, region, province, country) matches anywhere in
-a term and is rebuilt at every commit. Tapping a suggestion searches for it.
+From the second character, after a 200 ms pause in typing, the app POSTs `suggest.q` to the index's
+`/suggest` handler and shows up to eight distinct entries under the search box. The suggester
+(`AnalyzingInfixLookupFactory`, dictionary = the stored `suggest` field: your tags, CLIP labels, camera
+make and model, city, region, province, country) matches anywhere in a term and is rebuilt at every commit.
+Tapping a suggestion searches for it.
 
 ## Did you mean
 
 A typed search also sends `spellcheck=true` and `spellcheck.q=<text>`. The `/select` handler runs
-`DirectSolrSpellChecker` over the `spell` field (labels, file name, camera, places, unstemmed) and returns a
-collation; when it differs from what was typed, *Did you mean …?* is shown above the results, one tap away.
+`DirectSolrSpellChecker` over the `spell` field (tags, labels, file name, camera, places, unstemmed) and
+returns a collation; when it differs from what was typed, *Did you mean …?* is shown above the results, one
+tap away.
 
 ## Results
 
@@ -98,15 +129,33 @@ downloaded to draw the grid.
   5 km radius search), and the words Opensolr read the photo into.
 - **Reload**: swipe down on the grid, tap the reload icon next to the count, or come back from another
   screen; the results are read again from the index.
-- **Select**: the tick icon turns selection on; tick photos and press *Re-sync N photos* to have them read
-  again by CLIP regardless of the cache (each counts as new AI requests).
+- **Duplicates**: the duplicates icon on the count line switches the grid to groups of alike photos
+  ([duplicates](duplicates.md)).
+- **Select**: the *Select* button turns selection on. The bar at the bottom then works on the ticked
+  photos: **Share**, **Delete**, and **Re-sync N** to have them read again by CLIP (each counts as new AI
+  requests).
+
+## Deleting photos
+
+*Delete* always shows the app's own warning first: *Delete N photos? They are removed from this phone and
+from your index. This cannot be undone.* On Android 11 and newer the system's own confirmation follows, and
+Android does the deleting; on older versions the app deletes what it is allowed to. The deleted photos leave
+the results at once and are deleted from the index with an immediate commit, so a refresh does not bring
+them back. If that delete fails, the next sync removes them anyway.
 
 ## Editing tags and words
 
-*Edit tags and words* in the details sheet (`EditSheet.kt`, `EditRepository.kt`):
+*Edit tags and words* in the details sheet (`EditSheet.kt`, `EditRepository.kt`) opens at full height:
 
 - **My tags**: one per entry (commas split), removed with a tap. Stored in `custom_tags`; `custom_tags_text`
   is its tokenised copy, first in `qf` with boost 5.
+- **Tag suggestions**: focusing the tag field lists suggestions under it. With nothing typed, the 5 most
+  used of your tags and the 5 most used CLIP words; while typing (after a 250 ms pause), up to 8 tags and 5
+  words that contain the text anywhere, in any case. It is one `/select` with `rows=0`, faceting on
+  `custom_tags` and `labels` with `facet.contains` and `facet.contains.ignoreCase`. Tags already on the
+  photo are not offered, and a word already offered as a tag is not repeated. A thin accent line shows while
+  suggestions load. Tapping a suggestion adds it; tapping outside the field and its list closes the list,
+  and tapping the field again reopens it.
 - **What the photo shows**: `meaning` as free text; *Reset* restores CLIP's labels.
 - **Save**: the edit goes into the cache's `edits` table (id → tags, wording), the current document is read
   back from the index, the edits go in, the vector is computed again from `meaning + tags` on vector plans

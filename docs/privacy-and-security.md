@@ -11,7 +11,7 @@
 | A 640 px JPEG copy of each new photo, re-encoded from pixels and carrying the original's EXIF, with the file's name, folder and size, and your tags and words for it when this phone has them, five per call | api.opensolr.com `photos_ingest` | No: processed in memory, the document it produces goes into your index |
 | The words and tags of a photo you edited | api.opensolr.com `batch_embed` | No |
 | Your typed searches | api.opensolr.com `embed` (vector search plans), then your index `/select` | Not by the app; the query goes to your own index like any search on it |
-| Labels, vector, EXIF fields, path, folder, file name, size | Your Opensolr Index | Yes, until the photo leaves the phone or you empty the index |
+| Labels, vector, EXIF fields, path, folder, file name, size, duplicate keys | Your Opensolr Index | Yes, until the photo leaves the phone or you empty the index |
 | Account email and API key | opensolr.com, with each API call | It is your account |
 
 **Not sent anywhere:** the original files, their EXIF blocks as such, thumbnails, and anything about how you
@@ -57,7 +57,8 @@ What you type is only ever sent to Solr as a bound parameter (`v=$uq`), and ever
 | Internet, network state | Opensolr | Yes |
 | Foreground service (data sync) | So Android does not stop a long sync half way | Yes |
 
-The app never writes to, moves or deletes your photos.
+The app never writes to or moves your photos. It deletes one only when you select it and press *Delete*,
+after its own warning; on Android 11 and newer Android asks for confirmation again and does the deleting.
 
 ## Threat model, briefly
 

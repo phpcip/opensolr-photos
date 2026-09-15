@@ -62,6 +62,11 @@ data class UiState(
     val setupError: String? = null,
     val setupNeedsUpgrade: Boolean = false,
     val query: String = "",
+    /**
+     * The query of the search that produced the photos on screen. The grid's headings follow
+     * this, never the text still being typed (Cip, 2026-09-16): they change on Enter only.
+     */
+    val searchedQuery: String = "",
     val suggestions: List<String> = emptyList(),
     val didYouMean: String? = null,
     val filters: SearchFilters = SearchFilters(),
@@ -509,6 +514,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         searchNotice = page.notice,
                         didYouMean = if (reset) page.didYouMean else it.didYouMean,
                         resultsGeneration = if (reset) it.resultsGeneration + 1 else it.resultsGeneration,
+                        searchedQuery = if (reset) current.query else it.searchedQuery,
                         endReached = hits.size >= page.numFound || page.hits.isEmpty(),
                     )
                 }

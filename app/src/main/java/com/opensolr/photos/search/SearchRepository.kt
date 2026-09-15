@@ -617,7 +617,7 @@ class SearchRepository(private val context: Context) {
             "file_name", "size_bytes",
         )
         /** Photos an album needs before it is shown (Cip, 2026-09-15). */
-        private const val ALBUM_MIN = 3
+        private const val ALBUM_MIN = 1
         /** CLIP words offered as albums: only the most used, never the whole vocabulary. */
         private const val ALBUM_THINGS = 12
         private const val FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,city,region,country,labels,custom_tags"

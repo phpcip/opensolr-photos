@@ -56,7 +56,7 @@ private val Corner = RoundedCornerShape(2.dp)
 
 /**
  * Albums: the library grouped by what the index already knows about each photo - the owner's
- * tags, the words CLIP used most, places, cameras and years - every album with at least three
+ * tags, the words CLIP used most, places, cameras and years - every album with at least one
  * photos. Tapping one opens the photos grid filtered to it.
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -73,7 +73,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
         }
         if (!state.albumsLoading && state.albumsError == null && state.albums.isEmpty()) {
             Text(
-                "No albums yet: an album needs at least three photos with the same tag, word, place, camera or year.",
+                "No albums yet: albums come from your tags, the words photos were read into, places, cameras and years.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = p.muted,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
@@ -148,7 +148,7 @@ private fun AlbumCard(album: Album, onClick: () -> Unit) {
                 )
             }
         }
-        Text(album.title, style = MaterialTheme.typography.bodyMedium, color = p.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 4.dp))
+        Text(albumTitle(album.title), style = MaterialTheme.typography.bodyMedium, color = p.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 4.dp))
         Spacer(Modifier.height(2.dp))
         Text(
             "${Actions.formatCount(album.count.toLong())} photos",
@@ -158,6 +158,14 @@ private fun AlbumCard(album: Album, onClick: () -> Unit) {
         )
     }
 }
+
+/**
+ * An album's name as shown (Cip, 2026-09-16): the first letter of every word upper-cased, the
+ * rest left as written - "my wife" shows as "My Wife", "iPhone 15" as "IPhone 15". Only the
+ * display changes; the album still filters on the value as stored.
+ */
+private fun albumTitle(title: String): String =
+    title.split(" ").joinToString(" ") { word -> word.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() } }
 
 /** The turn of each photo in a cover stack: the newest straight, the two under it fanned out. */
 private val STACK_ANGLES = listOf(0f, -6f, 5f)

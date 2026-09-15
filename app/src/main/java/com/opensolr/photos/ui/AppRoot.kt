@@ -82,7 +82,7 @@ fun AppRoot(viewModel: AppViewModel) {
             confirmButton = { TextButton(onClick = { viewModel.approveRebuild() }) { Text("Reset and re-sync") } },
             dismissButton = { TextButton(onClick = { viewModel.postponeRebuild() }) { Text("Later") } },
             title = { Text("Your index will be reset") },
-            text = { Text("This version of Opensolr Photos comes with a new index configuration. Your index will now be reset and every photo synced again: a full re-sync. It takes a while, search is unavailable until it is done, and reading the photos again counts toward your plan's AI requests. Your tags and edits are kept.") },
+            text = { Text("This version of Opensolr Photos comes with a new index configuration. Your index will now be reset and every photo synced again: a full re-sync. It takes a while; search keeps working and finds the photos as they come back, and reading the photos again counts toward your plan's AI requests. Your tags and edits are kept.") },
             containerColor = p.paper,
             titleContentColor = p.ink,
             textContentColor = p.muted,

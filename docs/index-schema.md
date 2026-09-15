@@ -1,7 +1,7 @@
 # Index schema
 
 The app uploads the files in [`solr/conf`](../solr/conf) to the phone's index: `schema.xml`,
-`solrconfig.xml`, `stopwords.txt`, `synonyms.txt` and `protwords.txt`. The build zips that folder into the
+`solrconfig.xml`, `stopwords.txt`, `synonyms.txt`, `protwords.txt` and `mapping-ISOLatin1Accent.txt`. The build zips that folder into the
 APK, so the app always uploads exactly what is in the repository.
 
 ## Fields
@@ -34,19 +34,34 @@ APK, so the app always uploads exactly what is in the repository.
 | `custom_tags` | string, multi | The owner's tags; `custom_tags_text` is their tokenised copy for search |
 | `embeddings` | dense vector, 1024, cosine | Vector of `meaning` (plans with vector search) |
 | `clip_model`, `embed_model` | string | What produced the labels and the vector |
+| `dup_w1_hash` … `dup_w5_hash`, `dup_exif_hash`, `dup_exif_w1_hash` … `dup_exif_w5_hash` | string (`*_hash`) | Duplicate keys, written by the server ([duplicates](duplicates.md)) |
 | `indexed_at` | date | When the document was written |
 
-Copy fields feed the search fields: `text` (meaning, file name, folder, camera, city, region, country),
-`file_name_text`, `folder_text`, `camera_text`, `place_text`. Two more serve typing: `suggest` (stored,
-multi-valued: labels, camera make and model, city, region, province, country) is the suggester's dictionary,
-and `spell` (labels, file name, camera, places; `text_spell`, unstemmed) is the spellchecker's. Dynamic fields (`*_s`, `*_ss`, `*_i`, `*_l`, `*_f`, `*_b`, `*_dt`, `*_t`)
-are there for anyone extending the app.
+Copy fields feed the search fields: `text` (meaning, file name, folder, camera, city, region, country, tags),
+`file_name_text`, `folder_text`, `camera_text`, `place_text`, `custom_tags_text`. Two more serve typing:
+`suggest` (stored, multi-valued: tags, labels, camera make and model, city, region, province, country) is the
+suggester's dictionary, and `spell` (tags, labels, file name, camera, places) is the spellchecker's. Dynamic
+fields (`*_s`, `*_ss`, `*_i`, `*_l`, `*_f`, `*_b`, `*_dt`, `*_t`) are there for anyone extending the app.
+
+`*_hash` is a dynamic string field, indexed, not stored, with docValues: the duplicates view facets on it and
+nothing displays it. Schema version 1.6 still returns docValues fields to `fl=*`, so a document read back and
+written again (an edit) keeps its keys. The old `meaning_hash` field and the `text_photo` type are gone.
 
 ## Text analysis
 
-`text_photo`: standard tokenizer, stop words, lower case, ASCII folding, English possessives, protected
-words, KStem (so *dogs* matches *dog*). At query time a small synonym list adds *photo, picture, image,
-pic*, *sea, ocean* and a few more.
+Every text field (`meaning`, `text`, `custom_tags_text`, `place_text`, `file_name_text`, `folder_text`,
+`camera_text`, `spell` and the dynamic `*_t`) uses `text_general`:
+
+- `HTMLStripCharFilter`, `MappingCharFilter` (`mapping-ISOLatin1Accent.txt`);
+- `ICUTokenizer`;
+- `CJKWidth`, `EnglishPossessive`, `ASCIIFolding`, `StopFilter`, `WordDelimiterGraph` (with `FlattenGraph`
+  at index time), `LowerCase`, `Length` 1–500, `RemoveDuplicates`;
+- `SynonymGraph` at query time only (*photo, picture, image, pic*, *sea, ocean* and a few more).
+
+There is no stemming.
+
+`text_spell`, the analyzer of the suggester: `HTMLStrip`, `Mapping`, `ICUTokenizer`, `CJKWidth`,
+`EnglishPossessive`, `ASCIIFolding`, `FlattenGraph`, `LowerCase`, `Length`, `RemoveDuplicates`.
 
 ## Vector field
 
@@ -59,13 +74,14 @@ Vectors come from Opensolr's embedding service, the same one every Opensolr vect
 ## solrconfig.xml
 
 Deliberately small: `luceneMatchVersion` 9.0, classic schema (`schema.xml` is the schema), soft commit
-every 10 seconds, hard commit every 60, `/select` (JSON, 60 rows by default, spellcheck component attached
+every 10 seconds, hard commit every 60 without opening a searcher, `/select` (JSON, 60 rows by default, spellcheck component attached
 and off unless asked), `/suggest` (`AnalyzingInfixLookupFactory` over `suggest`, `buildOnCommit`) and
-`/update`.
+`/update`. `photos_ingest` posts its documents with `commitWithin=10000`, so search sees newly indexed
+photos within about 10 seconds, even while a large library is still syncing.
 
-`/opensolr-photos-config` answers `config_version`, the version of these files. When any of them changes,
-raise it together with `IndexManager.CONFIG_VERSION`: existing indexes are then rebuilt at their next sync,
-with the owner's consent, from the phone's cache ([sync](sync.md)). Remote
+`/opensolr-photos-config` answers `config_version`, the version of these files (currently 9). When any of
+them changes, raise it together with `IndexManager.CONFIG_VERSION`: existing indexes are then reset and
+fully re-synced at their next sync, with the owner's consent ([sync](sync.md#the-index)). Remote
 streaming and stream bodies are disabled. No `<lib>` directives, no script processors, no response writers
 that run templates.
 

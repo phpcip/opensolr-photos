@@ -8,9 +8,12 @@
 |---|---|
 | [How it works](how-it-works.md) | The whole picture: components, hosts, every call the app makes |
 | [Sign-in](sign-in.md) | OAuth 2.0 authorization code flow with PKCE, step by step |
-| [Sync and Re-Sync](sync.md) | The algorithm, photo ids, schedule, Force Re-Sync, index recreation |
-| [Search](search.md) | Query building, meaning and words, filters, facets, opening photos |
-| [Index schema](index-schema.md) | Every field of the index, the analyzer, the vector field |
+| [Sync and Re-Sync](sync.md) | The algorithm, photo ids, schedule, Force Re-Sync, index recreation and reset |
+| [Search](search.md) | The header, query building, grouping, filters, autocomplete, deleting, editing tags |
+| [Map](map.md) | Markers, groups, Search this area, what the map sends |
+| [Albums](albums.md) | The sections, the one facet request, covers and names |
+| [Duplicates](duplicates.md) | The 13 slider stops, the keys behind them, Select 1 of each duplicate |
+| [Index schema](index-schema.md) | Every field of the index, the analyzers, the vector field, the duplicate keys |
 | [Plan limits](plan-limits.md) | AI requests, disk space, bandwidth, indexes, and what happens at a limit |
 | [Privacy and security](privacy-and-security.md) | What is stored where, what travels, how it is protected |
 | [Project structure](project-structure.md) | A developer tour: every folder, every package, where to change what |

@@ -34,9 +34,11 @@ Account and index management:
 The AI endpoints:
 
 - `photos_ingest` takes up to five photos at once and indexes them completely on the server: EXIF from
-  the copy, the words CLIP sees (the same model and vocabulary as Opensolr's image search), the search
-  vector of those words, the place of the GPS position, your tags and words kept from the index, and
-  the write into your index. A tenth of an AI request per photo that needed the models. The copies are not stored.
+  the copy, the words CLIP sees (`openai/clip-vit-large-patch14` against a vocabulary of about 51,000
+  labels, with the ImageNet-21k and iNaturalist 2021 parts left out, a stoplist, and a small scene
+  vocabulary), the search vector of those words, the place of the GPS position, your tags and words kept
+  from the index, the [duplicate keys](duplicates.md) (from CLIP's labels and the EXIF, never from your
+  tags or wording), and the write into your index with `commitWithin=10000`. A tenth of an AI request per photo that needed the models. The copies are not stored.
 - `batch_embed` turns texts into search vectors; the app uses it only when you edit a photo's tags or
   words. `embed` turns a typed query into one.
 
@@ -79,10 +81,11 @@ reinstalled and differs on every other phone. So:
 | api.opensolr.com | `POST /solr_manager/api/photos_ingest` | Once per 5 new photos |
 | api.opensolr.com | `POST /solr_manager/api/batch_embed` | Once per round with edited photos |
 | api.opensolr.com | `POST /solr_manager/api/embed` | Once per typed search (vector search plans) |
-| your index | `POST /select` | Listing ids, searching (with spellcheck), map pins |
+| your index | `POST /select` | Listing ids, searching (with spellcheck), map pins, albums (one JSON facet), duplicates (one facet per slider stop), tag suggestions |
+| your index | `GET /opensolr-photos-config` | Every sync: the index's configuration version |
 | your index | `POST /suggest` | Autocomplete |
 | tile.openstreetmap.org | `GET` tiles | Only while the map is open |
-| your index | `POST /update` | Adding, deleting, committing |
+| your index | `POST /update` | Deleting, committing, saving an edit, emptying the index before a configuration reset |
 
 Credentials always travel in the request body, never in a URL.
 
@@ -95,7 +98,7 @@ Credentials always travel in the request body, never in a URL.
 | `index` | `IndexManager`: index name, find, create, upload config, refresh credentials |
 | `media` | `MediaScanner` (folders, photos, the id function), `PhotoReader` (EXIF, the 640 px copy) |
 | `net` | `OpensolrApi` (REST API), `SolrClient` (direct Solr), typed errors |
-| `search` | `SearchRepository`: query, filters, facets, suggest, spellcheck, map pins, parsing |
+| `search` | `SearchRepository`: query, filters, facets, suggest, spellcheck, map pins, albums, duplicates, tag suggestions, parsing; `EditRepository`: saving tags and words |
 | `ui/map` | `PhotoClusterOverlay`: grouping and drawing the markers on the osmdroid map |
 | `sync` | `SyncEngine` (the algorithm), `SyncWorker`, `SyncScheduler`, `Notifier` |
-| `ui` | Compose screens, `AppViewModel`, theme |
+| `ui` | Compose screens (photos, albums, map, sync, account, edit sheet), `AppViewModel`, theme |

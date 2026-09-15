@@ -1,0 +1,1 @@
+Typing in search no longer regroups the photos until you run the search. Albums show from a single photo, with their names capitalised. Tag suggestions close when you tap outside the field and come back when you tap it again.

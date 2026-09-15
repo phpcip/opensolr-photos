@@ -27,8 +27,12 @@ one per phone. No photo backup, no Google account, no ads, no analytics.
 |---|---|
 | **Search by meaning** | Every photo is read into words describing what it shows. On a plan with vector search, your query is matched on meaning too, so *puppy* finds the photos read as *dog*. |
 | **Filters** | Year, folder, camera make and model, city, region, country, orientation, a radius around a point, and photos with a location. The filter values come from your own photos. |
-| **Your own tags and words** | Press and hold a photo, edit its tags (a name, an event) and the words that describe it. Your words always win over what Opensolr saw, and they live in your index. |
-| **Autocomplete and spelling** | As you type, the words your photos were read into, the cameras and the places are offered; a misspelt search gets a *Did you mean*. |
+| **Best matches first** | A typed search splits its results into *Best matches* and *Also similar*; browsing without a query groups photos by date (Today, Yesterday, months). |
+| **Your own tags and words** | Press and hold a photo, edit its tags (a name, an event) and the words that describe it; your most used tags and words are suggested as you type. Your words always win over what Opensolr saw, and they live in your index. |
+| **Autocomplete and spelling** | As you type, your tags, the words your photos were read into, the cameras and the places are offered; a misspelt search gets a *Did you mean*. |
+| **Albums** | My tags, Things, Places, Cameras and Years, built from your index in one request, each album with a cover of its three newest photos. |
+| **Duplicates** | A slider from *Same first word* to *Same photo (EXIF)*, *Same file name* and *Same file size* groups alike photos; *Select 1 of each duplicate* ticks them for review, sharing or deleting. |
+| **Delete** | Delete selected photos from the phone and the index at once, after the app's own warning (and Android's, on Android 11 and newer). |
 | **A map** | Every photo with a GPS position, grouped into thumbnail markers on OpenStreetMap. Tap a group to see its photos, or *Search this area*. The place is written into the index in words (city, region, country). |
 | **Opens in your gallery** | Tap a result: it opens in Google Photos or your phone's gallery app. Press and hold for the details and the words Opensolr saw. |
 | **Keeps itself in step** | A sync runs on its own a minute after photos change in the folders you chose (a screenshot elsewhere costs nothing); a daily, weekly or monthly Re-Sync stands behind it, and Force Re-Sync is one tap away. New photos are added, edited photos are read again, deleted photos leave the index, and you can pick photos to have them read again. |
@@ -53,7 +57,8 @@ one per phone. No photo backup, no Google account, no ads, no analytics.
    tags and words already in the index, and writes the complete document into your index itself. The
    phone's part ends with the upload ([sync](docs/sync.md)).
 5. **Search** goes straight to the index through Opensolr's `{!hybrid}` parser: words and meaning
-   blended, filters, autocomplete, spelling, the map ([search](docs/search.md), [map](docs/map.md)).
+   blended, filters, autocomplete, spelling, the map, albums and duplicates ([search](docs/search.md),
+   [map](docs/map.md), [albums](docs/albums.md), [duplicates](docs/duplicates.md)).
 
 ## Requirements
 
@@ -106,9 +111,11 @@ Full account: [privacy and security](docs/privacy-and-security.md).
 | [How it works](docs/how-it-works.md) | The whole picture, component by component |
 | [Sign-in](docs/sign-in.md) | OAuth 2.0 with PKCE, step by step, and what is checked where |
 | [Sync and Re-Sync](docs/sync.md) | The algorithm, the ids, the schedule, index recreation, limits |
-| [Search](docs/search.md) | How a query is built, filters, facets, autocomplete, spelling, opening photos |
+| [Search](docs/search.md) | The header, how a query is built, grouping, filters, autocomplete, spelling, deleting, editing tags |
 | [Map](docs/map.md) | Markers, groups, Search this area, what the map sends |
-| [Index schema](docs/index-schema.md) | Every field, the analyzer, the vector field, the configset |
+| [Albums](docs/albums.md) | The sections, the one facet request, covers and names |
+| [Duplicates](docs/duplicates.md) | The 13 slider stops, the keys behind them, Select 1 of each duplicate |
+| [Index schema](docs/index-schema.md) | Every field, the analyzers, the vector field, the duplicate keys, the configset |
 | [Plan limits](docs/plan-limits.md) | What counts against your plan and what the app does at a limit |
 | [Privacy and security](docs/privacy-and-security.md) | Data flows, storage, network, threat model |
 | [Project structure](docs/project-structure.md) | A developer tour: every folder, every package, where to change what |
@@ -136,7 +143,7 @@ app/src/main/java/com/opensolr/photos/
   index/    finding, creating and setting up the phone's index
   media/    MediaStore scanning, EXIF, the 640 px copy
   net/      Opensolr REST API and direct Solr client
-  search/   query building and result parsing
+  search/   query building, albums, duplicates, tag edits and result parsing
   sync/     the sync engine, WorkManager worker, schedule, notifications
   ui/       Jetpack Compose screens and theme
 solr/conf/  schema.xml, solrconfig.xml and analyzer files uploaded to the index

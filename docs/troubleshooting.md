@@ -57,6 +57,11 @@ The index is over a limit of the plan and Opensolr closes it until it is back un
 The phone's index had disappeared from the account and was created again. It is refilled automatically,
 from the phone's cache, without using AI requests for photos read before.
 
+**"Your index will be reset."**
+This version of the app comes with a new index configuration. **Reset and re-sync** keeps your tags and
+words, empties the index, uploads the new configuration and syncs every photo again; search keeps working
+while the photos are added back. **Later** leaves the index as it is, but syncing waits until you agree.
+
 **Some photos are counted as skipped.**
 They could not be decoded on the phone or were refused by the reader (damaged files, unusual formats).
 They are tried again at every Re-Sync.
@@ -74,3 +79,14 @@ photos already indexed keep the details they were read with.
 
 **"This photo is no longer on your phone."**
 It was deleted or moved. The next Re-Sync removes it from the index.
+
+**Newly synced photos do not show up yet.**
+The index makes new photos searchable within about 10 seconds. Pull down on the grid to reload.
+
+**"No duplicates of this kind in your index."**
+No two photos share the key of this slider stop. Move the slider to a looser stop, such as *Same first
+word*. See [duplicates](duplicates.md).
+
+**Finding duplicates asks for an index reset.**
+The duplicate keys come with the newest index configuration. Approve *Reset and re-sync* on the photos
+screen.

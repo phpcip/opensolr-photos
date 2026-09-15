@@ -148,8 +148,10 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     // back newest first, so the cut is the day or the month: "Today", "Yesterday", "September".
     // On a typed search the order is the score - Fresh only boosts it - so the cut is the biggest
     // drop in score, where the vector's near misses begin.
-    val rows = remember(state.hits, state.query, state.duplicateGroups) {
-        buildRows(state.hits, byDate = state.query.isBlank(), groups = state.duplicateGroups)
+    // Grouped by the search that produced the hits, not by the text being typed: typing alone
+    // never regroups the grid; Enter (a new search) does.
+    val rows = remember(state.hits, state.searchedQuery, state.duplicateGroups) {
+        buildRows(state.hits, byDate = state.searchedQuery.isBlank(), groups = state.duplicateGroups)
     }
     // The search box is out of the way until asked for: the magnifier in the header opens it.
     // Active filters keep it on screen, so the filters button next to it stays reachable.
@@ -430,10 +432,11 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 }
             }
         }
-        // While the index is rebuilt for a newer configuration, search is unavailable.
+        // While the index is rebuilt for a newer configuration: search keeps working and finds
+        // the photos as they are written back (soft commit every 10 s).
         if (state.sync.running && state.sync.phase in REBUILD_PHASES) {
             Notice(
-                "Search is unavailable while your index is rebuilt" +
+                "Your photos are being added back; search finds them as they arrive" +
                     (if (state.sync.total > 0) ": ${Actions.formatCount(state.sync.done.toLong())} of ${Actions.formatCount(state.sync.total.toLong())} photos written." else "."),
                 title = "Rebuilding your index",
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),

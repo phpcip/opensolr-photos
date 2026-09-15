@@ -28,6 +28,9 @@ There is one algorithm. A **first Sync** and a **Re-Sync** only differ in what t
      complete document and writes it into your index. A photo the allowance cannot cover is indexed
      without words and read again at a later sync.
 
+The server also writes each photo's duplicate keys ([duplicates](duplicates.md)). Its documents are posted
+with `commitWithin=10000`, so photos become searchable within about 10 seconds while the sync goes on.
+
 Then a hard commit, and the plan usage is refreshed.
 
 <p align="center">
@@ -56,11 +59,13 @@ Consequences worth knowing:
 - **Found** in the account: its address and password are read and the configuration version the index
   reports (`GET /opensolr-photos-config`, `config_version` in `solrconfig.xml`) is compared with
   `IndexManager.CONFIG_VERSION`. Equal: Re-Sync. Older: the sync stops with `rebuild_required` and the app
-  asks the owner (*Your index must be rebuilt*, Rebuild now / Later); once approved
-  (`AppPrefs.rebuildApproved`) the next sync copies every document of the index into the cache, uploads the
-  configuration, empties the index (`delete *:*`) and writes every photo again from the cache: no CLIP, a
-  vector only where the cache had none. Newer: `update_app`, the index is left alone. Raise both version
-  numbers whenever anything in `solr/conf` changes.
+  asks the owner first (*Your index will be reset*, Reset and re-sync / Later). Once approved
+  (`AppPrefs.rebuildApproved`), the next sync, in this order: keeps the owner's tags and wording found only
+  in the index as local edits, empties the index (`delete *:*`), only **then** uploads the new
+  configuration, and re-syncs every photo through `photos_ingest`. Search keeps working while the photos
+  are added back. With more than 500 photos and no charger, it waits for the charger before anything is
+  emptied. Newer: `update_app`, the index is left alone. Raise both version numbers whenever anything in
+  `solr/conf` changes.
 - **Not found, this phone never had one, and the account holds photo indexes of other phones:**
   `Outcome.NEEDS_CHOICE`. The app asks *which one of these is your device?* with the phones' names
   (`device_name` from `get_index_list`, sent at `create_index` as maker + model + the phone's own name);

@@ -45,8 +45,10 @@ The APK is in `app/build/outputs/apk/release/app-release.apk`, shrunk with R8 an
 ## The Solr configuration
 
 `solr/conf` is zipped into the APK's assets by the `solrConfigZip` Gradle task on every build, as
-`opensolr-photos-conf.zip`. Change the schema there; the app uploads it to any index that does not yet
-carry it.
+`opensolr-photos-conf.zip`. Change the schema there, and raise `config_version` in `solrconfig.xml`
+together with `IndexManager.CONFIG_VERSION` (both 9 now): a new index gets the configuration at creation,
+and an existing one on an older version is reset and fully re-synced, with the owner's consent
+([sync](sync.md#the-index)).
 
 ## Dependencies
 

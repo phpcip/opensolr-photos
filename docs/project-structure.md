@@ -21,7 +21,7 @@ Opensolr Photos is a single Android app written in **Kotlin**, with its screens 
 | `app/src/main/AndroidManifest.xml` | Permissions, the two activities (the app, and the sign-in callback with its App Link), and the foreground service type for sync. |
 | `app/src/main/java/com/opensolr/photos/` | All Kotlin code, one folder per responsibility (section 03). |
 | `app/src/main/res/` | Resources: strings, colours, launcher and notification icons, the bundled Space Grotesk font, and two XML files that switch off cleartext traffic and backups. |
-| `solr/conf/` | The configuration uploaded to every phone's index: `schema.xml`, `solrconfig.xml`, stop words, synonyms, protected words. |
+| `solr/conf/` | The configuration uploaded to every phone's index: `schema.xml`, `solrconfig.xml`, stop words, synonyms, protected words, the accent mapping. |
 | `docs/` | The Markdown documentation shown on GitHub, and `docs/images/` with every diagram as an SVG file. |
 | `gradle/libs.versions.toml` | The one place every library and plugin version is written. |
 | `build.gradle.kts`, `settings.gradle.kts`, `gradle.properties`, `gradlew` | The Gradle project around the app module, and the wrapper that downloads the right Gradle version. |
@@ -44,7 +44,8 @@ Everything below lives under `app/src/main/java/com/opensolr/photos/`. The packa
 
 - `Http.kt` — the one shared HTTP client, with its timeouts and no redirects.
 - `OpensolrApi.kt` — one function per Opensolr call: token exchange, index list, create, config upload, connection details, account summary, `image_index`, `batch_embed`, `embed`. It also turns the platform's refusals into typed errors.
-- `SolrClient.kt` — talks straight to the phone's index: search, list every id, add, delete, commit, check the schema.
+- `SolrClient.kt` — talks straight to the phone's index: search, list every id, add, delete, empty, commit, check the schema and its configuration version, autocomplete, duplicate groups.
+- `UpdateCheck.kt` — once a day, compares the app with the latest release on GitHub.
 - `Errors.kt` — the exceptions, named after what the app has to do about them (sign in again, quota used up, plan limit, rate limited, photo rejected...).
 
 ### `media/` — photos on the phone
@@ -67,16 +68,19 @@ Everything below lives under `app/src/main/java/com/opensolr/photos/`. The packa
 - `SyncWorker.kt` — runs the engine as a background job with a progress notification, and makes sure only one runs at a time.
 - `SyncScheduler.kt` — starts a sync now, sets the weekly or monthly schedule, and exposes the live status the screens show.
 - `Notifier.kt` — every notification the app posts.
+- `PlanWatch.kt` — the warnings at 90% and at a plan limit, each posted once.
 
 ### `search/` — finding photos
 
-- `SearchRepository.kt` — builds the Solr request from the text and the filters (words, meaning, facets) and parses the answer into results.
+- `SearchRepository.kt` — builds the Solr request from the text and the filters (words, meaning, facets) and parses the answer into results; also the albums facet, the duplicate groups, autocomplete and the tag suggestions of the edit sheet.
+- `EditRepository.kt` — saves a photo's tags and words: local edits, the document read back, a new vector, the write.
 
 ### `ui/` — the screens
 
 - `AppViewModel.kt` — the brain of the interface: one `UiState` value holding everything the screens draw, and one function per thing the user can do (sign in, save folders, search, force a re-sync, sign out...).
 - `AppRoot.kt` — picks which screen to draw from `UiState.screen`.
-- `screens/` — the screens: sign-in, welcome, permissions, folders and setup in `OnboardingScreens.kt`; `SearchScreen.kt` with the filter and details sheets; `SyncScreen.kt`; `AccountScreen.kt`.
+- `screens/` — the screens: sign-in, welcome, permissions, folders and setup in `OnboardingScreens.kt`; `SearchScreen.kt` with the header, the filter and details sheets, the duplicates view and the selection bar; `EditSheet.kt`; `AlbumsScreen.kt`; `MapScreen.kt`; `SyncScreen.kt`; `AccountScreen.kt`.
+- `map/PhotoClusterOverlay.kt` — groups the map's photos into thumbnail markers.
 - `Components.kt` — the shared building blocks: buttons, notices, labelled rows, usage bars, headers.
 - `Actions.kt` — things handed to other apps (open a photo, a map, a web page) and the date and number formats.
 - `theme/Theme.kt` — colours, typography and shapes, light and dark.
@@ -115,6 +119,8 @@ Everything below lives under `app/src/main/java/com/opensolr/photos/`. The packa
 |---|---|
 | Store a new piece of photo information | `solr/conf/schema.xml` (the field), `SyncEngine.buildDocument()` (fill it), usually `PhotoReader` (read it); document it in `docs/`. Existing indexes pick up the new schema only if `IndexManager` detects it is missing, so change its schema check too. |
 | Add a filter | `SearchFilters` and `SearchRepository` (the `fq` and the facet), then the filter sheet in `SearchScreen.kt`. |
+| Add an album section | `SearchRepository.albums()` (one more facet in the JSON facet request), then `AlbumsScreen.kt`. |
+| Add a duplicates stop | The key on the server, a `*_hash` field name in `SearchRepository`'s duplicate fields, and the slider in `SearchScreen.kt`. |
 | Change how search ranks | The `lex` and `vec` parameters in `SearchRepository`. |
 | Add a screen | A new value in `Screen`, a composable in `ui/screens/`, a branch in `AppRoot.kt`, and the actions in `AppViewModel`. |
 | Remember a new setting | A property in `AppPrefs`, its default in `UiState`, and the control on the screen. |
