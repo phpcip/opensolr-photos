@@ -389,8 +389,9 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 }
             }
             // Reloads the results from the index, for photos a sync added in the meantime.
-            // Reload keeps the view: duplicates stay duplicates, on the same slider stop.
-            IconButton(onClick = { viewModel.refresh() }, enabled = !state.searching, modifier = Modifier.size(32.dp)) {
+            // Reload keeps the view: duplicates stay duplicates, on the same slider stop. Pressed
+            // on purpose, so held answers go and the index itself is asked.
+            IconButton(onClick = { viewModel.forceRefresh() }, enabled = !state.searching, modifier = Modifier.size(32.dp)) {
                 Icon(painterResource(R.drawable.ic_reload), contentDescription = "Reload", tint = p.accent, modifier = Modifier.size(20.dp))
             }
         }
@@ -466,13 +467,14 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             EmptyResults(state)
         }
 
-        // Swipe down on the grid reloads the results, like the reload icon.
+        // Swipe down on the grid reloads the results, like the reload icon. Asked for by hand,
+        // so it goes to the index and drops what the phone was holding.
         var pulled by remember { mutableStateOf(false) }
         LaunchedEffect(state.searching) { if (!state.searching) pulled = false }
         val pullState = rememberPullToRefreshState()
         PullToRefreshBox(
             isRefreshing = pulled && state.searching,
-            onRefresh = { pulled = true; viewModel.refresh() },
+            onRefresh = { pulled = true; viewModel.forceRefresh() },
             state = pullState,
             modifier = Modifier.fillMaxSize(),
             indicator = {

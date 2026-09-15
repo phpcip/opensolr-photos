@@ -1,0 +1,1 @@
+Answers from your index are now kept on the phone and reused, so asking the same thing twice does not spend your plan's search bandwidth twice. You choose how many seconds an answer may be reused, and you can clear what is held, both in the account screen. Your own tags, deleted photos and every finished sync clear it straight away, and swiping down always asks the index itself.

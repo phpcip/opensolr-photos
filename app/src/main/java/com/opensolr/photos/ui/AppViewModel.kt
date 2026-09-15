@@ -118,6 +118,10 @@ data class UiState(
     val updateChecking: Boolean = false,
     /** What that check answered, so the account screen says something even when nothing is new. */
     val updateResult: String? = null,
+    /** How long an answer from the index may be reused, in seconds; the owner sets it in Me. */
+    val cacheSeconds: Int = com.opensolr.photos.data.SearchCache.DEFAULT_SECONDS,
+    /** How many answers are held right now, shown beside the button that clears them. */
+    val cachedCount: Int = 0,
     /** Photo indexes of other phones, offered when this phone has none: "which one is your device?" */
     val deviceChoices: List<AccountIndex> = emptyList(),
     /** The albums screen: its sections, whether they are loading, and why they failed. */
@@ -209,6 +213,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * Reads what the cache holds right now into the state, for the account screen.
+     */
+    fun refreshCacheInfo() {
+        viewModelScope.launch {
+            val held = withContext(Dispatchers.IO) { searches.cachedCount() }
+            _state.update { it.copy(cacheSeconds = prefs.cacheSeconds, cachedCount = held) }
+        }
+    }
+
+    /**
+     * The owner sets how long an answer from the index may be reused. Never below a minute;
+     * [AppPrefs.cacheSeconds] keeps it inside what the cache allows.
+     */
+    fun setCacheSeconds(seconds: Int) {
+        prefs.cacheSeconds = seconds
+        _state.update { it.copy(cacheSeconds = prefs.cacheSeconds) }
+    }
+
+    /**
+     * "Clear cache": throws away every answer held on this phone. Nothing leaves the phone and
+     * no one else is affected; the next search asks the index again.
+     */
+    fun clearSearchCache() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { searches.clearCache() }
+            _state.update { it.copy(cachedCount = 0) }
+        }
+    }
+
     /** "Not now" on the update notice: hides it until a newer version than this one appears. */
     fun dismissUpdate() {
         prefs.updateDismissed = _state.value.update?.version
@@ -261,6 +295,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val doc = edits.save(hit.id, tags, meaning)
+                // The index just changed: no cached answer may outlive the owner's own edit.
+                searches.clearCache()
                 val updated = hit.copy(
                     meaning = doc.optString("meaning"),
                     customTags = doc.optJSONArray("custom_tags")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList(),
@@ -560,12 +596,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * Opens the albums screen and loads the albums, one request to the index, every time it
-     * opens: a sync may have added photos since.
+     * opens: a sync may have added photos since. [force] is the swipe-down gesture: the owner
+     * is asking the index itself, so whatever is held for it is dropped first.
      */
-    fun openAlbums() {
+    fun openAlbums(force: Boolean = false) {
         _state.update { it.copy(screen = Screen.Albums, albumsLoading = true, albumsError = null) }
         viewModelScope.launch {
             try {
+                if (force) withContext(Dispatchers.IO) { searches.clearCache() }
                 val sections = searches.albums()
                 _state.update { it.copy(albums = sections, albumsLoading = false) }
             } catch (e: kotlinx.coroutines.CancellationException) {
@@ -671,6 +709,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val connection = prefs.connection ?: return@launch
                 com.opensolr.photos.net.SolrClient(connection).deleteAll()
+                // Nothing cached describes the index any more: it is empty.
+                searches.clearCache()
             } catch (e: Exception) {
                 _state.update { it.copy(notice = "The index could not be emptied: ${e.message ?: "try again"}") }
                 return@launch
@@ -791,6 +831,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (_state.value.duplicatesMode) loadDuplicates(debounceMs = 0) else search(reset = true)
     }
 
+    /**
+     * Swipe down on the grid: the owner is asking the index itself, not the phone, so every
+     * held answer goes before the results are loaded again.
+     */
+    fun forceRefresh() {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { searches.clearCache() }
+            _state.update { it.copy(cachedCount = 0) }
+            refresh()
+        }
+    }
+
     /** Back to the ordinary results after looking at duplicates. */
     private fun clearDuplicates() {
         if (!_state.value.duplicatesMode) return
@@ -847,6 +899,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 // The next sync notices the photos are gone and deletes them anyway.
             }
+            // Deleted photos must not come back from a cached answer.
+            searches.clearCache()
             // The index has changed: reload what is on screen from it (duplicates stay duplicates).
             if (_state.value.screen == Screen.Search) refresh()
         }
@@ -952,6 +1006,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * sign-in that stopped working.
      */
     private fun onSyncFinished() {
+        // A sync adds, replaces or deletes documents, so every held answer is out of date.
+        searches.clearCache()
         val report = prefs.lastReport
         _state.update { it.copy(lastReport = report, account = prefs.account, planWarnings = prefs.account?.let { a -> PlanWatch.evaluate(a) } ?: emptyList(), indexName = prefs.connection?.indexName, environment = prefs.connection?.environment) }
         if (report?.status == "sign_in_required") {

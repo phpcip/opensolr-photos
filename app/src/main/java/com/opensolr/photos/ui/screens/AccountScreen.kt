@@ -1,6 +1,8 @@
 package com.opensolr.photos.ui.screens
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -8,19 +10,24 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.opensolr.photos.BuildConfig
+import com.opensolr.photos.data.SearchCache
 import com.opensolr.photos.ui.AccentButton
 import com.opensolr.photos.ui.Actions
 import com.opensolr.photos.ui.AppViewModel
@@ -42,6 +49,9 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
     val context = LocalContext.current
     var confirmSignOut by remember { mutableStateOf(false) }
     val account = state.account
+
+    // What the cache holds right now, read when the screen opens.
+    LaunchedEffect(Unit) { viewModel.refreshCacheInfo() }
 
     Column(
         Modifier
@@ -124,6 +134,43 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
         }
         Spacer(Modifier.height(10.dp))
         GhostButton(if (state.accountRefreshing) "Refreshing…" else "Refresh", onClick = { viewModel.refreshAccount() }, enabled = !state.accountRefreshing, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(28.dp))
+
+        // How long an answer from the index may be reused, and a way to throw them all away.
+        SectionLabel("Search cache")
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "Answers from your index are kept on this phone and reused, so asking the same thing twice does not spend your plan's search bandwidth twice. " +
+                "Your own tags, deleted photos and every finished sync empty it straight away, whatever the number below says.",
+            style = MaterialTheme.typography.bodyMedium, color = p.muted,
+        )
+        Spacer(Modifier.height(14.dp))
+        // Reset whenever the stored value changes, so the field always shows what is in force.
+        var seconds by remember(state.cacheSeconds) { mutableStateOf(state.cacheSeconds.toString()) }
+        OutlinedTextField(
+            value = seconds,
+            onValueChange = { typed -> seconds = typed.filter { it.isDigit() }.take(6) },
+            label = { Text("Reuse an answer for this many seconds") },
+            supportingText = { Text("At least ${SearchCache.MIN_SECONDS} seconds, at most a day. In force: ${state.cacheSeconds} seconds.") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(12.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            GhostButton(
+                "Save",
+                onClick = { viewModel.setCacheSeconds(seconds.toIntOrNull() ?: SearchCache.DEFAULT_SECONDS) },
+                enabled = seconds.toIntOrNull()?.let { it != state.cacheSeconds } ?: false,
+                modifier = Modifier.weight(1f),
+            )
+            GhostButton(
+                if (state.cachedCount > 0) "Clear cache (${state.cachedCount})" else "Clear cache",
+                onClick = { viewModel.clearSearchCache() },
+                enabled = state.cachedCount > 0,
+                modifier = Modifier.weight(1f),
+            )
+        }
         Spacer(Modifier.height(28.dp))
 
         SectionLabel("Advanced")

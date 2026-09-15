@@ -180,6 +180,18 @@ class AppPrefs(context: Context) {
         }
 
     /**
+     * How long an answer from the index may be reused before it is asked for again, in seconds.
+     * Kept between [SearchCache.MIN_SECONDS] and [SearchCache.MAX_SECONDS]: under a minute a
+     * cache saves nothing worth having, and beyond a day it is no longer a cache.
+     */
+    var cacheSeconds: Int
+        get() = prefs.getInt(KEY_CACHE_SECONDS, SearchCache.DEFAULT_SECONDS)
+            .coerceIn(SearchCache.MIN_SECONDS, SearchCache.MAX_SECONDS)
+        set(value) {
+            prefs.edit().putInt(KEY_CACHE_SECONDS, value.coerceIn(SearchCache.MIN_SECONDS, SearchCache.MAX_SECONDS)).apply()
+        }
+
+    /**
      * A message for the next screen the user sees (sign-in needed, sign-in cancelled...).
      */
     var pendingNotice: String?
@@ -253,6 +265,7 @@ class AppPrefs(context: Context) {
         private const val KEY_UPDATE_CHECKED = "update_checked_at"
         private const val KEY_WATCH_SYNC = "watch_sync_at"
         private const val KEY_UPDATE_DISMISSED = "update_dismissed"
+        private const val KEY_CACHE_SECONDS = "cache_seconds"
         private const val KEY_AUTH_VERIFIER = "auth_verifier"
         private const val KEY_AUTH_STATE = "auth_state"
         private const val KEY_AUTH_STARTED = "auth_started"

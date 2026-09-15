@@ -2,6 +2,8 @@ package com.opensolr.photos.search
 
 import android.content.Context
 import com.opensolr.photos.data.AppPrefs
+import com.opensolr.photos.data.IndexConnection
+import com.opensolr.photos.data.SearchCache
 import com.opensolr.photos.index.IndexManager
 import com.opensolr.photos.net.OpensolrApi
 import com.opensolr.photos.net.QuotaExceededException
@@ -9,6 +11,7 @@ import com.opensolr.photos.net.ServiceException
 import com.opensolr.photos.net.SolrAuthException
 import com.opensolr.photos.net.SolrClient
 import com.opensolr.photos.net.VectorNotAllowedException
+import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
 
@@ -169,6 +172,23 @@ class SearchRepository(private val context: Context) {
     private val api = OpensolrApi()
 
     /**
+     * Answers this phone already paid for. Only the reads below go through it; writing,
+     * deleting and the sync's walk over the index never do.
+     */
+    private val cache = SearchCache(context)
+
+    /**
+     * Forgets every cached answer. Called by the button in the account screen and by anything
+     * in the app that changes the index, so what the owner just did is never missing.
+     */
+    fun clearCache() = cache.clear()
+
+    /**
+     * How many answers are cached right now, for the account screen.
+     */
+    fun cachedCount(): Int = cache.count()
+
+    /**
      * Runs a search. [start] is the offset of the first result.
      */
     suspend fun search(query: String, filters: SearchFilters, start: Int, rows: Int = PAGE, freshBias: Boolean = false): SearchPage =
@@ -259,9 +279,9 @@ class SearchRepository(private val context: Context) {
         val field = DUPLICATE_FIELDS[level.coerceIn(0, DUPLICATE_FIELDS.size - 1)]
         val groups = try {
             try {
-                SolrClient(connection).duplicateGroups(field)
+                cachedDuplicateGroups(connection, field)
             } catch (e: SolrAuthException) {
-                SolrClient(IndexManager(context, prefs, api).refreshConnection(session)).duplicateGroups(field)
+                cachedDuplicateGroups(IndexManager(context, prefs, api).refreshConnection(session), field)
             }
         } catch (e: ServiceException) {
             // An index whose rebuild was postponed has no duplicate keys yet.
@@ -389,8 +409,16 @@ class SearchRepository(private val context: Context) {
         val text = prefix.trim().take(100)
         if (text.length < 2) return emptyList()
         val connection = prefs.connection ?: return emptyList()
+        // Autocomplete asks for the same prefixes over and over; a held answer saves the request.
+        val key = SearchCache.key(connection.indexName, "/suggest", listOf("suggest.q" to text.lowercase(Locale.ROOT)))
+        cache.get(key, prefs.cacheSeconds)?.let { stored ->
+            runCatching {
+                val array = JSONArray(stored)
+                (0 until array.length()).map { array.getString(it) }
+            }.getOrNull()?.let { return it }
+        }
         return try {
-            SolrClient(connection).suggest(text)
+            SolrClient(connection).suggest(text).also { cache.put(key, JSONArray(it).toString()) }
         } catch (e: ServiceException) {
             emptyList()
         }
@@ -424,11 +452,39 @@ class SearchRepository(private val context: Context) {
     private suspend fun select(params: List<Pair<String, String>>): JSONObject {
         val session = prefs.session ?: throw ServiceException("Sign in to search")
         val connection = prefs.connection ?: throw ServiceException("Your index is not set up yet. Open Sync and start a sync.")
-        return try {
+        // The same question asked again inside the owner's chosen seconds costs no bandwidth.
+        val key = SearchCache.key(connection.indexName, "/select", params)
+        val ttl = prefs.cacheSeconds
+        cache.get(key, ttl)?.let { stored ->
+            runCatching { JSONObject(stored) }.getOrNull()?.let { return it }
+        }
+        val json = try {
             SolrClient(connection).select(params)
         } catch (e: SolrAuthException) {
             SolrClient(IndexManager(context, prefs, api).refreshConnection(session)).select(params)
         }
+        cache.put(key, json.toString())
+        return json
+    }
+
+    /**
+     * The duplicate groups of [field], from the cache when a recent answer is held: the slider
+     * walks back and forth over the same few kinds, and each walk is otherwise a full request.
+     */
+    private suspend fun cachedDuplicateGroups(connection: IndexConnection, field: String): List<List<String>> {
+        val key = SearchCache.key(connection.indexName, "/duplicates", listOf("field" to field))
+        cache.get(key, prefs.cacheSeconds)?.let { stored ->
+            runCatching {
+                val outer = JSONArray(stored)
+                (0 until outer.length()).map { i ->
+                    val inner = outer.getJSONArray(i)
+                    (0 until inner.length()).map { k -> inner.getString(k) }
+                }
+            }.getOrNull()?.let { return it }
+        }
+        val groups = SolrClient(connection).duplicateGroups(field)
+        cache.put(key, JSONArray(groups.map { JSONArray(it) }).toString())
+        return groups
     }
 
     /**

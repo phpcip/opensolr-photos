@@ -85,7 +85,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
         val pullState = rememberPullToRefreshState()
         PullToRefreshBox(
             isRefreshing = pulled && state.albumsLoading,
-            onRefresh = { pulled = true; viewModel.openAlbums() },
+            onRefresh = { pulled = true; viewModel.openAlbums(force = true) },
             state = pullState,
             modifier = Modifier.fillMaxSize(),
             indicator = {
