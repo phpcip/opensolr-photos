@@ -1,0 +1,1 @@
+The sync compares the phone with the index by photo id and file size: a changed photo is read again from scratch, a deleted one leaves the index, an unchanged one is not touched. Nothing is pulled from the index any more, and a reinstall changes nothing.

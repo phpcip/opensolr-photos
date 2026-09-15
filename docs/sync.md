@@ -11,25 +11,22 @@ There is one algorithm. A **first Sync** and a **Re-Sync** only differ in what t
 1. **Make sure the index is there** ([below](#the-index)).
 2. **Scan the chosen folders** through MediaStore. MediaStore already leaves out files still being
    written and files in the trash.
-3. **Download every id the index holds**: `q=*:*`, `fl=id`, `sort=id asc`, `rows=1000`, `start` advancing
-   by 1000 until a page comes back shorter than 1000. The sort keeps consecutive pages lined up.
+3. **Download the index's side of the diff**: every id it holds with the file size it was indexed with
+   (`q=*:*`, `fl=id,size_bytes`, `sort=id asc`, `rows=1000`, `start` advancing by 1000). Nothing else is
+   ever pulled from the index.
 4. **Delete** every id that is in the index but not on the phone, 500 per request.
-5. **Add** every photo that is on the phone but not in the index, plus every photo that must be written
-   again — edited in place (same id, different size or modification time than the cache holds), chosen for
-   *Re-sync selected*, or carrying a position without place words yet — 20 per round:
-   - make the 640 px copy carrying the original's EXIF, and take your tags and words for the photo
+5. **Hand to Opensolr** every photo that is on the phone but not in the index, every photo whose file size
+   differs from the index's (a changed photo is read again from scratch, whatever the index still holds
+   about it), and every photo chosen for *Re-sync selected*, indexed without words while the plan had no
+   AI, or carrying a position without place words yet. Five per call:
+   - make the 640 px copy carrying the original's EXIF, and add your tags and words for the photo
      from the phone's edits when there are any;
-   - one `photos_ingest` call per 5 copies: the server reads the EXIF, asks CLIP and the embedder, finds
-     the place, keeps the tags and words already in the index, builds the complete document and writes
-     it into your index. A photo the allowance cannot cover is indexed without words and read again at
-     a later sync;
-   - one `batch_embed` call for photos whose tags or words you edited (their vector is made from your
-     words);
-   - one `POST /update` with the round's documents (`commitWithin=10000`, so they appear in search within
-     ten seconds while the rest continue).
+   - one `photos_ingest` call: the server reads the EXIF, asks CLIP and the embedder, finds the place,
+     keeps the tags and words already in the index for photos the phone did not speak for, builds the
+     complete document and writes it into your index. A photo the allowance cannot cover is indexed
+     without words and read again at a later sync.
 
-Then a hard commit, the cache forgets photos that are no longer on the phone, and the plan usage is
-refreshed.
+Then a hard commit, and the plan usage is refreshed.
 
 <p align="center">
   <img src="images/resync-diff.svg" alt="Re-Sync compares the ids on the phone with the ids in the index" width="100%">
@@ -81,18 +78,10 @@ sync simply tries again.
 
 ## The cache
 
-Reading a photo and embedding its words both count against the plan. The phone keeps, per photo, the
-document that was written and its vector (SQLite, `photo_cache.db`), keyed by id and valid while the file's
-size and modification time are unchanged. The same database holds the owner's `edits` (tags and wording)
-and the `places` already looked up.
-
-**The cache is rebuilt from the index.** At every sync, each photo the index knows and the cache does not
-(a reinstall, a lost cache) is copied back from the index (`SolrClient.allDocs`, all stored fields, no
-vector) when its `modified_at` and `size_bytes` still match the file; otherwise the photo is read again. A
-reinstall therefore never costs a CLIP request, and the owner's tags come back with the documents.
-
-So when an index is emptied, deleted or recreated, **the next sync refills it from the cache without a
-single AI request**. Only photos the phone has never read cost anything.
+The phone keeps only what the index cannot: your `edits` (tags and wording per photo, written the moment
+you save them) in SQLite, `photo_cache.db`. Nothing about the photos themselves is cached and nothing is
+pulled from the index. A reinstall therefore changes nothing: an unchanged photo is in the index and is not
+touched, a changed one is read again. Reading a photo again is free when Opensolr's caches have seen it.
 
 ## When syncs run
 

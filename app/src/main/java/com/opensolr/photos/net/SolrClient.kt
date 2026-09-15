@@ -63,6 +63,36 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
     }
 
     /**
+     * Every photo in the index with the file size it was indexed with: id to size_bytes, in
+     * pages. The sync's diff is made from this and the phone's files alone: a photo whose
+     * size differs from the index's is a changed photo, read again from scratch.
+     */
+    suspend fun allSizes(pageSize: Int = 1000, onPage: suspend (Int) -> Unit = {}): Map<String, Long> {
+        val out = HashMap<String, Long>()
+        var start = 0
+        while (true) {
+            val json = select(
+                listOf(
+                    "q" to "*:*",
+                    "fl" to "id,size_bytes",
+                    "sort" to "id asc",
+                    "start" to start.toString(),
+                    "rows" to pageSize.toString(),
+                )
+            )
+            val docs = json.getJSONObject("response").getJSONArray("docs")
+            for (i in 0 until docs.length()) {
+                val d = docs.getJSONObject(i)
+                d.optString("id").takeIf { it.isNotEmpty() }?.let { out[it] = d.optLong("size_bytes", -1L) }
+            }
+            onPage(out.size)
+            if (docs.length() < pageSize) break
+            start += pageSize
+        }
+        return out
+    }
+
+    /**
      * Number of documents in the index.
      */
     suspend fun count(): Long =

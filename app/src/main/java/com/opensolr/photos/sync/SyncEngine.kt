@@ -110,16 +110,16 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             localCount = local.size
 
             onProgress(Progress("Comparing with your index", 0, 0))
-            var remote = withFreshPassword(session, { connection = it; solr = SolrClient(it) }) {
-                solr.allIds { onProgress(Progress("Comparing with your index", it, 0)) }
+            // The index's side of the diff: every photo it holds, with the file size it had.
+            var sizes = withFreshPassword(session, { connection = it; solr = SolrClient(it) }) {
+                solr.allSizes { onProgress(Progress("Comparing with your index", it, 0)) }
             }
+            var remote: Set<String> = sizes.keys
             indexCount = remote.size
 
-            // What the cache holds, once: every comparison below is done from memory. Nothing
-            // is pulled from the index: the documents live there, the phone keeps only the
-            // facts it needs to tell a changed file from an unchanged one.
-            val stamps = cache.allStamps()
-            val changedSinceIndexed = emptySet<String>()
+            // A photo in both places with a different size is a changed photo: it goes through
+            // everything again, as if new, whatever the index still holds about it.
+            val changed = local.values.filter { p -> sizes[p.id].let { it != null && it != p.sizeBytes } }.map { it.id }.toHashSet()
 
             if (rebuild) {
                 // New configuration in, every document out, every photo handed to Opensolr
@@ -129,6 +129,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                 indexes.applyConfig(session, connection) { onProgress(Progress("Rebuilding your index", 0, 0)) }
                 solr.deleteAll()
                 remote = emptySet()
+                sizes = emptyMap()
             }
 
             val toDelete = remote - local.keys
@@ -161,13 +162,13 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             // the same id, but a different size or time): both go through CLIP again.
             val forced = prefs.resyncIds
             val toAdd = if (rebuild) local.values.toList() else local.values.filter {
-                it.id !in remote || it.id in withoutPlace || it.id in forced || it.id in needWords || it.id in changedSinceIndexed || stamps[it.id].let { st -> st != null && (st.sizeBytes != it.sizeBytes || st.modified != it.modifiedSec) }
+                it.id !in remote || it.id in changed || it.id in withoutPlace || it.id in forced || it.id in needWords
             }
             val phase = if (rebuild) "Rebuilding your index" else "Indexing photos"
             // Photos this run will ask CLIP about: not known to the cache as current, or asked
             // to be read again. When the month's allowance covers fewer than that, say so once:
             // the rest stays without words until the allowance resets.
-            val toRead = if (!aiAvailable) 0 else toAdd.count { it.id in forced || it.id in needWords || stamps[it.id].let { st -> st == null || st.sizeBytes != it.sizeBytes || st.modified != it.modifiedSec } }
+            val toRead = if (!aiAvailable) 0 else toAdd.count { it.id !in remote || it.id in changed || it.id in forced || it.id in needWords }
             if (aiAvailable && limits != null) {
                 val left = limits.photosLeftThisMonth
                 if (left != null && left < toRead) shortAllowance = warnShortAllowance(left, toRead)
@@ -219,9 +220,6 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                         } else {
                             added++
                             if (!result.words) withoutWords++
-                            // Known from now on, with the file as it is: only a photo with its
-                            // words is "learned"; one without is offered again once the plan allows.
-                            if (result.words) cache.put(item.photo.id, item.photo.sizeBytes, item.photo.modifiedSec, "{}", null)
                         }
                     }
                 }
