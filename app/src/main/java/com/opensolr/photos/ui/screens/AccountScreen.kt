@@ -20,6 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import com.opensolr.photos.BuildConfig
 import com.opensolr.photos.ui.AccentButton
 import com.opensolr.photos.ui.Actions
 import com.opensolr.photos.ui.AppViewModel
@@ -55,6 +56,24 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
         account?.let { InfoRow("Plan", it.planLabel, onOpen = { Actions.openUrl(context, Actions.DASHBOARD_URL) }) }
         state.indexName?.let { InfoRow("This phone's index", it) }
         state.environment?.takeIf { it.isNotBlank() }?.let { InfoRow("Environment", it) }
+        // The installed version, and a check that does not wait for the once-a-day one.
+        InfoRow("App version", BuildConfig.VERSION_NAME)
+        Spacer(Modifier.height(10.dp))
+        GhostButton(
+            if (state.updateChecking) "Checking…" else "Check for updates",
+            onClick = { viewModel.checkForUpdateNow() },
+            enabled = !state.updateChecking,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        state.updateResult?.let { result ->
+            Spacer(Modifier.height(12.dp))
+            Notice(result, title = if (state.update != null) "Update available" else "Version")
+            // A newer release leads to its page; the install stays the user's and Android's.
+            state.update?.let { newer ->
+                Spacer(Modifier.height(10.dp))
+                AccentButton("Download ${newer.version}", onClick = { Actions.openUrl(context, newer.pageUrl) }, modifier = Modifier.fillMaxWidth())
+            }
+        }
         Spacer(Modifier.height(24.dp))
 
         if (account != null) {

@@ -114,6 +114,10 @@ data class UiState(
     val planWarnings: List<PlanWatch.Warning> = emptyList(),
     /** A newer release on GitHub, when the daily check found one and it was not dismissed. */
     val update: UpdateCheck.Update? = null,
+    /** True while "Check for updates" on the account screen is asking GitHub. */
+    val updateChecking: Boolean = false,
+    /** What that check answered, so the account screen says something even when nothing is new. */
+    val updateResult: String? = null,
     /** Photo indexes of other phones, offered when this phone has none: "which one is your device?" */
     val deviceChoices: List<AccountIndex> = emptyList(),
     /** The albums screen: its sections, whether they are loading, and why they failed. */
@@ -172,10 +176,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private fun checkForUpdate() {
         if (System.currentTimeMillis() - prefs.updateCheckedAt < UPDATE_CHECK_INTERVAL_MS) return
         viewModelScope.launch {
-            val update = UpdateCheck.latest() ?: return@launch
+            val update = UpdateCheck.check().getOrNull() ?: return@launch
+            // Stamped only when GitHub actually answered: a failed check is retried, not skipped
+            // for a whole day.
             prefs.updateCheckedAt = System.currentTimeMillis()
             if (prefs.updateDismissed == update.version) return@launch
             _state.update { it.copy(update = update) }
+        }
+    }
+
+    /**
+     * "Check for updates" on the account screen: asks GitHub straight away, ignoring both the
+     * once-a-day gate and an earlier "Not now", and always says what came back.
+     */
+    fun checkForUpdateNow() {
+        if (_state.value.updateChecking) return
+        _state.update { it.copy(updateChecking = true, updateResult = null) }
+        viewModelScope.launch {
+            val outcome = UpdateCheck.check()
+            prefs.updateCheckedAt = System.currentTimeMillis()
+            val update = outcome.getOrNull()
+            _state.update {
+                when {
+                    // The check itself failed: say so, never claim the app is up to date.
+                    outcome.isFailure -> it.copy(updateChecking = false, updateResult = "The check could not reach GitHub. Try again in a moment.")
+                    update == null -> it.copy(updateChecking = false, updateResult = "You are on the latest version.")
+                    else -> it.copy(updateChecking = false, update = update, updateResult = "Version ${update.version} is available.")
+                }
+            }
+            // Asked for on purpose, so a version hidden with "Not now" is offered again.
+            if (update != null) prefs.updateDismissed = null
         }
     }
 

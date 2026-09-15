@@ -1,0 +1,1 @@
+The account screen now shows the version you are running and checks for a newer one the moment you ask, instead of waiting for the daily check. A check that cannot reach GitHub says so, rather than claiming you are up to date.
