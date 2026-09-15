@@ -21,8 +21,8 @@ android {
         applicationId = "com.opensolr.photos"
         minSdk = 26
         targetSdk = 36
-        versionCode = 15
-        versionName = "1.7.1"
+        versionCode = 16
+        versionName = "1.7.2"
     }
 
     signingConfigs {
@@ -41,6 +41,13 @@ android {
                 enableV4Signing = true
             }
         }
+    }
+
+    // No Google "dependency info" block in the APK: it is encrypted for Google alone, so nobody
+    // else can verify what it says. IzzyOnDroid and F-Droid refuse APKs that carry it.
+    dependenciesInfo {
+        includeInApk = false
+        includeInBundle = false
     }
 
     buildTypes {

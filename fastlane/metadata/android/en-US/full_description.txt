@@ -1,9 +1,11 @@
 Opensolr Photos turns the photo folders on your phone into a search engine. Type "dog on the beach", "birthday cake" or "snow in the mountains" and the matching photos come up. Tap one and it opens in Google Photos or your phone's own gallery.
 
-How it works
+<b>How it works</b>
+
 Pick the folders you want. Every photo is read into words describing what it shows, the camera data is kept (date, camera make and model, GPS turned into a city, region and country), and everything is written into a search index in your own Opensolr account, one index per phone. New photos are picked up on their own a minute after they land on the phone.
 
-What you get
+<b>What you get</b>
+
 - Search by meaning: "puppy" also finds the photos read as "dog"
 - Autocomplete and "Did you mean", built from your own photos
 - Filters: year, folder, camera make and model, city, region, country, orientation, photos with a location, a radius around a point
@@ -12,13 +14,16 @@ What you get
 - Automatic sync when your photos change, plus a daily, weekly or monthly safety net
 - Photo details: when, which camera, where, and the words the photo was read into
 
-Your data
-The originals never leave the phone. A 640 px copy of each photo is sent once to be read, without EXIF, and it is not stored. No photo backup, no Google account, no ads, no analytics. The index lives in your Opensolr account: you can see it, download it or empty it from the Opensolr control panel. The map uses OpenStreetMap tiles, requested only while the map is open.
+<b>Your data</b>
 
-Requirements
-Android 8.0 or newer and an Opensolr account (https://opensolr.com/register, a free plan exists). Each new photo uses two AI requests of the plan, photos already indexed never cost anything again. Search by meaning needs a plan with vector search; on the other plans photos are still found by the words they were read into.
+The originals never leave the phone. A 640 px copy of each new photo is sent once, with its EXIF, to be read; it is processed in memory and not stored. No photo backup, no Google account, no ads, no analytics. The index lives in your Opensolr account: you can see it, download it or empty it from the Opensolr control panel. The map uses OpenStreetMap tiles, requested only while the map is open.
 
-Battery settings
+<b>Requirements</b>
+
+Android 8.0 or newer and an Opensolr account (https://opensolr.com/register, a free plan exists). Ten new photos use one AI request of the plan; photos already indexed never cost anything again. Search by meaning needs a plan with vector search; on the other plans photos are still found by their date, camera, place, file name and your tags.
+
+<b>Battery settings</b>
+
 On Xiaomi, Redmi, POCO, Huawei, OnePlus, Oppo and Vivo phones, set the app's battery to "No restrictions" so the sync can run in the background. Without it the sync only advances while the app is open. It resumes where it stopped, nothing is lost.
 
 Open source under the MIT license: https://github.com/phpcip/opensolr-photos
