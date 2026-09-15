@@ -1,0 +1,1 @@
+The comparison with the index is streamed: each page of the index is compared as it arrives, and deletions and re-reads start while the next page downloads. Memory no longer grows with the index.

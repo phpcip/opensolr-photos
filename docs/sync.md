@@ -11,9 +11,11 @@ There is one algorithm. A **first Sync** and a **Re-Sync** only differ in what t
 1. **Make sure the index is there** ([below](#the-index)).
 2. **Scan the chosen folders** through MediaStore. MediaStore already leaves out files still being
    written and files in the trash.
-3. **Download the index's side of the diff**: every id it holds with the file size it was indexed with
-   (`q=*:*`, `fl=id,size_bytes`, `sort=id asc`, `rows=1000`, `start` advancing by 1000). Nothing else is
-   ever pulled from the index.
+3. **Walk the index's side of the diff**: every id it holds with the file size it was indexed with
+   (`q=*:*`, `fl=id,size_bytes`, `sort=id asc`, `rows=1000`, `cursorMark` paging). Each page is compared
+   with the phone's files as it arrives, and its deletions and re-reads are handled while the next page
+   downloads; what the phone has and the index does not is known once the last page has been seen.
+   The whole index is never held in memory, and nothing else is ever pulled from it.
 4. **Delete** every id that is in the index but not on the phone, 500 per request.
 5. **Hand to Opensolr** every photo that is on the phone but not in the index, every photo whose file size
    differs from the index's (a changed photo is read again from scratch, whatever the index still holds

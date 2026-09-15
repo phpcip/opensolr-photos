@@ -25,6 +25,9 @@ import com.opensolr.photos.net.SolrClient
 import com.opensolr.photos.ui.Actions
 import com.opensolr.photos.net.VectorNotAllowedException
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import org.json.JSONArray
 import org.json.JSONObject
@@ -71,6 +74,9 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
     /** The warning of this run that the month's allowance covers fewer photos than there are to read, if any. */
     private var shortAllowance = ""
 
+    /** Thrown before anything is changed when reading [photos] photos should wait for the charger. */
+    private class ChargerNeededException(val photos: Int) : Exception()
+
     /**
      * Runs one sync and returns what happened. Never throws except for cancellation.
      */
@@ -109,17 +115,15 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             val local = MediaScanner.scan(context, prefs.folders)
             localCount = local.size
 
-            onProgress(Progress("Comparing with your index", 0, 0))
-            // The index's side of the diff: every photo it holds, with the file size it had.
-            var sizes = withFreshPassword(session, { connection = it; solr = SolrClient(it) }) {
-                solr.allSizes { onProgress(Progress("Comparing with your index", it, 0)) }
-            }
-            var remote: Set<String> = sizes.keys
-            indexCount = remote.size
-
-            // A photo in both places with a different size is a changed photo: it goes through
-            // everything again, as if new, whatever the index still holds about it.
-            val changed = local.values.filter { p -> sizes[p.id].let { it != null && it != p.sizeBytes } }.map { it.id }.toHashSet()
+            // The plan as it is now, not as it was at the last look: an upgrade since then
+            // (vector search, a new AI allowance) takes effect in this very run.
+            refreshAccount(session, connection)
+            val limits = prefs.account
+            var vectorAllowed = limits?.vectorAllowed ?: false
+            // Without vector search on the plan, or with the month's AI requests used up, photos
+            // are indexed by what the phone knows and found by those words; nothing is read.
+            val aiAvailable = vectorAllowed && (limits == null || limits.maxAiRequests <= 0 || limits.aiRequestsUsed < limits.maxAiRequests)
+            if (!aiAvailable) quotaHit = true
 
             if (rebuild) {
                 // New configuration in, every document out, every photo handed to Opensolr
@@ -128,64 +132,23 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                 onProgress(Progress("Rebuilding your index", 0, 0))
                 indexes.applyConfig(session, connection) { onProgress(Progress("Rebuilding your index", 0, 0)) }
                 solr.deleteAll()
-                remote = emptySet()
-                sizes = emptyMap()
             }
 
-            val toDelete = remote - local.keys
-            if (toDelete.isNotEmpty()) {
-                onProgress(Progress("Removing deleted photos", 0, toDelete.size))
-                toDelete.chunked(500).forEach { batch ->
-                    solr.delete(batch)
-                    deleted += batch.size
-                    onProgress(Progress("Removing deleted photos", deleted, toDelete.size))
-                }
-            }
-
-            // Photos whose place lookup did not succeed last time are written again (from the
-            // cache, so without AI requests) so the place words get another chance.
-            val withoutPlace = if (rebuild) emptySet() else withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { solr.idsWithoutPlace() }
-            // The plan as it is now, not as it was at the last look: an upgrade since then
-            // (vector search, a new AI allowance) takes effect in this very run.
-            refreshAccount(session, connection)
-            val limits = prefs.account
-            var vectorAllowed = limits?.vectorAllowed ?: false
-            // Without vector search on the plan, photos are not read into words either: they
-            // are indexed by what the phone knows and found by those words. Same when the
-            // month's AI requests are already used up. Nothing is decoded or asked for then.
-            val aiAvailable = vectorAllowed && (limits == null || limits.maxAiRequests <= 0 || limits.aiRequestsUsed < limits.maxAiRequests)
-            if (!aiAvailable) quotaHit = true
-            // Photos indexed without their words (no AI at the time) are read by CLIP now, and
-            // only now: when the plan allows it. Otherwise they stay as they are, untouched.
-            val needWords = if (rebuild || !aiAvailable) emptySet() else solr.idsWithoutWords()
-            // Photos the user asked to read again, and photos edited in place (same path, so
-            // the same id, but a different size or time): both go through CLIP again.
+            // Photos that go through everything again whatever their size says: those the owner
+            // picked for Re-sync, those indexed without words while the plan had no AI (only now
+            // that it has), and those with a position whose place lookup failed.
             val forced = prefs.resyncIds
-            val toAdd = if (rebuild) local.values.toList() else local.values.filter {
-                it.id !in remote || it.id in changed || it.id in withoutPlace || it.id in forced || it.id in needWords
-            }
+            val needWords = if (rebuild || !aiAvailable) emptySet() else solr.idsWithoutWords()
+            val withoutPlace = if (rebuild) emptySet() else withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { solr.idsWithoutPlace() }
             val phase = if (rebuild) "Rebuilding your index" else "Indexing photos"
-            // Photos this run will ask CLIP about: not known to the cache as current, or asked
-            // to be read again. When the month's allowance covers fewer than that, say so once:
-            // the rest stays without words until the allowance resets.
-            val toRead = if (!aiAvailable) 0 else toAdd.count { it.id !in remote || it.id in changed || it.id in forced || it.id in needWords }
-            if (aiAvailable && limits != null) {
-                val left = limits.photosLeftThisMonth
-                if (left != null && left < toRead) shortAllowance = warnShortAllowance(left, toRead)
-            }
-            // Reading thousands of photos takes hours of background work: on battery, that
-            // waits for the charger. The run that follows carries the charger tag and reads
-            // everything; small runs are never held back.
-            if (!unlimited && toRead > CHARGER_THRESHOLD && !isCharging()) {
-                return report("waiting_charger", 0, deleted, 0, localCount, indexCount,
-                    "${Actions.formatCount(toRead.toLong())} photos are waiting to be read. That takes a while, so it runs when the phone is charging.", recreated)
-            }
-            onProgress(Progress(phase, 0, toAdd.size))
 
             // Each photo goes to Opensolr once, five per call, with its EXIF and the owner's
             // edits when this phone has them. The server does the rest (words, vector, place,
             // the document, the index write) and answers what each photo got.
-            for (batch in toAdd.chunked(READ_BATCH)) {
+            val sent = HashSet<String>()
+            val pending = ArrayList<LocalPhoto>(READ_BATCH)
+            var total = 0
+            suspend fun ingest(batch: List<LocalPhoto>) {
                 val items = ArrayList<IngestItem>(batch.size)
                 for (photo in batch) {
                     val jpeg = try {
@@ -206,24 +169,113 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                     } catch (e: PhotoRejectedException) {
                         // The whole batch refused: counted as failed, tried again next time.
                         failed += items.size
-                        onProgress(Progress(phase, added + failed, toAdd.size))
-                        continue
+                        null
                     } catch (e: ServiceException) {
                         failed += items.size
-                        onProgress(Progress(phase, added + failed, toAdd.size))
-                        continue
+                        null
                     }
-                    items.forEachIndexed { k, item ->
-                        val result = results.getOrNull(k)
-                        if (result == null) {
-                            failed++
-                        } else {
-                            added++
-                            if (!result.words) withoutWords++
+                    results?.let { r ->
+                        items.forEachIndexed { k, item ->
+                            val result = r.getOrNull(k)
+                            if (result == null) {
+                                failed++
+                            } else {
+                                added++
+                                if (!result.words) withoutWords++
+                            }
                         }
                     }
                 }
-                onProgress(Progress(phase, added + failed, toAdd.size))
+                onProgress(Progress(phase, added + failed, total))
+            }
+            suspend fun queue(photo: LocalPhoto) {
+                if (!sent.add(photo.id)) return
+                total++
+                pending += photo
+                if (pending.size >= READ_BATCH) {
+                    val batch = pending.toList()
+                    pending.clear()
+                    ingest(batch)
+                }
+            }
+
+            // The diff, page by page: each page of (id, size) the index holds is compared with the
+            // phone's files as it arrives, and its deletions and changed photos are handled while
+            // the next page downloads. What the phone has and the index does not is known only
+            // once every page has been seen: the ids left unticked.
+            val unseen = HashSet(local.keys)
+            val toDelete = ArrayList<String>(500)
+            var pages = 0
+            if (!rebuild) {
+                onProgress(Progress("Comparing with your index", 0, 0))
+                // The pages download in their own coroutine, two ahead at most, while this one
+                // compares and acts on the page in hand: the download and the work overlap.
+                withFreshPassword(session, { connection = it; solr = SolrClient(it) }) {
+                    coroutineScope {
+                    val pageChannel = Channel<Pair<Long, List<Pair<String, Long>>>>(capacity = 2)
+                    launch {
+                        try {
+                            solr.forEachSizePage { numFound, page -> pageChannel.send(numFound to page) }
+                            pageChannel.close()
+                        } catch (e: Throwable) {
+                            pageChannel.close(e)
+                        }
+                    }
+                    for ((numFound, page) in pageChannel) {
+                        if (pages == 0) {
+                            indexCount = numFound.toInt()
+                            // Photos the index cannot hold yet, plus those to be read again: the
+                            // least this run reads. When the month's allowance covers fewer, say
+                            // so once; when there are too many to read on battery, wait for the
+                            // charger before touching anything.
+                            val atLeast = (local.size - indexCount).coerceAtLeast(0) + forced.size + needWords.size
+                            if (aiAvailable && limits != null) {
+                                val left = limits.photosLeftThisMonth
+                                if (left != null && left < atLeast) shortAllowance = warnShortAllowance(left, atLeast)
+                            }
+                            if (!unlimited && atLeast > CHARGER_THRESHOLD && !isCharging()) {
+                                throw ChargerNeededException(atLeast)
+                            }
+                        }
+                        pages++
+                        for ((id, size) in page) {
+                            val photo = local[id]
+                            if (photo == null) {
+                                toDelete += id
+                                if (toDelete.size >= 500) {
+                                    solr.delete(toDelete)
+                                    deleted += toDelete.size
+                                    toDelete.clear()
+                                }
+                            } else {
+                                unseen.remove(id)
+                                // A different size is a changed photo: everything again, as if new.
+                                if (size != photo.sizeBytes || id in forced || id in needWords || id in withoutPlace) queue(photo)
+                            }
+                        }
+                        onProgress(Progress(if (total > 0) phase else "Comparing with your index", added + failed, total))
+                    }
+                    }
+                }
+                if (toDelete.isNotEmpty()) {
+                    solr.delete(toDelete)
+                    deleted += toDelete.size
+                    toDelete.clear()
+                }
+            } else {
+                indexCount = 0
+            }
+
+            // New on the phone (or everything, on a rebuild).
+            val newOnes = local.values.filter { it.id in unseen }
+            if (rebuild && !unlimited && newOnes.size > CHARGER_THRESHOLD && !isCharging()) {
+                throw ChargerNeededException(newOnes.size)
+            }
+            for (photo in newOnes) queue(photo)
+            if (pending.isNotEmpty()) {
+                val batch = pending.toList()
+                pending.clear()
+                ingest(batch)
             }
 
             solr.commit()
@@ -246,6 +298,9 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             return report("ok", added, deleted, failed, localCount, indexCount, message, recreated, indexAfter)
         } catch (e: CancellationException) {
             throw e
+        } catch (e: ChargerNeededException) {
+            return report("waiting_charger", 0, deleted, 0, localCount, indexCount,
+                "${Actions.formatCount(e.photos.toLong())} photos are waiting to be read. That takes a while, so it runs when the phone is charging.", recreated)
         } catch (e: RetryLaterException) {
             commitQuietly()
             return report("retry_later", added, deleted, failed, localCount, indexCount, e.message ?: "", recreated)

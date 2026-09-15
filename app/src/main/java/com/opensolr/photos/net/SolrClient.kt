@@ -63,33 +63,35 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
     }
 
     /**
-     * Every photo in the index with the file size it was indexed with: id to size_bytes, in
-     * pages. The sync's diff is made from this and the phone's files alone: a photo whose
-     * size differs from the index's is a changed photo, read again from scratch.
+     * Walks every photo in the index, [pageSize] at a time, handing each page of (id, size_bytes
+     * it was indexed with) to [onPage] together with the index's total. Cursor paging, so a deep
+     * page costs the same as the first; the pages arrive in id order. The caller compares each
+     * page with the phone's files as it comes, so the whole index is never held in memory.
      */
-    suspend fun allSizes(pageSize: Int = 1000, onPage: suspend (Int) -> Unit = {}): Map<String, Long> {
-        val out = HashMap<String, Long>()
-        var start = 0
+    suspend fun forEachSizePage(pageSize: Int = 1000, onPage: suspend (total: Long, page: List<Pair<String, Long>>) -> Unit) {
+        var cursor = "*"
         while (true) {
             val json = select(
                 listOf(
                     "q" to "*:*",
                     "fl" to "id,size_bytes",
                     "sort" to "id asc",
-                    "start" to start.toString(),
                     "rows" to pageSize.toString(),
+                    "cursorMark" to cursor,
                 )
             )
-            val docs = json.getJSONObject("response").getJSONArray("docs")
+            val response = json.getJSONObject("response")
+            val docs = response.getJSONArray("docs")
+            val page = ArrayList<Pair<String, Long>>(docs.length())
             for (i in 0 until docs.length()) {
                 val d = docs.getJSONObject(i)
-                d.optString("id").takeIf { it.isNotEmpty() }?.let { out[it] = d.optLong("size_bytes", -1L) }
+                d.optString("id").takeIf { it.isNotEmpty() }?.let { page += it to d.optLong("size_bytes", -1L) }
             }
-            onPage(out.size)
-            if (docs.length() < pageSize) break
-            start += pageSize
+            onPage(response.optLong("numFound"), page)
+            val next = json.optString("nextCursorMark")
+            if (docs.length() < pageSize || next.isEmpty() || next == cursor) break
+            cursor = next
         }
-        return out
     }
 
     /**
