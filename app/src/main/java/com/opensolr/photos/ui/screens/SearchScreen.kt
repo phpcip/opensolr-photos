@@ -31,6 +31,7 @@ import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -49,8 +50,6 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
@@ -69,6 +68,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -118,6 +120,11 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     var details by remember { mutableStateOf<PhotoHit?>(null) }
     var editing by remember { mutableStateOf<PhotoHit?>(null) }
     val gridState = rememberLazyGridState()
+    // The search box is out of the way until asked for: the magnifier in the header opens it.
+    // Active filters keep it on screen, so the filters button next to it stays reachable.
+    var searchOpen by remember { mutableStateOf(false) }
+    val searchBarVisible = searchOpen || state.filters.count > 0
+    val searchFocus = remember { FocusRequester() }
 
     val nearEnd by remember {
         derivedStateOf {
@@ -142,6 +149,18 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 if (state.selecting) "${state.selectedIds.size} selected" else "Photos",
                 style = MaterialTheme.typography.headlineMedium, color = p.ink, modifier = Modifier.weight(1f),
             )
+            // Search lives here as a single icon; tapping again puts it away and clears the query.
+            IconButton(onClick = {
+                if (searchOpen) {
+                    searchOpen = false
+                    keyboard?.hide()
+                    if (state.query.isNotBlank()) { viewModel.onQueryChange(""); viewModel.search(reset = true) }
+                } else {
+                    searchOpen = true
+                }
+            }) {
+                Icon(Icons.Filled.Search, contentDescription = if (searchOpen) "Close search" else "Search", tint = if (searchOpen) p.accent else p.ink)
+            }
             // Selection: tap photos, then re-sync them (read again by CLIP).
             IconButton(onClick = { viewModel.setSelecting(!state.selecting) }) {
                 Icon(
@@ -159,44 +178,79 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             }
         }
 
-        OutlinedTextField(
-            value = state.query,
-            onValueChange = { viewModel.onQueryChange(it) },
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 8.dp)
-                .onPreviewKeyEvent { event ->
-                    // A hardware Enter is consumed here so that its key-up never reaches the
-                    // next focusable control (it used to "click" the Sync button).
-                    if (event.key != Key.Enter && event.key != Key.NumPadEnter) return@onPreviewKeyEvent false
-                    if (event.type == KeyEventType.KeyUp) { keyboard?.hide(); viewModel.search(reset = true) }
-                    true
-                },
-            placeholder = { Text("Search your photos", color = p.muted) },
-            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null, tint = p.muted) },
-            trailingIcon = {
+        // One compact line: the query on the left, the filters button on the right, like a
+        // search widget. Opened from the header, it takes the keyboard straight away.
+        if (searchBarVisible) {
+            LaunchedEffect(searchOpen) { if (searchOpen) searchFocus.requestFocus() }
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp)
+                    .height(36.dp)
+                    .clip(Corner)
+                    .background(p.paper)
+                    .border(1.dp, p.hairline, Corner)
+                    .padding(start = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Search, contentDescription = null, tint = p.muted, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.size(8.dp))
+                BasicTextField(
+                    value = state.query,
+                    onValueChange = { viewModel.onQueryChange(it) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .focusRequester(searchFocus)
+                        .onPreviewKeyEvent { event ->
+                            // A hardware Enter is consumed here so that its key-up never reaches the
+                            // next focusable control (it used to "click" the Sync button).
+                            if (event.key != Key.Enter && event.key != Key.NumPadEnter) return@onPreviewKeyEvent false
+                            if (event.type == KeyEventType.KeyUp) { keyboard?.hide(); viewModel.search(reset = true) }
+                            true
+                        },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(color = p.ink),
+                    cursorBrush = SolidColor(p.accent),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = { keyboard?.hide(); viewModel.search(reset = true) }),
+                    decorationBox = { field ->
+                        if (state.query.isEmpty()) {
+                            Text("Search your photos", style = MaterialTheme.typography.bodyMedium, color = p.muted, maxLines = 1)
+                        }
+                        field()
+                    },
+                )
                 if (state.query.isNotEmpty()) {
-                    IconButton(onClick = { viewModel.onQueryChange(""); viewModel.search(reset = true) }) {
-                        Icon(Icons.Filled.Clear, contentDescription = "Clear", tint = p.muted)
+                    Icon(
+                        Icons.Filled.Clear, contentDescription = "Clear", tint = p.muted,
+                        modifier = Modifier
+                            .size(28.dp)
+                            .combinedClickableCompat { viewModel.onQueryChange(""); viewModel.search(reset = true) }
+                            .padding(6.dp),
+                    )
+                }
+                // Filters sit on the same line, as a divider plus an icon rather than a button.
+                Box(Modifier.size(width = 1.dp, height = 20.dp).background(p.hairline))
+                Row(
+                    Modifier
+                        .combinedClickableCompat { showFilters = true }
+                        .padding(horizontal = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.List, contentDescription = "Filters",
+                        tint = if (state.filters.count > 0) p.accent else p.muted, modifier = Modifier.size(18.dp),
+                    )
+                    if (state.filters.count > 0) {
+                        Spacer(Modifier.size(4.dp))
+                        Text("${state.filters.count}", style = MaterialTheme.typography.labelSmall, color = p.accent)
                     }
                 }
-            },
-            singleLine = true,
-            shape = Corner,
-            textStyle = MaterialTheme.typography.bodyLarge,
-            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-            keyboardActions = KeyboardActions(onSearch = { keyboard?.hide(); viewModel.search(reset = true) }),
-            colors = OutlinedTextFieldDefaults.colors(
-                focusedBorderColor = p.accent,
-                unfocusedBorderColor = p.hairline,
-                cursorColor = p.accent,
-                focusedTextColor = p.ink,
-                unfocusedTextColor = p.ink,
-            ),
-        )
+            }
+        }
 
         // Autocomplete: labels containing what was typed, shown under the search box.
-        if (state.suggestions.isNotEmpty() && state.query.isNotBlank()) {
+        if (searchBarVisible && state.suggestions.isNotEmpty() && state.query.isNotBlank()) {
             Column(
                 Modifier
                     .fillMaxWidth()
@@ -222,13 +276,14 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             Spacer(Modifier.height(8.dp))
         }
 
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            FilterButton(count = state.filters.count, onClick = { showFilters = true })
-            ActiveFilterChips(state.filters, onRemove = { viewModel.setFilters(it) }, modifier = Modifier.weight(1f))
+        // What is filtered right now, removable; the button itself moved into the search line.
+        if (state.filters.count > 0) {
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                ActiveFilterChips(state.filters, onRemove = { viewModel.setFilters(it) }, modifier = Modifier.weight(1f))
+            }
         }
 
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -399,26 +454,6 @@ private fun SyncIndicator(running: Boolean, onClick: () -> Unit) {
             tint = if (running) p.accent else p.ink,
             modifier = if (running) Modifier.rotate(angle) else Modifier,
         )
-    }
-}
-
-/**
- * The "Filters" button with the number of active filters.
- */
-@Composable
-private fun FilterButton(count: Int, onClick: () -> Unit) {
-    val p = LocalPalette.current
-    Row(
-        Modifier
-            .clip(Corner)
-            .border(1.dp, if (count > 0) p.accent else p.ink, Corner)
-            .combinedClickableCompat(onClick)
-            .padding(horizontal = 12.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.AutoMirrored.Filled.List, contentDescription = null, tint = if (count > 0) p.accent else p.ink, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.size(6.dp))
-        Text(if (count > 0) "Filters · $count" else "Filters", style = MaterialTheme.typography.labelLarge, color = if (count > 0) p.accent else p.ink)
     }
 }
 

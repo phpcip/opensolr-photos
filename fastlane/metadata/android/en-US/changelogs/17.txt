@@ -1,0 +1,1 @@
+Search is a magnifier in the header now. Tapping it opens one compact line with the filters button on it, so the photos start right under the title.

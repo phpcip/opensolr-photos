@@ -6,6 +6,10 @@
 
 Search goes straight from the app to the phone's index, in one `POST /select`.
 
+The search box is not on screen until it is asked for: the magnifier in the header opens one compact
+line with the filters button on it, and tapping the magnifier again puts it away and clears the query.
+Active filters keep the line on screen, with their chips under it.
+
 ## Empty search box
 
 Every photo, newest first: `q=*:*`, `sort=taken_at desc, id asc`.
