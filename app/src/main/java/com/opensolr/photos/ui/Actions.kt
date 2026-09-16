@@ -182,6 +182,33 @@ object Actions {
     }
 
     /**
+     * True when [millis] falls in the stretch [dateHeading] already names by the day itself -
+     * Today, Yesterday, or a weekday in the last six days. Those headings are days, so they get
+     * no days of their own underneath.
+     */
+    fun isRecentDay(millis: Long): Boolean {
+        val startOfToday = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        return millis >= startOfToday || (startOfToday - millis) / 86_400_000L < 6
+    }
+
+    /**
+     * The day a photo belongs to, as a key that never changes wording: 2025-09-16. The heading
+     * on screen is [dayHeading]; this is what the folded/selected state is kept by, because a
+     * key built from the words on screen breaks the moment the words change.
+     */
+    fun dayKey(millis: Long): String =
+        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(millis)
+
+    /**
+     * A day inside a month: "Tuesday 16". The month is already written above it, so it is not
+     * repeated here.
+     */
+    fun dayHeading(millis: Long): String =
+        SimpleDateFormat("EEEE d", Locale.US).format(millis)
+
+    /**
      * 12,345
      */
     fun formatCount(value: Long): String = NumberFormat.getIntegerInstance(Locale.US).format(value)

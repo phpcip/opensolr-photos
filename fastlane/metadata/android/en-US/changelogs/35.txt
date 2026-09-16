@@ -1,0 +1,3 @@
+A month of photos is no longer one endless run of thumbnails: inside every month the photos are now grouped by day, so "Saturday 5" has its own heading you can fold away or tick to take the whole day at once. Headings are bigger and bolder, which also makes them easier to hit.
+
+Filters gained a date range. The list of years stays, because it tells you which years you actually have photos in, and under it you can now pick any two days in a calendar: "that week in July" is finally one filter rather than a whole year to scroll through.

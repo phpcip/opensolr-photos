@@ -65,7 +65,11 @@ import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DatePickerDefaults
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -120,6 +124,7 @@ import com.opensolr.photos.R
 import com.opensolr.photos.search.FacetValue
 import com.opensolr.photos.search.NearFilter
 import com.opensolr.photos.search.PhotoHit
+import com.opensolr.photos.search.DateRange
 import com.opensolr.photos.search.SearchFilters
 import com.opensolr.photos.ui.AccentButton
 import com.opensolr.photos.ui.Actions
@@ -592,17 +597,30 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                         },
                                         onLongClick = { viewModel.toggleSelectedGroup(row.ids) },
                                     )
-                                    .padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 6.dp),
+                                    // Big enough to aim a thumb at: a heading is the tick that
+                                    // takes the whole group and the fold (Cip, 2026-09-16).
+                                    .padding(
+                                        start = if (row.level > 0) 34.dp else 18.dp,
+                                        end = 18.dp,
+                                        top = if (row.level > 0) 14.dp else 22.dp,
+                                        bottom = if (row.level > 0) 8.dp else 10.dp,
+                                    ),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Icon(
                                     if (row.collapsed) Icons.Filled.KeyboardArrowRight else Icons.Filled.KeyboardArrowDown,
                                     contentDescription = if (row.collapsed) "Open this group" else "Fold this group away",
-                                    tint = p.muted,
-                                    modifier = Modifier.size(18.dp),
+                                    tint = if (row.level > 0) p.muted else p.ink,
+                                    modifier = Modifier.size(if (row.level > 0) 20.dp else 26.dp),
                                 )
-                                Spacer(Modifier.width(4.dp))
-                                Text(row.text, style = MaterialTheme.typography.labelLarge, color = p.ink, modifier = Modifier.weight(1f))
+                                Spacer(Modifier.width(if (row.level > 0) 6.dp else 8.dp))
+                                Text(
+                                    row.text,
+                                    style = if (row.level > 0) MaterialTheme.typography.titleMedium else MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = p.ink,
+                                    modifier = Modifier.weight(1f),
+                                )
                                 if (state.selecting) {
                                     Box(
                                         Modifier
@@ -892,6 +910,11 @@ private sealed interface GridRow {
          * toggled a different name, and the group could never be opened again (Cip, 2026-09-16).
          */
         val name: String = text,
+        /**
+         * 0 for a month, 1 for a day inside it. Only the size and the indent of the heading
+         * change with it; everything else (folding, the tick that takes the group) is the same.
+         */
+        val level: Int = 0,
     ) : GridRow {
         override val key: String get() = "h:$name"
     }
@@ -919,16 +942,18 @@ private fun buildRows(
 
     // One group: its heading, then its photos - unless it is folded away, in which case the
     // heading stands alone and says how many are under it (Cip, 2026-09-16).
-    fun MutableList<GridRow>.addGroup(name: String, photos: List<PhotoHit>) {
+    fun MutableList<GridRow>.addGroup(name: String, photos: List<PhotoHit>, text: String = name, level: Int = 0): Boolean {
         val folded = "h:$name" in collapsed
         // The name is what the group is, and never changes; the text is only what it says now.
         this += GridRow.Heading(
-            text = if (folded) "$name · ${photos.size}" else name,
+            text = if (folded) "$text · ${photos.size}" else text,
             ids = photos.map { it.id },
             collapsed = folded,
             name = name,
+            level = level,
         )
         if (!folded) photos.forEach { this += GridRow.Photo(it) }
+        return folded
     }
 
     if (groups.isNotEmpty()) {
@@ -950,6 +975,9 @@ private fun buildRows(
         rows.addGroup("Also similar", hits.drop(cut))
         return rows
     }
+    // Two levels: the month, and the days inside it. A month of holiday photos used to be one
+    // unbroken run of hundreds of thumbnails with nothing to aim a tap at (Cip, 2026-09-16).
+    // Today / Yesterday / a weekday in the last six days are already days, so they stay flat.
     val byHeading = LinkedHashMap<String, MutableList<PhotoHit>>()
     val loose = ArrayList<PhotoHit>()
     hits.forEach { hit ->
@@ -960,7 +988,32 @@ private fun buildRows(
     }
     val rows = ArrayList<GridRow>(hits.size + byHeading.size)
     loose.forEach { rows += GridRow.Photo(it) }
-    byHeading.forEach { (heading, photos) -> rows.addGroup(heading, photos) }
+    byHeading.forEach { (heading, photos) ->
+        val days = LinkedHashMap<String, MutableList<PhotoHit>>()
+        photos.forEach { hit ->
+            // A photo with no date sits under the day of the one before it, as it did under the
+            // month before there were days.
+            val key = Actions.solrDateMillis(hit.takenAt)
+                ?.takeIf { !Actions.isRecentDay(it) }
+                ?.let { Actions.dayKey(it) }
+                ?: days.keys.lastOrNull()
+            if (key == null) days.getOrPut("") { ArrayList() } += hit
+            else days.getOrPut(key) { ArrayList() } += hit
+        }
+        // One day in the month is the month: a second heading saying the same thing helps nobody.
+        val split = days.size > 1 && days.keys.none { it.isEmpty() }
+        val folded = rows.addGroup(heading, photos, level = 0)
+        if (folded) return@forEach
+        if (!split) return@forEach
+        // The month's own photos were written by addGroup; days replace them.
+        repeat(photos.size) { rows.removeAt(rows.size - 1) }
+        days.forEach { (key, dayPhotos) ->
+            val millis = dayPhotos.firstNotNullOfOrNull { Actions.solrDateMillis(it.takenAt) }
+            val text = millis?.let { Actions.dayHeading(it) } ?: key
+            // The key carries the month too: the same day number in two months is two groups.
+            rows.addGroup("$heading / $key", dayPhotos, text = text, level = 1)
+        }
+    }
     return rows
 }
 
@@ -1139,6 +1192,7 @@ private fun ActiveFilterChips(filters: SearchFilters, onRemove: (SearchFilters) 
         if (filters.withLocation) add("With location" to filters.copy(withLocation = false))
         filters.tagged?.let { add((if (it) "Tagged" else "Not tagged") to filters.copy(tagged = null)) }
         filters.near?.let { add(it.label to filters.copy(near = null)) }
+        filters.taken?.let { add(it.label to filters.copy(taken = null)) }
     }
     LazyRow(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         // No key: the same label can be applied in two fields (a city and a word), and a
@@ -1277,6 +1331,11 @@ private fun FilterSheet(
 
             SearchFilters.FACETS.forEach { (field, title) ->
                 FacetSection(title, facets[field], draft.values(field), label = { facetLabel(field, it) }) { onChange(draft.toggled(field, it)) }
+                // Under the years, which say which years you actually have photos in, a picker
+                // for anything narrower than a whole year (Cip, 2026-09-16).
+                if (field == "year") {
+                    DateRangeSection(draft.taken) { onChange(draft.copy(taken = it)) }
+                }
             }
 
             draft.near?.let { near ->
@@ -1327,6 +1386,69 @@ private fun FilterSheet(
             Spacer(Modifier.height(12.dp))
             FilterActions(count, onClear = { onChange(SearchFilters()) }, onDone = onDismiss)
             Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+/**
+ * "Taken between": the two days are chosen in a calendar, because a list of years cannot say
+ * "that week in July". Built on `taken_at`, which every photo already carries, so this asks
+ * nothing new of the index.
+ */
+@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@Composable
+private fun DateRangeSection(current: DateRange?, onChange: (DateRange?) -> Unit) {
+    val p = LocalPalette.current
+    var picking by remember { mutableStateOf(false) }
+
+    SectionLabel("Taken between")
+    Spacer(Modifier.height(10.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Chip(label = current?.label ?: "Choose dates", selected = current != null, onClick = { picking = true })
+        if (current != null) {
+            Chip(label = "Any date", selected = false, onClick = { onChange(null) })
+        }
+    }
+    Spacer(Modifier.height(18.dp))
+
+    if (picking) {
+        val state = rememberDateRangePickerState(
+            initialSelectedStartDateMillis = current?.fromUtcMillis,
+            initialSelectedEndDateMillis = current?.toUtcMillis,
+        )
+        DatePickerDialog(
+            onDismissRequest = { picking = false },
+            colors = DatePickerDefaults.colors(containerColor = p.paper),
+            confirmButton = {
+                TextButton(
+                    // One day chosen and not the other means that single day, rather than
+                    // nothing at all.
+                    enabled = state.selectedStartDateMillis != null,
+                    onClick = {
+                        val from = state.selectedStartDateMillis
+                        val to = state.selectedEndDateMillis ?: from
+                        if (from != null && to != null) onChange(DateRange(minOf(from, to), maxOf(from, to)))
+                        picking = false
+                    },
+                ) { Text("Apply", color = p.accent) }
+            },
+            dismissButton = {
+                TextButton(onClick = { picking = false }) { Text("Cancel", color = p.muted) }
+            },
+        ) {
+            DateRangePicker(
+                state = state,
+                title = { Text("Taken between", style = MaterialTheme.typography.titleMedium, color = p.ink, modifier = Modifier.padding(start = 20.dp, top = 16.dp)) },
+                showModeToggle = false,
+                colors = DatePickerDefaults.colors(
+                    containerColor = p.paper,
+                    selectedDayContainerColor = p.accentFill,
+                    selectedDayContentColor = p.onAccentFill,
+                    dayInSelectionRangeContainerColor = p.chip,
+                    todayDateBorderColor = p.accent,
+                ),
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }

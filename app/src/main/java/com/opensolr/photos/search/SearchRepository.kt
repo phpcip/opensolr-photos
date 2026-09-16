@@ -15,7 +15,10 @@ import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 /**
  * Filters the user can combine with a search.
@@ -31,10 +34,12 @@ data class SearchFilters(
      */
     val tagged: Boolean? = null,
     val near: NearFilter? = null,
+    /** "Taken between these two days", when the year list is not fine enough (Cip, 2026-09-16). */
+    val taken: DateRange? = null,
 ) {
     /** Number of active filters, for the filter button badge. */
     val count: Int get() = fields.values.sumOf { it.size } + (if (withLocation) 1 else 0) +
-        (if (tagged != null) 1 else 0) + (if (near != null) 1 else 0)
+        (if (tagged != null) 1 else 0) + (if (near != null) 1 else 0) + (if (taken != null) 1 else 0)
 
     /** The chosen values of [field]. */
     fun values(field: String): Set<String> = fields[field] ?: emptySet()
@@ -63,6 +68,31 @@ data class SearchFilters(
         )
         /** Facet fields an index on the previous configuration does not have. */
         val NEWER_FACETS = setOf("city", "region", "country", "labels", "custom_tags")
+    }
+}
+
+/**
+ * "Taken between these two days", both ends included. Kept as the millis a date picker hands
+ * back (UTC midnight of the chosen day) so nothing is lost between the picker and the query;
+ * the query is built on `taken_at`, which every photo already has, so this needs no new field
+ * and no reindex.
+ */
+data class DateRange(val fromUtcMillis: Long, val toUtcMillis: Long) {
+
+    private fun day(millis: Long): String = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        .apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(millis))
+
+    /** The first instant of the first day, in the form Solr reads. */
+    val fromSolr: String get() = day(fromUtcMillis) + "T00:00:00Z"
+
+    /** The last instant of the last day, so the day chosen as the end is itself included. */
+    val toSolr: String get() = day(toUtcMillis) + "T23:59:59Z"
+
+    /** Short wording for a chip: "16 Sep 2025 - 4 Jan 2026". */
+    val label: String get() {
+        val short = SimpleDateFormat("d MMM yyyy", Locale.US)
+            .apply { timeZone = TimeZone.getTimeZone("UTC") }
+        return short.format(Date(fromUtcMillis)) + " – " + short.format(Date(toUtcMillis))
     }
 }
 
@@ -639,6 +669,15 @@ class SearchRepository(private val context: Context) {
             params += "f_$field" to values.filter { '|' !in it }.joinToString("|")
         }
         if (filters.withLocation) params += "fq" to "has_location:true"
+        // Taken between two days. The ends travel as bound parameters, so nothing the picker
+        // produced is ever spliced into the query itself.
+        filters.taken?.let { range ->
+            // The whole clause travels as one bound parameter: a range cannot be expressed with
+            // {!field} or {!term}, and nothing is spliced into the fq itself. The two ends are
+            // formatted from a Long by a fixed pattern, so they can only ever be timestamps.
+            params += "fq" to "{!lucene v=\$taken_q}"
+            params += "taken_q" to "taken_at:[${range.fromSolr} TO ${range.toSolr}]"
+        }
         // Tagged or untagged: the field is only on the newer configuration, so an index still on
         // the old one is left alone rather than being asked something it would refuse.
         if (!legacy) filters.tagged?.let { wanted ->
