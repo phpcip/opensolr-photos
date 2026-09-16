@@ -110,6 +110,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.foundation.gestures.calculateCentroid
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.HorizontalDivider
@@ -1865,8 +1866,13 @@ internal fun PhotoViewer(
     val pager = rememberPagerState(initialPage = start) { hits.size }
     val view = LocalView.current
     var showActions by remember { mutableStateOf(true) }
-    // How far the photo on screen is magnified; the pager only scrolls while it is whole.
-    val zoomed = remember { mutableFloatStateOf(1f) }
+    // How far the photo on screen is magnified, and where it is held - kept HERE rather than per
+    // page. Writing it from inside a page meant a state write during composition, which asks for
+    // another composition, on every frame of a drag: moving a magnified photo about crawled
+    // (Cip, 2026-09-16). Swiping to another photo starts it whole again.
+    var scale by remember { mutableFloatStateOf(1f) }
+    var offset by remember { mutableStateOf(Offset.Zero) }
+    LaunchedEffect(pager.currentPage) { scale = 1f; offset = Offset.Zero }
     // The details of the photo being looked at, opened over it rather than in its place: a swipe
     // up must not take the picture away (Cip, 2026-09-16).
     var sheetFor by remember { mutableStateOf<PhotoHit?>(null) }
@@ -1901,19 +1907,13 @@ internal fun PhotoViewer(
             HorizontalPager(
                 state = pager,
                 // While a photo is magnified the finger belongs to it, not to the next photo.
-                userScrollEnabled = zoomed.value <= 1.01f,
+                userScrollEnabled = scale <= 1.01f,
                 modifier = Modifier.fillMaxSize(),
             ) { page ->
                 val hit = hits.getOrNull(page) ?: return@HorizontalPager
                 val uri = remember(hit.mediaId) {
                     ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, hit.mediaId)
                 }
-                // Magnification and where it is centred, per photo: swiping to the next one
-                // starts it whole again, as a gallery does.
-                var scale by remember(hit.id) { mutableFloatStateOf(1f) }
-                var offset by remember(hit.id) { mutableStateOf(Offset.Zero) }
-                if (page == pager.currentPage) zoomed.value = scale
-
                 AsyncImage(
                     // No size: the original, not the thumbnail the grid is drawn from.
                     model = ImageRequest.Builder(context).data(uri).crossfade(true).build(),
@@ -1921,34 +1921,56 @@ internal fun PhotoViewer(
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
                         .fillMaxSize()
-                        .graphicsLayer {
-                            scaleX = scale
-                            scaleY = scale
-                            translationX = offset.x
-                            translationY = offset.y + (if (page == pager.currentPage) dismiss.value else 0f)
-                        }
-                        // Pinch, with no ceiling: as far in as the picture will go. Out stops at
-                        // the whole picture - zooming out is not a way to leave (Cip, 2026-09-16).
-                        //
-                        // Written out rather than taken from transformable or
-                        // detectTransformGestures: both of those answer a ONE-finger drag as a
-                        // pan and consume it, and the swipe to the next photo died with it. This
-                        // one touches nothing until a second finger is down, so a single finger
-                        // still belongs to the pager and to the swipe down.
                         .pointerInput(hit.id) {
                             awaitEachGesture {
                                 awaitFirstDown(requireUnconsumed = false)
                                 do {
                                     val event = awaitPointerEvent()
                                     if (event.changes.size > 1) {
-                                        scale = (scale * event.calculateZoom()).coerceAtLeast(1f)
-                                        if (scale <= 1.01f) {
+                                        // Magnify about the point BETWEEN the fingers, not about
+                                        // the middle of the picture: whatever is under the hand
+                                        // stays under it, wherever on the photo it is pinched
+                                        // (Cip, 2026-09-16).
+                                        //
+                                        // A point sits at centre + (p - centre) * scale + offset.
+                                        // Holding the point under the centroid still while the
+                                        // scale goes from s to s' (k = s'/s) gives
+                                        // offset' = d * (1 - k) + offset * k, with d the centroid
+                                        // measured from the middle.
+                                        val next = (scale * event.calculateZoom()).coerceAtLeast(1f)
+                                        if (next <= 1.01f) {
                                             scale = 1f
                                             offset = Offset.Zero
                                         } else {
-                                            offset += event.calculatePan()
+                                            val k = next / scale
+                                            val centre = Offset(size.width / 2f, size.height / 2f)
+                                            val d = event.calculateCentroid(useCurrent = true) - centre
+                                            val moved = d * (1f - k) + offset * k + event.calculatePan()
+                                            val limitX = size.width * (next - 1f) / 2f
+                                            val limitY = size.height * (next - 1f) / 2f
+                                            scale = next
+                                            offset = Offset(
+                                                moved.x.coerceIn(-limitX, limitX),
+                                                moved.y.coerceIn(-limitY, limitY),
+                                            )
                                         }
                                         event.changes.forEach { it.consume() }
+                                    } else if (scale > 1f) {
+                                        // One finger on a magnified photo moves it, handled HERE
+                                        // rather than by a drag detector of its own: a detector
+                                        // waits for its own slop before it starts, so the picture
+                                        // fell behind the finger every time the hand changed
+                                        // direction, and the whole thing felt slow (Cip, 2026-09-16).
+                                        val pan = event.calculatePan()
+                                        if (pan != Offset.Zero) {
+                                            val limitX = size.width * (scale - 1f) / 2f
+                                            val limitY = size.height * (scale - 1f) / 2f
+                                            offset = Offset(
+                                                (offset.x + pan.x).coerceIn(-limitX, limitX),
+                                                (offset.y + pan.y).coerceIn(-limitY, limitY),
+                                            )
+                                            event.changes.forEach { it.consume() }
+                                        }
                                     }
                                 } while (event.changes.any { it.pressed })
                             }
@@ -1980,19 +2002,7 @@ internal fun PhotoViewer(
                         // its threshold first consumed the drag, and moving about a magnified
                         // photo up and down was a matter of luck (Cip, 2026-09-16).
                         .pointerInput(hit.id, scale > 1f) {
-                            if (scale > 1f) {
-                                // Magnified: the finger moves the picture, in any direction, and
-                                // it is held so its edges cannot be dragged off the screen.
-                                detectDragGestures { change, amount ->
-                                    change.consume()
-                                    val limitX = size.width * (scale - 1f) / 2f
-                                    val limitY = size.height * (scale - 1f) / 2f
-                                    offset = Offset(
-                                        (offset.x + amount.x).coerceIn(-limitX, limitX),
-                                        (offset.y + amount.y).coerceIn(-limitY, limitY),
-                                    )
-                                }
-                            } else {
+                            if (scale <= 1f) {
                                 // Whole: down carries the picture away to leave, up opens its
                                 // details. Sideways is left alone, so the pager still has it.
                                 detectVerticalDragGestures(
@@ -2030,6 +2040,16 @@ internal fun PhotoViewer(
                                     },
                                 )
                             }
+                        }
+                        // graphicsLayer LAST, after every gesture: a pointer area placed INSIDE a
+                        // scaled layer is measured in that layer's own coordinates, so a finger
+                        // crossing 300px of screen reported 300/scale, and the more the photo was
+                        // magnified the slower it moved (Cip, 2026-09-16).
+                        .graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                            translationX = offset.x
+                            translationY = offset.y + (if (page == pager.currentPage) dismiss.value else 0f)
                         },
                 )
             }
@@ -2047,6 +2067,9 @@ internal fun PhotoViewer(
                 )
                 // A quiet hint that the photo has more to say: three chevrons drifting upwards
                 // over the action bar, faintest at the top (Cip, 2026-09-16).
+                // Only while the photo is whole: magnified, a swipe up moves the picture, so the
+                // hint would be promising something that does not happen (Cip, 2026-09-16).
+                if (scale <= 1.01f) {
                 val drift = rememberInfiniteTransition(label = "swipeHint")
                 val rise by drift.animateFloat(
                     initialValue = 0f,
@@ -2076,6 +2099,7 @@ internal fun PhotoViewer(
                         modifier = Modifier.padding(top = 8.dp),
                     )
                 }
+                }
                 Row(
                     Modifier
                         .align(Alignment.BottomCenter)
@@ -2099,7 +2123,14 @@ internal fun PhotoViewer(
                     ViewerAction("Delete", R.drawable.ic_delete) { onDelete(hit) }
                 }
             }
-            sheetFor?.let { photo -> onSheet(photo, { sheetFor = null }, { editFor = it }) }
+            // Closing the details is felt too, the firmer one, as opening them was (Cip, 2026-09-16).
+            sheetFor?.let { photo ->
+                onSheet(
+                    photo,
+                    { Haptics.tick(view, strong = true); sheetFor = null },
+                    { editFor = it },
+                )
+            }
             // Leaving the tags puts the photo's details back, where they were entered from -
             // and with whatever was just saved showing on them (Cip, 2026-09-16).
             editFor?.let { photo ->

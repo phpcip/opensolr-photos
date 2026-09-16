@@ -192,7 +192,7 @@ downloaded to draw the grid.
   grid — drawn over it, so its scroll position is never disturbed. *Gallery* is `ACTION_VIEW` on the photo's
   MediaStore URI with read permission granted; if the stored id went stale the app finds the photo again by
   its path, and if it is gone from the phone it says so and the next Re-Sync removes it from the index.
-  - **Zoom**: pinch with no ceiling, double tap to magnify on the point touched and again to come back, one
+  - **Zoom**: pinch with no ceiling, magnifying about the point between the fingers, double tap to magnify on the point touched and again to come back, one
     finger to move a magnified photo about (held inside its own edges). Zooming out stops at the whole
     picture — it is not a way to leave. The pager only scrolls while the photo is whole, so a finger on a
     magnified photo belongs to the photo. The pinch loop is written out rather than taken from

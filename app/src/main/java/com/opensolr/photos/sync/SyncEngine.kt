@@ -144,11 +144,12 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             }
 
             // Photos that go through everything again whatever their size says: those the owner
-            // picked for Re-sync, those indexed without words while the plan had no AI (only now
-            // that it has), and those with a position whose place lookup failed.
+            // picked for Re-sync, and those indexed without words while the plan had no AI (only
+            // now that it has), except the ones still pausing after a miss. A missing place
+            // never sends a photo again.
             val forced = prefs.resyncIds
-            val needWords = if (rebuild || !aiAvailable) emptySet() else solr.idsWithoutWords()
-            val withoutPlace = if (rebuild) emptySet() else withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { solr.idsWithoutPlace() }
+            forced.forEach { cache.clearWordRetry(it) }
+            val needWords = if (rebuild || !aiAvailable) emptySet() else solr.idsWithoutWords() - cache.wordRetriesWaiting(System.currentTimeMillis())
             val phase = if (rebuild) "Rebuilding your index" else "Indexing photos"
 
             // Each photo goes to Opensolr once, five per call, with its EXIF and the owner's
@@ -212,7 +213,12 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                                 failed++
                             } else {
                                 added++
-                                if (!result.words) withoutWords++
+                                if (result.words) {
+                                    cache.clearWordRetry(item.photo.id)
+                                } else {
+                                    withoutWords++
+                                    if (aiAvailable) cache.noteWordsMissing(item.photo.id, System.currentTimeMillis())
+                                }
                             }
                         }
                     }
@@ -260,7 +266,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                             // so once. However many there are, the run starts: it stops only if
                             // the battery gets low with no charger (Cip, 2026-09-16).
                             val atLeast = (local.size - indexCount).coerceAtLeast(0) + forced.size + needWords.size
-                            expected = atLeast + withoutPlace.size
+                            expected = atLeast
                             if (aiAvailable && limits != null) {
                                 val left = limits.photosLeftThisMonth
                                 if (left != null && left < atLeast) shortAllowance = warnShortAllowance(left, atLeast)
@@ -279,7 +285,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                             } else {
                                 unseen.remove(id)
                                 // A different size is a changed photo: everything again, as if new.
-                                if (size != photo.sizeBytes || id in forced || id in needWords || id in withoutPlace) queue(photo)
+                                if (size != photo.sizeBytes || id in forced || id in needWords) queue(photo)
                             }
                         }
                         progress(if (total > 0) phase else "Comparing with your index")

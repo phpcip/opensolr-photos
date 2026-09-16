@@ -1,0 +1,1 @@
+Sync no longer sends the same photos again and again. A photo whose position has no known place is indexed once without one; a photo that comes back without words is asked again after a pause that grows each time. Pinch to zoom now magnifies around your fingers, and moving a magnified photo is smooth.

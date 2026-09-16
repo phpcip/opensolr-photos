@@ -181,12 +181,6 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
     }
 
     /**
-     * Ids of the photos that have a GPS position but no place words yet (their lookup
-     * failed or the schema did not have the fields at the time), to be written again.
-     */
-    suspend fun idsWithoutPlace(): Set<String> = allIds(query = "has_location:true AND -city:[* TO *]")
-
-    /**
      * Ids of the photos indexed without CLIP words (the monthly AI allowance was used up when
      * they were written), to be read once the allowance is back.
      */

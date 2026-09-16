@@ -20,6 +20,10 @@ import java.nio.ByteOrder
  *   asked for twice. An empty answer means "looked up, and there is no place there".
  * - **edits**: the tags and the wording the owner gave a photo. Every later write of that photo
  *   puts them back over what Opensolr saw, so the owner's words always win.
+ * - **word_retries**: photos Opensolr wrote without words although the plan has AI (the AI
+ *   server was restarting, a photo it cannot read). Each is asked again only after a pause
+ *   that grows with every miss (1 h, 4 h, 16 h, then daily), so a photo that never gets words
+ *   can never keep the sync busy.
  */
 class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext, NAME, null, VERSION) {
 
@@ -46,10 +50,11 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
         )
         db.execSQL("CREATE TABLE IF NOT EXISTS places (key TEXT PRIMARY KEY NOT NULL, place_json TEXT NOT NULL)")
         db.execSQL("CREATE TABLE IF NOT EXISTS edits (id TEXT PRIMARY KEY NOT NULL, tags_json TEXT NOT NULL, meaning TEXT, updated INTEGER NOT NULL)")
+        db.execSQL(WORD_RETRIES_TABLE)
     }
 
     /**
-     * Versions 2 and 3 only add tables; the photos (paid AI answers) are kept.
+     * Versions 2, 3 and 4 only add tables; the photos (paid AI answers) are kept.
      */
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) {
@@ -58,6 +63,47 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
         if (oldVersion < 3) {
             db.execSQL("CREATE TABLE IF NOT EXISTS edits (id TEXT PRIMARY KEY NOT NULL, tags_json TEXT NOT NULL, meaning TEXT, updated INTEGER NOT NULL)")
         }
+        if (oldVersion < 4) {
+            db.execSQL(WORD_RETRIES_TABLE)
+        }
+    }
+
+    /**
+     * Ids of the photos still waiting out their pause after being written without words, at
+     * [now] (epoch millis). The sync leaves these out of its "read again" list.
+     */
+    fun wordRetriesWaiting(now: Long): Set<String> {
+        val out = HashSet<String>()
+        readableDatabase.query("word_retries", arrayOf("id"), "next_at > ?", arrayOf(now.toString()), null, null, null).use { cursor ->
+            while (cursor.moveToNext()) out += cursor.getString(0)
+        }
+        return out
+    }
+
+    /**
+     * Records that [id] came back without words once more and sets when it may be asked
+     * again: 1 h after the first miss, 4 h after the second, 16 h after the third, then 24 h.
+     */
+    fun noteWordsMissing(id: String, now: Long) {
+        var attempts = 0
+        readableDatabase.query("word_retries", arrayOf("attempts"), "id = ?", arrayOf(id), null, null, null, "1").use { cursor ->
+            if (cursor.moveToFirst()) attempts = cursor.getInt(0)
+        }
+        attempts++
+        val hours = if (attempts >= 4) 24L else 1L shl (2 * (attempts - 1))
+        val values = ContentValues().apply {
+            put("id", id)
+            put("attempts", attempts)
+            put("next_at", now + hours * 3_600_000L)
+        }
+        writableDatabase.insertWithOnConflict("word_retries", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    /**
+     * Forgets the pause of [id]: it got its words, or the owner asked for it explicitly.
+     */
+    fun clearWordRetry(id: String) {
+        writableDatabase.delete("word_retries", "id = ?", arrayOf(id))
     }
 
     /**
@@ -223,6 +269,7 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
         // The owner's edits are their work, not account data: they stay.
         writableDatabase.delete("photos", null, null)
         writableDatabase.delete("places", null, null)
+        writableDatabase.delete("word_retries", null, null)
     }
 
     /**
@@ -244,6 +291,7 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
 
     companion object {
         private const val NAME = "photo_cache.db"
-        private const val VERSION = 3
+        private const val VERSION = 4
+        private const val WORD_RETRIES_TABLE = "CREATE TABLE IF NOT EXISTS word_retries (id TEXT PRIMARY KEY NOT NULL, attempts INTEGER NOT NULL, next_at INTEGER NOT NULL)"
     }
 }

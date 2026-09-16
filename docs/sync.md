@@ -19,8 +19,12 @@ There is one algorithm. A **first Sync** and a **Re-Sync** only differ in what t
 4. **Delete** every id that is in the index but not on the phone, 500 per request.
 5. **Hand to Opensolr** every photo that is on the phone but not in the index, every photo whose file size
    differs from the index's (a changed photo is read again from scratch, whatever the index still holds
-   about it), and every photo chosen for *Re-sync selected*, indexed without words while the plan had no
-   AI, or carrying a position without place words yet. Five per call:
+   about it), every photo chosen for *Re-sync selected*, and every photo indexed without words while the
+   plan had no AI or while the AI server could not answer. A photo that comes back without words again is
+   left out for a pause that grows each time (1 hour, 4 hours, 16 hours, then once a day; kept in the
+   `word_retries` table of `PhotoCache`, cleared by *Re-sync selected*), so it can never keep the sync busy.
+   A missing place never sends a photo again: the place is looked up once, when the photo is handed over,
+   and a photo whose position has no known place is simply indexed without one. Five per call:
    - make the 640 px copy carrying the original's EXIF, and add your tags and words for the photo
      from the phone's edits when there are any;
    - one `photos_ingest` call: the server reads the EXIF, asks CLIP and the embedder, finds the place,
@@ -102,7 +106,7 @@ touched, a changed one is read again. Reading a photo again is free when Opensol
 | **Photos changed** | `SyncScheduler.watchMedia`: a WorkManager content-URI trigger on MediaStore images, 60 s after the first change and at most 5 min later; one-shot by design, re-armed after every run and at every app start |
 | **Re-sync selected** | Chosen photo ids go to `AppPrefs.resyncIds` and a sync starts; those photos bypass the cache |
 | **Kind to the battery** | The watch only starts a sync when a changed picture is in one of your folders; a screenshot or a chat picture elsewhere is ignored without a single request. Two watch-started syncs stay at least 15 minutes apart (the change waits, it is not lost). More than 500 photos to read at once waits for the charger. The app paces its calls under your account's API rate limits, and if Opensolr still asks it to slow down, the run stops and is started again a little later instead of waiting with the phone awake. |
-| **Scheduled** | Every day, week or month, your choice on the Sync screen; the safety net for what the watcher cannot see (words after the allowance resets, places to retry, an index changed on the server); only with a network connection and a battery that is not low |
+| **Scheduled** | Every day, week or month, your choice on the Sync screen; the safety net for what the watcher cannot see (words after the allowance resets or a pause ends, an index changed on the server); only with a network connection and a battery that is not low |
 
 **Only one sync runs at a time.** Both kinds are unique WorkManager jobs, and the worker also refuses to
 start while another sync runs in the same process. Pressing Force Re-Sync while a sync is queued or running
