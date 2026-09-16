@@ -91,6 +91,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -194,10 +195,23 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             last >= gridState.layoutInfo.totalItemsCount - 12
         }
     }
-    // A fresh search shows its best matches first: back to the top when it starts, and again
-    // when its results arrive (a lazy grid otherwise follows the item that used to be on top).
-    LaunchedEffect(state.searchGeneration) { gridState.scrollToItem(0) }
-    LaunchedEffect(state.resultsGeneration) { gridState.scrollToItem(0) }
+    // The grid is taken where the view model says, once per change it announces: the place this
+    // exact search was last left at, or the top for a search never seen before. A new search, an
+    // album, duplicates and the similar photos each have their own place, so leaving one and
+    // coming back lands where it was, not at the top (Cip, 2026-09-16).
+    var restored by remember { mutableStateOf(false) }
+    LaunchedEffect(state.restoreGeneration) {
+        if (rows.isEmpty()) return@LaunchedEffect
+        gridState.scrollToItem(state.gridIndex.coerceAtMost(rows.lastIndex), state.gridOffset)
+        restored = true
+    }
+    // Written back only after the grid has been put where it belongs, so the restore is never
+    // overwritten by the 0 of a grid that has not been placed yet.
+    LaunchedEffect(restored) {
+        if (!restored) return@LaunchedEffect
+        snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) -> viewModel.rememberGridPosition(index, offset) }
+    }
     LaunchedEffect(nearEnd, state.hits.size) {
         if (nearEnd && state.hits.isNotEmpty() && !state.endReached && !state.searching) viewModel.search(reset = false)
     }

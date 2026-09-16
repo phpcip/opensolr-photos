@@ -13,6 +13,7 @@ import com.opensolr.photos.media.PhotoReader
 import com.opensolr.photos.net.IngestItem
 import com.opensolr.photos.net.OpensolrApi
 import com.opensolr.photos.net.OpensolrException
+import com.opensolr.photos.net.friendlyMessage
 import com.opensolr.photos.net.PhotoRejectedException
 import com.opensolr.photos.net.ServiceException
 import com.opensolr.photos.net.PlanLimitException
@@ -343,10 +344,10 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             return report("stopped_plan_limit", added, deleted, failed, localCount, indexCount, e.message ?: "", recreated)
         } catch (e: OpensolrException) {
             commitQuietly()
-            return report("failed", added, deleted, failed, localCount, indexCount, e.message ?: "Sync failed", recreated)
+            return report("failed", added, deleted, failed, localCount, indexCount, friendlyMessage(e, "Sync failed"), recreated)
         } catch (e: Exception) {
             commitQuietly()
-            return report("failed", added, deleted, failed, localCount, indexCount, "Sync stopped: ${e.message ?: e.javaClass.simpleName}", recreated)
+            return report("failed", added, deleted, failed, localCount, indexCount, "Sync stopped: ${friendlyMessage(e, "try again later")}", recreated)
         }
     }
 

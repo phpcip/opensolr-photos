@@ -11,6 +11,8 @@ import com.opensolr.photos.net.ServiceException
 import com.opensolr.photos.net.SolrAuthException
 import com.opensolr.photos.net.SolrClient
 import com.opensolr.photos.net.VectorNotAllowedException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Locale
@@ -499,13 +501,21 @@ class SearchRepository(private val context: Context) {
         cache.get(key, ttl)?.let { stored ->
             runCatching { JSONObject(stored) }.getOrNull()?.let { return it }
         }
-        val json = try {
-            SolrClient(connection).select(params)
-        } catch (e: SolrAuthException) {
-            SolrClient(IndexManager(context, prefs, api).refreshConnection(session)).select(params)
+        // The request and the storing of its answer are one uncancellable step. Dragging the
+        // duplicates slider cancels the job for every stop it crosses, and the call itself is
+        // blocking, so the index answers anyway; with a cancellable step the answer was thrown
+        // away on the way out and the next pass asked for it again. Wrapping only the put was
+        // not enough: the cancellation is raised inside the call, before the put is reached
+        // (Cip, 2026-09-16).
+        return withContext(NonCancellable) {
+            val json = try {
+                SolrClient(connection).select(params)
+            } catch (e: SolrAuthException) {
+                SolrClient(IndexManager(context, prefs, api).refreshConnection(session)).select(params)
+            }
+            cache.put(key, json.toString())
+            json
         }
-        cache.put(key, json.toString())
-        return json
     }
 
     /**
@@ -523,9 +533,14 @@ class SearchRepository(private val context: Context) {
                 }
             }.getOrNull()?.let { return it }
         }
-        val groups = SolrClient(connection).duplicateGroups(field)
-        cache.put(key, JSONArray(groups.map { JSONArray(it) }).toString())
-        return groups
+        // One uncancellable step, for the same reason as in select(): the slider cancels this job
+        // on every stop it crosses, and an answer the index has already given must not be lost
+        // between the call and the cache.
+        return withContext(NonCancellable) {
+            val groups = SolrClient(connection).duplicateGroups(field)
+            cache.put(key, JSONArray(groups.map { JSONArray(it) }).toString())
+            groups
+        }
     }
 
     /**

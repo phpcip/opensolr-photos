@@ -1,5 +1,11 @@
 package com.opensolr.photos.net
 
+import java.io.IOException
+import java.io.InterruptedIOException
+import java.net.SocketTimeoutException
+import java.net.UnknownHostException
+import javax.net.ssl.SSLException
+
 /**
  * Everything that can go wrong talking to Opensolr, sorted by what the app has to do about it.
  */
@@ -67,3 +73,22 @@ class ServiceException(message: String) : OpensolrException(message)
  * rate limiting, and waiting inside a background job keeps the phone awake for nothing.
  */
 class RetryLaterException(val afterSeconds: Long) : OpensolrException("Opensolr asked to slow down; the sync continues shortly.")
+
+/**
+ * What a person is told when something goes wrong, from whatever was thrown.
+ *
+ * The app's own errors are already written for them and are passed through. Everything else
+ * carries a message written for a developer - "Unable to resolve host ...", "Software caused
+ * connection abort", an SSL class name - which must never reach the screen; the common network
+ * failures become one plain sentence each, and anything unrecognised falls back to whatever the
+ * caller would have said anyway (Cip, 2026-09-16).
+ */
+fun friendlyMessage(e: Throwable, fallback: String): String = when (e) {
+    is OpensolrException -> e.message ?: fallback
+    is UnknownHostException -> "No connection. Check your internet and try again."
+    is SocketTimeoutException -> "Your index took too long to answer. Try again."
+    is SSLException -> "The secure connection could not be made. Try again."
+    is InterruptedIOException -> "The connection took too long. Try again."
+    is IOException -> "The connection failed. Check your internet and try again."
+    else -> fallback
+}

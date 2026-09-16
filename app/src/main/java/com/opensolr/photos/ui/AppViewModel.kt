@@ -18,6 +18,7 @@ import com.opensolr.photos.net.AccountIndex
 import com.opensolr.photos.net.IndexLimitException
 import com.opensolr.photos.net.OpensolrApi
 import com.opensolr.photos.net.UpdateCheck
+import com.opensolr.photos.net.friendlyMessage
 import com.opensolr.photos.net.SignInRequiredException
 import com.opensolr.photos.search.FacetValue
 import com.opensolr.photos.search.NearFilter
@@ -115,6 +116,11 @@ data class UiState(
     val searchGeneration: Int = 0,
     /** Counts fresh result pages that arrived, so the grid scrolls to the top once they are in. */
     val resultsGeneration: Int = 0,
+    /** Where the grid should stand: the first visible item and its offset, for the search on screen. */
+    val gridIndex: Int = 0,
+    val gridOffset: Int = 0,
+    /** Bumped whenever the grid has somewhere to be taken to, so the screen scrolls exactly once. */
+    val restoreGeneration: Int = 0,
     val editSaving: Boolean = false,
     val editError: String? = null,
     /** What the plan's limits mean right now, for the account screen. */
@@ -251,6 +257,43 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Where the grid stood, one place per search (Cip, 2026-09-16). A single remembered position
+     * was not enough: opening an album and then clearing its filter, or looking at similar photos
+     * and coming back, returns to a search that had its own place in the list. The key is what
+     * produced the photos on screen, so each of them is returned to its own.
+     */
+    private val scrollPositions = HashMap<String, Pair<Int, Int>>()
+
+    /**
+     * What the photos on screen answer to: the words searched for, the filters, and whether the
+     * grid is showing duplicates or the photos like one photo.
+     */
+    private fun contextKey(s: UiState): String =
+        // Each kind of view is keyed by what actually decides its photos, and by nothing else.
+        // The slider stop used to be in the key even for an ordinary search, so moving the slider
+        // inside the duplicates view changed the key of the search waiting behind it and losing
+        // its place (Cip, 2026-09-16).
+        if (s.duplicatesMode) "duplicates|${s.similarToId}|${s.duplicateLevel}"
+        else "search|${s.searchedQuery}|${s.filters}|${s.freshBias}"
+
+    /**
+     * Remembers where the grid stands for the search it is showing.
+     */
+    fun rememberGridPosition(index: Int, offset: Int) {
+        scrollPositions[contextKey(_state.value)] = index to offset
+    }
+
+    /**
+     * Hands the screen the place this search was last left at, or the top when it has never been
+     * seen. Called whenever the photos on screen change: results arriving, duplicates arriving,
+     * and coming back from the map or the albums, where nothing is reloaded.
+     */
+    private fun targetScroll() {
+        val (index, offset) = scrollPositions[contextKey(_state.value)] ?: (0 to 0)
+        _state.update { it.copy(gridIndex = index, gridOffset = offset, restoreGeneration = it.restoreGeneration + 1) }
+    }
+
+    /**
      * "Back to search" above the slider: leaves the duplicates or similar view and runs the
      * search that was in force again, with its query and filters, which were never cleared.
      */
@@ -321,7 +364,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: SignInRequiredException) {
                 signedOut("Your Opensolr sign-in stopped working. Sign in again.")
             } catch (e: Exception) {
-                _state.update { it.copy(editSaving = false, editError = e.message ?: "The edit could not be saved.") }
+                _state.update { it.copy(editSaving = false, editError = friendlyMessage(e, "The edit could not be saved.")) }
             }
         }
     }
@@ -394,7 +437,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 prefs.account = limits
                 _state.update { it.copy(busy = false, email = session.email, account = limits, screen = Screen.Welcome) }
             } catch (e: Exception) {
-                _state.update { it.copy(busy = false, screen = Screen.SignIn, signInError = e.message ?: "Sign-in failed. Tap Sign in again.") }
+                _state.update { it.copy(busy = false, screen = Screen.SignIn, signInError = friendlyMessage(e, "Sign-in failed. Tap Sign in again.")) }
             }
         }
     }
@@ -488,9 +531,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: SignInRequiredException) {
                 signedOut("Your Opensolr sign-in stopped working. Sign in again.")
             } catch (e: IndexLimitException) {
-                _state.update { it.copy(setupError = e.message, setupNeedsUpgrade = true) }
+                _state.update { it.copy(setupError = friendlyMessage(e, "The index could not be set up."), setupNeedsUpgrade = true) }
             } catch (e: Exception) {
-                _state.update { it.copy(setupError = e.message ?: "The index could not be set up.") }
+                _state.update { it.copy(setupError = friendlyMessage(e, "The index could not be set up.")) }
             }
         }
     }
@@ -575,8 +618,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * Runs the search from the first page ([reset]) or loads the next page.
+     *
+     * [keepPosition] reloads the same search without counting as a new one: the generation
+     * counters stay put, so the grid is not thrown back to the top. Coming back from the account
+     * or the Sync screen reloads the photos this way, and landing at the top there was exactly
+     * the bug (Cip, 2026-09-16). A search the owner starts - Enter, a suggestion, a filter, an
+     * album - is a new one and does begin at the top.
      */
-    fun search(reset: Boolean) {
+    fun search(reset: Boolean, keepPosition: Boolean = false) {
         val current = _state.value
         if (!reset && (current.searching || current.endReached)) return
         searchJob?.cancel()
@@ -584,7 +633,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         suggestJob?.cancel()
         // Leaving the duplicates view drops the photo it was anchored to as well: the line above
         // the grid and the way back read the anchor, not the mode (Cip, 2026-09-16).
-        _state.update { it.copy(searching = true, searchError = null, suggestions = emptyList(), duplicateGroups = emptyList(), duplicatesMode = false, similarToId = null, similarToHit = null, searchGeneration = if (reset) it.searchGeneration + 1 else it.searchGeneration) }
+        _state.update { it.copy(searching = true, searchError = null, suggestions = emptyList(), duplicateGroups = emptyList(), duplicatesMode = false, similarToId = null, similarToHit = null, searchGeneration = if (reset && !keepPosition) it.searchGeneration + 1 else it.searchGeneration) }
         // The suggestions come from their own words-only request, next to this one.
         if (reset) loadQueryFacets(current.query, current.filters)
         searchJob = viewModelScope.launch {
@@ -600,17 +649,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         smart = page.smart,
                         searchNotice = page.notice,
                         didYouMean = if (reset) page.didYouMean else it.didYouMean,
-                        resultsGeneration = if (reset) it.resultsGeneration + 1 else it.resultsGeneration,
+                        resultsGeneration = if (reset && !keepPosition) it.resultsGeneration + 1 else it.resultsGeneration,
                         searchedQuery = if (reset) current.query else it.searchedQuery,
                         endReached = hits.size >= page.numFound || page.hits.isEmpty(),
                     )
                 }
+                // Only a first page lands somewhere; the next pages must not move the grid.
+                if (reset) targetScroll()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: SignInRequiredException) {
                 signedOut("Your Opensolr sign-in stopped working. Sign in again.")
             } catch (e: Exception) {
-                _state.update { it.copy(searching = false, searchError = e.message ?: "Search failed.") }
+                _state.update { it.copy(searching = false, searchError = friendlyMessage(e, "Search failed.")) }
             }
         }
     }
@@ -632,7 +683,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: SignInRequiredException) {
                 signedOut("Your Opensolr sign-in stopped working. Sign in again.")
             } catch (e: Exception) {
-                _state.update { it.copy(albumsLoading = false, albumsError = e.message ?: "The albums could not be loaded.") }
+                _state.update { it.copy(albumsLoading = false, albumsError = friendlyMessage(e, "The albums could not be loaded.")) }
             }
         }
     }
@@ -682,7 +733,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: SignInRequiredException) {
                 signedOut("Your Opensolr sign-in stopped working. Sign in again.")
             } catch (e: Exception) {
-                _state.update { it.copy(pinsLoading = false, pinsError = e.message ?: "The map could not be loaded.") }
+                _state.update { it.copy(pinsLoading = false, pinsError = friendlyMessage(e, "The map could not be loaded.")) }
             }
         }
     }
@@ -735,7 +786,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 // Nothing cached describes the index any more: it is empty.
                 searches.clearCache()
             } catch (e: Exception) {
-                _state.update { it.copy(notice = "The index could not be emptied: ${e.message ?: "try again"}") }
+                _state.update { it.copy(notice = "The index could not be emptied: ${friendlyMessage(e, "try again")}") }
                 return@launch
             }
             // No search follows this one, so the anchor has to go with the mode here.
@@ -839,12 +890,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         resultsGeneration = it.resultsGeneration + 1,
                     )
                 }
+                // Duplicates and the similar photos are searches of their own, each with its own
+                // place: coming back to a stop already looked at returns to where it was left.
+                targetScroll()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: SignInRequiredException) {
                 signedOut("Your Opensolr sign-in stopped working. Sign in again.")
             } catch (e: Exception) {
-                _state.update { it.copy(searching = false, searchError = e.message ?: "Looking for duplicates failed.") }
+                _state.update { it.copy(searching = false, searchError = friendlyMessage(e, "Looking for duplicates failed.")) }
             }
         }
     }
@@ -872,7 +926,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * again, never the ordinary results (Cip, 2026-09-16); otherwise the search.
      */
     fun refresh() {
-        if (_state.value.duplicatesMode) loadDuplicates(debounceMs = 0) else search(reset = true)
+        // A reload of the same search, so the grid stays where the owner left it.
+        if (_state.value.duplicatesMode) loadDuplicates(debounceMs = 0) else search(reset = true, keepPosition = true)
     }
 
     /**
@@ -998,7 +1053,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: SignInRequiredException) {
                 signedOut("Your Opensolr sign-in stopped working. Sign in again.")
             } catch (e: Exception) {
-                _state.update { it.copy(accountRefreshing = false, accountError = e.message) }
+                _state.update { it.copy(accountRefreshing = false, accountError = friendlyMessage(e, "The plan limits could not be read.")) }
             }
         }
     }
@@ -1033,7 +1088,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun back() {
         val current = _state.value
         when (current.screen) {
-            Screen.Map, Screen.Albums -> _state.update { it.copy(screen = Screen.Search) }
+            // Nothing is reloaded on the way back from these, so the grid is put back by hand.
+            Screen.Map, Screen.Albums -> {
+                _state.update { it.copy(screen = Screen.Search) }
+                targetScroll()
+            }
             // Back to the photos always reloads them: a sync may have finished meanwhile.
             Screen.Sync, Screen.Account -> {
                 _state.update { it.copy(screen = Screen.Search) }

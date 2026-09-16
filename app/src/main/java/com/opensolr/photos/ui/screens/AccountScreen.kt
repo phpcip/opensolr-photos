@@ -100,7 +100,9 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                 if (account.diskLimitMb > 0) (account.diskUsedMb / account.diskLimitMb).toFloat() else null,
             )
             UsageRow(
-                "Search bandwidth this month",
+                // Short on purpose: a big allowance ("7 MB of 200000.0 GB") leaves the value no
+                // room next to a long label (Cip, 2026-09-16).
+                "BW",
                 Actions.formatMb(account.bandwidthUsedMb), Actions.formatMb(account.bandwidthLimitMb),
                 if (account.bandwidthLimitMb > 0) (account.bandwidthUsedMb / account.bandwidthLimitMb).toFloat() else null,
             )
