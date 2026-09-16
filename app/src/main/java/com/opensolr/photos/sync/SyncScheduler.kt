@@ -175,6 +175,30 @@ object SyncScheduler {
     }
 
     /**
+     * Stops whatever is running or queued, and leaves everything else standing (Cip, 2026-09-16).
+     *
+     * A first sync of a whole library holds the phone for hours, and while it runs nothing else
+     * can be asked for - not a forced run, not a reset. This is the way out. It is a stop, not a
+     * switch-off: the schedule is put back and the photo watch armed again, so the next sync
+     * starts on its own exactly as it would have.
+     *
+     * Cancelling takes the periodic work and the watch down with the run, because everything
+     * carries the same tag; both are restored here.
+     */
+    fun stopNow(context: Context) {
+        val manager = WorkManager.getInstance(context)
+        // Only the runs that were asked for, never the schedule or the photo watch. Cancelling
+        // everything under TAG takes the periodic work down too, and putting it back enqueues it
+        // with its period already elapsed - so WorkManager starts a fresh sync on the spot and
+        // the stop looks like it did nothing at all.
+        manager.cancelAllWorkByTag(NOW)
+        manager.cancelAllWorkByTag(LATER)
+        manager.cancelAllWorkByTag(CHARGING)
+        manager.cancelAllWorkByTag(MEDIA)
+        watchMedia(context)
+    }
+
+    /**
      * Live status of sync work.
      */
     fun status(context: Context): Flow<SyncStatus> =

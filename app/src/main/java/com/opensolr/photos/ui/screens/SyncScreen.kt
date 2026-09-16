@@ -2,6 +2,11 @@ package com.opensolr.photos.ui.screens
 
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material3.Icon
+import androidx.compose.ui.res.painterResource
+import com.opensolr.photos.R
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -117,24 +122,35 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
             Spacer(Modifier.height(20.dp))
         }
 
-        AccentButton("Force Re-Sync", onClick = { viewModel.forceResync() }, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(6.dp))
-        // Four words, not a paragraph (Cip, 2026-09-15).
-        Text("New and deleted photos only.", style = MaterialTheme.typography.bodySmall, color = p.muted)
-        Spacer(Modifier.height(14.dp))
-
-        // Everything out of the index and read again: the only way to pick up a better
-        // reading of the pictures without touching the account on opensolr.com.
-        GhostButton("Reset index", onClick = { confirmReset = true }, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(6.dp))
-        Text("Empties it, reads every photo again.", style = MaterialTheme.typography.bodySmall, color = p.muted)
-        Spacer(Modifier.height(14.dp))
-
-        // The same idea as a reset, but only for the photos that carry printed text: they go
-        // out of the index and the next sync puts them back (Cip, 2026-09-16).
-        GhostButton("Rebuild OCR documents", onClick = { confirmRebuildOcr = true }, modifier = Modifier.fillMaxWidth())
-        Spacer(Modifier.height(6.dp))
-        Text("Reads the receipts, labels and screenshots again.", style = MaterialTheme.typography.bodySmall, color = p.muted)
+        // The four actions as one row of the header's own cells: icon over a short label, the
+        // way the top bar of the photos screen reads (Cip, 2026-09-16). Four stacked buttons
+        // each with a line of explanation under it had taken over the screen.
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            HeaderItem("Re-Sync", onClick = { viewModel.forceResync() }) {
+                Icon(painterResource(R.drawable.ic_sync), contentDescription = null, tint = p.accent, modifier = Modifier.size(20.dp))
+            }
+            // Only offered while something is actually going: nothing to stop otherwise.
+            HeaderItem("Stop", active = state.sync.busy, onClick = { viewModel.stopSync() }) {
+                Icon(
+                    painterResource(R.drawable.ic_stop),
+                    contentDescription = null,
+                    tint = if (state.sync.busy) p.accent else p.muted,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            HeaderItem("Documents", onClick = { confirmRebuildOcr = true }) {
+                Icon(painterResource(R.drawable.ic_rebuild), contentDescription = null, tint = p.ink, modifier = Modifier.size(20.dp))
+            }
+            HeaderItem("Reset", onClick = { confirmReset = true }) {
+                Icon(painterResource(R.drawable.ic_reset), contentDescription = null, tint = p.ink, modifier = Modifier.size(20.dp))
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            "Re-Sync takes new and deleted photos only. Stop ends the run that is going; the next one starts on its own. Documents reads the receipts, labels and screenshots again. Reset empties the index and reads every photo.",
+            style = MaterialTheme.typography.bodySmall,
+            color = p.muted,
+        )
         Spacer(Modifier.height(28.dp))
 
         SectionLabel("Automatic Re-Sync")

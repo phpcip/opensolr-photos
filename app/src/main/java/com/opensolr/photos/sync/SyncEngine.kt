@@ -78,6 +78,9 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
     /** Thrown mid-run when the battery is low with no charger; [photos] are left to read. */
     private class ChargerNeededException(val photos: Int) : Exception()
 
+    /** Thrown mid-run when the owner pressed Stop; everything written so far stays written. */
+    private class SyncStoppedException : Exception()
+
     /**
      * Runs one sync and returns what happened. Never throws except for cancellation.
      */
@@ -168,6 +171,12 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                 // stays indexed. A run that waited for the charger reads without pausing.
                 if (!unlimited && !isCharging() && batteryPercent() < BATTERY_PAUSE_PERCENT) {
                     throw ChargerNeededException((maxOf(expected, total) - added).coerceAtLeast(0))
+                }
+                // Stop was pressed. Checked here rather than left to WorkManager: cancelling the
+                // work cannot interrupt a batch already on its way, so a run of ten thousand
+                // photos would carry on for hours after the owner asked it to stop.
+                if (SyncWorker.stopRequested.get()) {
+                    throw SyncStoppedException()
                 }
                 val items = ArrayList<IngestItem>(batch.size)
                 for (photo in batch) {
@@ -317,6 +326,12 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             return report("ok", added, deleted, failed, localCount, indexCount, message, recreated, indexAfter)
         } catch (e: CancellationException) {
             throw e
+        } catch (e: SyncStoppedException) {
+            // Asked to stop: what is written stays written, and the next sync carries on from
+            // there, because the diff is on what the index holds rather than on a position.
+            commitQuietly()
+            return report("stopped", added, deleted, failed, localCount, indexCount,
+                "Stopped after $added photo${if (added == 1) "" else "s"}. The next sync carries on from here.", recreated)
         } catch (e: ChargerNeededException) {
             commitQuietly()
             return report("waiting_charger", added, deleted, failed, localCount, indexCount,

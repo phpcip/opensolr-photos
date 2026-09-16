@@ -958,6 +958,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Stops the sync that is running or waiting. Nothing already written is lost, and the next
+     * sync starts on its own as it would have: this is a stop, not a switch-off (Cip, 2026-09-16).
+     */
+    fun stopSync() {
+        // The flag first: WorkManager's cancellation cannot interrupt a batch already uploading,
+        // so the run is asked to give up between batches, and only then is the work cancelled.
+        com.opensolr.photos.sync.SyncWorker.stopRequested.set(true)
+        SyncScheduler.stopNow(context)
+        _state.update { it.copy(notice = "Sync stopped. It starts again on its own, or press Force Re-Sync.") }
+    }
+
+    /**
      * Enters or leaves photo selection on the grid.
      */
     fun setSelecting(on: Boolean) {

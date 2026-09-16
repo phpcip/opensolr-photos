@@ -1106,7 +1106,7 @@ private const val ALSO_SIMILAR_SHARE = 0.6
  * sharing the row's width equally with the others. [active] draws it in the accent.
  */
 @Composable
-private fun RowScope.HeaderItem(label: String, active: Boolean = false, onClick: () -> Unit, icon: @Composable () -> Unit) {
+internal fun RowScope.HeaderItem(label: String, active: Boolean = false, onClick: () -> Unit, icon: @Composable () -> Unit) {
     val p = LocalPalette.current
     Column(
         Modifier

@@ -30,6 +30,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
      */
     override suspend fun doWork(): Result {
         if (!running.compareAndSet(false, true)) return Result.success()
+        stopRequested.set(false)
         try {
             val prefs = AppPrefs(applicationContext)
             if (SyncScheduler.isWatchRun(tags)) {
@@ -118,5 +119,12 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
         /** True while any sync runs in this process. */
         val running = AtomicBoolean(false)
+
+        /**
+         * Set when the owner presses Stop. WorkManager's own cancellation cannot interrupt a
+         * batch that is already uploading, so the run checks this between batches and gives up
+         * cleanly, keeping everything it has already written (Cip, 2026-09-16).
+         */
+        val stopRequested = AtomicBoolean(false)
     }
 }

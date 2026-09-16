@@ -1,0 +1,3 @@
+A Stop button on the Sync screen. A first sync of a large library runs for hours, and while it ran nothing else could be asked for - not a forced sync, not a reset. Stop ends the run that is going; everything already indexed stays indexed, and the next sync carries on from there on its own.
+
+The four actions on that screen - Re-Sync, Stop, Documents, Reset - are now one row of icons with short labels, the way the bar at the top of your photos reads, instead of four stacked buttons each with a line of explanation under it.
