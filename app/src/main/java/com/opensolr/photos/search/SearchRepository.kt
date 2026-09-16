@@ -484,7 +484,8 @@ class SearchRepository(private val context: Context) {
         params += "anchorKey" to key
         params += "fl" to FIELDS
         params += "rows" to SIMILAR_ROWS.toString()
-        params += "sort" to "taken_at desc"
+        // With a tiebreaker: photos taken in the same second must come back in one fixed order.
+        params += "sort" to "taken_at desc, id asc"
         val hits = parse(select(params), false, null).hits
         return hits to if (hits.isEmpty()) emptyList() else listOf(hits.size)
     }
@@ -606,6 +607,12 @@ class SearchRepository(private val context: Context) {
             } else {
                 params += "q" to matched
             }
+            // Relevance first, then the id: two photos scoring the same must come back in one
+            // fixed order, or consecutive pages of an infinite scroll overlap and the same photo
+            // arrives twice. The grid keys its items by photo id, so a repeat crashed the app as
+            // soon as it was drawn (Cip, 2026-09-16). This only settles ties; the ranking itself
+            // is untouched.
+            params += "sort" to "score desc, id asc"
         }
 
         // One fq per field with chosen values, OR-ing the values ({!terms}), tagged with the

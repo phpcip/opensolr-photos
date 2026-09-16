@@ -59,7 +59,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             // Rate limited: stop now, sleep, and let WorkManager start the run again with its
             // backoff, instead of counting seconds with the phone held awake.
             if (report.status == "retry_later") return Result.retry()
-            // Too many photos to read on battery: the run continues once the phone is charging.
+            // The battery ran low with no charger: the run continues once the phone is plugged in.
             if (report.status == "waiting_charger") SyncScheduler.runWhenCharging(applicationContext)
             return Result.success(workDataOf(KEY_STATUS to report.status))
         } finally {

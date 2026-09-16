@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -225,14 +224,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            // Order, left to right (Cip, 2026-09-16): Opensolr, Me, Sync, Map, Albums, Select, Search.
-            HeaderItem("Opensolr", onClick = { Actions.openUrl(context, OPENSOLR_DASHBOARD_URL) }) {
-                // The launcher icon drawn small: its artwork sits in the middle two thirds of
-                // the adaptive canvas, so the canvas is drawn larger than the clipped square.
-                Box(Modifier.size(20.dp).clip(Corner).background(p.accentFill), contentAlignment = Alignment.Center) {
-                    Icon(painterResource(R.drawable.ic_launcher_foreground), contentDescription = "Opensolr dashboard", tint = p.onAccentFill, modifier = Modifier.requiredSize(32.dp))
-                }
-            }
+            // Order, left to right (Cip, 2026-09-16): Me, Sync, Map, Albums, Select, Search.
             HeaderItem("Me", onClick = { viewModel.open(Screen.Account) }) {
                 Icon(Icons.Filled.AccountCircle, contentDescription = "Opensolr account", tint = p.ink, modifier = Modifier.size(20.dp))
             }
@@ -1026,9 +1018,6 @@ private val DUPLICATE_LOOSE_DARK = Color(0xFFF4F1EC)
 private val DUPLICATE_NEUTRAL_DARK = Color(0xFFADB5BD)
 private val DUPLICATE_GREEN_DARK = Color(0xFF51CF66)
 private val DUPLICATE_RED_DARK = Color(0xFFFF6B6B)
-
-/** Where the logo of the header leads: the Opensolr dashboard, in the default browser. */
-private const val OPENSOLR_DASHBOARD_URL = "https://opensolr.com/admin/solr_manager"
 
 /**
  * Removable chips for the filters currently applied, on ONE row that scrolls sideways, like the

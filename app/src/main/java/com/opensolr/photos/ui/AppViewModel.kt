@@ -640,7 +640,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val page = searches.search(current.query, current.filters, start, freshBias = current.freshBias)
                 _state.update {
-                    val hits = if (reset) page.hits else it.hits + page.hits
+                    // A photo already on the grid is never added twice. Consecutive pages can
+                    // overlap when several photos share the value being sorted on, and the grid
+                    // keys its items by photo id: a repeat used to crash the app the moment it
+                    // was drawn, which is what fast scrolling produced (Cip, 2026-09-16).
+                    val hits = if (reset) {
+                        page.hits
+                    } else {
+                        val seen = it.hits.mapTo(HashSet()) { hit -> hit.id }
+                        it.hits + page.hits.filter { hit -> seen.add(hit.id) }
+                    }
                     it.copy(
                         searching = false,
                         hits = hits,

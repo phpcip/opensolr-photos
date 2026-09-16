@@ -75,7 +75,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
     /** The warning of this run that the month's allowance covers fewer photos than there are to read, if any. */
     private var shortAllowance = ""
 
-    /** Thrown before anything is changed when reading [photos] photos should wait for the charger. */
+    /** Thrown mid-run when the battery is low with no charger; [photos] are left to read. */
     private class ChargerNeededException(val photos: Int) : Exception()
 
     /**
@@ -131,11 +131,6 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                 // other (Cip, 2026-09-15): the owner's tags and wording are kept on the phone,
                 // the index is emptied, and only THEN the new configuration goes up. Every
                 // photo is handed to Opensolr again below.
-                // Too many photos for the battery: wait for the charger before anything is
-                // emptied, so the index is never left empty while the phone waits.
-                if (!unlimited && local.size > CHARGER_THRESHOLD && !isCharging()) {
-                    throw ChargerNeededException(local.size)
-                }
                 onProgress(Progress("Resetting your index", 0, 0))
                 withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { keepOwnersEdits(solr) }
                 solr.deleteAll()
@@ -166,6 +161,14 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             var expected = 0
             suspend fun progress(phase: String) = onProgress(Progress(phase, added + failed, maxOf(total, expected)))
             suspend fun ingest(batch: List<LocalPhoto>) {
+                // However many photos there are, the run goes ahead. It stops only when the
+                // battery is low and nothing is charging, and continues by itself once the phone
+                // is plugged in (Cip, 2026-09-16). Checked before every batch, so a long run
+                // gives up cleanly instead of flattening the phone, and what it already indexed
+                // stays indexed. A run that waited for the charger reads without pausing.
+                if (!unlimited && !isCharging() && batteryPercent() < BATTERY_PAUSE_PERCENT) {
+                    throw ChargerNeededException((maxOf(expected, total) - added).coerceAtLeast(0))
+                }
                 val items = ArrayList<IngestItem>(batch.size)
                 for (photo in batch) {
                     val jpeg = try {
@@ -243,16 +246,13 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                             indexCount = numFound.toInt()
                             // Photos the index cannot hold yet, plus those to be read again: the
                             // least this run reads. When the month's allowance covers fewer, say
-                            // so once; when there are too many to read on battery, wait for the
-                            // charger before touching anything.
+                            // so once. However many there are, the run starts: it stops only if
+                            // the battery gets low with no charger (Cip, 2026-09-16).
                             val atLeast = (local.size - indexCount).coerceAtLeast(0) + forced.size + needWords.size
                             expected = atLeast + withoutPlace.size
                             if (aiAvailable && limits != null) {
                                 val left = limits.photosLeftThisMonth
                                 if (left != null && left < atLeast) shortAllowance = warnShortAllowance(left, atLeast)
-                            }
-                            if (!unlimited && atLeast > CHARGER_THRESHOLD && !isCharging()) {
-                                throw ChargerNeededException(atLeast)
                             }
                         }
                         pages++
@@ -288,9 +288,6 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             val newOnes = local.values.filter { it.id in unseen }
             // The diff is over: what is left to read is exactly known, so the estimate goes.
             expected = total + newOnes.size
-            if (rebuild && !unlimited && newOnes.size > CHARGER_THRESHOLD && !isCharging()) {
-                throw ChargerNeededException(newOnes.size)
-            }
             for (photo in newOnes) queue(photo)
             if (pending.isNotEmpty()) {
                 val batch = pending.toList()
@@ -319,8 +316,9 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
         } catch (e: CancellationException) {
             throw e
         } catch (e: ChargerNeededException) {
-            return report("waiting_charger", 0, deleted, 0, localCount, indexCount,
-                "${Actions.formatCount(e.photos.toLong())} photos are waiting to be read. That takes a while, so it runs when the phone is charging.", recreated)
+            commitQuietly()
+            return report("waiting_charger", added, deleted, failed, localCount, indexCount,
+                "Paused at ${batteryPercent()}% battery after $added photos; ${Actions.formatCount(e.photos.toLong())} are left. It continues on its own when the phone is charging.", recreated)
         } catch (e: RetryLaterException) {
             commitQuietly()
             return report("retry_later", added, deleted, failed, localCount, indexCount, e.message ?: "", recreated)
@@ -410,6 +408,18 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
         }
     }
 
+    /**
+     * How much battery is left, as a percentage, from the same sticky broadcast the charging
+     * check reads. Returns 100 when Android does not say, so an unknown battery never pauses a
+     * sync.
+     */
+    private fun batteryPercent(): Int {
+        val intent = context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)) ?: return 100
+        val level = intent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+        val scale = intent.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1)
+        return if (level < 0 || scale <= 0) 100 else (level * 100 / scale)
+    }
+
     private fun isCharging(): Boolean {
         val status = context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
             ?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1) ?: -1
@@ -494,8 +504,12 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             /** Photos per photos_ingest call, the most the endpoint takes. */
         private const val READ_BATCH = 5
 
-        /** More photos to read than this, and a run on battery waits for the charger. */
-        private const val CHARGER_THRESHOLD = 500
+        /**
+         * Below this much battery, with no charger, a run stops where it is and continues when
+         * the phone is plugged in (Cip, 2026-09-16). However many photos there are, the run
+         * starts: the number of them is not a reason to wait, only the battery is.
+         */
+        private const val BATTERY_PAUSE_PERCENT = 20
 
         /** Share of a rate limit this run keeps under, so a call is never refused. */
         private const val PACE_SHARE = 0.8
