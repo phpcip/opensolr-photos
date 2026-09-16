@@ -45,6 +45,12 @@
 
   <field name="meaning" type="text_general" indexed="true" stored="true"/>
   <field name="labels" type="string" indexed="true" stored="true" multiValued="true"/>
+  <!-- The text printed IN the photo, read with tesseract on the server (petrol receipts, shelf
+       labels, screenshots). Separate from meaning, which is what the photo SHOWS: a receipt is
+       found by the words on it, and the words on it are never presented as a description.
+       stored="true" so a document read back and rewritten (an edit of the tags) keeps it, and
+       so the copyField below can put it back into text on every write. -->
+  <field name="ocr_t" type="text_general" indexed="true" stored="true"/>
   <!-- Words the owner added to the photo by hand. They outrank the CLIP words in search. -->
   <field name="custom_tags" type="string" indexed="true" stored="true" multiValued="true"/>
   <!-- The tags as words, for search: "luminita" finds the tag "Luminița". -->
@@ -68,6 +74,10 @@
   <field name="camera_text" type="text_general" indexed="true" stored="false" multiValued="true"/>
 
   <copyField source="meaning" dest="text"/>
+  <!-- The printed text joins the words the search already looks through, so a search for
+       "petrom" or a receipt number finds the photo with no change in the app's query fields.
+       NOT copied into suggest or spell: a receipt would fill autocomplete with its own numbers. -->
+  <copyField source="ocr_t" dest="text"/>
   <copyField source="file_name" dest="file_name_text"/>
   <copyField source="folder" dest="folder_text"/>
   <copyField source="camera_make" dest="camera_text"/>

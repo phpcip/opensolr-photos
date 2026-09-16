@@ -123,7 +123,7 @@
       <int name="rows">0</int>
       <str name="echoParams">all</str>
       <str name="wt">json</str>
-      <int name="config_version">9</int>
+      <int name="config_version">10</int>
     </lst>
   </requestHandler>
 
