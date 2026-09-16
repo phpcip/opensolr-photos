@@ -252,12 +252,16 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         }
     }
 
-    val nearEnd by remember {
+    val nearEnd by remember(rows) {
         derivedStateOf {
             val last = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
             // Halfway through the last page loaded, not at its very end: the next page is on its
             // way (or already held in the cache) before the owner reaches it (Cip, 2026-09-17).
-            last >= gridState.layoutInfo.totalItemsCount - PREFETCH_REMAINING
+            // Only while the last group is open: a folded group at the bottom keeps the list
+            // short whatever arrives, so every page loaded would leave it "near the end" again
+            // and the pages were fetched one after another to the end of the results, a tap
+            // for each (Cip, 2026-09-17). Opening that group resumes the loading.
+            rows.lastOrNull() is GridRow.Photo && last >= gridState.layoutInfo.totalItemsCount - PREFETCH_REMAINING
         }
     }
     // The grid is taken where the view model says, once per change it announces: the place this
@@ -466,8 +470,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 state.duplicatesMode && state.similarToId != null ->
                     "${Actions.formatCount(state.hits.size.toLong())} like ${state.similarToHit?.fileName ?: "this photo"}"
                 state.duplicatesMode ->
-                    // The groups of this kind, all of them, however few have been fetched so far.
-                    "${Actions.formatCount(state.hits.size.toLong())} photos in ${Actions.formatCount(state.duplicateGroupsTotal.toLong())} group${if (state.duplicateGroupsTotal == 1) "" else "s"}"
+                    // Only the photos: how many groups they fall into interests nobody (Cip, 2026-09-17).
+                    "${Actions.formatCount(state.hits.size.toLong())} photo${if (state.hits.size == 1) "" else "s"}"
                 else -> "${Actions.formatCount(state.numFound)} photo${if (state.numFound == 1L) "" else "s"}"
             }
             Text(countText, style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.weight(1f))

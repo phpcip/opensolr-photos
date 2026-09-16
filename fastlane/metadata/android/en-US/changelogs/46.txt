@@ -1,0 +1,1 @@
+With groups folded, a refresh or a search no longer loads page after page of results in a row, with a tap for each: the next page is only asked for while the last group is open. The duplicates count line says only how many photos there are.
