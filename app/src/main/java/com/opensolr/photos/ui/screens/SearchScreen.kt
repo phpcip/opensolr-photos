@@ -82,6 +82,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.launch
+import androidx.compose.ui.draw.scale
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.HorizontalDivider
@@ -421,6 +422,30 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                     contentDescription = if (!state.duplicatesMode) "Photos of the same thing" else "Back to all photos",
                     tint = if (state.duplicatesMode) p.accent else p.muted,
                     modifier = Modifier.size(20.dp),
+                )
+            }
+            // AI: on, the search blends meaning with words; off, it matches words only. The same
+            // switch search.opensolr.com carries, and it only means anything once something is
+            // typed - browsing has no query to search by meaning (Cip, 2026-09-16).
+            if (state.query.isNotBlank()) {
+                Text(
+                    "AI",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = if (state.wordsOnly) p.muted else p.accent,
+                    modifier = Modifier.padding(end = 4.dp),
+                )
+                Switch(
+                    checked = !state.wordsOnly,
+                    onCheckedChange = { viewModel.setWordsOnly(!it) },
+                    colors = SwitchDefaults.colors(
+                        checkedTrackColor = p.accentFill,
+                        checkedThumbColor = p.onAccentFill,
+                        uncheckedTrackColor = p.chip,
+                        uncheckedBorderColor = p.hairline,
+                        uncheckedThumbColor = p.muted,
+                    ),
+                    modifier = Modifier.scale(0.7f),
                 )
             }
             // Fresh: recent photos are boosted among the matches, nothing is dropped or resorted.
@@ -1223,6 +1248,9 @@ private fun ActiveFilterChips(filters: SearchFilters, onRemove: (SearchFilters) 
         filters.tagged?.let { add((if (it) "Tagged" else "Not tagged") to filters.copy(tagged = null)) }
         filters.near?.let { add(it.label to filters.copy(near = null)) }
         filters.taken?.let { add(it.label to filters.copy(taken = null)) }
+        filters.hasOcr?.let { add((if (it) "Has OCR" else "No OCR") to filters.copy(hasOcr = null)) }
+        filters.hasPeople?.let { add((if (it) "Has people" else "No people") to filters.copy(hasPeople = null)) }
+        filters.documents?.let { add((if (it) "Documents" else "Not documents") to filters.copy(documents = null)) }
     }
     LazyRow(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         // No key: the same label can be applied in two fields (a city and a word), and a
@@ -1385,6 +1413,27 @@ private fun FilterSheet(
                 }
                 Spacer(Modifier.height(18.dp))
             }
+
+            // Read, named, paperwork: the same three-state shape as "My tags" below - picking
+            // the chip already chosen clears it and every photo is shown again.
+            TriStateSection(
+                title = "Printed text",
+                yes = "Has OCR", no = "No OCR",
+                state = draft.hasOcr,
+                onChange = { onChange(draft.copy(hasOcr = it)) },
+            )
+            TriStateSection(
+                title = "People",
+                yes = "Has people", no = "No people",
+                state = draft.hasPeople,
+                onChange = { onChange(draft.copy(hasPeople = it)) },
+            )
+            TriStateSection(
+                title = "Documents",
+                yes = "Documents", no = "Not documents",
+                state = draft.documents,
+                onChange = { onChange(draft.copy(documents = it)) },
+            )
 
             // Your own tags: three states, so two chips rather than a switch. Picking the one
             // already chosen clears it and every photo is shown again.
@@ -1589,6 +1638,22 @@ private fun DateRangeSection(current: DateRange?, onChange: (DateRange?) -> Unit
             )
         }
     }
+}
+
+/**
+ * A filter with three states: every photo, only those that have the thing, only those that do
+ * not. Two chips rather than a switch, because a switch has no way to say "I do not care".
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun TriStateSection(title: String, yes: String, no: String, state: Boolean?, onChange: (Boolean?) -> Unit) {
+    SectionLabel(title)
+    Spacer(Modifier.height(10.dp))
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Chip(label = yes, selected = state == true, onClick = { onChange(if (state == true) null else true) })
+        Chip(label = no, selected = state == false, onClick = { onChange(if (state == false) null else false) })
+    }
+    Spacer(Modifier.height(18.dp))
 }
 
 /**

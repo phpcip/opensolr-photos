@@ -1,0 +1,5 @@
+The words printed in a photo now count as much as the words it was read into, so a receipt comes up by the station on it, not only by looking like a receipt.
+
+An AI switch next to the results turns search by meaning on and off. Off, the search matches words only, which is what you want when you are after an exact code or number.
+
+Three filters added: photos that carry printed text or do not, photos with people named on them or without, and photos that are paperwork - receipts, invoices, certificates, labels, screenshots - judged the same way the server decides a photo is worth reading at all.

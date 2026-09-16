@@ -96,6 +96,11 @@ data class UiState(
     val selectedIds: Set<String> = emptySet(),
     /** "Fresh": recency multiplies the score, so recent photos rise without anything being lost. */
     val freshBias: Boolean = false,
+    /**
+     * Words only: the vector leg is left out and the search is purely lexical, the way the AI
+     * switch works on search.opensolr.com (Cip, 2026-09-16).
+     */
+    val wordsOnly: Boolean = false,
     /** Facet values of the words alone, for the suggestions above a typed search's results. */
     val queryFacets: Map<String, List<FacetValue>> = emptyMap(),
     /** Looking at photos of the same thing: the size of each group, laid out in order over [hits]. */
@@ -301,7 +306,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // inside the duplicates view changed the key of the search waiting behind it and losing
         // its place (Cip, 2026-09-16).
         if (s.duplicatesMode) "duplicates|${s.similarToId}|${s.duplicateLevel}"
-        else "search|${s.searchedQuery}|${s.filters}|${s.freshBias}"
+        else "search|${s.searchedQuery}|${s.filters}|${s.freshBias}|${s.wordsOnly}"
 
     /**
      * Remembers where the grid stands for the search it is showing: the row at the top by its
@@ -743,7 +748,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (reset) loadQueryFacets(current.query, current.filters)
         searchJob = viewModelScope.launch {
             try {
-                val page = searches.search(current.query, current.filters, start, freshBias = current.freshBias)
+                val page = searches.search(current.query, current.filters, start, freshBias = current.freshBias, wordsOnly = current.wordsOnly)
                 _state.update {
                     // A photo already on the grid is never added twice. Consecutive pages can
                     // overlap when several photos share the value being sorted on, and the grid
@@ -1076,6 +1081,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun setFreshBias(on: Boolean) {
         if (_state.value.freshBias == on) return
         _state.update { it.copy(freshBias = on) }
+        search(reset = true)
+    }
+
+    /**
+     * The AI switch: off leaves the vector leg out and the search matches words only. Runs the
+     * search again, since it is the query itself that changes.
+     */
+    fun setWordsOnly(on: Boolean) {
+        if (_state.value.wordsOnly == on) return
+        _state.update { it.copy(wordsOnly = on) }
         search(reset = true)
     }
 

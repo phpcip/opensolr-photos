@@ -36,10 +36,21 @@ data class SearchFilters(
     val near: NearFilter? = null,
     /** "Taken between these two days", when the year list is not fine enough (Cip, 2026-09-16). */
     val taken: DateRange? = null,
+    /** Photos by whether anything was read printed in them; three states, like [tagged]. */
+    val hasOcr: Boolean? = null,
+    /** Photos by whether anyone is named on them; three states, like [tagged]. */
+    val hasPeople: Boolean? = null,
+    /**
+     * Photos that look like paperwork. Not "has printed text": a document read badly is still a
+     * document. The test is the one the server uses to decide whether a photo is worth reading
+     * at all, run against the same words - see DOCUMENT_WORDS.
+     */
+    val documents: Boolean? = null,
 ) {
     /** Number of active filters, for the filter button badge. */
     val count: Int get() = fields.values.sumOf { it.size } + (if (withLocation) 1 else 0) +
-        (if (tagged != null) 1 else 0) + (if (near != null) 1 else 0) + (if (taken != null) 1 else 0)
+        (if (tagged != null) 1 else 0) + (if (near != null) 1 else 0) + (if (taken != null) 1 else 0) +
+        (if (hasOcr != null) 1 else 0) + (if (hasPeople != null) 1 else 0) + (if (documents != null) 1 else 0)
 
     /** The chosen values of [field]. */
     fun values(field: String): Set<String> = fields[field] ?: emptySet()
@@ -68,6 +79,19 @@ data class SearchFilters(
         )
         /** Facet fields an index on the previous configuration does not have. */
         val NEWER_FACETS = setOf("city", "region", "country", "labels", "custom_tags")
+
+        /**
+         * What makes a photo paperwork, copied from TEXT_FAMILY_WORDS in stream_server.py -
+         * the same list the server runs over the same words before sending a photo to be read.
+         * Matched against `meaning`, which is those words joined, so the rule is the server's
+         * rule expressed as a query rather than a regex; no field and no reindex for it.
+         */
+        val DOCUMENT_WORDS = listOf(
+            "text", "label", "labels", "document", "documents", "receipt", "invoice",
+            "certificate", "card", "ticket", "menu", "poster", "brochure", "flyer", "leaflet",
+            "banner", "billboard", "guide", "print", "number", "tag", "\"nutrition facts\"",
+            "website", "screenshot",
+        )
     }
 }
 
@@ -234,13 +258,13 @@ class SearchRepository(private val context: Context) {
     /**
      * Runs a search. [start] is the offset of the first result.
      */
-    suspend fun search(query: String, filters: SearchFilters, start: Int, rows: Int = PAGE, freshBias: Boolean = false): SearchPage =
+    suspend fun search(query: String, filters: SearchFilters, start: Int, rows: Int = PAGE, freshBias: Boolean = false, wordsOnly: Boolean = false): SearchPage =
         try {
-            search(query, filters, start, rows, legacy = false, freshBias = freshBias)
+            search(query, filters, start, rows, legacy = false, freshBias = freshBias, wordsOnly = wordsOnly)
         } catch (e: ServiceException) {
             // An index still on an older configuration (rebuild postponed) lacks the newest
             // fields and answers 400 to them; search it with what it has.
-            if (e.message?.contains("HTTP 400") == true) search(query, filters, start, rows, legacy = true, freshBias = freshBias) else throw e
+            if (e.message?.contains("HTTP 400") == true) search(query, filters, start, rows, legacy = true, freshBias = freshBias, wordsOnly = wordsOnly) else throw e
         }
 
     /**
@@ -287,8 +311,8 @@ class SearchRepository(private val context: Context) {
     /**
      * One search request; [legacy] leaves out the fields an older configuration lacks.
      */
-    private suspend fun search(query: String, filters: SearchFilters, start: Int, rows: Int, legacy: Boolean, freshBias: Boolean): SearchPage {
-        val (params, smart, notice) = queryParams(query, filters, legacy, freshBias = freshBias)
+    private suspend fun search(query: String, filters: SearchFilters, start: Int, rows: Int, legacy: Boolean, freshBias: Boolean, wordsOnly: Boolean): SearchPage {
+        val (params, smart, notice) = queryParams(query, filters, legacy, wordsOnly = wordsOnly, freshBias = freshBias)
         val text = query.trim().take(300)
         if (text.isNotEmpty()) {
             // Spellcheck the typed words; the collation is offered as "did you mean".
@@ -671,6 +695,16 @@ class SearchRepository(private val context: Context) {
         if (filters.withLocation) params += "fq" to "has_location:true"
         // Taken between two days. The ends travel as bound parameters, so nothing the picker
         // produced is ever spliced into the query itself.
+        // Fields the older configuration does not have, so an index still on it is left alone
+        // rather than asked for something it would refuse.
+        if (!legacy) {
+            filters.hasOcr?.let { params += "fq" to if (it) "ocr_t:*" else "-ocr_t:*" }
+            filters.hasPeople?.let { params += "fq" to if (it) "persons_t:*" else "-persons_t:*" }
+            filters.documents?.let { wanted ->
+                params += "fq" to if (wanted) "{!lucene v=\$doc_q}" else "-{!lucene v=\$doc_q}"
+                params += "doc_q" to "meaning:(" + SearchFilters.DOCUMENT_WORDS.joinToString(" OR ") + ")"
+            }
+        }
         filters.taken?.let { range ->
             // The whole clause travels as one bound parameter: a range cannot be expressed with
             // {!field} or {!term}, and nothing is spliced into the fq itself. The two ends are
@@ -777,7 +811,9 @@ class SearchRepository(private val context: Context) {
         private const val FRESH_BIAS = "recip(max(0,ms(NOW,taken_at)),3.16e-11,1,1)"
         /** Minimum-should-match of the lexical leg: Opensolr's "flexible" setting. */
         private const val MM = "2<65% 4<50% 8<40%"
-        private const val QF = "custom_tags_text^5 meaning^3 text file_name_text folder_text camera_text place_text"
+        // ocr_t sits right under meaning: the words printed IN a photo name it as surely as the
+        // words it was read into, and a receipt is asked for by what is on it (Cip, 2026-09-16).
+        private const val QF = "custom_tags_text^5 meaning^3 ocr_t^3 text file_name_text folder_text camera_text place_text"
         private const val LEGACY_QF = "meaning^3 text file_name_text folder_text camera_text"
         private const val LEGACY_FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,labels"
         /**
