@@ -49,7 +49,7 @@ What you type is trimmed to 300 characters and sent **only as the bound paramete
 
 ```
 uq          = dog on the beach
-lexicalRaw  = {!edismax qf="custom_tags_text^5 meaning^3 text file_name_text folder_text camera_text place_text" mm="2<65% 4<50% 8<40%" v=$uq}
+lexicalRaw  = {!edismax qf="custom_tags_text^5 meaning^3 ocr_t^3 text file_name_text folder_text camera_text place_text" mm="2<65% 4<50% 8<40%" v=$uq}
 ```
 
 On a plan with vector search, the app first asks `embed` (with `is_query=1`) for the query's vector and
@@ -90,6 +90,13 @@ The names are read on the phone rather than carried on the 640 px copy: `ExifInt
 packet to a `String` as ASCII, which turns a name with diacritics into question marks. `PhotoReader
 .personsIn` decodes the raw bytes as UTF-8 and the names travel to `photos_ingest` as JSON, in the `persons`
 field of the photo.
+
+## The AI switch
+
+Next to the count above the grid, once something is typed. On, the search blends meaning with words
+(the hybrid query below). Off, the vector leg is left out entirely and the search is purely lexical —
+which is what you want for an exact code, a receipt number or a product reference, where the vector
+only drags the answer away from the thing you asked for. The same switch search.opensolr.com carries.
 
 ## The text printed in a photo
 
@@ -137,6 +144,9 @@ horizontally scrolling row.
 | Filter | Parameters |
 |---|---|
 | Year | `fq={!term f=year v=$f_year}` and `f_year=2024` |
+| Printed text | `fq=ocr_t:*`, or `-ocr_t:*` for photos without |
+| People | `fq=persons_t:*`, or `-persons_t:*` |
+| Documents | `fq={!lucene v=$doc_q}` with `doc_q=meaning:(receipt OR invoice OR certificate OR label OR …)` — the server's own TEXT_FAMILY_WORDS list run against `meaning`, which is those words joined. A document read badly is still a document, so this is not the same as having printed text |
 | Taken between | `fq={!lucene v=$taken_q}` and `taken_q=taken_at:[2025-07-01T00:00:00Z TO 2025-07-08T23:59:59Z]`. Both days included; the clause travels as one bound parameter, and its two ends are formatted from a Long, so they can only ever be timestamps |
 | Folder | `fq={!term f=folder v=$f_folder}` and `f_folder=DCIM/Camera/` |
 | Camera make | `fq={!term f=camera_make v=$f_make}` and `f_make=Google` |

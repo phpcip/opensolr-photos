@@ -97,6 +97,7 @@ touched, a changed one is read again. Reading a photo again is free when Opensol
 | First setup | Right after the index is created or found |
 | Changing folders | Saving a new folder choice starts a sync |
 | **Force Re-Sync** | Button on the Sync screen |
+| **Rebuild OCR documents** | Button under *Reset index*. One delete-by-query on `ocr_t:*` drops the documents, then a sync puts them back: the diff finds them missing and writes them afresh, with the reading cleaned on the way out of the server's cache. Free — a photo read once is never read again |
 | **Photos changed** | `SyncScheduler.watchMedia`: a WorkManager content-URI trigger on MediaStore images, 60 s after the first change and at most 5 min later; one-shot by design, re-armed after every run and at every app start |
 | **Re-sync selected** | Chosen photo ids go to `AppPrefs.resyncIds` and a sync starts; those photos bypass the cache |
 | **Kind to the battery** | The watch only starts a sync when a changed picture is in one of your folders; a screenshot or a chat picture elsewhere is ignored without a single request. Two watch-started syncs stay at least 15 minutes apart (the change waits, it is not lost). More than 500 photos to read at once waits for the charger. The app paces its calls under your account's API rate limits, and if Opensolr still asks it to slow down, the run stops and is started again a little later instead of waiting with the phone awake. |
