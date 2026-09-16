@@ -116,9 +116,12 @@ data class UiState(
     val searchGeneration: Int = 0,
     /** Counts fresh result pages that arrived, so the grid scrolls to the top once they are in. */
     val resultsGeneration: Int = 0,
-    /** Where the grid should stand: the first visible item and its offset, for the search on screen. */
+    /** Where the grid should stand: the row that was at the top, by its key, then by position. */
+    val gridKey: String? = null,
     val gridIndex: Int = 0,
     val gridOffset: Int = 0,
+    /** The group headings folded away in the view on screen. */
+    val collapsedHeadings: Set<String> = emptySet(),
     /** Bumped whenever the grid has somewhere to be taken to, so the screen scrolls exactly once. */
     val restoreGeneration: Int = 0,
     val editSaving: Boolean = false,
@@ -269,7 +272,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * and coming back, returns to a search that had its own place in the list. The key is what
      * produced the photos on screen, so each of them is returned to its own.
      */
-    private val scrollPositions = HashMap<String, Pair<Int, Int>>()
+    private val scrollPositions = HashMap<String, ScrollAt>()
+
+    /**
+     * Where a view was left: which row was at the top, how far it had been scrolled past, and
+     * which row that was by position.
+     *
+     * The key matters more than the position (Cip, 2026-09-16): deleting photos, or folding a
+     * group away, makes the list shorter, and a remembered row number then points at something
+     * else entirely - which is exactly how a delete used to throw the grid somewhere random. The
+     * number is only the fallback, for when that row is no longer there at all.
+     */
+    private data class ScrollAt(val key: String?, val index: Int, val offset: Int)
+
+    /**
+     * Which group headings are folded away, per view. Remembered the same way as the place in
+     * the list, so folding "Today" and coming back later finds it still folded.
+     */
+    private val collapsedHeadings = HashMap<String, Set<String>>()
 
     /**
      * What the photos on screen answer to: the words searched for, the filters, and whether the
@@ -284,10 +304,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         else "search|${s.searchedQuery}|${s.filters}|${s.freshBias}"
 
     /**
-     * Remembers where the grid stands for the search it is showing.
+     * Remembers where the grid stands for the search it is showing: the row at the top by its
+     * own key, and its position as a fallback.
      */
-    fun rememberGridPosition(index: Int, offset: Int) {
-        scrollPositions[contextKey(_state.value)] = index to offset
+    fun rememberGridPosition(key: String?, index: Int, offset: Int) {
+        scrollPositions[contextKey(_state.value)] = ScrollAt(key, index, offset)
+    }
+
+    /**
+     * Folds a group heading away, or opens it again, for the view on screen.
+     */
+    fun toggleHeading(key: String) {
+        val context = contextKey(_state.value)
+        val next = collapsedHeadings[context].orEmpty().let { if (key in it) it - key else it + key }
+        collapsedHeadings[context] = next
+        _state.update { it.copy(collapsedHeadings = next) }
     }
 
     /**
@@ -296,8 +327,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * and coming back from the map or the albums, where nothing is reloaded.
      */
     private fun targetScroll() {
-        val (index, offset) = scrollPositions[contextKey(_state.value)] ?: (0 to 0)
-        _state.update { it.copy(gridIndex = index, gridOffset = offset, restoreGeneration = it.restoreGeneration + 1) }
+        val context = contextKey(_state.value)
+        val at = scrollPositions[context] ?: ScrollAt(null, 0, 0)
+        _state.update {
+            it.copy(
+                gridKey = at.key,
+                gridIndex = at.index,
+                gridOffset = at.offset,
+                // The folded groups of this view travel with it, so they survive leaving and
+                // coming back exactly as the place in the list does.
+                collapsedHeadings = collapsedHeadings[context].orEmpty(),
+                restoreGeneration = it.restoreGeneration + 1,
+            )
+        }
     }
 
     /**
@@ -395,6 +437,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * per batch rather than one per photo.
      */
     fun tagPhotos(tags: List<String>) {
+        // One at a time: a second run started over the first would write the same photos twice
+        // and the count on screen would mean nothing.
+        if (_state.value.bulkTagging) return
         val targets = photosToTag()
         val ids = targets.map { it.id }
         val clean = tags.map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }

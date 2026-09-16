@@ -24,10 +24,17 @@ data class SearchFilters(
     /** Chosen values per Solr field (year, folder, camera_model, ...); several per field are OR-ed. */
     val fields: Map<String, Set<String>> = emptyMap(),
     val withLocation: Boolean = false,
+    /**
+     * Photos by whether the owner has tagged them: null is every photo, true only the tagged
+     * ones, false only those with no tags of their own (Cip, 2026-09-16). Three states, so a
+     * switch would not do.
+     */
+    val tagged: Boolean? = null,
     val near: NearFilter? = null,
 ) {
     /** Number of active filters, for the filter button badge. */
-    val count: Int get() = fields.values.sumOf { it.size } + (if (withLocation) 1 else 0) + (if (near != null) 1 else 0)
+    val count: Int get() = fields.values.sumOf { it.size } + (if (withLocation) 1 else 0) +
+        (if (tagged != null) 1 else 0) + (if (near != null) 1 else 0)
 
     /** The chosen values of [field]. */
     fun values(field: String): Set<String> = fields[field] ?: emptySet()
@@ -46,7 +53,11 @@ data class SearchFilters(
         val FACETS = listOf(
             // No "region": between City and Country it said the same thing a third time
             // (Cip, 2026-09-15). The field is still indexed and still searched by words.
-            "year" to "Year", "folder" to "Folder", "city" to "City", "country" to "Country",
+            // No "folder" either (Cip, 2026-09-16): MediaStore names a folder by its whole path,
+            // so a library kept in nested folders filled the list with "Documents/photos/..."
+            // lines that all looked alike. The field is still indexed and still searched by
+            // words, and a photo's details still say which folder it is in.
+            "year" to "Year", "city" to "City", "country" to "Country",
             "camera_make" to "Camera make", "camera_model" to "Camera model", "custom_tags" to "My tags",
             "labels" to "Meaning", "orientation" to "Orientation",
         )
@@ -486,7 +497,10 @@ class SearchRepository(private val context: Context) {
         params += "rows" to SIMILAR_ROWS.toString()
         // With a tiebreaker: photos taken in the same second must come back in one fixed order.
         params += "sort" to "taken_at desc, id asc"
-        val hits = parse(select(params), false, null).hits
+        // The photo everything is being compared with comes first, where it is expected, instead
+        // of sitting somewhere down the list with a label on it (Cip, 2026-09-16). The sort is
+        // stable, so the others keep their own order, newest first.
+        val hits = parse(select(params), false, null).hits.sortedByDescending { it.id == photoId }
         return hits to if (hits.isEmpty()) emptyList() else listOf(hits.size)
     }
 
@@ -625,6 +639,11 @@ class SearchRepository(private val context: Context) {
             params += "f_$field" to values.filter { '|' !in it }.joinToString("|")
         }
         if (filters.withLocation) params += "fq" to "has_location:true"
+        // Tagged or untagged: the field is only on the newer configuration, so an index still on
+        // the old one is left alone rather than being asked something it would refuse.
+        if (!legacy) filters.tagged?.let { wanted ->
+            params += "fq" to if (wanted) "custom_tags:[* TO *]" else "-custom_tags:[* TO *]"
+        }
         filters.near?.let { near ->
             // Radius search on the GPS position; point and distance travel as bound parameters.
             params += "fq" to "{!geofilt sfield=location pt=\$near_pt d=\$near_d}"
@@ -734,6 +753,10 @@ class SearchRepository(private val context: Context) {
             // The same file name (without the folder: several folders can be indexed) and the
             // same size in bytes, straight from the stored fields, which have docValues already.
             "file_name", "size_bytes",
+            // The strictest stop of all: the md5 of the file itself, so only true copies group
+            // together (Cip, 2026-09-16). Same size is not the same file - a camera pads its
+            // files to whole blocks, so hundreds of different photos share a size exactly.
+            "file_hash",
         )
         /** Most photos "Show similar photos" brings back for one anchor photo. */
         private const val SIMILAR_ROWS = 200

@@ -97,6 +97,29 @@ object PhotoReader {
      * and the phone does nothing else with it. Orientation is set upright because the pixels
      * already are. Null when the file cannot be decoded.
      */
+    /**
+     * The md5 of the photo file itself, lower-case hex, or null when it cannot be read.
+     *
+     * Of the original bytes, not of the copy sent to be read into words: that copy is
+     * re-encoded and carries none of the original's identity. This is what tells two files that
+     * are byte for byte the same apart from everything that merely looks alike (Cip,
+     * 2026-09-16). Streamed in blocks, so a large photo never sits in memory whole.
+     */
+    fun fileMd5(context: Context, photo: LocalPhoto): String? = try {
+        context.contentResolver.openInputStream(photo.uri)?.use { input ->
+            val digest = java.security.MessageDigest.getInstance("MD5")
+            val buffer = ByteArray(1 shl 16)
+            while (true) {
+                val read = input.read(buffer)
+                if (read <= 0) break
+                digest.update(buffer, 0, read)
+            }
+            digest.digest().joinToString("") { "%02x".format(it) }
+        }
+    } catch (e: Exception) {
+        null
+    }
+
     fun copyForIngest(context: Context, photo: LocalPhoto): ByteArray? {
         val exif = openExif(context, photo.uri)
         val jpeg = shrinkForClip(context, photo.uri, exif?.rotationDegrees ?: 0) ?: return null

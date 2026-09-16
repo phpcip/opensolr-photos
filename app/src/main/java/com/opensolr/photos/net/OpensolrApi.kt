@@ -32,7 +32,7 @@ data class ClipResult(val text: String, val labels: List<String>, val model: Str
  * One photo handed to photos_ingest: the copy with its EXIF, and the owner's edits when
  * this phone holds them (null = the server keeps what the index already has).
  */
-data class IngestItem(val photo: com.opensolr.photos.media.LocalPhoto, val jpeg: ByteArray, val tags: List<String>?, val meaning: String?)
+data class IngestItem(val photo: com.opensolr.photos.media.LocalPhoto, val jpeg: ByteArray, val tags: List<String>?, val meaning: String?, val fileHash: String? = null)
 
 /** What the server did with one photo: whether it got words (and a vector), and a place. */
 data class IngestResult(val words: Boolean, val place: Boolean)
@@ -338,6 +338,9 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
                 put("media_id", p.mediaId)
                 put("mime", p.mime)
                 put("size_bytes", p.sizeBytes)
+                // The md5 of the file itself, so two copies of the same photo can be told from
+                // two photos that merely look alike. Absent when the file could not be read.
+                item.fileHash?.let { put("file_hash", it) }
                 if (p.modifiedSec > 0) put("modified_at", isoUtc(p.modifiedSec * 1000L))
                 put("width", p.width)
                 put("height", p.height)

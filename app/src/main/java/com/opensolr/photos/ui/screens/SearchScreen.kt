@@ -60,6 +60,8 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
@@ -79,6 +81,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.lerp
 import kotlin.math.roundToInt
 import androidx.compose.material3.TextButton
@@ -155,8 +158,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     // drop in score, where the vector's near misses begin.
     // Grouped by the search that produced the hits, not by the text being typed: typing alone
     // never regroups the grid; Enter (a new search) does.
-    val rows = remember(state.hits, state.searchedQuery, state.duplicateGroups) {
-        buildRows(state.hits, byDate = state.searchedQuery.isBlank(), groups = state.duplicateGroups)
+    val rows = remember(state.hits, state.searchedQuery, state.duplicateGroups, state.collapsedHeadings) {
+        buildRows(state.hits, byDate = state.searchedQuery.isBlank(), groups = state.duplicateGroups, collapsed = state.collapsedHeadings)
     }
     // The search box is out of the way until asked for: the magnifier in the header opens it.
     // Active filters keep it on screen, so the filters button next to it stays reachable.
@@ -203,7 +206,13 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     var restored by remember { mutableStateOf(false) }
     LaunchedEffect(state.restoreGeneration) {
         if (rows.isEmpty()) return@LaunchedEffect
-        gridState.scrollToItem(state.gridIndex.coerceAtMost(rows.lastIndex), state.gridOffset)
+        // By the row that was at the top, not by its number: deleting photos or folding a group
+        // makes the list shorter, and a remembered number then points somewhere else - which is
+        // how a delete used to land the grid in a random place (Cip, 2026-09-16). The number is
+        // only the fallback, for when that row is gone from the list altogether.
+        val byKey = state.gridKey?.let { key -> rows.indexOfFirst { it.key == key } }?.takeIf { it >= 0 }
+        val target = byKey ?: state.gridIndex.coerceAtMost(rows.lastIndex)
+        gridState.scrollToItem(target.coerceAtLeast(0), if (byKey != null) state.gridOffset else 0)
         restored = true
     }
     // Written back only after the grid has been put where it belongs, so the restore is never
@@ -211,7 +220,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     LaunchedEffect(restored) {
         if (!restored) return@LaunchedEffect
         snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
-            .collect { (index, offset) -> viewModel.rememberGridPosition(index, offset) }
+            .collect { (index, offset) -> viewModel.rememberGridPosition(rows.getOrNull(index)?.key, index, offset) }
     }
     LaunchedEffect(nearEnd, state.hits.size) {
         if (nearEnd && state.hits.isNotEmpty() && !state.endReached && !state.searching) viewModel.search(reset = false)
@@ -450,6 +459,29 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         if (state.searching) {
             LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp), color = p.accent, trackColor = p.chip)
         }
+        // Tagging many photos carries on in the background, so it says so on screen the whole
+        // time: hundreds of photos take a while and the owner is free to go elsewhere meanwhile
+        // (Cip, 2026-09-16).
+        if (state.bulkTagging) {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
+                Text(
+                    if (state.bulkTagTotal > 0)
+                        "Tagging ${Actions.formatCount(state.bulkTagDone.toLong())} of ${Actions.formatCount(state.bulkTagTotal.toLong())} photos…"
+                    else "Tagging your photos…",
+                    style = MaterialTheme.typography.bodySmall, color = p.accent,
+                )
+                Spacer(Modifier.height(6.dp))
+                if (state.bulkTagTotal > 0) {
+                    LinearProgressIndicator(
+                        progress = { state.bulkTagDone.toFloat() / state.bulkTagTotal },
+                        modifier = Modifier.fillMaxWidth().height(3.dp),
+                        color = p.accent, trackColor = p.chip, strokeCap = StrokeCap.Butt, gapSize = 0.dp, drawStopIndicator = {},
+                    )
+                } else {
+                    LinearProgressIndicator(Modifier.fillMaxWidth().height(3.dp), color = p.accent, trackColor = p.chip)
+                }
+            }
+        }
 
         // What the photos on screen have in common, one tap away from being a filter. Browsing,
         // these are the index's own counts; on a typed search they come from the words-only
@@ -551,12 +583,25 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                 Modifier
                                     .fillMaxWidth()
                                     .combinedClickable(
-                                        onClick = { if (state.selecting) viewModel.toggleSelectedGroup(row.ids) },
+                                        // While selecting, a tap still takes the whole group, as
+                                        // before; otherwise it folds the group away and opens it
+                                        // again (Cip, 2026-09-16).
+                                        onClick = {
+                                            if (state.selecting) viewModel.toggleSelectedGroup(row.ids)
+                                            else viewModel.toggleHeading(row.key)
+                                        },
                                         onLongClick = { viewModel.toggleSelectedGroup(row.ids) },
                                     )
                                     .padding(start = 18.dp, end = 18.dp, top = 16.dp, bottom = 6.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
+                                Icon(
+                                    if (row.collapsed) Icons.Filled.KeyboardArrowRight else Icons.Filled.KeyboardArrowDown,
+                                    contentDescription = if (row.collapsed) "Open this group" else "Fold this group away",
+                                    tint = p.muted,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                                Spacer(Modifier.width(4.dp))
                                 Text(row.text, style = MaterialTheme.typography.labelLarge, color = p.ink, modifier = Modifier.weight(1f))
                                 if (state.selecting) {
                                     Box(
@@ -585,6 +630,27 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                         onLongClick = { if (state.selecting) viewModel.toggleSelected(hit.id) else details = hit },
                                     ),
                                 )
+                                // Photos the owner has tagged, marked in every view (Cip,
+                                // 2026-09-16): a small tag on a translucent dark square, so it
+                                // reads on a bright photo and on a dark one alike. While
+                                // selecting, the corner belongs to the tick instead.
+                                if (hit.customTags.isNotEmpty() && !state.selecting) {
+                                    Box(
+                                        Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(4.dp)
+                                            .size(18.dp)
+                                            .background(Color(0x99000000), Corner),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            painterResource(R.drawable.ic_tag),
+                                            contentDescription = "Has your tags",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(11.dp),
+                                        )
+                                    }
+                                }
                                 if (anchor) {
                                     Text(
                                         "This one",
@@ -811,8 +877,11 @@ private sealed interface GridRow {
     /** The key the lazy grid keeps items by; headings carry their own text. */
     val key: String
 
-    /** A full-width heading, with the photos of its group so its tick can take them all. */
-    data class Heading(val text: String, val ids: List<String>) : GridRow {
+    /**
+     * A full-width heading, with the photos of its group so its tick can take them all, and
+     * whether the group is folded away under it.
+     */
+    data class Heading(val text: String, val ids: List<String>, val collapsed: Boolean = false) : GridRow {
         override val key: String get() = "h:$text"
     }
 
@@ -829,8 +898,22 @@ private sealed interface GridRow {
  * the score: the hybrid query returns the strong matches first and the vector's near misses
  * after them, so the biggest fall in score is where "Also similar" begins.
  */
-private fun buildRows(hits: List<PhotoHit>, byDate: Boolean, groups: List<Int> = emptyList()): List<GridRow> {
+private fun buildRows(
+    hits: List<PhotoHit>,
+    byDate: Boolean,
+    groups: List<Int> = emptyList(),
+    collapsed: Set<String> = emptySet(),
+): List<GridRow> {
     if (hits.isEmpty()) return emptyList()
+
+    // One group: its heading, then its photos - unless it is folded away, in which case the
+    // heading stands alone and says how many are under it (Cip, 2026-09-16).
+    fun MutableList<GridRow>.addGroup(text: String, photos: List<PhotoHit>) {
+        val folded = "h:$text" in collapsed
+        this += GridRow.Heading(if (folded) "$text · ${photos.size}" else text, photos.map { it.id }, folded)
+        if (!folded) photos.forEach { this += GridRow.Photo(it) }
+    }
+
     if (groups.isNotEmpty()) {
         // Photos of the same thing: the groups come laid out one after another.
         val rows = ArrayList<GridRow>(hits.size + groups.size)
@@ -838,8 +921,7 @@ private fun buildRows(hits: List<PhotoHit>, byDate: Boolean, groups: List<Int> =
         groups.forEachIndexed { index, size ->
             val group = hits.drop(from).take(size)
             if (group.isEmpty()) return@forEachIndexed
-            rows += GridRow.Heading("${group.size} of the same · ${index + 1}", group.map { it.id })
-            group.forEach { rows += GridRow.Photo(it) }
+            rows.addGroup("${group.size} of the same · ${index + 1}", group)
             from += size
         }
         return rows
@@ -847,26 +929,21 @@ private fun buildRows(hits: List<PhotoHit>, byDate: Boolean, groups: List<Int> =
     if (!byDate) {
         val cut = scoreCut(hits) ?: return hits.map { GridRow.Photo(it) }
         val rows = ArrayList<GridRow>(hits.size + 2)
-        rows += GridRow.Heading("Best matches", hits.take(cut).map { it.id })
-        hits.take(cut).forEach { rows += GridRow.Photo(it) }
-        rows += GridRow.Heading("Also similar", hits.drop(cut).map { it.id })
-        hits.drop(cut).forEach { rows += GridRow.Photo(it) }
+        rows.addGroup("Best matches", hits.take(cut))
+        rows.addGroup("Also similar", hits.drop(cut))
         return rows
     }
-    val groups = LinkedHashMap<String, MutableList<PhotoHit>>()
+    val byHeading = LinkedHashMap<String, MutableList<PhotoHit>>()
     val loose = ArrayList<PhotoHit>()
     hits.forEach { hit ->
         val heading = Actions.solrDateMillis(hit.takenAt)?.let { Actions.dateHeading(it) }
-        if (heading == null && groups.isEmpty()) loose += hit
-        else if (heading == null) groups.values.last() += hit
-        else groups.getOrPut(heading) { ArrayList() } += hit
+        if (heading == null && byHeading.isEmpty()) loose += hit
+        else if (heading == null) byHeading.values.last() += hit
+        else byHeading.getOrPut(heading) { ArrayList() } += hit
     }
-    val rows = ArrayList<GridRow>(hits.size + groups.size)
+    val rows = ArrayList<GridRow>(hits.size + byHeading.size)
     loose.forEach { rows += GridRow.Photo(it) }
-    groups.forEach { (heading, photos) ->
-        rows += GridRow.Heading(heading, photos.map { it.id })
-        photos.forEach { rows += GridRow.Photo(it) }
-    }
+    byHeading.forEach { (heading, photos) -> rows.addGroup(heading, photos) }
     return rows
 }
 
@@ -1014,7 +1091,7 @@ private val DUPLICATE_KIND_NAMES = listOf(
     "Same photo (EXIF)",
     "Same photo + first word", "Same photo + first 2 words", "Same photo + first 3 words", "Same photo + first 4 words",
     "Same photo + first 5 words",
-    "Same file name", "Same file size",
+    "Same file name", "Same file size", "Same file (exact copy)",
 )
 /**
  * The ends of the duplicates scale, one set per theme (Cip, 2026-09-16). On paper the loosest
@@ -1043,6 +1120,7 @@ private fun ActiveFilterChips(filters: SearchFilters, onRemove: (SearchFilters) 
             filters.values(field).forEach { value -> add(facetLabel(field, value) to filters.toggled(field, value)) }
         }
         if (filters.withLocation) add("With location" to filters.copy(withLocation = false))
+        filters.tagged?.let { add((if (it) "Tagged" else "Not tagged") to filters.copy(tagged = null)) }
         filters.near?.let { add(it.label to filters.copy(near = null)) }
     }
     LazyRow(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1201,6 +1279,24 @@ private fun FilterSheet(
                 }
                 Spacer(Modifier.height(18.dp))
             }
+
+            // Your own tags: three states, so two chips rather than a switch. Picking the one
+            // already chosen clears it and every photo is shown again.
+            SectionLabel("My tags")
+            Spacer(Modifier.height(10.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(
+                    label = "Tagged",
+                    selected = draft.tagged == true,
+                    onClick = { onChange(draft.copy(tagged = if (draft.tagged == true) null else true)) },
+                )
+                Chip(
+                    label = "Not tagged",
+                    selected = draft.tagged == false,
+                    onClick = { onChange(draft.copy(tagged = if (draft.tagged == false) null else false)) },
+                )
+            }
+            Spacer(Modifier.height(18.dp))
 
             Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Only photos with a location", style = MaterialTheme.typography.bodyLarge, color = p.ink, modifier = Modifier.weight(1f))
