@@ -184,6 +184,31 @@ class AppPrefs(context: Context) {
      * Kept between [SearchCache.MIN_SECONDS] and [SearchCache.MAX_SECONDS]: under a minute a
      * cache saves nothing worth having, and beyond a day it is no longer a cache.
      */
+    /**
+     * Which headings the owner folded away, per view, kept between runs of the app: a library
+     * browsed with the old months folded should come back folded (Cip, 2026-09-16). Stored as
+     * one line per view, "context\u0001key\u0002key".
+     */
+    var collapsedHeadings: Map<String, Set<String>>
+        get() = prefs.getStringSet(KEY_COLLAPSED, emptySet()).orEmpty().mapNotNull { line ->
+            val at = line.indexOf('\u0001')
+            if (at <= 0) null else line.substring(0, at) to
+                line.substring(at + 1).split('\u0002').filter { it.isNotEmpty() }.toSet()
+        }.toMap()
+        set(value) {
+            prefs.edit().putStringSet(
+                KEY_COLLAPSED,
+                value.filterValues { it.isNotEmpty() }
+                    .map { (context, keys) -> context + '\u0001' + keys.joinToString("\u0002") }
+                    .toSet(),
+            ).apply()
+        }
+
+    /** Whether the app answers gestures with a tap you can feel. On unless the owner says not. */
+    var hapticsEnabled: Boolean
+        get() = prefs.getBoolean(KEY_HAPTICS, true)
+        set(value) = prefs.edit().putBoolean(KEY_HAPTICS, value).apply()
+
     var cacheSeconds: Int
         get() = prefs.getInt(KEY_CACHE_SECONDS, SearchCache.DEFAULT_SECONDS)
             .coerceIn(SearchCache.MIN_SECONDS, SearchCache.MAX_SECONDS)
@@ -266,6 +291,8 @@ class AppPrefs(context: Context) {
         private const val KEY_WATCH_SYNC = "watch_sync_at"
         private const val KEY_UPDATE_DISMISSED = "update_dismissed"
         private const val KEY_CACHE_SECONDS = "cache_seconds"
+        private const val KEY_COLLAPSED = "collapsed_headings"
+        private const val KEY_HAPTICS = "haptics_enabled"
         private const val KEY_AUTH_VERIFIER = "auth_verifier"
         private const val KEY_AUTH_STATE = "auth_state"
         private const val KEY_AUTH_STARTED = "auth_started"

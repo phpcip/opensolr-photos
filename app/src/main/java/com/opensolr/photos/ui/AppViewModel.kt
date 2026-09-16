@@ -105,6 +105,10 @@ data class UiState(
     val queryFacets: Map<String, List<FacetValue>> = emptyMap(),
     /** Looking at photos of the same thing: the size of each group, laid out in order over [hits]. */
     val duplicateGroups: List<Int> = emptyList(),
+    /** How many duplicate groups have had their photos fetched so far; the rest follow on scroll. */
+    val duplicateGroupsLoaded: Int = 0,
+    /** How many groups of this kind exist in all, so the count line does not report a page. */
+    val duplicateGroupsTotal: Int = 0,
     /** True while the grid shows duplicates (even a kind with no groups at all). */
     val duplicatesMode: Boolean = false,
     /** The duplicates slider, 0..10 over SearchRepository.DUPLICATE_FIELDS; 4 = first five words. */
@@ -148,6 +152,8 @@ data class UiState(
     val updateResult: String? = null,
     /** How long an answer from the index may be reused, in seconds; the owner sets it in Me. */
     val cacheSeconds: Int = com.opensolr.photos.data.SearchCache.DEFAULT_SECONDS,
+    /** Whether the app answers gestures with a tap you can feel. */
+    val hapticsEnabled: Boolean = true,
     /** How many answers are held right now, shown beside the button that clears them. */
     val cachedCount: Int = 0,
     /** Photo indexes of other phones, offered when this phone has none: "which one is your device?" */
@@ -182,6 +188,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var suggestJob: Job? = null
     private var facetsJob: Job? = null
 
+    /**
+     * Where the grid stood, one place per search (Cip, 2026-09-16). A single remembered position
+     * was not enough: opening an album and then clearing its filter, or looking at similar photos
+     * and coming back, returns to a search that had its own place in the list. The key is what
+     * produced the photos on screen, so each of them is returned to its own.
+     */
+    private val scrollPositions = HashMap<String, ScrollAt>()
+
+    /**
+     * Which group headings are folded away, per view, loaded from the phone so they survive the
+     * app being closed. Remembered the same way as the place in the list.
+     */
+    private val collapsedHeadings = HashMap<String, Set<String>>(prefs.collapsedHeadings)
+        .also { com.opensolr.photos.ui.Haptics.enabled = prefs.hapticsEnabled }
+
+    // Both maps are declared ABOVE init on purpose. init starts the first search, and a search
+    // answered from the cache finishes without ever suspending - so it reached targetScroll()
+    // while these were still null and the app opened saying "Search failed" (Cip, 2026-09-16).
     init {
         viewModelScope.launch {
             var wasBusy = false
@@ -247,7 +271,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshCacheInfo() {
         viewModelScope.launch {
             val held = withContext(Dispatchers.IO) { searches.cachedCount() }
-            _state.update { it.copy(cacheSeconds = prefs.cacheSeconds, cachedCount = held) }
+            _state.update { it.copy(cacheSeconds = prefs.cacheSeconds, cachedCount = held, hapticsEnabled = prefs.hapticsEnabled) }
         }
     }
 
@@ -255,6 +279,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * The owner sets how long an answer from the index may be reused. Never below a minute;
      * [AppPrefs.cacheSeconds] keeps it inside what the cache allows.
      */
+    /** The owner's choice about taps you can feel; taken up at once, everywhere. */
+    fun setHaptics(on: Boolean) {
+        prefs.hapticsEnabled = on
+        com.opensolr.photos.ui.Haptics.enabled = on
+        _state.update { it.copy(hapticsEnabled = on) }
+    }
+
     fun setCacheSeconds(seconds: Int) {
         prefs.cacheSeconds = seconds
         _state.update { it.copy(cacheSeconds = prefs.cacheSeconds) }
@@ -272,14 +303,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Where the grid stood, one place per search (Cip, 2026-09-16). A single remembered position
-     * was not enough: opening an album and then clearing its filter, or looking at similar photos
-     * and coming back, returns to a search that had its own place in the list. The key is what
-     * produced the photos on screen, so each of them is returned to its own.
-     */
-    private val scrollPositions = HashMap<String, ScrollAt>()
-
-    /**
      * Where a view was left: which row was at the top, how far it had been scrolled past, and
      * which row that was by position.
      *
@@ -290,11 +313,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     private data class ScrollAt(val key: String?, val index: Int, val offset: Int)
 
-    /**
-     * Which group headings are folded away, per view. Remembered the same way as the place in
-     * the list, so folding "Today" and coming back later finds it still folded.
-     */
-    private val collapsedHeadings = HashMap<String, Set<String>>()
 
     /**
      * What the photos on screen answer to: the words searched for, the filters, and whether the
@@ -323,6 +341,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val context = contextKey(_state.value)
         val next = collapsedHeadings[context].orEmpty().let { if (key in it) it - key else it + key }
         collapsedHeadings[context] = next
+        prefs.collapsedHeadings = collapsedHeadings
         _state.update { it.copy(collapsedHeadings = next) }
     }
 
@@ -737,6 +756,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun search(reset: Boolean, keepPosition: Boolean = false) {
         val current = _state.value
+        // Scrolling to the end of the duplicates asks for the next groups, not for another page
+        // of a search: the grid is the same, what fills it is not.
+        if (!reset && current.duplicatesMode) { loadMoreDuplicates(); return }
         if (!reset && (current.searching || current.endReached)) return
         searchJob?.cancel()
         val start = if (reset) 0 else current.hits.size
@@ -970,6 +992,39 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * The next page of duplicate groups, appended as the grid reaches its end. The groups
+     * themselves came back in the one facet request the level already made and are held in the
+     * cache, so this costs a single request for the photos of the groups it adds.
+     */
+    private fun loadMoreDuplicates() {
+        val current = _state.value
+        if (current.searching || current.endReached || current.similarToId != null) return
+        val level = current.duplicateLevel
+        val from = current.duplicateGroupsLoaded
+        _state.update { it.copy(searching = true) }
+        searchJob = viewModelScope.launch {
+            try {
+                val page = searches.duplicates(level, groupsFrom = from)
+                _state.update {
+                    if (!it.duplicatesMode || it.duplicateLevel != level || it.duplicateGroupsLoaded != from) it
+                    else it.copy(
+                        searching = false,
+                        hits = it.hits + page.hits,
+                        duplicateGroups = it.duplicateGroups + page.sizes,
+                        duplicateGroupsLoaded = from + com.opensolr.photos.search.SearchRepository.GROUPS_PAGE,
+                        numFound = (it.hits.size + page.hits.size).toLong(),
+                        endReached = page.endReached,
+                    )
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(searching = false, searchError = friendlyMessage(e, "Looking for duplicates failed.")) }
+            }
+        }
+    }
+
+    /**
      * Enters or leaves photo selection on the grid.
      */
     fun setSelecting(on: Boolean) {
@@ -1047,15 +1102,32 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _state.update { it.copy(searching = true, searchError = null, suggestions = emptyList()) }
             try {
                 // Anchored to a photo, or over the whole index: the same slider, the same grid.
-                val (hits, groups) = if (anchor != null) searches.similarTo(anchor, level) else searches.duplicates(level)
+                // Anchored to one photo the whole answer is small; over the index it arrives a
+                // page of groups at a time.
+                val hits: List<PhotoHit>
+                val groups: List<Int>
+                val loaded: Int
+                val done: Boolean
+                val total: Int
+                if (anchor != null) {
+                    val (h, g) = searches.similarTo(anchor, level)
+                    hits = h; groups = g; loaded = g.size; done = true; total = g.size
+                } else {
+                    val page = searches.duplicates(level, groupsFrom = 0)
+                    hits = page.hits; groups = page.sizes
+                    loaded = com.opensolr.photos.search.SearchRepository.GROUPS_PAGE
+                    done = page.endReached; total = page.totalGroups
+                }
                 _state.update {
                     if (!it.duplicatesMode || it.duplicateLevel != level || it.similarToId != anchor) it
                     else it.copy(
                         searching = false,
                         hits = hits,
                         duplicateGroups = groups,
+                        duplicateGroupsLoaded = loaded,
+                        duplicateGroupsTotal = total,
                         numFound = hits.size.toLong(),
-                        endReached = true,
+                        endReached = done,
                         searchNotice = when {
                             hits.isNotEmpty() -> null
                             anchor != null -> "Nothing else in your index is like this photo at this setting."
@@ -1294,9 +1366,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * sign-in that stopped working.
      */
     private fun onSyncFinished() {
-        // A sync adds, replaces or deletes documents, so every held answer is out of date.
-        searches.clearCache()
         val report = prefs.lastReport
+        // Only a sync that actually wrote something makes the held answers wrong. Almost every
+        // sync of an ordinary day writes nothing at all - it wakes on a photo somewhere, finds
+        // the index already in step, and ends - and emptying the cache on those defeated the
+        // whole point of having one (Cip, 2026-09-16). The owner can still empty it by hand,
+        // from Me.
+        if (report == null || report.added > 0 || report.deleted > 0) {
+            searches.clearCache()
+        }
         _state.update { it.copy(lastReport = report, account = prefs.account, planWarnings = prefs.account?.let { a -> PlanWatch.evaluate(a) } ?: emptyList(), indexName = prefs.connection?.indexName, environment = prefs.connection?.environment) }
         if (report?.status == "sign_in_required") {
             signedOut(prefs.pendingNotice ?: "Your Opensolr sign-in stopped working. Sign in again.")

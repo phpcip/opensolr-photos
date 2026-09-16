@@ -1,5 +1,8 @@
 package com.opensolr.photos.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import android.content.ContentUris
 import android.provider.MediaStore
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -83,6 +86,14 @@ import kotlin.math.max
 @Composable
 fun MapScreen(state: UiState, viewModel: AppViewModel) {
     val p = LocalPalette.current
+    // The photo opened full screen from a group, and the photos waiting on the system's own
+    // confirmation before they are removed.
+    var viewing by remember { mutableStateOf<com.opensolr.photos.search.PhotoHit?>(null) }
+    var pendingDelete by remember { mutableStateOf<Set<String>>(emptySet()) }
+    val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) viewModel.removeDeleted(pendingDelete)
+        pendingDelete = emptySet()
+    }
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val dark = androidx.compose.foundation.isSystemInDarkTheme()
@@ -203,7 +214,36 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
         }
     }
 
-    group?.let { GroupSheet(it, onDismiss = { group = null }, onShowPhoto = { hit -> Actions.openPhoto(context, hit) }) }
+    // A photo of a place opens exactly as a photo of a search does: full screen, in the app,
+    // swiped through the photos of that place (Cip, 2026-09-16). It used to be handed to the
+    // gallery, which knows nothing about the group you tapped.
+    group?.let { cluster ->
+        GroupSheet(cluster, onDismiss = { group = null }, onShowPhoto = { hit -> viewing = hit })
+    }
+    viewing?.let { hit ->
+        val photos = group?.pins?.map { it.hit } ?: listOf(hit)
+        PhotoViewer(
+            hits = photos,
+            start = photos.indexOfFirst { it.id == hit.id }.coerceAtLeast(0),
+            onClose = { viewing = null },
+            onSheet = { photo, close, openEdit ->
+                DetailsSheet(hit = photo, viewModel = viewModel, onDismiss = close, onLeave = { viewing = null }, onEdit = { openEdit(it); close() })
+            },
+            onEditSheet = { photo, close -> EditSheet(hit = photo, state = state, viewModel = viewModel, onDismiss = close) },
+            onNeedMore = {},
+            onDelete = { one ->
+                val sender = Actions.deleteRequest(context, Actions.contentUris(context, listOf(one)))
+                pendingDelete = setOf(one.id)
+                if (sender != null) {
+                    deleteLauncher.launch(IntentSenderRequest.Builder(sender).build())
+                } else {
+                    viewModel.removeDeleted(pendingDelete)
+                    pendingDelete = emptySet()
+                }
+                viewing = null
+            },
+        )
+    }
 }
 
 /**

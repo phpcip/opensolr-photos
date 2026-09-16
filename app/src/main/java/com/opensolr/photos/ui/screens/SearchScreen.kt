@@ -88,6 +88,25 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.gestures.rememberTransformableState
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.HorizontalDivider
@@ -175,6 +194,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     var details by remember { mutableStateOf<PhotoHit?>(null) }
     // The photo opened full screen, from which the results are swiped through in their own order.
     var viewing by remember { mutableStateOf<PhotoHit?>(null) }
+    val view = LocalView.current
     var editing by remember { mutableStateOf<PhotoHit?>(null) }
     // Open while tags are being put on every photo of the view at once.
     var bulkTagging by remember { mutableStateOf(false) }
@@ -250,7 +270,11 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             .collect { (index, offset) -> viewModel.rememberGridPosition(rows.getOrNull(index)?.key, index, offset) }
     }
     LaunchedEffect(nearEnd, state.hits.size) {
-        if (nearEnd && state.hits.isNotEmpty() && !state.endReached && !state.searching) viewModel.search(reset = false)
+        if (nearEnd && state.hits.isNotEmpty() && !state.endReached && !state.searching) {
+            // The end of what is loaded, and the next page on its way: a light tap says so.
+            Haptics.tick(view, strong = false)
+            viewModel.search(reset = false)
+        }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -276,7 +300,15 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 Icon(painterResource(R.drawable.ic_albums), contentDescription = "Albums", tint = p.ink, modifier = Modifier.size(20.dp))
             }
             // Selection: tap photos, then share, delete or re-sync them.
-            HeaderItem(if (state.selecting) "Done" else "Select", active = state.selecting, onClick = { viewModel.setSelecting(!state.selecting) }) {
+            HeaderItem(
+                if (state.selecting) "Done" else "Select",
+                active = state.selecting,
+                onClick = {
+                    // Entering the picking mode is felt, however it is entered (Cip, 2026-09-16).
+                    if (!state.selecting) Haptics.tick(view, strong = true)
+                    viewModel.setSelecting(!state.selecting)
+                },
+            ) {
                 Icon(
                     if (state.selecting) Icons.Filled.Close else Icons.Filled.CheckCircle,
                     contentDescription = if (state.selecting) "Stop selecting" else "Select photos",
@@ -418,7 +450,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 state.duplicatesMode && state.similarToId != null ->
                     "${Actions.formatCount(state.hits.size.toLong())} like ${state.similarToHit?.fileName ?: "this photo"}"
                 state.duplicatesMode ->
-                    "${Actions.formatCount(state.hits.size.toLong())} photos in ${state.duplicateGroups.size} group${if (state.duplicateGroups.size == 1) "" else "s"}"
+                    // The groups of this kind, all of them, however few have been fetched so far.
+                    "${Actions.formatCount(state.hits.size.toLong())} photos in ${Actions.formatCount(state.duplicateGroupsTotal.toLong())} group${if (state.duplicateGroupsTotal == 1) "" else "s"}"
                 else -> "${Actions.formatCount(state.numFound)} photo${if (state.numFound == 1L) "" else "s"}"
             }
             Text(countText, style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.weight(1f))
@@ -694,7 +727,16 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                     hit = hit,
                                     modifier = Modifier.combinedClickable(
                                         onClick = { if (state.selecting) viewModel.toggleSelected(hit.id) else viewing = hit },
-                                        onLongClick = { if (state.selecting) viewModel.toggleSelected(hit.id) else details = hit },
+                                        // A long press starts picking photos, as every gallery
+                                        // does. The details live in the full screen view now,
+                                        // a swipe up from the photo itself (Cip, 2026-09-16).
+                                        onLongClick = {
+                                            if (!state.selecting) {
+                                                Haptics.tick(view, strong = true)
+                                                viewModel.setSelecting(true)
+                                            }
+                                            viewModel.toggleSelected(hit.id)
+                                        },
                                     ),
                                 )
                                 // Photos the owner has tagged, marked in every view (Cip,
@@ -810,7 +852,19 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             hits = state.hits,
             start = state.hits.indexOfFirst { it.id == hit.id }.coerceAtLeast(0),
             onClose = { viewing = null },
-            onDetails = { details = it },
+            // Anything that leads somewhere else closes the picture first, or the new screen is
+            // built behind a photo still filling the display (Cip, 2026-09-16).
+            onSheet = { photo, close, openEdit ->
+                DetailsSheet(
+                    hit = photo,
+                    viewModel = viewModel,
+                    onDismiss = close,
+                    onLeave = { viewing = null },
+                    // Not a departure: the tags open over the photo and hand it back on Cancel.
+                    onEdit = { openEdit(it); close() },
+                )
+            },
+            onEditSheet = { photo, close -> EditSheet(hit = photo, state = state, viewModel = viewModel, onDismiss = close) },
             onNeedMore = { if (!state.endReached && !state.searching) viewModel.search(reset = false) },
             onDelete = { one ->
                 val sender = Actions.deleteRequest(context, Actions.contentUris(context, listOf(one)))
@@ -1040,7 +1094,13 @@ private fun buildRows(
         groups.forEachIndexed { index, size ->
             val group = hits.drop(from).take(size)
             if (group.isEmpty()) return@forEachIndexed
-            rows.addGroup("${group.size} of the same · ${index + 1}", group)
+            // The number stays in the NAME, which is the key and must stay unique, and is kept
+            // off the screen: nobody wants to read which group it is (Cip, 2026-09-16).
+            rows.addGroup(
+                "${group.size} of the same · ${index + 1}",
+                group,
+                text = "${group.size} of the same",
+            )
             from += size
         }
         return rows
@@ -1121,7 +1181,13 @@ private const val MIN_HITS_TO_CUT = 8
 
 /** Rows below which the fast scroller is not worth showing: a couple of screens. */
 /** How far a finger must travel up the picture before the details open. */
-private const val VIEWER_SWIPE_UP = 18f
+private const val VIEWER_SWIPE_UP = 90f
+
+/** How much of the screen the picture must be carried down before the viewer closes. */
+private const val VIEWER_DISMISS_SHARE = 0.18f
+
+/** How far a double tap magnifies, as Google Photos does it. */
+private const val VIEWER_DOUBLE_TAP_SCALE = 3f
 
 private const val FAST_SCROLL_MIN_ROWS = 60
 
@@ -1399,6 +1465,7 @@ private fun EmptyResults(state: UiState) {
 @Composable
 private fun FilterActions(count: Long, onClear: () -> Unit, onDone: () -> Unit) {
     val p = LocalPalette.current
+    val view = LocalView.current
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
         OutlinedButton(
             onClick = onClear,
@@ -1413,7 +1480,7 @@ private fun FilterActions(count: Long, onClear: () -> Unit, onDone: () -> Unit) 
             Text("Clear all", style = MaterialTheme.typography.labelMedium)
         }
         Button(
-            onClick = onDone,
+            onClick = { Haptics.tick(view, strong = true); onDone() },
             modifier = Modifier.height(34.dp),
             shape = Corner,
             colors = ButtonDefaults.buttonColors(containerColor = p.accentFill, contentColor = p.onAccentFill),
@@ -1721,11 +1788,20 @@ private fun DateRangeSection(current: DateRange?, onChange: (DateRange?) -> Unit
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TriStateSection(title: String, yes: String, no: String, state: Boolean?, onChange: (Boolean?) -> Unit) {
+    val view = LocalView.current
     SectionLabel(title)
     Spacer(Modifier.height(10.dp))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Chip(label = yes, selected = state == true, onClick = { onChange(if (state == true) null else true) })
-        Chip(label = no, selected = state == false, onClick = { onChange(if (state == false) null else false) })
+        // Switching a filter ON is the firmer tap, switching it off the lighter one: the hand can
+        // tell which way it went without looking (Cip, 2026-09-16).
+        Chip(label = yes, selected = state == true, onClick = {
+            Haptics.tick(view, strong = state != true)
+            onChange(if (state == true) null else true)
+        })
+        Chip(label = no, selected = state == false, onClick = {
+            Haptics.tick(view, strong = state != false)
+            onChange(if (state == false) null else false)
+        })
     }
     Spacer(Modifier.height(18.dp))
 }
@@ -1742,17 +1818,28 @@ private fun TriStateSection(title: String, yes: String, no: String, state: Boole
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PhotoViewer(
+internal fun PhotoViewer(
     hits: List<PhotoHit>,
     start: Int,
     onClose: () -> Unit,
-    onDetails: (PhotoHit) -> Unit,
+    /** The details, given the photo, a way to close them, and a way to open the tags. */
+    onSheet: @Composable (PhotoHit, () -> Unit, (PhotoHit) -> Unit) -> Unit,
+    onEditSheet: @Composable (PhotoHit, () -> Unit) -> Unit,
     onNeedMore: () -> Unit,
     onDelete: (PhotoHit) -> Unit,
 ) {
     val context = LocalContext.current
     val pager = rememberPagerState(initialPage = start) { hits.size }
+    val view = LocalView.current
     var showActions by remember { mutableStateOf(true) }
+    // How far the photo on screen is magnified; the pager only scrolls while it is whole.
+    val zoomed = remember { mutableFloatStateOf(1f) }
+    // The details of the photo being looked at, opened over it rather than in its place: a swipe
+    // up must not take the picture away (Cip, 2026-09-16).
+    var sheetFor by remember { mutableStateOf<PhotoHit?>(null) }
+    // Editing happens over the picture too: closing it puts you back on the photo you were
+    // looking at, not on a sheet halfway there (Cip, 2026-09-16).
+    var editFor by remember { mutableStateOf<PhotoHit?>(null) }
 
     // Swiping towards the end asks for the next page, so the viewer runs as far as the results do.
     LaunchedEffect(pager.currentPage, hits.size) {
@@ -1761,13 +1848,39 @@ private fun PhotoViewer(
     // Nothing left to show (the last photo was deleted): close rather than stand on an empty page.
     LaunchedEffect(hits.size) { if (hits.isEmpty()) onClose() }
 
-    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Box(Modifier.fillMaxSize().background(Color.Black)) {
-            HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
+    // How far the picture has been dragged down, and how far it must go before it closes.
+    val dismiss = remember { Animatable(0f) }
+    // How far the finger has travelled upwards on a picture that is not being carried down.
+    val upBy = remember { mutableFloatStateOf(0f) }
+    val scope = rememberCoroutineScope()
+
+    // decorFitsSystemWindows = false, or the window reports no system bars at all and the
+    // labels under the icons are cut off by its own edge (Cip, 2026-09-16).
+    Dialog(
+        onDismissRequest = onClose,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+    ) {
+        BoxWithConstraints(Modifier.fillMaxSize()) {
+            val closeAt = with(LocalDensity.current) { maxHeight.toPx() } * VIEWER_DISMISS_SHARE
+            // The ground fades as the picture is carried down, so the grid shows through.
+            val shade = (1f - (kotlin.math.abs(dismiss.value) / (closeAt * 2f))).coerceIn(0.35f, 1f)
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = shade))) {
+            HorizontalPager(
+                state = pager,
+                // While a photo is magnified the finger belongs to it, not to the next photo.
+                userScrollEnabled = zoomed.value <= 1.01f,
+                modifier = Modifier.fillMaxSize(),
+            ) { page ->
                 val hit = hits.getOrNull(page) ?: return@HorizontalPager
                 val uri = remember(hit.mediaId) {
                     ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, hit.mediaId)
                 }
+                // Magnification and where it is centred, per photo: swiping to the next one
+                // starts it whole again, as a gallery does.
+                var scale by remember(hit.id) { mutableFloatStateOf(1f) }
+                var offset by remember(hit.id) { mutableStateOf(Offset.Zero) }
+                if (page == pager.currentPage) zoomed.value = scale
+
                 AsyncImage(
                     // No size: the original, not the thumbnail the grid is drawn from.
                     model = ImageRequest.Builder(context).data(uri).crossfade(true).build(),
@@ -1775,16 +1888,116 @@ private fun PhotoViewer(
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
                         .fillMaxSize()
+                        .graphicsLayer {
+                            scaleX = scale
+                            scaleY = scale
+                            translationX = offset.x
+                            translationY = offset.y + (if (page == pager.currentPage) dismiss.value else 0f)
+                        }
+                        // Pinch, with no ceiling: as far in as the picture will go. Out stops at
+                        // the whole picture - zooming out is not a way to leave (Cip, 2026-09-16).
+                        //
+                        // Written out rather than taken from transformable or
+                        // detectTransformGestures: both of those answer a ONE-finger drag as a
+                        // pan and consume it, and the swipe to the next photo died with it. This
+                        // one touches nothing until a second finger is down, so a single finger
+                        // still belongs to the pager and to the swipe down.
                         .pointerInput(hit.id) {
-                            detectVerticalDragGestures { _, amount ->
-                                // Up on the picture: the details, as a long press gives on the grid.
-                                if (amount < -VIEWER_SWIPE_UP) { onDetails(hit); onClose() }
-                                // Down: back to the grid, standing exactly where it was left -
-                                // the viewer is drawn over it, so nothing about it was disturbed.
-                                if (amount > VIEWER_SWIPE_UP) onClose()
+                            awaitEachGesture {
+                                awaitFirstDown(requireUnconsumed = false)
+                                do {
+                                    val event = awaitPointerEvent()
+                                    if (event.changes.size > 1) {
+                                        scale = (scale * event.calculateZoom()).coerceAtLeast(1f)
+                                        if (scale <= 1.01f) {
+                                            scale = 1f
+                                            offset = Offset.Zero
+                                        } else {
+                                            offset += event.calculatePan()
+                                        }
+                                        event.changes.forEach { it.consume() }
+                                    }
+                                } while (event.changes.any { it.pressed })
                             }
                         }
-                        .combinedClickableCompat { showActions = !showActions },
+                        .pointerInput(hit.id) {
+                            detectTapGestures(
+                                // Google Photos' gesture: in on the spot you tapped, out again.
+                                onDoubleTap = { at ->
+                                    if (scale > 1f) {
+                                        scale = 1f
+                                        offset = Offset.Zero
+                                    } else {
+                                        scale = VIEWER_DOUBLE_TAP_SCALE
+                                        val centre = Offset(size.width / 2f, size.height / 2f)
+                                        val limitX = size.width * (VIEWER_DOUBLE_TAP_SCALE - 1f) / 2f
+                                        val limitY = size.height * (VIEWER_DOUBLE_TAP_SCALE - 1f) / 2f
+                                        val wanted = (centre - at) * (VIEWER_DOUBLE_TAP_SCALE - 1f)
+                                        offset = Offset(
+                                            wanted.x.coerceIn(-limitX, limitX),
+                                            wanted.y.coerceIn(-limitY, limitY),
+                                        )
+                                    }
+                                },
+                                onTap = { showActions = !showActions },
+                            )
+                        }
+                        // One finger, and only ONE detector for it, chosen by whether the
+                        // picture is magnified. Two of them competing meant the one that crossed
+                        // its threshold first consumed the drag, and moving about a magnified
+                        // photo up and down was a matter of luck (Cip, 2026-09-16).
+                        .pointerInput(hit.id, scale > 1f) {
+                            if (scale > 1f) {
+                                // Magnified: the finger moves the picture, in any direction, and
+                                // it is held so its edges cannot be dragged off the screen.
+                                detectDragGestures { change, amount ->
+                                    change.consume()
+                                    val limitX = size.width * (scale - 1f) / 2f
+                                    val limitY = size.height * (scale - 1f) / 2f
+                                    offset = Offset(
+                                        (offset.x + amount.x).coerceIn(-limitX, limitX),
+                                        (offset.y + amount.y).coerceIn(-limitY, limitY),
+                                    )
+                                }
+                            } else {
+                                // Whole: down carries the picture away to leave, up opens its
+                                // details. Sideways is left alone, so the pager still has it.
+                                detectVerticalDragGestures(
+                                    onVerticalDrag = { change, amount ->
+                                        change.consume()
+                                        if (amount < 0 && dismiss.value == 0f) {
+                                            // The first hint that the details are on their way up.
+                                            if (upBy.value == 0f) Haptics.tick(view, strong = false)
+                                            upBy.value -= amount
+                                        }
+                                        scope.launch { dismiss.snapTo((dismiss.value + amount).coerceAtLeast(0f)) }
+                                    },
+                                    onDragEnd = {
+                                        // Up, unmagnified: the details, over the picture, which stays.
+                                        if (dismiss.value == 0f && upBy.value > VIEWER_SWIPE_UP) {
+                                            // It arrived: a second tap, so the hand knows.
+                                            Haptics.tick(view, strong = false)
+                                            sheetFor = hit
+                                        }
+                                        upBy.value = 0f
+                                        if (dismiss.value > closeAt) {
+                                            // Carried away for good: the firmer one.
+                                            Haptics.tick(view, strong = true)
+                                            scope.launch {
+                                                dismiss.animateTo(closeAt * 4f, tween(160))
+                                                onClose()
+                                            }
+                                        } else {
+                                            scope.launch { dismiss.animateTo(0f, spring()) }
+                                        }
+                                    },
+                                    onDragCancel = {
+                                        upBy.value = 0f
+                                        scope.launch { dismiss.animateTo(0f, spring()) }
+                                    },
+                                )
+                            }
+                        },
                 )
             }
 
@@ -1800,20 +2013,66 @@ private fun PhotoViewer(
                         .statusBarsPadding()
                         .padding(top = 12.dp),
                 )
+                // A quiet hint that the photo has more to say: three chevrons drifting upwards
+                // over the action bar, faintest at the top (Cip, 2026-09-16).
+                val drift = rememberInfiniteTransition(label = "swipeHint")
+                val rise by drift.animateFloat(
+                    initialValue = 0f,
+                    targetValue = -6f,
+                    animationSpec = infiniteRepeatable(tween(1100), RepeatMode.Reverse),
+                    label = "swipeHintRise",
+                )
+                Column(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                        .padding(bottom = 104.dp)
+                        .graphicsLayer { translationY = rise * density },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    listOf(0.16f, 0.30f, 0.55f).forEach { shade ->
+                        Icon(
+                            Icons.Filled.KeyboardArrowUp,
+                            contentDescription = null,
+                            tint = Color.White.copy(alpha = shade),
+                            modifier = Modifier.size(20.dp).offset(y = 6.dp),
+                        )
+                    }
+                    Text(
+                        "Details",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.White.copy(alpha = 0.55f),
+                        modifier = Modifier.padding(top = 8.dp),
+                    )
+                }
                 Row(
                     Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .background(Color(0xCC000000))
-                        .navigationBarsPadding()
-                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                        // safeDrawing and not navigationBars: inside a dialog window the latter
+                        // can report nothing at all, and the labels ended up on the very edge of
+                        // the screen (Cip, 2026-09-16). The extra room below is deliberate.
+                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                        .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 28.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    ViewerAction("Edit", R.drawable.ic_tag) { onDetails(hit); onClose() }
+                    // It opens the tags straight away, so it says what it does.
+                    ViewerAction("Tag", R.drawable.ic_tag) { editFor = hit }
                     ViewerAction("Gallery", R.drawable.ic_open) { Actions.openPhoto(context, hit) }
                     ViewerAction("Share", R.drawable.ic_share) { Actions.sharePhotos(context, listOf(hit)) }
                     ViewerAction("Delete", R.drawable.ic_delete) { onDelete(hit) }
                 }
+            }
+            sheetFor?.let { photo -> onSheet(photo, { sheetFor = null }, { editFor = it }) }
+            // Leaving the tags puts the photo's details back, where they were entered from -
+            // and with whatever was just saved showing on them (Cip, 2026-09-16).
+            editFor?.let { photo ->
+                onEditSheet(photo) {
+                    editFor = null
+                    sheetFor = photo
+                }
+            }
             }
         }
     }
@@ -1828,6 +2087,8 @@ private fun RowScope.ViewerAction(label: String, icon: Int, onClick: () -> Unit)
         Modifier
             .weight(1f)
             .clip(Corner)
+            // Framed like every other action in the app, so they read as buttons on the picture.
+            .border(1.dp, Color.White.copy(alpha = 0.45f), Corner)
             .combinedClickableCompat(onClick)
             .padding(vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -1852,6 +2113,7 @@ private fun FacetSection(
 ) {
     if (values.isNullOrEmpty() && selected.isEmpty()) return
     val p = LocalPalette.current
+    val view = LocalView.current
     // Long lists (the CLIP words) start with the most frequent values; "Show all" opens the rest.
     var expanded by remember(title) { mutableStateOf(false) }
     val all = values.orEmpty().ifEmpty { selected.map { FacetValue(it, 0) } }
@@ -1863,7 +2125,10 @@ private fun FacetSection(
             Chip(
                 label = if (facet.count > 0) "${label(facet.value)} · ${facet.count}" else label(facet.value),
                 selected = facet.value in selected,
-                onClick = { onToggle(facet.value) },
+                onClick = {
+                    Haptics.tick(view, strong = facet.value !in selected)
+                    onToggle(facet.value)
+                },
             )
         }
         if (all.size > FACET_PREVIEW) {
@@ -1888,7 +2153,9 @@ private fun facetLabel(field: String, value: String): String = when (field) {
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
-private fun DetailsSheet(hit: PhotoHit, viewModel: AppViewModel, onDismiss: () -> Unit, onEdit: (PhotoHit) -> Unit) {
+internal fun DetailsSheet(
+    /** Called by the actions that take the viewer somewhere else, so it can close first. */
+    onLeave: () -> Unit = {},hit: PhotoHit, viewModel: AppViewModel, onDismiss: () -> Unit, onEdit: (PhotoHit) -> Unit) {
     val p = LocalPalette.current
     val context = LocalContext.current
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = p.paper, shape = Corner) {
@@ -1900,34 +2167,58 @@ private fun DetailsSheet(hit: PhotoHit, viewModel: AppViewModel, onDismiss: () -
                 .navigationBarsPadding()
         ) {
             val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, hit.mediaId)
-            Box(Modifier.fillMaxWidth().aspectRatio(4f / 3f).background(p.chip)) {
-                AsyncImage(
-                    model = ImageRequest.Builder(context).data(uri).size(1080).build(),
-                    contentDescription = hit.meaning,
-                    contentScale = ContentScale.Fit,
-                    modifier = Modifier.fillMaxSize(),
-                )
+            // A small picture, and beside it the plate a camera shows for a frame: what the
+            // file is, where it sits, when it was taken, on what, how big, and how it was shot.
+            // Nothing below repeats any of it (Cip, 2026-09-16).
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
+                Box(Modifier.size(104.dp).clip(Corner).background(p.chip)) {
+                    AsyncImage(
+                        model = ImageRequest.Builder(context).data(uri).size(360).build(),
+                        contentDescription = hit.meaning,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.End) {
+                    Text(
+                        hit.fileName,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = p.ink,
+                        maxLines = 2,
+                        textAlign = TextAlign.End,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    val place = listOfNotNull(hit.city, hit.country).joinToString(", ")
+                    val plate = listOfNotNull(
+                        hit.folder.trim('/').ifBlank { null },
+                        Actions.formatSolrDate(hit.takenAt),
+                        listOfNotNull(hit.cameraMake, hit.cameraModel).joinToString(" ").takeIf { it.isNotBlank() },
+                        hit.lens,
+                        listOfNotNull(
+                            if (hit.width != null && hit.height != null) "${hit.width} × ${hit.height}" else null,
+                            Actions.formatFileSize(hit.sizeBytes).takeIf { it.isNotBlank() },
+                        ).joinToString("  ").takeIf { it.isNotBlank() },
+                        listOfNotNull(
+                            hit.fNumber?.let { "f/" + String.format(java.util.Locale.US, "%.1f", it) },
+                            hit.exposure,
+                            hit.iso?.let { "ISO $it" },
+                            hit.focalLength?.let { String.format(java.util.Locale.US, "%.0f mm", it) },
+                        ).joinToString("  ").takeIf { it.isNotBlank() },
+                        place.takeIf { it.isNotBlank() },
+                    )
+                    plate.forEach {
+                        Text(
+                            it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = p.muted,
+                            maxLines = 2,
+                            textAlign = TextAlign.End,
+                        )
+                        Spacer(Modifier.height(2.dp))
+                    }
+                }
             }
-            Spacer(Modifier.height(16.dp))
-            Text(hit.fileName, style = MaterialTheme.typography.titleLarge, color = p.ink)
-            Spacer(Modifier.height(12.dp))
-            SectionLabel("Details")
-            Actions.formatSolrDate(hit.takenAt)?.let { InfoRow("Taken", it) }
-            listOfNotNull(hit.cameraMake, hit.cameraModel).joinToString(" ").takeIf { it.isNotBlank() }?.let { InfoRow("Camera", it) }
-            hit.lens?.let { InfoRow("Lens", it) }
-            val settings = listOfNotNull(
-                hit.fNumber?.let { "f/" + String.format(java.util.Locale.US, "%.1f", it) },
-                hit.exposure,
-                hit.iso?.let { "ISO $it" },
-                hit.focalLength?.let { String.format(java.util.Locale.US, "%.0f mm", it) },
-            ).joinToString("  ·  ")
-            if (settings.isNotBlank()) InfoRow("Settings", settings)
-            if (hit.width != null && hit.height != null) InfoRow("Size", "${hit.width} × ${hit.height}")
-            InfoRow("Folder", hit.folder.ifBlank { "/" })
-            // City and country in words; the raw coordinates only until the place is known.
-            val place = listOfNotNull(hit.city, hit.country).distinct().joinToString(", ")
-            if (place.isNotBlank()) InfoRow("Location", place)
-            else hit.latLon?.let { (lat, lon) -> InfoRow("Location", String.format(java.util.Locale.US, "%.4f, %.4f", lat, lon)) }
             Spacer(Modifier.height(16.dp))
             if (hit.customTags.isNotEmpty()) {
                 SectionLabel("My tags")
@@ -1937,19 +2228,31 @@ private fun DetailsSheet(hit: PhotoHit, viewModel: AppViewModel, onDismiss: () -
                 }
                 Spacer(Modifier.height(16.dp))
             }
+            // The people already named on the file, when something wrote them there.
+            if (hit.persons.isNotBlank()) {
+                SectionLabel("People")
+                Text(hit.persons, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = p.ink, modifier = Modifier.padding(vertical = 12.dp))
+            }
             SectionLabel("What the photo shows")
             Text(hit.meaning.ifBlank { "No words yet" }, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = p.ink, modifier = Modifier.padding(vertical = 12.dp))
+            // What was read printed IN the photo - a receipt, a label, a screenshot. Shown apart
+            // from the words above, which say what the photo is OF (Cip, 2026-09-16).
+            if (hit.ocrText.isNotBlank()) {
+                SectionLabel("Text printed in the photo")
+                Text(hit.ocrText, style = MaterialTheme.typography.bodyMedium, color = p.muted, modifier = Modifier.padding(vertical = 12.dp))
+            }
             // Everything this photo can do, as one row of small bordered icons with their words,
             // the same shape as the header of the photos screen (Cip, 2026-09-16): there are too
             // many of them now for full-width buttons.
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                HeaderItem("Edit", onClick = { onEdit(hit) }) {
-                    Icon(Icons.Filled.Edit, contentDescription = "Edit tags and words", tint = p.ink, modifier = Modifier.size(20.dp))
+                // The same word and the same mark as on the photo itself: it opens the tags.
+                HeaderItem("Tag", onClick = { onEdit(hit) }) {
+                    Icon(painterResource(R.drawable.ic_tag), contentDescription = "Tags and words", tint = p.ink, modifier = Modifier.size(20.dp))
                 }
                 HeaderItem("Gallery", onClick = { Actions.openPhoto(context, hit) }) {
                     Icon(painterResource(R.drawable.ic_open), contentDescription = "Open in gallery", tint = p.ink, modifier = Modifier.size(20.dp))
                 }
-                HeaderItem("Similar", onClick = { onDismiss(); viewModel.showSimilar(hit) }) {
+                HeaderItem("Similar", onClick = { onDismiss(); onLeave(); viewModel.showSimilar(hit) }) {
                     Icon(painterResource(R.drawable.ic_duplicates), contentDescription = "Show similar photos", tint = p.ink, modifier = Modifier.size(20.dp))
                 }
                 // The same sharing as the selection bar, for this one photo: the file itself goes
@@ -1958,10 +2261,10 @@ private fun DetailsSheet(hit: PhotoHit, viewModel: AppViewModel, onDismiss: () -
                     Icon(painterResource(R.drawable.ic_share), contentDescription = "Share this photo", tint = p.ink, modifier = Modifier.size(20.dp))
                 }
                 hit.latLon?.let { (lat, lon) ->
-                    HeaderItem("Map", onClick = { onDismiss(); viewModel.openMap(MapFocus(lat, lon, 15.0)) }) {
+                    HeaderItem("Map", onClick = { onDismiss(); onLeave(); viewModel.openMap(MapFocus(lat, lon, 15.0)) }) {
                         Icon(painterResource(R.drawable.ic_map), contentDescription = "Show on map", tint = p.ink, modifier = Modifier.size(20.dp))
                     }
-                    HeaderItem("Nearby", onClick = { onDismiss(); viewModel.searchNear(lat, lon, 5.0) }) {
+                    HeaderItem("Nearby", onClick = { onDismiss(); onLeave(); viewModel.searchNear(lat, lon, 5.0) }) {
                         Icon(Icons.Filled.LocationOn, contentDescription = "Photos nearby", tint = p.ink, modifier = Modifier.size(20.dp))
                     }
                 }

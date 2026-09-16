@@ -1,0 +1,7 @@
+Version 2.0. Your photos now open full screen inside the app, at their own size, and a swipe walks the ones you actually searched for - something your gallery cannot do, because it knows nothing about your search. Pinch to magnify with no ceiling, double tap to zoom in on the spot you touched, drag a magnified photo about, swipe up for its details, swipe down to put it back where you were.
+
+The details are a camera's plate now: a small picture and beside it the file, the folder, when it was taken, on what, its size and resolution, the aperture, exposure and ISO. Under it only what Opensolr knows: your tags, the people named on the photo, what it shows, and the text printed in it.
+
+The app answers your hands. A tap you can feel when you start picking photos, when you cross a month on the scroll bar, when a filter goes on or off, when the next page arrives. All of it can be turned off in Me.
+
+And the search cache finally does its job: a sync that changed nothing no longer throws every held answer away, and dragging the duplicates slider asks the index once per stop instead of forty times.

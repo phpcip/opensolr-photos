@@ -1,5 +1,9 @@
 package com.opensolr.photos.ui.screens
 
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -136,6 +140,26 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
         }
         Spacer(Modifier.height(10.dp))
         GhostButton(if (state.accountRefreshing) "Refreshing…" else "Refresh", onClick = { viewModel.refreshAccount() }, enabled = !state.accountRefreshing, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(28.dp))
+
+        // The taps the app gives back under a finger, which not everyone wants.
+        SectionLabel("Feedback")
+        Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Haptic feedback", style = MaterialTheme.typography.bodyLarge, color = p.ink)
+                Text(
+                    "A tap you can feel when you pick photos, cross a month on the scroll bar, or change a filter.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = p.muted,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Switch(
+                checked = state.hapticsEnabled,
+                onCheckedChange = { viewModel.setHaptics(it) },
+                colors = SwitchDefaults.colors(checkedTrackColor = p.accentFill, checkedThumbColor = p.onAccentFill, uncheckedTrackColor = p.chip, uncheckedBorderColor = p.hairline, uncheckedThumbColor = p.muted),
+            )
+        }
         Spacer(Modifier.height(28.dp))
 
         // How long an answer from the index may be reused, and a way to throw them all away.

@@ -135,6 +135,17 @@ data class NearFilter(val lat: Double, val lon: Double, val radiusKm: Double) {
 }
 
 /**
+ * One page of duplicate groups: the photos laid out group after group, the size of each group,
+ * how many groups there are in all, and whether this page was the last.
+ */
+data class DuplicatePage(
+    val hits: List<PhotoHit>,
+    val sizes: List<Int>,
+    val totalGroups: Int,
+    val endReached: Boolean,
+)
+
+/**
  * A photo with a GPS position, for the map.
  */
 data class PhotoPin(val hit: PhotoHit, val lat: Double, val lon: Double)
@@ -178,7 +189,13 @@ data class PhotoHit(
     val focalLength: Double?,
     val width: Int?,
     val height: Int?,
+    /** The file's size on the phone, for the plate of facts in a photo's details. */
+    val sizeBytes: Long = 0,
     val meaning: String,
+    /** The words printed IN the photo, read on Opensolr's side; empty when it carries none. */
+    val ocrText: String = "",
+    /** The people named on the photo, as they were written on the file. */
+    val persons: String = "",
     val location: String?,
     val city: String? = null,
     val region: String? = null,
@@ -340,7 +357,7 @@ class SearchRepository(private val context: Context) {
      *
      * Returns the photos laid out group after group, with the size of each group.
      */
-    suspend fun duplicates(level: Int): Pair<List<PhotoHit>, List<Int>> {
+    suspend fun duplicates(level: Int, groupsFrom: Int = 0, groupsLimit: Int = GROUPS_PAGE): DuplicatePage {
         val session = prefs.session ?: throw ServiceException("Sign in to search")
         val connection = prefs.connection ?: throw ServiceException("Your index is not set up yet. Open Sync and start a sync.")
         val field = DUPLICATE_FIELDS[level.coerceIn(0, DUPLICATE_FIELDS.size - 1)]
@@ -355,10 +372,16 @@ class SearchRepository(private val context: Context) {
             if (e.message?.contains("HTTP 400") == true) throw ServiceException("Finding duplicates needs your index reset for this version of the app. Open the app's photos screen to start it.")
             throw e
         }
-        if (groups.isEmpty()) return emptyList<PhotoHit>() to emptyList()
+        if (groups.isEmpty()) return DuplicatePage(emptyList(), emptyList(), 0, true)
+
+        // Only the groups this page shows. The whole set of ids arrives in the one facet request
+        // above and is cheap to hold; the documents are not. Asking for all of them meant 8000
+        // photos and forty requests to fill a screen that shows three groups (Cip, 2026-09-16).
+        val page = groups.drop(groupsFrom).take(groupsLimit.coerceAtLeast(1))
+        if (page.isEmpty()) return DuplicatePage(emptyList(), emptyList(), groups.size, true)
 
         // The documents themselves, in batches, then laid out in the order of their group.
-        val wanted = groups.flatten()
+        val wanted = page.flatten()
         val found = HashMap<String, PhotoHit>(wanted.size)
         wanted.chunked(200).forEach { batch ->
             val params = ArrayList<Pair<String, String>>()
@@ -370,15 +393,15 @@ class SearchRepository(private val context: Context) {
             parse(select(params), false, null).hits.forEach { found[it.id] = it }
         }
         val hits = ArrayList<PhotoHit>(wanted.size)
-        val sizes = ArrayList<Int>(groups.size)
-        groups.forEach { group ->
+        val sizes = ArrayList<Int>(page.size)
+        page.forEach { group ->
             val present = group.mapNotNull { found[it] }
             if (present.size >= 2) {
                 hits += present
                 sizes += present.size
             }
         }
-        return hits to sizes
+        return DuplicatePage(hits, sizes, groups.size, groupsFrom + page.size >= groups.size)
     }
 
     /**
@@ -751,7 +774,10 @@ class SearchRepository(private val context: Context) {
                 focalLength = if (d.has("focal_length")) d.optDouble("focal_length") else null,
                 width = if (d.has("width")) d.optInt("width") else null,
                 height = if (d.has("height")) d.optInt("height") else null,
+                sizeBytes = d.optLong("size_bytes"),
                 meaning = d.optString("meaning"),
+                ocrText = d.optString("ocr_t"),
+                persons = d.optString("persons_t"),
                 location = d.optString("location").ifBlank { null },
                 city = d.optString("city").ifBlank { null },
                 region = d.optString("region").ifBlank { null },
@@ -833,12 +859,15 @@ class SearchRepository(private val context: Context) {
             // files to whole blocks, so hundreds of different photos share a size exactly.
             "file_hash",
         )
+        /** Groups of duplicates fetched at a time; the rest follow as the grid is scrolled. */
+        const val GROUPS_PAGE = 20
+
         /** Most photos "Show similar photos" brings back for one anchor photo. */
         private const val SIMILAR_ROWS = 200
         /** Photos an album needs before it is shown (Cip, 2026-09-15). */
         private const val ALBUM_MIN = 1
         /** CLIP words offered as albums: only the most used, never the whole vocabulary. */
         private const val ALBUM_THINGS = 12
-        private const val FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,city,region,country,labels,custom_tags"
+        private const val FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,size_bytes,meaning,ocr_t,persons_t,location,city,region,country,labels,custom_tags"
     }
 }

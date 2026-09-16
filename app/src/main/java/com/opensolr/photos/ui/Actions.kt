@@ -214,6 +214,24 @@ object Actions {
     fun formatCount(value: Long): String = NumberFormat.getIntegerInstance(Locale.US).format(value)
 
     /**
+     * A file's size in the unit that suits it, kilobytes at the smallest: "812 KB", "4.2 MB",
+     * "1.49 GB". Never "10000 KB" (Cip, 2026-09-16).
+     */
+    fun formatFileSize(bytes: Long): String {
+        if (bytes <= 0) return ""
+        val kb = bytes / 1024.0
+        val mb = kb / 1024.0
+        val gb = mb / 1024.0
+        val tb = gb / 1024.0
+        return when {
+            tb >= 1 -> String.format(Locale.US, "%.2f TB", tb)
+            gb >= 1 -> String.format(Locale.US, "%.2f GB", gb)
+            mb >= 1 -> String.format(Locale.US, "%.1f MB", mb)
+            else -> String.format(Locale.US, "%.0f KB", kb)
+        }
+    }
+
+    /**
      * Megabytes as "812 MB" or "1.4 GB".
      */
     fun formatMb(mb: Double): String =
