@@ -33,8 +33,8 @@ already a day. Anything older is a month — *September*, or *September 2025* on
 the days inside it under headings of their own, *Saturday 5*, *Friday 4*. A month whose photos all fall on
 one day is not split.
 
-A bar down the right edge (`FastScroller`) drags the grid: one movement crosses months, with the month
-beside the finger. Crossing a heading gives haptic feedback — the heavier constant for a month, the lighter
+A bar down the right edge (`FastScroller`) drags the grid: one movement crosses months, with the month and,
+under it, the day shown in a badge lifted clear of the thumb. Crossing a heading gives haptic feedback — the heavier constant for a month, the lighter
 one for a day — played through the view (`Haptics.tick`), which needs no VIBRATE permission and obeys the
 phone's own haptics setting. Its visuals fade when the grid stops, but the strip stays touchable: gated on
 the same animation there would be nothing to grab from a standing start.
@@ -192,6 +192,18 @@ downloaded to draw the grid.
   grid — drawn over it, so its scroll position is never disturbed. *Gallery* is `ACTION_VIEW` on the photo's
   MediaStore URI with read permission granted; if the stored id went stale the app finds the photo again by
   its path, and if it is gone from the phone it says so and the next Re-Sync removes it from the index.
+  - **Zoom**: pinch with no ceiling, double tap to magnify on the point touched and again to come back, one
+    finger to move a magnified photo about (held inside its own edges). Zooming out stops at the whole
+    picture — it is not a way to leave. The pager only scrolls while the photo is whole, so a finger on a
+    magnified photo belongs to the photo. The pinch loop is written out rather than taken from
+    `transformable` or `detectTransformGestures`: both answer a *one*-finger drag as a pan and consume it,
+    and the swipe to the next photo dies with them.
+  - **Tag** opens the tags over the photo; leaving them puts the photo's details back.
+- **Long press** starts picking photos, as every gallery does.
+- **A tap you can feel** answers picking photos, crossing a month or a day on the scroll bar, a filter going
+  on (firmer) or off (lighter), *Done*, and the next page arriving. `Haptics.tick` plays it through the view
+  (`performHapticFeedback`), so it needs no VIBRATE permission and obeys the phone's own setting; one switch
+  in Me gates every call site.
 - **Press and hold** shows the details: date, camera, lens, settings, size, folder, location as *City,
   Country*, and the words Opensolr read the photo into. At the bottom, one row of labelled icons:
   *Edit* (tags and words), *Gallery* (open it in the gallery app), *Similar* (photos like this one, see
