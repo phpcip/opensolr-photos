@@ -83,6 +83,11 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.launch
 import androidx.compose.ui.draw.scale
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.HorizontalDivider
@@ -168,6 +173,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     val keyboard = LocalSoftwareKeyboardController.current
     var showFilters by remember { mutableStateOf(false) }
     var details by remember { mutableStateOf<PhotoHit?>(null) }
+    // The photo opened full screen, from which the results are swiped through in their own order.
+    var viewing by remember { mutableStateOf<PhotoHit?>(null) }
     var editing by remember { mutableStateOf<PhotoHit?>(null) }
     // Open while tags are being put on every photo of the view at once.
     var bulkTagging by remember { mutableStateOf(false) }
@@ -415,25 +422,18 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 else -> "${Actions.formatCount(state.numFound)} photo${if (state.numFound == 1L) "" else "s"}"
             }
             Text(countText, style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.weight(1f))
-            // Photos of the same thing, grouped. On when it is what the grid is showing.
-            IconButton(onClick = { viewModel.showDuplicates() }, modifier = Modifier.size(32.dp)) {
-                Icon(
-                    painterResource(R.drawable.ic_duplicates),
-                    contentDescription = if (!state.duplicatesMode) "Photos of the same thing" else "Back to all photos",
-                    tint = if (state.duplicatesMode) p.accent else p.muted,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
             // AI: on, the search blends meaning with words; off, it matches words only. The same
             // switch search.opensolr.com carries, and it only means anything once something is
-            // typed - browsing has no query to search by meaning (Cip, 2026-09-16).
+            // typed - browsing has no query to search by meaning (Cip, 2026-09-16). No border
+            // around it: a switch already looks like something to touch, and a frame would make
+            // it read as one more of the buttons beside it.
             if (state.query.isNotBlank()) {
                 Text(
                     "AI",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
                     color = if (state.wordsOnly) p.muted else p.accent,
-                    modifier = Modifier.padding(end = 4.dp),
+                    modifier = Modifier.padding(end = 2.dp),
                 )
                 Switch(
                     checked = !state.wordsOnly,
@@ -447,24 +447,34 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                     ),
                     modifier = Modifier.scale(0.7f),
                 )
+                Spacer(Modifier.width(2.dp))
             }
+            // Photos of the same thing, grouped. On when it is what the grid is showing.
+            IconAction(
+                icon = R.drawable.ic_duplicates,
+                label = if (!state.duplicatesMode) "Photos of the same thing" else "Back to all photos",
+                active = state.duplicatesMode,
+                onClick = { viewModel.showDuplicates() },
+            )
             // Fresh: recent photos are boosted among the matches, nothing is dropped or resorted.
             if (state.query.isNotBlank()) {
-                IconButton(onClick = { viewModel.setFreshBias(!state.freshBias) }, modifier = Modifier.size(32.dp)) {
-                    Icon(
-                        painterResource(R.drawable.ic_newest),
-                        contentDescription = if (state.freshBias) "Stop favouring recent photos" else "Favour recent photos",
-                        tint = if (state.freshBias) p.accent else p.muted,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
+                IconAction(
+                    icon = R.drawable.ic_newest,
+                    label = if (state.freshBias) "Stop favouring recent photos" else "Favour recent photos",
+                    active = state.freshBias,
+                    onClick = { viewModel.setFreshBias(!state.freshBias) },
+                )
             }
             // Reloads the results from the index, for photos a sync added in the meantime.
             // Reload keeps the view: duplicates stay duplicates, on the same slider stop. Pressed
             // on purpose, so held answers go and the index itself is asked.
-            IconButton(onClick = { viewModel.forceRefresh() }, enabled = !state.searching, modifier = Modifier.size(32.dp)) {
-                Icon(painterResource(R.drawable.ic_reload), contentDescription = "Reload", tint = p.accent, modifier = Modifier.size(20.dp))
-            }
+            IconAction(
+                icon = R.drawable.ic_reload,
+                label = "Reload",
+                accent = true,
+                enabled = !state.searching,
+                onClick = { viewModel.forceRefresh() },
+            )
         }
         // The kind of duplicates, 0..10 (Cip, 2026-09-15): from the loosest (the same first word)
         // through the same photo by its EXIF (green, the middle) to the strictest (EXIF and the
@@ -683,7 +693,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                 Thumbnail(
                                     hit = hit,
                                     modifier = Modifier.combinedClickable(
-                                        onClick = { if (state.selecting) viewModel.toggleSelected(hit.id) else Actions.openPhoto(context, hit) },
+                                        onClick = { if (state.selecting) viewModel.toggleSelected(hit.id) else viewing = hit },
                                         onLongClick = { if (state.selecting) viewModel.toggleSelected(hit.id) else details = hit },
                                     ),
                                 )
@@ -792,6 +802,30 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     if (bulkTagging) {
         BulkTagSheet(state = state, viewModel = viewModel, onDismiss = { bulkTagging = false })
     }
+    // Full screen, one photo at a time, swiped through in the order the results came back -
+    // which is the whole point: the gallery cannot swipe through a search of yours, because it
+    // knows nothing about it (Cip, 2026-09-16).
+    viewing?.let { hit ->
+        PhotoViewer(
+            hits = state.hits,
+            start = state.hits.indexOfFirst { it.id == hit.id }.coerceAtLeast(0),
+            onClose = { viewing = null },
+            onDetails = { details = it },
+            onNeedMore = { if (!state.endReached && !state.searching) viewModel.search(reset = false) },
+            onDelete = { one ->
+                val sender = Actions.deleteRequest(context, Actions.contentUris(context, listOf(one)))
+                pendingDelete = setOf(one.id)
+                if (sender != null) {
+                    deleteLauncher.launch(IntentSenderRequest.Builder(sender).build())
+                } else {
+                    viewModel.removeDeleted(pendingDelete)
+                    pendingDelete = emptySet()
+                }
+                viewing = null
+            },
+        )
+    }
+
     details?.let { hit ->
         DetailsSheet(hit = hit, viewModel = viewModel, onDismiss = { details = null }, onEdit = { editing = it; details = null })
     }
@@ -1086,13 +1120,19 @@ private fun scoreCut(hits: List<PhotoHit>): Int? {
 private const val MIN_HITS_TO_CUT = 8
 
 /** Rows below which the fast scroller is not worth showing: a couple of screens. */
+/** How far a finger must travel up the picture before the details open. */
+private const val VIEWER_SWIPE_UP = 18f
+
 private const val FAST_SCROLL_MIN_ROWS = 60
 
 /** The grab handle of the fast scroller: tall enough for a thumb to land on. */
-private val FAST_SCROLL_THUMB = 48.dp
+private val FAST_SCROLL_THUMB = 72.dp
+
+/** How far above the thumb the month bubble sits, so a thumb never covers it (Cip, 2026-09-16). */
+private val FAST_SCROLL_LABEL_LIFT = 64.dp
 
 /** How wide the strip on the right edge is: narrow enough to leave a photo tappable. */
-private val FAST_SCROLL_WIDTH = 28.dp
+private val FAST_SCROLL_WIDTH = 36.dp
 
 /** Room kept to the left of the bar for the month bubble while a finger is dragging. */
 private val FAST_SCROLL_LABEL_ROOM = 240.dp
@@ -1259,6 +1299,38 @@ private fun ActiveFilterChips(filters: SearchFilters, onRemove: (SearchFilters) 
             // Same round pills as the suggestions above the grid, in the accent, with a cross.
             Pill(label = label, accent = true, trailingClose = true, onClick = { onRemove(without) })
         }
+    }
+}
+
+/**
+ * One of the small actions over the grid: a bordered cell, so it reads as a button rather than a
+ * mark on the page (Cip, 2026-09-16). [active] draws it in the accent, as the header cells do.
+ */
+@Composable
+private fun IconAction(
+    icon: Int,
+    label: String,
+    active: Boolean = false,
+    accent: Boolean = false,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    val p = LocalPalette.current
+    val tint = when {
+        !enabled -> p.hairline
+        active || accent -> p.accent
+        else -> p.ink
+    }
+    Box(
+        Modifier
+            .padding(start = 6.dp)
+            .size(36.dp)
+            .clip(Corner)
+            .border(1.dp, if (active) p.accent else p.hairline, Corner)
+            .combinedClickableCompat { if (enabled) onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(painterResource(icon), contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
     }
 }
 
@@ -1551,9 +1623,10 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
                 .offset(y = travel * fraction)
                 .align(Alignment.TopEnd)
                 .padding(end = 4.dp)
-                .size(width = 10.dp, height = FAST_SCROLL_THUMB)
+                .size(width = 16.dp, height = FAST_SCROLL_THUMB)
                 .alpha(alpha)
-                .background(if (dragging) p.accentFill else p.muted, Corner),
+                .background(if (dragging) p.accentFill else p.ink, Corner)
+                .border(1.dp, if (dragging) p.accentFill else p.paper, Corner),
         )
 
         // While dragging, what the finger is standing on, so the jump is aimed rather than lucky.
@@ -1564,13 +1637,14 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
             if (!heading.isNullOrBlank()) {
                 Box(
                     Modifier
-                        .offset(y = travel * fraction)
+                        // Lifted clear of the thumb: under the finger it could not be read.
+                        .offset(y = (travel * fraction - FAST_SCROLL_LABEL_LIFT).coerceAtLeast(0.dp))
                         .align(Alignment.TopEnd)
-                        .padding(end = FAST_SCROLL_WIDTH, top = 6.dp)
-                        .background(p.ink, Corner)
-                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                        .padding(end = FAST_SCROLL_WIDTH + 4.dp)
+                        .background(p.accentFill, Corner)
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
                 ) {
-                    Text(heading, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = p.paper, maxLines = 1)
+                    Text(heading, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = p.onAccentFill, maxLines = 1)
                 }
             }
         }
@@ -1654,6 +1728,114 @@ private fun TriStateSection(title: String, yes: String, no: String, state: Boole
         Chip(label = no, selected = state == false, onClick = { onChange(if (state == false) null else false) })
     }
     Spacer(Modifier.height(18.dp))
+}
+
+/**
+ * The photo, full screen, at its own size - and the rest of the results either side of it.
+ *
+ * A tap used to hand the photo straight to the gallery, which left the result set behind: swiping
+ * there walked the camera roll, not the photos you had just searched for. Here the swipe follows
+ * the order the results came back in, and the gallery is one tap away when you want it.
+ *
+ * A tap on the picture shows the actions; a swipe up opens the same sheet a long press on the
+ * grid opens (Cip, 2026-09-16).
+ */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun PhotoViewer(
+    hits: List<PhotoHit>,
+    start: Int,
+    onClose: () -> Unit,
+    onDetails: (PhotoHit) -> Unit,
+    onNeedMore: () -> Unit,
+    onDelete: (PhotoHit) -> Unit,
+) {
+    val context = LocalContext.current
+    val pager = rememberPagerState(initialPage = start) { hits.size }
+    var showActions by remember { mutableStateOf(true) }
+
+    // Swiping towards the end asks for the next page, so the viewer runs as far as the results do.
+    LaunchedEffect(pager.currentPage, hits.size) {
+        if (pager.currentPage >= hits.size - 3) onNeedMore()
+    }
+    // Nothing left to show (the last photo was deleted): close rather than stand on an empty page.
+    LaunchedEffect(hits.size) { if (hits.isEmpty()) onClose() }
+
+    Dialog(onDismissRequest = onClose, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Box(Modifier.fillMaxSize().background(Color.Black)) {
+            HorizontalPager(state = pager, modifier = Modifier.fillMaxSize()) { page ->
+                val hit = hits.getOrNull(page) ?: return@HorizontalPager
+                val uri = remember(hit.mediaId) {
+                    ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, hit.mediaId)
+                }
+                AsyncImage(
+                    // No size: the original, not the thumbnail the grid is drawn from.
+                    model = ImageRequest.Builder(context).data(uri).crossfade(true).build(),
+                    contentDescription = hit.meaning.ifBlank { hit.fileName },
+                    contentScale = ContentScale.Fit,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInput(hit.id) {
+                            detectVerticalDragGestures { _, amount ->
+                                // Up on the picture: the details, as a long press gives on the grid.
+                                if (amount < -VIEWER_SWIPE_UP) { onDetails(hit); onClose() }
+                                // Down: back to the grid, standing exactly where it was left -
+                                // the viewer is drawn over it, so nothing about it was disturbed.
+                                if (amount > VIEWER_SWIPE_UP) onClose()
+                            }
+                        }
+                        .combinedClickableCompat { showActions = !showActions },
+                )
+            }
+
+            val hit = hits.getOrNull(pager.currentPage)
+            // Which one of how many, so a swipe through a long result set has a place in it.
+            if (showActions && hit != null) {
+                Text(
+                    "${pager.currentPage + 1} of ${Actions.formatCount(hits.size.toLong())}",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color.White,
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .statusBarsPadding()
+                        .padding(top = 12.dp),
+                )
+                Row(
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .background(Color(0xCC000000))
+                        .navigationBarsPadding()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    ViewerAction("Edit", R.drawable.ic_tag) { onDetails(hit); onClose() }
+                    ViewerAction("Gallery", R.drawable.ic_open) { Actions.openPhoto(context, hit) }
+                    ViewerAction("Share", R.drawable.ic_share) { Actions.sharePhotos(context, listOf(hit)) }
+                    ViewerAction("Delete", R.drawable.ic_delete) { onDelete(hit) }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * One action under the full screen photo: icon over a short label, on the dark bar.
+ */
+@Composable
+private fun RowScope.ViewerAction(label: String, icon: Int, onClick: () -> Unit) {
+    Column(
+        Modifier
+            .weight(1f)
+            .clip(Corner)
+            .combinedClickableCompat(onClick)
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Icon(painterResource(icon), contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+        Spacer(Modifier.height(3.dp))
+        Text(label, fontSize = 10.sp, lineHeight = 12.sp, color = Color.White, maxLines = 1, softWrap = false)
+    }
 }
 
 /**

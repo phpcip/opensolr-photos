@@ -1,0 +1,5 @@
+Tapping a photo now opens it full screen inside the app, at its own size, and swiping left and right walks the photos you just searched for - in the order they came back. Your gallery cannot do that: it knows nothing about your search, so swiping there walked the camera roll instead.
+
+Tap the picture for the actions under it - Edit, Gallery, Share, Delete. Swipe up for the photo's details, the same panel a long press on the grid opens. Swipe down to go back to exactly where you were in the results.
+
+The scroll bar down the right edge is bigger and easier to grab, and the month it is passing is now shown clear of your thumb. The small buttons over the grid have frames so they read as buttons, and the AI switch sits at the front of that row.
