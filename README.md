@@ -26,6 +26,7 @@ one per phone. No photo backup, no Google account, no ads, no analytics.
 | | |
 |---|---|
 | **Search by meaning** | Every photo is read into words describing what it shows. On a plan with vector search, your query is matched on meaning too, so *puppy* finds the photos read as *dog*. |
+| **Search the text in your photos** | Receipts, invoices, shelf labels, screenshots, business cards: the words printed in a photo are read on Opensolr's side and become searchable. A petrol receipt is found by the station, the total or its number. Only photos that carry text are read, and it costs no more than any other photo. |
 | **Filters** | Year, folder, camera make and model, city, region, country, orientation, a radius around a point, and photos with a location. The filter values come from your own photos. |
 | **Best matches first** | A typed search splits its results into *Best matches* and *Also similar*; browsing without a query groups photos by date (Today, Yesterday, months). |
 | **Your own tags and words** | Press and hold a photo, edit its tags (a name, an event) and the words that describe it; your most used tags and words are suggested as you type. Your words always win over what Opensolr saw, and they live in your index. |
@@ -54,9 +55,10 @@ one per phone. No photo backup, no Google account, no ads, no analytics.
 4. **Sync.** For every photo not yet in the index, the app makes a 640 px copy carrying the original's
    EXIF and hands it, five at a time, to Opensolr's `photos_ingest` endpoint, together with your tags and
    words for it when this phone has them. The server does the rest: reads the EXIF, asks CLIP what the
-   photo shows, turns those words into a search vector, turns the GPS position into a place, keeps the
-   tags and words already in the index, and writes the complete document into your index itself. The
-   phone's part ends with the upload ([sync](docs/sync.md)).
+   photo shows, turns those words into a search vector, reads the text printed in the photo when CLIP says
+   there is any, turns the GPS position into a place, keeps the tags and words already in the index, and
+   writes the complete document into your index itself. The phone's part ends with the upload
+   ([sync](docs/sync.md)).
 5. **Search** goes straight to the index through Opensolr's `{!hybrid}` parser: words and meaning
    blended, filters, autocomplete, spelling, the map, albums and duplicates ([search](docs/search.md),
    [map](docs/map.md), [albums](docs/albums.md), [duplicates](docs/duplicates.md)).

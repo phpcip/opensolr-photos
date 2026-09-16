@@ -250,7 +250,7 @@ class IndexManager(
          * raise both whenever any file in solr/conf changes. An index on a lower version is
          * rebuilt (with the owner's consent), one on a higher version asks for an app update.
          */
-        const val CONFIG_VERSION = 10
+        const val CONFIG_VERSION = 11
         /** Opensolr environment for phones in the Americas. */
         const val REGION_AMERICAS = "CHICAGO-96"
         /** Opensolr environment for everyone else. */

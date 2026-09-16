@@ -43,6 +43,12 @@ The AI endpoints:
   vocabulary), the search vector of those words, the place of the GPS position, your tags and words kept
   from the index, the [duplicate keys](duplicates.md) (from CLIP's labels and the EXIF, never from your
   tags or wording), and the write into your index with `commitWithin=10000`. A tenth of an AI request per photo that needed the models. The copies are not stored.
+- The **text printed in the photo** is read in the same pass, when there is any: CLIP decides first (a
+  photo has to carry a text-family label among its top 50 for the reading to be worth it, so a wedding
+  photo is never sent), and the reading itself happens on Opensolr's OCR servers — Solr machines that run
+  nothing else — through `POST /solr_manager/api/image_ocr` on opensolr.com. It lands in the `ocr_t` field
+  and is searchable with no change on the phone. It costs nothing extra: the photo is still a tenth of a
+  request, whether the words, the vector or the printed text was the work.
 - `batch_embed` turns texts into search vectors; the app uses it only when you edit a photo's tags or
   words. `embed` turns a typed query into one.
 
@@ -83,6 +89,7 @@ reinstalled and differs on every other phone. So:
 | opensolr.com | `POST /solr_manager/api/get_account_summary` | Plan limits and usage |
 | opensolr.com | `POST /solr_manager/api/nearby_places` | Called by the server, per batch of photos with a position |
 | api.opensolr.com | `POST /solr_manager/api/photos_ingest` | Once per 5 new photos |
+| opensolr.com | `POST /solr_manager/api/image_ocr` | Server to server, for photos that carry text — the phone never calls it |
 | api.opensolr.com | `POST /solr_manager/api/batch_embed` | Once per round with edited photos |
 | api.opensolr.com | `POST /solr_manager/api/embed` | Once per typed search (vector search plans) |
 | your index | `POST /select` | Listing ids, searching (with spellcheck), map pins, albums (one JSON facet), duplicates (one facet per slider stop), tag suggestions |

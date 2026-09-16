@@ -30,6 +30,7 @@ APK, so the app always uploads exactly what is in the repository.
 | `city`, `region`, `province`, `community`, `country`, `country_code` | string | The nearest named place, from `nearby_places` |
 | `altitude` | float | EXIF, metres |
 | `meaning` | text | The CLIP labels joined with commas |
+| `ocr_t` | text | The text printed **in** the photo, read with tesseract on Opensolr's OCR servers: a petrol receipt, an invoice, a shelf label, a screenshot. Separate from `meaning`, which is what the photo *shows* |
 | `labels` | string, multi | The CLIP labels one by one |
 | `custom_tags` | string, multi | The owner's tags; `custom_tags_text` is their tokenised copy for search |
 | `embeddings` | dense vector, 1024, cosine | Vector of `meaning` (plans with vector search) |
@@ -37,11 +38,16 @@ APK, so the app always uploads exactly what is in the repository.
 | `dup_w1_hash` … `dup_w5_hash`, `dup_exif_hash`, `dup_exif_w1_hash` … `dup_exif_w5_hash` | string (`*_hash`) | Duplicate keys, written by the server ([duplicates](duplicates.md)) |
 | `indexed_at` | date | When the document was written |
 
-Copy fields feed the search fields: `text` (meaning, file name, folder, camera, city, region, country, tags),
+Copy fields feed the search fields: `text` (meaning, the printed text `ocr_t`, file name, folder, camera, city, region, country, tags),
 `file_name_text`, `folder_text`, `camera_text`, `place_text`, `custom_tags_text`. Two more serve typing:
 `suggest` (stored, multi-valued: tags, labels, camera make and model, city, region, province, country) is the
 suggester's dictionary, and `spell` (tags, labels, file name, camera, places) is the spellchecker's. Dynamic
 fields (`*_s`, `*_ss`, `*_i`, `*_l`, `*_f`, `*_b`, `*_dt`, `*_t`) are there for anyone extending the app.
+
+`ocr_t` is stored and copied into `text`, deliberately: stored so that reading the document back and
+rewriting it (what editing a photo's tags does) keeps the printed text, and copied by Solr on every
+write so the search never has to know the field exists. It is **not** copied into `suggest` or `spell` —
+a receipt would fill autocomplete with its own numbers.
 
 `*_hash` is a dynamic string field, indexed, not stored, with docValues: the duplicates view facets on it and
 nothing displays it. Schema version 1.6 still returns docValues fields to `fl=*`, so a document read back and

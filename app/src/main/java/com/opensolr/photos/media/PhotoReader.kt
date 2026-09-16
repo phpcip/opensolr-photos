@@ -182,6 +182,11 @@ object PhotoReader {
         ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY, ExifInterface.TAG_EXPOSURE_TIME, ExifInterface.TAG_F_NUMBER, ExifInterface.TAG_FOCAL_LENGTH, ExifInterface.TAG_FLASH,
         ExifInterface.TAG_GPS_LATITUDE, ExifInterface.TAG_GPS_LATITUDE_REF, ExifInterface.TAG_GPS_LONGITUDE, ExifInterface.TAG_GPS_LONGITUDE_REF,
         ExifInterface.TAG_GPS_ALTITUDE, ExifInterface.TAG_GPS_ALTITUDE_REF,
+        // The whole XMP packet, for XMP:PersonInImage - the names of the people in the photo,
+        // written by whatever recognised the faces (Google Photos, Lightroom, digiKam). The
+        // server reads them into persons_t. Carried whole because ExifInterface has no tag for
+        // a single XMP property.
+        ExifInterface.TAG_XMP,
     )
 
     private fun openExif(context: Context, uri: Uri): ExifInterface? {

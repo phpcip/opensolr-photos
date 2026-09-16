@@ -61,6 +61,25 @@ then retries once without them.
 `meaning` holds the labels CLIP gave the photo. `text` also collects the file name, the folder, the camera,
 the place and your tags, so *pixel* or *screenshots* find what you would expect.
 
+## The text printed in a photo
+
+`text` also collects `ocr_t`: the words printed **in** the photo, read on Opensolr's side when a photo
+carries any. This is what makes a phone full of paperwork searchable — a petrol receipt by the station's
+name, the total or its number, an invoice by the company on it, a shelf label by its product code, a
+screenshot by what it says, a business card by the person's name. Nothing new to type and nothing to turn
+on: the words go into the same field the search already reads, so *petrom*, *invoice 4417* or *usa lemn*
+answer straight away.
+
+Only photos that carry text are read at all. CLIP sees the photo first, and unless one of its top 50 labels
+belongs to the text family (label, document, receipt, invoice, card, ticket, menu, poster, screenshot,
+number…) the photo is never sent for reading. A holiday album costs nothing and the wedding photos are not
+shipped anywhere.
+
+The reading itself happens on Opensolr's OCR servers — Solr machines that do nothing else, never on your
+phone — and it does not cost extra: a photo is a tenth of an AI request whether the work was the words, the
+vector, the printed text or all three ([plan limits](plan-limits.md)). A photo already read is never read
+again.
+
 ### When the grid regroups
 
 The grid's grouping follows the **last search that ran**, not the text being typed: typing alone never

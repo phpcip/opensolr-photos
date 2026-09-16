@@ -94,6 +94,9 @@
   <copyField source="city" dest="text"/>
   <copyField source="region" dest="text"/>
   <copyField source="country" dest="text"/>
+  <!-- persons_t: the names of the people in the photo, read from XMP:PersonInImage on the server.
+       No field declaration of its own - it matches the *_t dynamic field below. -->
+  <copyField source="persons_t" dest="text"/>
   <copyField source="custom_tags" dest="custom_tags_text"/>
   <copyField source="custom_tags" dest="text"/>
   <copyField source="custom_tags" dest="spell"/>
