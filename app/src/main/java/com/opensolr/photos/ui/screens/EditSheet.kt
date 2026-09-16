@@ -1,5 +1,15 @@
 package com.opensolr.photos.ui.screens
 
+import android.app.Activity
+import android.os.Build
+import android.provider.MediaStore
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.platform.LocalContext
+import com.opensolr.photos.media.PhotoReader
+import com.opensolr.photos.ui.Actions
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -83,6 +93,11 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
     var tags by remember(hit.id) { mutableStateOf(hit.customTags) }
     var newTag by remember(hit.id) { mutableStateOf("") }
     var meaning by remember(hit.id) { mutableStateOf(hit.meaning) }
+    // The names of the people in the photo, the same ones the file carries in its XMP.
+    val context = LocalContext.current
+    val originalPersons = remember(hit.id) { hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() } }
+    var persons by remember(hit.id) { mutableStateOf(originalPersons) }
+    var newPerson by remember(hit.id) { mutableStateOf("") }
     // Autocomplete of the tag field: shown while it has focus, asked again a short pause after
     // the last keystroke, and whenever the photo's tags change (a picked tag leaves the list).
     var tagFieldFocused by remember(hit.id) { mutableStateOf(false) }
@@ -108,6 +123,29 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
             // Also when a newer keystroke cancels this run: the next run raises it again.
             suggestionsLoading = false
         }
+    }
+
+    // Adds what was typed as one or more names (commas split), ignoring blanks and repeats.
+    fun addPerson() {
+        val parts = newPerson.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        if (parts.isEmpty()) return
+        persons = (persons + parts).distinctBy { it.lowercase() }
+        newPerson = ""
+    }
+
+    // Saves everything; the names go into the index whether or not the file could be written.
+    fun finishSave(changedPersons: List<String>?) {
+        val wording = meaning.trim().takeIf { it.isNotEmpty() && it != clipWords }
+        viewModel.saveEdits(hit, tags, wording, changedPersons, onDone = onDismiss)
+    }
+
+    // Android asks the owner once before the app may change a photo it did not create; on yes
+    // the names are written into the file's XMP, so any other app sees them too (Cip, 2026-09-17).
+    val writeLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            Actions.contentUris(context, listOf(hit)).firstOrNull()?.let { PhotoReader.writePersons(context, it, hit.mime, persons) }
+        }
+        finishSave(persons)
     }
 
     // Adds a picked suggestion as a tag and empties the field for the next one.
@@ -236,6 +274,45 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
             Text("Anything you would search for.", style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.padding(top = 6.dp))
             Spacer(Modifier.height(20.dp))
 
+            SectionLabel("People")
+            Spacer(Modifier.height(10.dp))
+            if (persons.isNotEmpty()) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    persons.forEach { person ->
+                        Row(
+                            Modifier
+                                .clip(Corner)
+                                .background(p.paper)
+                                .border(1.dp, p.accent, Corner)
+                                .clickable { persons = persons - person }
+                                .padding(horizontal = 10.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(person, style = MaterialTheme.typography.labelSmall, color = p.accent)
+                            Spacer(Modifier.size(4.dp))
+                            Icon(Icons.Filled.Close, contentDescription = "Remove", tint = p.accent, modifier = Modifier.size(14.dp))
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+            }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = newPerson,
+                    onValueChange = { newPerson = it },
+                    modifier = Modifier.weight(1f),
+                    placeholder = { Text("Add a name", color = p.muted) },
+                    singleLine = true,
+                    shape = Corner,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { addPerson() }),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = p.accent, unfocusedBorderColor = p.hairline, cursorColor = p.accent, focusedTextColor = p.ink, unfocusedTextColor = p.ink),
+                )
+                TextButton(onClick = { addPerson() }, enabled = newPerson.isNotBlank()) { Text("Add", color = p.accent) }
+            }
+            Text("Saved into the photo itself, so other apps see the names too.", style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.padding(top = 6.dp))
+            Spacer(Modifier.height(20.dp))
+
             SectionLabel("What the photo shows")
             Spacer(Modifier.height(10.dp))
             OutlinedTextField(
@@ -261,9 +338,25 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                     if (state.editSaving) "Saving…" else "Save",
                     onClick = {
                         addTag()
+                        addPerson()
                         // The wording is an edit only when it differs from what Opensolr saw.
-                        val wording = meaning.trim().takeIf { it.isNotEmpty() && it != clipWords }
-                        viewModel.saveEdits(hit, tags, wording, onDone = onDismiss)
+                        val names = persons
+                        if (names == originalPersons) {
+                            finishSave(null)
+                        } else {
+                            val uri = Actions.contentUris(context, listOf(hit)).firstOrNull()
+                            when {
+                                uri == null -> finishSave(names)
+                                Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
+                                    val request = MediaStore.createWriteRequest(context.contentResolver, listOf(uri))
+                                    writeLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
+                                }
+                                else -> {
+                                    PhotoReader.writePersons(context, uri, hit.mime, names)
+                                    finishSave(names)
+                                }
+                            }
+                        }
                     },
                     modifier = Modifier.weight(1f),
                     enabled = !state.editSaving,

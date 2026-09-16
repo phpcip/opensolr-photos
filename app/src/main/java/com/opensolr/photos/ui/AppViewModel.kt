@@ -166,6 +166,12 @@ data class UiState(
     val albums: List<com.opensolr.photos.search.AlbumSection> = emptyList(),
     val albumsLoading: Boolean = false,
     val albumsError: String? = null,
+    /** Albums picked with a long press, by "field:value", for deleting or sharing their photos. */
+    val selectedAlbums: Set<String> = emptySet(),
+    /** Album sections picked with a long press, by title: every album under them. */
+    val selectedSections: Set<String> = emptySet(),
+    /** True while the photos of the picked albums are being looked up. */
+    val albumsWorking: Boolean = false,
 )
 
 /**
@@ -396,11 +402,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun toggleHeading(key: String) {
         val context = contextKey(_state.value)
-        val next = collapsedHeadings[context].orEmpty().let { if (key in it) it - key else it + key }
+        val next = (collapsedHeadings[context] ?: defaultCollapsed(_state.value)).let { if (key in it) it - key else it + key }
         collapsedHeadings[context] = next
         prefs.collapsedHeadings = collapsedHeadings
         _state.update { it.copy(collapsedHeadings = next) }
     }
+
+    /**
+     * What a view folds away before the owner has touched it: after a typed search "Also
+     * similar" starts closed and "Best matches" open (Cip, 2026-09-17); nothing otherwise.
+     */
+    private fun defaultCollapsed(s: UiState): Set<String> =
+        if (!s.duplicatesMode && !s.skippedMode && s.searchedQuery.isNotBlank()) setOf("h:Also similar") else emptySet()
 
     /**
      * Folds away every heading in [keys] at once, or opens them all when [keys] is empty: the
@@ -428,7 +441,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 gridOffset = at.offset,
                 // The folded groups of this view travel with it, so they survive leaving and
                 // coming back exactly as the place in the list does.
-                collapsedHeadings = collapsedHeadings[context].orEmpty(),
+                collapsedHeadings = collapsedHeadings[context] ?: defaultCollapsed(it),
                 restoreGeneration = it.restoreGeneration + 1,
             )
         }
@@ -487,15 +500,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * Saves the owner's tags and wording of a photo, on the phone and in the index, and
      * refreshes the photo in the results.
      */
-    fun saveEdits(hit: PhotoHit, tags: List<String>, meaning: String?, onDone: () -> Unit) {
+    fun saveEdits(hit: PhotoHit, tags: List<String>, meaning: String?, persons: List<String>? = null, onDone: () -> Unit) {
         _state.update { it.copy(editSaving = true, editError = null) }
         viewModelScope.launch {
             try {
-                val doc = edits.save(hit.id, tags, meaning)
+                val doc = edits.save(hit.id, tags, meaning, persons)
                 // The index just changed: no cached answer may outlive the owner's own edit.
                 searches.clearCache()
                 val updated = hit.copy(
                     meaning = doc.optString("meaning"),
+                    persons = doc.optString("persons_t"),
                     customTags = doc.optJSONArray("custom_tags")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList(),
                 )
                 _state.update { s -> s.copy(editSaving = false, hits = s.hits.map { if (it.id == hit.id) updated else it }) }
@@ -895,6 +909,67 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: Exception) {
                 _state.update { it.copy(albumsLoading = false, albumsError = friendlyMessage(e, "The albums could not be loaded.")) }
             }
+        }
+    }
+
+    /** Picks or unpicks one album on the albums screen. */
+    fun toggleAlbumSelected(album: com.opensolr.photos.search.Album) {
+        val key = "${album.field}:${album.value}"
+        _state.update { it.copy(selectedAlbums = if (key in it.selectedAlbums) it.selectedAlbums - key else it.selectedAlbums + key) }
+    }
+
+    /** Picks or unpicks a whole album section on the albums screen. */
+    fun toggleSectionSelected(title: String) {
+        _state.update { it.copy(selectedSections = if (title in it.selectedSections) it.selectedSections - title else it.selectedSections + title) }
+    }
+
+    /** Picks every album section at once, or none when [all] is false. */
+    fun selectAllAlbums(all: Boolean) {
+        _state.update {
+            it.copy(selectedAlbums = emptySet(), selectedSections = if (all) it.albums.map { s -> s.title }.toSet() else emptySet())
+        }
+    }
+
+    /** Leaves album selection. */
+    fun clearAlbumSelection() {
+        _state.update { it.copy(selectedAlbums = emptySet(), selectedSections = emptySet()) }
+    }
+
+    /**
+     * The photos of everything picked on the albums screen (whole sections and single albums),
+     * looked up in the index and handed to [then] on the main thread.
+     */
+    fun withSelectedAlbumPhotos(then: (List<PhotoHit>) -> Unit) {
+        val s = _state.value
+        val albums = s.albums.flatMap { section ->
+            if (section.title in s.selectedSections) section.albums
+            else section.albums.filter { "${it.field}:${it.value}" in s.selectedAlbums }
+        }.distinctBy { "${it.field}:${it.value}" }
+        if (albums.isEmpty()) return
+        _state.update { it.copy(albumsWorking = true) }
+        viewModelScope.launch {
+            try {
+                val photos = searches.albumPhotos(albums)
+                _state.update { it.copy(albumsWorking = false) }
+                then(photos)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(albumsWorking = false, albumsError = friendlyMessage(e, "The photos of those albums could not be looked up.")) }
+            }
+        }
+    }
+
+    /**
+     * The photos of picked albums were deleted from the phone: they go from the index too, and
+     * the albums are asked for again.
+     */
+    fun albumPhotosDeleted(ids: Set<String>) {
+        clearAlbumSelection()
+        removeDeleted(ids)
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(500)
+            openAlbums(force = true)
         }
     }
 
@@ -1420,6 +1495,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         when (current.screen) {
             // Nothing is reloaded on the way back from these, so the grid is put back by hand.
             Screen.Map, Screen.Albums -> {
+                if (current.selectedAlbums.isNotEmpty() || current.selectedSections.isNotEmpty()) {
+                    clearAlbumSelection()
+                    return
+                }
                 _state.update { it.copy(screen = Screen.Search) }
                 targetScroll()
             }

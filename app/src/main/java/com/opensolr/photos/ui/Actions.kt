@@ -209,6 +209,17 @@ object Actions {
         SimpleDateFormat("EEEE d", Locale.US).format(millis)
 
     /**
+     * A count short enough to always fit a line of buttons: 842, 1.2K, 23K, 1.4M (Cip, 2026-09-17).
+     */
+    fun formatCompact(value: Long): String = when {
+        value < 1_000 -> value.toString()
+        value < 10_000 -> String.format(Locale.US, "%.1fK", value / 1_000.0).replace(".0K", "K")
+        value < 1_000_000 -> "${value / 1_000}K"
+        value < 10_000_000 -> String.format(Locale.US, "%.1fM", value / 1_000_000.0).replace(".0M", "M")
+        else -> "${value / 1_000_000}M"
+    }
+
+    /**
      * 12,345
      */
     fun formatCount(value: Long): String = NumberFormat.getIntegerInstance(Locale.US).format(value)

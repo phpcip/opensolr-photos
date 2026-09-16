@@ -444,13 +444,41 @@ class SearchRepository(private val context: Context) {
             val make = b.optJSONObject("make")?.optJSONArray("buckets")?.optJSONObject(0)?.optString("val").orEmpty().trim()
             if (make.isEmpty() || model.lowercase().startsWith(make.lowercase())) model else "$make $model"
         }
+        // My tags, then Years, then Places, then the rest (Cip, 2026-09-17).
         return listOf(
             AlbumSection("My tags", albumsOf("tags", "custom_tags")),
-            AlbumSection("Things", albumsOf("things", "labels")),
-            AlbumSection("Places", albumsOf("cities", "city") + albumsOf("countries", "country")),
-            AlbumSection("Cameras", albumsOf("cameras", "camera_model", cameraTitle)),
             AlbumSection("Years", albumsOf("years", "year")),
+            AlbumSection("Places", albumsOf("cities", "city") + albumsOf("countries", "country")),
+            AlbumSection("Things", albumsOf("things", "labels")),
+            AlbumSection("Cameras", albumsOf("cameras", "camera_model", cameraTitle)),
         ).filter { it.albums.isNotEmpty() }
+    }
+
+    /**
+     * Every photo of [albums] (one album, or all the albums of a section), straight from the
+     * index and never from the cache, for deleting or sharing them all. The values travel as
+     * bound parameters, one terms query per field, joined with OR.
+     */
+    suspend fun albumPhotos(albums: List<Album>): List<PhotoHit> {
+        if (albums.isEmpty()) return emptyList()
+        val connection = prefs.connection ?: throw ServiceException("Your index is not set up yet. Open Sync and start a sync.")
+        val params = ArrayList<Pair<String, String>>()
+        val clauses = albums.groupBy { it.field }.entries.mapIndexed { i, (field, list) ->
+            params += "album_q$i" to "{!terms f=$field separator=\u0001 v=\$album_v$i}"
+            params += "album_v$i" to list.joinToString("\u0001") { it.value }
+            "should=\$album_q$i"
+        }
+        params += "fq" to "{!bool ${clauses.joinToString(" ")}}"
+        val out = ArrayList<PhotoHit>()
+        com.opensolr.photos.net.SolrClient(connection).forEachDoc("id,media_id,path,file_name,folder,mime", filters = params) { d ->
+            out += PhotoHit(
+                id = d.optString("id"), mediaId = d.optLong("media_id", -1L), path = d.optString("path"),
+                fileName = d.optString("file_name"), folder = d.optString("folder"), mime = d.optString("mime"),
+                takenAt = null, cameraMake = null, cameraModel = null, lens = null, iso = null, exposure = null,
+                fNumber = null, focalLength = null, width = null, height = null, meaning = "", location = null,
+            )
+        }
+        return out
     }
 
     /**
@@ -661,7 +689,6 @@ class SearchRepository(private val context: Context) {
             params += "uq" to text
             // The lexical leg: the owner's tags outrank CLIP's words, which outrank the rest.
             // Same edismax shape and the same mm as Opensolr's own site search ("flexible").
-            params += "lexicalRaw" to "{!edismax qf=\"${if (legacy) LEGACY_QF else QF}\" mm=\"$MM\" v=\$uq}"
             val vector = if (!wordsOnly && prefs.account?.vectorAllowed == true) {
                 try {
                     api.embedQuery(session, connection.indexName, text)
@@ -677,6 +704,14 @@ class SearchRepository(private val context: Context) {
                 }
             } else null
 
+            // Each kind of search weighs the fields its own way (Cip, 2026-09-17): alone, the words
+            // carry the whole ranking; blended, they only nudge what the vector already found.
+            val qf = when {
+                legacy -> LEGACY_QF
+                vector != null -> HYBRID_QF
+                else -> QF
+            }
+            params += "lexicalRaw" to "{!edismax qf=\"$qf\" mm=\"$MM\" v=\$uq}"
             val matched = if (vector != null) {
                 smart = true
                 // Opensolr's {!hybrid} parser, exactly as search.opensolr.com runs it: both legs
@@ -828,7 +863,7 @@ class SearchRepository(private val context: Context) {
          * meaning, and among word matches the meaning decides. Opensolr's site search leans
          * further toward meaning (0.85) because product catalogues have no hand-written tags.
          */
-        private const val HYBRID_ALPHA = "0.5"
+        private const val HYBRID_ALPHA = "0.8"
         /**
          * Recency as a multiplier: 1.0 for a photo taken today, 0.5 a year later, 0.33 after two.
          * 3.16e-11 is 1/(a year in ms); max(0, ...) guards a date in the future, which would make
@@ -839,7 +874,8 @@ class SearchRepository(private val context: Context) {
         private const val MM = "2<65% 4<50% 8<40%"
         // ocr_t sits right under meaning: the words printed IN a photo name it as surely as the
         // words it was read into, and a receipt is asked for by what is on it (Cip, 2026-09-16).
-        private const val QF = "custom_tags_text^5 meaning^3 ocr_t^3 text file_name_text folder_text camera_text place_text"
+        private const val QF = "custom_tags_text^5 meaning^2 ocr_t^3 persons_t^4 text file_name_text folder_text camera_text place_text^1"
+        private const val HYBRID_QF = "custom_tags_text^0.5 meaning^0.2 ocr_t^0.4 persons_t^0.3 file_name_text folder_text camera_text place_text^0.1"
         private const val LEGACY_QF = "meaning^3 text file_name_text folder_text camera_text"
         private const val LEGACY_FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,labels"
         /**

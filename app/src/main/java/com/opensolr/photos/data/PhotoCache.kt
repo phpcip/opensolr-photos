@@ -52,7 +52,7 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
                 "vector BLOB)"
         )
         db.execSQL("CREATE TABLE IF NOT EXISTS places (key TEXT PRIMARY KEY NOT NULL, place_json TEXT NOT NULL)")
-        db.execSQL("CREATE TABLE IF NOT EXISTS edits (id TEXT PRIMARY KEY NOT NULL, tags_json TEXT NOT NULL, meaning TEXT, updated INTEGER NOT NULL)")
+        db.execSQL("CREATE TABLE IF NOT EXISTS edits (id TEXT PRIMARY KEY NOT NULL, tags_json TEXT NOT NULL, meaning TEXT, updated INTEGER NOT NULL, persons_json TEXT)")
         db.execSQL(WORD_RETRIES_TABLE)
         db.execSQL(SKIPPED_TABLE)
     }
@@ -72,6 +72,9 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
         }
         if (oldVersion < 5) {
             db.execSQL(SKIPPED_TABLE)
+        }
+        if (oldVersion < 6) {
+            db.execSQL("ALTER TABLE edits ADD COLUMN persons_json TEXT")
         }
     }
 
@@ -204,25 +207,27 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
      * What the owner wrote about a photo: their tags, and their own wording of what the
      * photo shows when they changed it (null = keep what Opensolr saw).
      */
-    data class Edits(val tags: List<String>, val meaning: String?)
+    data class Edits(val tags: List<String>, val meaning: String?, val persons: List<String>? = null)
 
     /**
      * The owner's edits of [id], or null when there are none.
      */
     fun getEdits(id: String): Edits? {
-        readableDatabase.query("edits", arrayOf("tags_json", "meaning"), "id = ?", arrayOf(id), null, null, null, "1").use { cursor ->
+        readableDatabase.query("edits", arrayOf("tags_json", "meaning", "persons_json"), "id = ?", arrayOf(id), null, null, null, "1").use { cursor ->
             if (!cursor.moveToFirst()) return null
             val array = org.json.JSONArray(cursor.getString(0))
             val tags = (0 until array.length()).map { array.getString(it) }
-            return Edits(tags, if (cursor.isNull(1)) null else cursor.getString(1))
+            val persons = if (cursor.isNull(2)) null else org.json.JSONArray(cursor.getString(2)).let { a -> (0 until a.length()).map { a.getString(it) } }
+            return Edits(tags, if (cursor.isNull(1)) null else cursor.getString(1), persons)
         }
     }
 
     /**
-     * Stores the owner's edits of [id]; no tags and no wording removes the row.
+     * Stores the owner's edits of [id]; no tags, no wording and no names of their own removes
+     * the row. [Edits.persons] null means the names on the file stand; empty means none.
      */
     fun putEdits(id: String, edits: Edits) {
-        if (edits.tags.isEmpty() && edits.meaning == null) {
+        if (edits.tags.isEmpty() && edits.meaning == null && edits.persons == null) {
             writableDatabase.delete("edits", "id = ?", arrayOf(id))
             return
         }
@@ -230,6 +235,7 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
             put("id", id)
             put("tags_json", org.json.JSONArray(edits.tags).toString())
             if (edits.meaning == null) putNull("meaning") else put("meaning", edits.meaning)
+            if (edits.persons == null) putNull("persons_json") else put("persons_json", org.json.JSONArray(edits.persons).toString())
             put("updated", System.currentTimeMillis())
         }
         writableDatabase.insertWithOnConflict("edits", null, values, SQLiteDatabase.CONFLICT_REPLACE)
@@ -386,7 +392,7 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
 
     companion object {
         private const val NAME = "photo_cache.db"
-        private const val VERSION = 5
+        private const val VERSION = 6
         private const val SKIPPED_TABLE = "CREATE TABLE IF NOT EXISTS skipped (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, media_id INTEGER NOT NULL, path TEXT NOT NULL, folder TEXT NOT NULL, file_name TEXT NOT NULL, mime TEXT NOT NULL, taken_ms INTEGER NOT NULL, reason TEXT NOT NULL, at INTEGER NOT NULL)"
         private const val WORD_RETRIES_TABLE = "CREATE TABLE IF NOT EXISTS word_retries (id TEXT PRIMARY KEY NOT NULL, attempts INTEGER NOT NULL, next_at INTEGER NOT NULL)"
     }

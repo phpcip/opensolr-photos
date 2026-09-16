@@ -98,7 +98,7 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
      * Walks every document in the index with the stored [fields], [pageSize] at a time, cursor
      * paging (a deep page costs the same as the first), handing each document to [onDoc].
      */
-    suspend fun forEachDoc(fields: String, pageSize: Int = 1000, onDoc: suspend (JSONObject) -> Unit) {
+    suspend fun forEachDoc(fields: String, pageSize: Int = 1000, filters: List<Pair<String, String>> = emptyList(), onDoc: suspend (JSONObject) -> Unit) {
         var cursor = "*"
         while (true) {
             val json = select(
@@ -108,7 +108,7 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
                     "sort" to "id asc",
                     "rows" to pageSize.toString(),
                     "cursorMark" to cursor,
-                )
+                ) + filters
             )
             val docs = json.getJSONObject("response").getJSONArray("docs")
             for (i in 0 until docs.length()) onDoc(docs.getJSONObject(i))

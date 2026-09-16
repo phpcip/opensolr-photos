@@ -30,15 +30,17 @@ class EditRepository(private val context: Context) {
     private val cache = PhotoCache(context)
 
     /**
-     * Saves [tags] and [meaning] (null = keep what Opensolr saw) for the photo [id] and
-     * updates its document in the index. Returns the document as written.
+     * Saves [tags], [meaning] (null = keep what Opensolr saw) and [persons] (null = leave the
+     * names alone) for the photo [id] and updates its document in the index. Returns the
+     * document as written.
      */
-    suspend fun save(id: String, tags: List<String>, meaning: String?): JSONObject {
+    suspend fun save(id: String, tags: List<String>, meaning: String?, persons: List<String>? = null): JSONObject {
         val session = prefs.session ?: throw ServiceException("Sign in to edit photos")
         var connection = prefs.connection ?: throw ServiceException("Your index is not set up yet.")
         val clean = tags.map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }
         val wording = meaning?.trim()?.takeIf { it.isNotEmpty() }
-        cache.putEdits(id, PhotoCache.Edits(clean, wording))
+        val names = persons?.map { it.trim() }?.filter { it.isNotEmpty() }?.distinctBy { it.lowercase() }
+        cache.putEdits(id, PhotoCache.Edits(clean, wording, names ?: cache.getEdits(id)?.persons))
 
         var solr = SolrClient(connection)
         val current = try {
@@ -52,6 +54,9 @@ class EditRepository(private val context: Context) {
         current.remove("_version_")
         current.remove("score")
         if (clean.isEmpty()) current.remove("custom_tags") else current.put("custom_tags", JSONArray(clean))
+        if (names != null) {
+            if (names.isEmpty()) current.remove("persons_t") else current.put("persons_t", names.joinToString(", "))
+        }
         if (wording != null) current.put("meaning", wording)
         else current.optJSONArray("labels")?.let { labels ->
             // Back to what Opensolr saw: the labels joined, as at indexing time.
@@ -121,7 +126,7 @@ class EditRepository(private val context: Context) {
                 val id = doc.optString("id")
                 if (id.isNotEmpty()) {
                     val edits = cache.getEdits(id)
-                    cache.putEdits(id, PhotoCache.Edits(merged, edits?.meaning))
+                    cache.putEdits(id, PhotoCache.Edits(merged, edits?.meaning, edits?.persons))
                 }
             }
 

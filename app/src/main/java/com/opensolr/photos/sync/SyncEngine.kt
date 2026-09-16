@@ -195,7 +195,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                     val edits = cache.getEdits(photo.id)
                     // The md5 of the file itself goes up with it: the server only sees the small
                     // re-encoded copy, so it could never work this out on its own.
-                    items += IngestItem(photo, jpeg, edits?.tags, edits?.meaning, PhotoReader.fileMd5(context, photo), PhotoReader.personsIn(context, photo))
+                    items += IngestItem(photo, jpeg, edits?.tags, edits?.meaning, PhotoReader.fileMd5(context, photo), edits?.persons ?: PhotoReader.personsIn(context, photo))
                 }
                 if (items.isNotEmpty()) {
                     val results = try {

@@ -12,12 +12,26 @@ library: the current search and filters do not apply to them.
 | Section | Field | What is in it |
 |---|---|---|
 | **My tags** | `custom_tags` | Every tag you gave a photo |
-| **Things** | `labels` | The 12 most used CLIP labels |
-| **Places** | `city`, then `country` | Cities first, then countries |
-| **Cameras** | `camera_model` | Each camera model, shown with its make |
 | **Years** | `year` | One album per year |
+| **Places** | `city`, then `country` | Cities first, then countries |
+| **Things** | `labels` | The 12 most used CLIP labels |
+| **Cameras** | `camera_model` | Each camera model, shown with its make |
 
-An album appears as soon as one photo carries its value.
+An album appears as soon as one photo carries its value. Each section title is a band like a month on the
+photos grid: a tap folds it, and the button at the top right folds or opens them all.
+
+## Selecting, deleting, sharing
+
+A long press on a section title or on an album starts selecting; while selecting, a tap picks or unpicks.
+The check all / check none button at the top picks every section at once. The bar at the bottom offers:
+
+- **Delete**: every photo in the picked albums, and in every album of a picked section, removed from the
+  phone and from the index. A warning says exactly what goes first ("every photo in every album of: Years,
+  My tags", "every photo in the album Summer"), then Android asks once more.
+- **Share**: every photo of one album. Greyed out when a section, or more than one album, is picked.
+
+The photos are looked up in one walk over the index: the picked values of each field go in a `terms` query
+as a bound parameter, the fields are joined with `{!bool should=...}`.
 
 ## How an album looks
 

@@ -169,7 +169,7 @@ object PhotoReader {
             val packet = String(xmp, Charsets.UTF_8)
             XMP_PERSONS.find(packet)?.groupValues?.get(2)?.let { bag ->
                 XMP_LI.findAll(bag)
-                    .map { it.groupValues[1].trim() }
+                    .map { unescapeXml(it.groupValues[1]).trim() }
                     .filter { it.isNotEmpty() }
                     .distinct()
                     .toList()
@@ -224,6 +224,74 @@ object PhotoReader {
 
     /** One <rdf:li> of an XMP bag: the text between the tags, attributes ignored. */
     private val XMP_LI = Regex("<rdf:li[^>]*>(.*?)</rdf:li>", RegexOption.DOT_MATCHES_ALL)
+
+    /**
+     * Writes [persons] into the XMP of the photo at [uri] as Iptc4xmpExt:PersonInImage, the
+     * property Google Photos, Lightroom and digiKam use, replacing any names already there and
+     * keeping the rest of the packet. An empty list removes the property. Returns false when the
+     * file cannot be written (a format ExifInterface cannot save, or no write access).
+     *
+     * Every character outside ASCII is written as an XML character reference: ExifInterface
+     * turns the packet into bytes as ASCII, so "Țuțu" would otherwise be saved as "??u?u".
+     * [personsIn] and exiftool both read the references back as the letters.
+     */
+    fun writePersons(context: Context, uri: Uri, mime: String, persons: List<String>): Boolean {
+        if (mime !in setOf("image/jpeg", "image/png", "image/webp")) return false
+        return try {
+            context.contentResolver.openFileDescriptor(uri, "rw")?.use { pfd ->
+                val exif = ExifInterface(pfd.fileDescriptor)
+                val old = exif.getAttributeBytes(ExifInterface.TAG_XMP)?.let { String(it, Charsets.UTF_8) }
+                exif.setAttribute(ExifInterface.TAG_XMP, withPersons(old, persons))
+                exif.saveAttributes()
+                true
+            } ?: false
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * [packet] (or a new one when there is none) with its PersonInImage replaced by [persons].
+     */
+    private fun withPersons(packet: String?, persons: List<String>): String {
+        val property = if (persons.isEmpty()) "" else
+            "<Iptc4xmpExt:PersonInImage xmlns:Iptc4xmpExt=\"http://iptc.org/std/Iptc4xmpExt/2008-02-29/\"><rdf:Bag>" +
+                persons.joinToString("") { "<rdf:li>${escapeXml(it)}</rdf:li>" } +
+                "</rdf:Bag></Iptc4xmpExt:PersonInImage>"
+        val base = packet?.takeIf { it.contains("</rdf:Description>") }
+            ?: return "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">" +
+                "<rdf:Description rdf:about=\"\">$property</rdf:Description></rdf:RDF></x:xmpmeta>"
+        val cleared = XMP_PERSONS.replace(base, "")
+        val at = cleared.indexOf("</rdf:Description>")
+        return cleared.substring(0, at) + property + cleared.substring(at)
+    }
+
+    /** Text safe inside an XML element, with everything outside ASCII as a character reference. */
+    private fun escapeXml(text: String): String = buildString {
+        text.codePoints().forEach { cp ->
+            when {
+                cp == '&'.code -> append("&amp;")
+                cp == '<'.code -> append("&lt;")
+                cp == '>'.code -> append("&gt;")
+                cp > 127 -> append("&#x").append(Integer.toHexString(cp)).append(';')
+                else -> appendCodePoint(cp)
+            }
+        }
+    }
+
+    /** The inverse of [escapeXml], for names read from a packet. */
+    private fun unescapeXml(text: String): String =
+        Regex("&#x([0-9a-fA-F]+);|&#([0-9]+);|&amp;|&lt;|&gt;|&quot;|&apos;").replace(text) { m ->
+            when {
+                m.groupValues[1].isNotEmpty() -> String(Character.toChars(m.groupValues[1].toInt(16)))
+                m.groupValues[2].isNotEmpty() -> String(Character.toChars(m.groupValues[2].toInt()))
+                m.value == "&amp;" -> "&"
+                m.value == "&lt;" -> "<"
+                m.value == "&gt;" -> ">"
+                m.value == "&quot;" -> "\""
+                else -> "'"
+            }
+        }
 
     /** The Iptc4xmpExt:PersonInImage property, whichever namespace prefix the writer used. */
     private val XMP_PERSONS = Regex("<([A-Za-z0-9_]+:)?PersonInImage[^>]*>(.*?)</([A-Za-z0-9_]+:)?PersonInImage>", RegexOption.DOT_MATCHES_ALL)

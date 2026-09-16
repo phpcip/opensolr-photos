@@ -197,6 +197,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     val p = LocalPalette.current
     val context = LocalContext.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val latestState by androidx.compose.runtime.rememberUpdatedState(state)
     var showFilters by remember { mutableStateOf(false) }
     var details by remember { mutableStateOf<PhotoHit?>(null) }
     // The photo opened full screen, from which the results are swiped through in their own order.
@@ -293,6 +294,20 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             Haptics.tick(view, strong = false)
             viewModel.search(reset = false)
         }
+    }
+    // With the last group folded, the prefetch above stays off (else every page arriving left
+    // the short list at its end again and the pages chained). The owner still gets more by
+    // scrolling against the bottom: one page per scroll that reaches it, never on its own
+    // (Cip, 2026-09-17).
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.isScrollInProgress && !gridState.canScrollForward }
+            .collect { pushedAtBottom ->
+                val now = latestState
+                if (pushedAtBottom && now.hits.isNotEmpty() && !now.endReached && !now.searching) {
+                    Haptics.tick(view, strong = false)
+                    viewModel.search(reset = false)
+                }
+            }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -400,25 +415,6 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                             .padding(6.dp),
                     )
                 }
-                // Filters sit on the same line, as a divider plus an icon rather than a button.
-                Box(Modifier.size(width = 1.dp, height = 20.dp).background(p.hairline))
-                // Slightly bigger and tappable over the line's full height (Cip, 2026-09-15).
-                Row(
-                    Modifier
-                        .fillMaxHeight()
-                        .combinedClickableCompat { showFilters = true }
-                        .padding(horizontal = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.List, contentDescription = "Filters",
-                        tint = if (state.filters.count > 0) p.accent else p.muted, modifier = Modifier.size(22.dp),
-                    )
-                    if (state.filters.count > 0) {
-                        Spacer(Modifier.size(4.dp))
-                        Text("${state.filters.count}", style = MaterialTheme.typography.labelSmall, color = p.accent)
-                    }
-                }
             }
         }
 
@@ -449,7 +445,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             Spacer(Modifier.height(8.dp))
         }
 
-        // What is filtered right now, removable; the button itself moved into the search line.
+        // What is filtered right now, removable; the button itself is on the buttons line.
         if (state.filters.count > 0) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
@@ -468,11 +464,12 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 state.skippedMode ->
                     "${Actions.formatCount(state.hits.size.toLong())} photo${if (state.hits.size == 1) "" else "s"} your phone could not read"
                 state.duplicatesMode && state.similarToId != null ->
-                    "${Actions.formatCount(state.hits.size.toLong())} like ${state.similarToHit?.fileName ?: "this photo"}"
+                    "${Actions.formatCompact(state.hits.size.toLong())} similar"
                 state.duplicatesMode ->
                     // Only the photos: how many groups they fall into interests nobody (Cip, 2026-09-17).
                     "${Actions.formatCount(state.hits.size.toLong())} photo${if (state.hits.size == 1) "" else "s"}"
-                else -> "${Actions.formatCount(state.numFound)} photo${if (state.numFound == 1L) "" else "s"}"
+                // Compact, so it always fits beside the buttons and nothing moves (Cip, 2026-09-17).
+                else -> Actions.formatCompact(state.numFound)
             }
             Text(countText, style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.weight(1f))
             // AI: on, the search blends meaning with words; off, it matches words only. The same
@@ -502,6 +499,15 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 )
                 Spacer(Modifier.width(2.dp))
             }
+            // Filters, moved here from the search line so they are there without opening the
+            // search (Cip, 2026-09-17); the number of filters in force rides on the button.
+            IconAction(
+                icon = R.drawable.ic_filters,
+                label = "Filters",
+                active = state.filters.count > 0,
+                badge = state.filters.count,
+                onClick = { showFilters = true },
+            )
             // Photos of the same thing, grouped. On when it is what the grid is showing.
             IconAction(
                 icon = R.drawable.ic_duplicates,
@@ -529,6 +535,16 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                     onClick = { viewModel.setFreshBias(!state.freshBias) },
                 )
             }
+            // Reloads the results from the index, for photos a sync added in the meantime.
+            // Reload keeps the view: duplicates stay duplicates, on the same slider stop. Pressed
+            // on purpose, so held answers go and the index itself is asked.
+            IconAction(
+                icon = R.drawable.ic_reload,
+                label = "Reload",
+                accent = true,
+                enabled = !state.searching,
+                onClick = { viewModel.forceRefresh() },
+            )
             // Every group of the view on screen folded away, or all of them opened again: only
             // there when the grid has headings to fold (Cip, 2026-09-17).
             val headingKeys = remember(state.hits, state.searchedQuery, state.duplicateGroups) {
@@ -546,16 +562,6 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                     },
                 )
             }
-            // Reloads the results from the index, for photos a sync added in the meantime.
-            // Reload keeps the view: duplicates stay duplicates, on the same slider stop. Pressed
-            // on purpose, so held answers go and the index itself is asked.
-            IconAction(
-                icon = R.drawable.ic_reload,
-                label = "Reload",
-                accent = true,
-                enabled = !state.searching,
-                onClick = { viewModel.forceRefresh() },
-            )
         }
         // The kind of duplicates, 0..10 (Cip, 2026-09-15): from the loosest (the same first word)
         // through the same photo by its EXIF (green, the middle) to the strictest (EXIF and the
@@ -764,7 +770,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                 Spacer(Modifier.width(if (row.level > 0) 6.dp else 8.dp))
                                 Text(
                                     row.text,
-                                    style = if (row.level > 0) MaterialTheme.typography.titleMedium else MaterialTheme.typography.headlineSmall,
+                                    style = headingStyle(row.level),
                                     fontWeight = FontWeight.Bold,
                                     color = onBand,
                                     modifier = Modifier.weight(1f),
@@ -1097,7 +1103,7 @@ private fun SelectionDock(
  * One icon of the dock with its word, greyed out while nothing is selected.
  */
 @Composable
-private fun DockAction(icon: Int, label: String, enabled: Boolean, accent: Boolean = false, onClick: () -> Unit) {
+internal fun DockAction(icon: Int, label: String, enabled: Boolean, accent: Boolean = false, onClick: () -> Unit) {
     val p = LocalPalette.current
     val tint = when {
         !enabled -> p.hairline
@@ -1283,6 +1289,9 @@ private const val VIEWER_SWIPE_UP = 90f
 
 /** How much of the screen the picture must be carried down before the viewer closes. */
 private const val VIEWER_DISMISS_SHARE = 0.18f
+
+/** How long the double tap takes to magnify or come back, in milliseconds. */
+private const val VIEWER_DOUBLE_TAP_MS = 260
 
 /** How far a double tap magnifies, as Google Photos does it. */
 private const val VIEWER_DOUBLE_TAP_SCALE = 3f
@@ -1531,13 +1540,14 @@ private fun ActiveFilterChips(filters: SearchFilters, onRemove: (SearchFilters) 
  * mark on the page (Cip, 2026-09-16). [active] draws it in the accent, as the header cells do.
  */
 @Composable
-private fun IconAction(
+internal fun IconAction(
     icon: Int,
     label: String,
     active: Boolean = false,
     accent: Boolean = false,
     danger: Boolean = false,
     enabled: Boolean = true,
+    badge: Int = 0,
     onClick: () -> Unit,
 ) {
     val p = LocalPalette.current
@@ -1557,6 +1567,17 @@ private fun IconAction(
         contentAlignment = Alignment.Center,
     ) {
         Icon(painterResource(icon), contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
+        if (badge > 0) {
+            Text(
+                "$badge",
+                style = MaterialTheme.typography.labelSmall,
+                color = p.onAccentFill,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .background(p.accentFill, Corner)
+                    .padding(horizontal = 3.dp),
+            )
+        }
     }
 }
 
@@ -1686,14 +1707,48 @@ private fun FilterSheet(
             FilterActions(count, onClear = { onChange(SearchFilters()) }, onDone = onDismiss)
             Spacer(Modifier.height(12.dp))
 
-            SearchFilters.FACETS.forEach { (field, title) ->
-                FacetSection(title, facets[field], draft.values(field), label = { facetLabel(field, it) }) { onChange(draft.toggled(field, it)) }
-                // Under the years, which say which years you actually have photos in, a picker
-                // for anything narrower than a whole year (Cip, 2026-09-16).
-                if (field == "year") {
-                    DateRangeSection(draft.taken) { onChange(draft.copy(taken = it)) }
+            // The order people reach for (Cip, 2026-09-17): when, then their own tags and papers,
+            // then where; everything else after.
+            val facetTitles = SearchFilters.FACETS.toMap()
+            val facet: @Composable (String) -> Unit = { field ->
+                facetTitles[field]?.let { title ->
+                    FacetSection(title, facets[field], draft.values(field), label = { facetLabel(field, it) }) { onChange(draft.toggled(field, it)) }
                 }
             }
+            facet("year")
+            // Under the years, which say which years you actually have photos in, a picker
+            // for anything narrower than a whole year (Cip, 2026-09-16).
+            DateRangeSection(draft.taken) { onChange(draft.copy(taken = it)) }
+
+            // Your own tags: three states, so two chips rather than a switch. Picking the one
+            // already chosen clears it and every photo is shown again.
+            SectionLabel("My tags")
+            Spacer(Modifier.height(10.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Chip(
+                    label = "Tagged",
+                    selected = draft.tagged == true,
+                    onClick = { onChange(draft.copy(tagged = if (draft.tagged == true) null else true)) },
+                )
+                Chip(
+                    label = "Not tagged",
+                    selected = draft.tagged == false,
+                    onClick = { onChange(draft.copy(tagged = if (draft.tagged == false) null else false)) },
+                )
+            }
+            Spacer(Modifier.height(18.dp))
+            facet("custom_tags")
+            TriStateSection(
+                title = "Documents",
+                yes = "Documents", no = "Not documents",
+                state = draft.documents,
+                onChange = { onChange(draft.copy(documents = it)) },
+            )
+            facet("city")
+            facet("country")
+            SearchFilters.FACETS.map { it.first }
+                .filter { it !in setOf("year", "custom_tags", "city", "country") }
+                .forEach { facet(it) }
 
             draft.near?.let { near ->
                 // Radius of the "near a point" filter set from the map or a photo's details.
@@ -1713,8 +1768,8 @@ private fun FilterSheet(
                 Spacer(Modifier.height(18.dp))
             }
 
-            // Read, named, paperwork: the same three-state shape as "My tags" below - picking
-            // the chip already chosen clears it and every photo is shown again.
+            // Read and named: the same three-state shape as "My tags" above - picking the chip
+            // already chosen clears it and every photo is shown again.
             TriStateSection(
                 title = "Printed text",
                 yes = "Has OCR", no = "No OCR",
@@ -1727,30 +1782,6 @@ private fun FilterSheet(
                 state = draft.hasPeople,
                 onChange = { onChange(draft.copy(hasPeople = it)) },
             )
-            TriStateSection(
-                title = "Documents",
-                yes = "Documents", no = "Not documents",
-                state = draft.documents,
-                onChange = { onChange(draft.copy(documents = it)) },
-            )
-
-            // Your own tags: three states, so two chips rather than a switch. Picking the one
-            // already chosen clears it and every photo is shown again.
-            SectionLabel("My tags")
-            Spacer(Modifier.height(10.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Chip(
-                    label = "Tagged",
-                    selected = draft.tagged == true,
-                    onClick = { onChange(draft.copy(tagged = if (draft.tagged == true) null else true)) },
-                )
-                Chip(
-                    label = "Not tagged",
-                    selected = draft.tagged == false,
-                    onClick = { onChange(draft.copy(tagged = if (draft.tagged == false) null else false)) },
-                )
-            }
-            Spacer(Modifier.height(18.dp))
 
             Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("Only photos with a location", style = MaterialTheme.typography.bodyLarge, color = p.ink, modifier = Modifier.weight(1f))
@@ -2018,7 +2049,8 @@ internal fun PhotoViewer(
     // (Cip, 2026-09-16). Swiping to another photo starts it whole again.
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
-    LaunchedEffect(pager.currentPage) { scale = 1f; offset = Offset.Zero }
+    var zoomJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    LaunchedEffect(pager.currentPage) { zoomJob?.cancel(); scale = 1f; offset = Offset.Zero }
     // The details of the photo being looked at, opened over it rather than in its place: a swipe
     // up must not take the picture away (Cip, 2026-09-16).
     var sheetFor by remember { mutableStateOf<PhotoHit?>(null) }
@@ -2084,6 +2116,7 @@ internal fun PhotoViewer(
                                         // scale goes from s to s' (k = s'/s) gives
                                         // offset' = d * (1 - k) + offset * k, with d the centroid
                                         // measured from the middle.
+                                        zoomJob?.cancel()
                                         val next = (scale * event.calculateZoom()).coerceAtLeast(1f)
                                         if (next <= 1.01f) {
                                             scale = 1f
@@ -2125,20 +2158,36 @@ internal fun PhotoViewer(
                         .pointerInput(hit.id) {
                             detectTapGestures(
                                 // Google Photos' gesture: in on the spot you tapped, out again.
+                                // Animated, the pinch is not (Cip, 2026-09-17): the jump read as
+                                // unpolished, a finger on the glass already moves at its own pace.
                                 onDoubleTap = { at ->
+                                    val fromScale = scale
+                                    val fromOffset = offset
+                                    val toScale: Float
+                                    val toOffset: Offset
                                     if (scale > 1f) {
-                                        scale = 1f
-                                        offset = Offset.Zero
+                                        toScale = 1f
+                                        toOffset = Offset.Zero
                                     } else {
-                                        scale = VIEWER_DOUBLE_TAP_SCALE
+                                        toScale = VIEWER_DOUBLE_TAP_SCALE
                                         val centre = Offset(size.width / 2f, size.height / 2f)
                                         val limitX = size.width * (VIEWER_DOUBLE_TAP_SCALE - 1f) / 2f
                                         val limitY = size.height * (VIEWER_DOUBLE_TAP_SCALE - 1f) / 2f
                                         val wanted = (centre - at) * (VIEWER_DOUBLE_TAP_SCALE - 1f)
-                                        offset = Offset(
+                                        toOffset = Offset(
                                             wanted.x.coerceIn(-limitX, limitX),
                                             wanted.y.coerceIn(-limitY, limitY),
                                         )
+                                    }
+                                    zoomJob?.cancel()
+                                    zoomJob = scope.launch {
+                                        androidx.compose.animation.core.animate(
+                                            0f, 1f,
+                                            animationSpec = tween(VIEWER_DOUBLE_TAP_MS, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                                        ) { t, _ ->
+                                            scale = fromScale + (toScale - fromScale) * t
+                                            offset = fromOffset + (toOffset - fromOffset) * t
+                                        }
                                     }
                                 },
                                 onTap = { showActions = !showActions },
@@ -2503,7 +2552,16 @@ private fun Modifier.combinedClickableCompat(onClick: () -> Unit): Modifier = th
 private val SkippedRed = Color(0xFFE53E3E)
 
 /** The bands behind the grid's headings: month and day, per theme (Cip, 2026-09-17). */
-private val HEADING_MONTH_LIGHT = Color(0xFF343A40)
-private val HEADING_DAY_LIGHT = Color(0xFF6C757D)
-private val HEADING_MONTH_DARK = Color(0xFFFFFFFF)
-private val HEADING_DAY_DARK = Color(0xFFDEE2E6)
+internal val HEADING_MONTH_LIGHT = Color(0xFF343A40)
+internal val HEADING_DAY_LIGHT = Color(0xFF6C757D)
+internal val HEADING_MONTH_DARK = Color(0xFFFFFFFF)
+internal val HEADING_DAY_DARK = Color(0xFFDEE2E6)
+
+/**
+ * The type of a group heading: a month (level 0) or a day under it. A touch under the title
+ * sizes they had, which read too big (Cip, 2026-09-17). Shared with the album sections.
+ */
+@Composable
+internal fun headingStyle(level: Int): androidx.compose.ui.text.TextStyle =
+    if (level > 0) MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp)
+    else MaterialTheme.typography.headlineSmall.copy(fontSize = 21.sp)

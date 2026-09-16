@@ -90,6 +90,12 @@ names are read the way a file name is read, and a photo that carries none is ind
 Accent folding applies as everywhere else, so a name written with diacritics is found without them and the
 other way round.
 
+You can add, change or remove the names yourself in **Edit**, under *People*. They are written into the
+file's XMP (`PhotoReader.writePersons`, after Android asks once for permission to change the photo), so
+any other app sees them too, and into `persons_t` in the index at once. Names outside ASCII are written
+as XML character references, which every XMP reader turns back into letters. The names are kept on the
+phone as well (`PhotoCache` edits), so a later read of the photo sends them again.
+
 The names are read on the phone rather than carried on the 640 px copy: `ExifInterface` converts the XMP
 packet to a `String` as ASCII, which turns a name with diacritics into question marks. `PhotoReader
 .personsIn` decodes the raw bytes as UTF-8 and the names travel to `photos_ingest` as JSON, in the `persons`
