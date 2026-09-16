@@ -146,6 +146,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     var showFilters by remember { mutableStateOf(false) }
     var details by remember { mutableStateOf<PhotoHit?>(null) }
     var editing by remember { mutableStateOf<PhotoHit?>(null) }
+    // Open while tags are being put on every photo of the view at once.
+    var bulkTagging by remember { mutableStateOf(false) }
     val gridState = rememberLazyGridState()
     // Two ways to cut the grid, both from what is already on screen. Browsing, the results come
     // back newest first, so the cut is the day or the month: "Today", "Yesterday", "September".
@@ -627,6 +629,9 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             // confirmation follows.
             onDelete = { confirmDelete = true },
             onResync = { viewModel.resyncSelected() },
+            // Always available: with photos ticked it tags those, with none it tags everything
+            // the view is showing (Cip, 2026-09-16).
+            onTag = { bulkTagging = true },
         )
     }
     }
@@ -656,6 +661,10 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         )
     }
 
+    // Tags for the whole view at once, over the grid it applies to.
+    if (bulkTagging) {
+        BulkTagSheet(state = state, viewModel = viewModel, onDismiss = { bulkTagging = false })
+    }
     details?.let { hit ->
         DetailsSheet(hit = hit, viewModel = viewModel, onDismiss = { details = null }, onEdit = { editing = it; details = null })
     }
@@ -748,6 +757,7 @@ private fun SelectionDock(
     onShare: () -> Unit,
     onDelete: () -> Unit,
     onResync: () -> Unit,
+    onTag: () -> Unit,
 ) {
     val p = LocalPalette.current
     Row(
@@ -764,6 +774,9 @@ private fun SelectionDock(
         DockAction(R.drawable.ic_share, "Share", enabled = count > 0, onClick = onShare)
         DockAction(R.drawable.ic_delete, "Delete", enabled = count > 0, onClick = onDelete)
         DockAction(R.drawable.ic_sync, if (count > 0) "Re-sync $count" else "Re-sync", enabled = count > 0, accent = true, onClick = onResync)
+        // Last, and never greyed out: with photos ticked it tags those, with none it tags every
+        // photo the view is showing (Cip, 2026-09-16).
+        DockAction(R.drawable.ic_tag, if (count > 0) "Tag $count" else "Tag all", enabled = true, onClick = onTag)
     }
 }
 

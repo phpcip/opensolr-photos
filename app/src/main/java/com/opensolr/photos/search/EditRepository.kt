@@ -81,6 +81,99 @@ class EditRepository(private val context: Context) {
     }
 
     /**
+     * Adds [tags] to every photo in [ids], keeping the tags each already has and leaving what
+     * the photo shows untouched (Cip, 2026-09-16). Returns how many photos were written.
+     *
+     * Done in batches, not photo by photo: the documents of a batch are read in one request, the
+     * new vectors for the whole batch in one `batch_embed` call, and the batch is written with
+     * one update. So this costs one AI request per [EMBED_BATCH] photos, instead of one each.
+     * Photos not in the index yet are skipped; their tags are kept on the phone anyway and go up
+     * with them at the next sync.
+     */
+    suspend fun addTagsToAll(ids: List<String>, tags: List<String>, onProgress: (Int, Int) -> Unit = { _, _ -> }): Int {
+        val session = prefs.session ?: throw ServiceException("Sign in to edit photos")
+        var connection = prefs.connection ?: throw ServiceException("Your index is not set up yet.")
+        val clean = tags.map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }
+        if (clean.isEmpty() || ids.isEmpty()) return 0
+
+        var solr = SolrClient(connection)
+        var written = 0
+        ids.chunked(EMBED_BATCH).forEach { batch ->
+            val docs = try {
+                fetchAll(solr, batch)
+            } catch (e: SolrAuthException) {
+                connection = IndexManager(context, prefs, api).refreshConnection(session)
+                solr = SolrClient(connection)
+                fetchAll(solr, batch)
+            }
+            if (docs.isEmpty()) return@forEach
+
+            docs.forEach { doc ->
+                doc.remove("_version_")
+                doc.remove("score")
+                val existing = doc.optJSONArray("custom_tags")
+                    ?.let { a -> (0 until a.length()).map { a.optString(it) } }
+                    ?.filter { it.isNotBlank() }
+                    ?: emptyList()
+                val merged = (existing + clean).distinctBy { it.lowercase() }
+                doc.put("custom_tags", JSONArray(merged))
+                // Kept on the phone too, so a later rewrite of the photo carries them again.
+                val id = doc.optString("id")
+                if (id.isNotEmpty()) {
+                    val edits = cache.getEdits(id)
+                    cache.putEdits(id, PhotoCache.Edits(merged, edits?.meaning))
+                }
+            }
+
+            // One vector per photo, all of them in a single request.
+            if (prefs.account?.vectorAllowed == true) {
+                try {
+                    val vectors = api.batchEmbed(session, connection.indexName, docs.map { SyncEngine.embeddingText(it) })
+                    docs.forEachIndexed { index, doc ->
+                        vectors.getOrNull(index)?.let { vector ->
+                            doc.put("embeddings", JSONArray().apply { vector.forEach { put(it.toDouble()) } })
+                            doc.put("embed_model", "opensolr-${vector.size}")
+                        }
+                    }
+                } catch (e: VectorNotAllowedException) {
+                    docs.forEach { it.remove("embeddings") }
+                }
+            }
+
+            solr.add(JSONArray().apply { docs.forEach { put(it) } })
+            written += docs.size
+            onProgress(written, ids.size)
+        }
+        solr.commit()
+        return written
+    }
+
+    private companion object {
+        /**
+         * Photos per batch when tagging many at once: the most `batch_embed` takes in one call
+         * (see OpensolrApi.batchEmbed), so a batch is one request for the vectors and one write.
+         */
+        const val EMBED_BATCH = 50
+    }
+
+    /**
+     * The stored documents of [ids] from the index, in one request.
+     */
+    private suspend fun fetchAll(solr: SolrClient, ids: List<String>): List<JSONObject> {
+        val json = solr.select(
+            listOf(
+                "q" to "*:*",
+                "fq" to "{!terms f=id separator=| v=\$bulkIds}",
+                "bulkIds" to ids.joinToString("|"),
+                "fl" to "*",
+                "rows" to ids.size.toString(),
+            )
+        )
+        val docs = json.getJSONObject("response").getJSONArray("docs")
+        return (0 until docs.length()).map { docs.getJSONObject(it) }
+    }
+
+    /**
      * The stored document of [id] from the index, or null when it is not there.
      */
     private suspend fun fetch(solr: SolrClient, id: String): JSONObject? {

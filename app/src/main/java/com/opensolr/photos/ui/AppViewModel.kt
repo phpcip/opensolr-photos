@@ -123,6 +123,13 @@ data class UiState(
     val restoreGeneration: Int = 0,
     val editSaving: Boolean = false,
     val editError: String? = null,
+    /** True while tags are being put on every photo of the view at once. */
+    val bulkTagging: Boolean = false,
+    /** How far that has got: photos written, and how many there are. */
+    val bulkTagDone: Int = 0,
+    val bulkTagTotal: Int = 0,
+    /** Why it did not finish, for the bulk tagging screen. */
+    val bulkTagError: String? = null,
     /** What the plan's limits mean right now, for the account screen. */
     val planWarnings: List<PlanWatch.Warning> = emptyList(),
     /** A newer release on GitHub, when the daily check found one and it was not dismissed. */
@@ -365,6 +372,59 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 signedOut("Your Opensolr sign-in stopped working. Sign in again.")
             } catch (e: Exception) {
                 _state.update { it.copy(editSaving = false, editError = friendlyMessage(e, "The edit could not be saved.")) }
+            }
+        }
+    }
+
+    /**
+     * The photos the tagging button works on: the ticked ones, or every photo the view shows
+     * when nothing is ticked (Cip, 2026-09-16).
+     */
+    fun photosToTag(): List<PhotoHit> {
+        val state = _state.value
+        return if (state.selectedIds.isEmpty()) state.hits else state.hits.filter { it.id in state.selectedIds }
+    }
+
+    /**
+     * Puts [tags] on those photos, keeping the tags each already has and leaving what each photo
+     * shows untouched.
+     *
+     * Never the whole index: only the photos named above. The work carries on in the background
+     * after the sheet is closed - hundreds of photos take a while, and nothing is gained by
+     * making the owner watch (Cip, 2026-09-16). Written in batches, so it costs one AI request
+     * per batch rather than one per photo.
+     */
+    fun tagPhotos(tags: List<String>) {
+        val targets = photosToTag()
+        val ids = targets.map { it.id }
+        val clean = tags.map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }
+        if (ids.isEmpty() || clean.isEmpty()) return
+        _state.update { it.copy(bulkTagging = true, bulkTagError = null, bulkTagDone = 0, bulkTagTotal = ids.size) }
+        viewModelScope.launch {
+            try {
+                edits.addTagsToAll(ids, clean) { done, total ->
+                    _state.update { it.copy(bulkTagDone = done, bulkTagTotal = total) }
+                }
+                // The index just changed: no cached answer may outlive the owner's own tags.
+                searches.clearCache()
+                // The photos on screen carry the new tags without asking the index again.
+                val tagged = ids.toSet()
+                _state.update { s ->
+                    s.copy(
+                        bulkTagging = false,
+                        selecting = false,
+                        selectedIds = emptySet(),
+                        hits = s.hits.map { hit ->
+                            if (hit.id in tagged) hit.copy(customTags = (hit.customTags + clean).distinctBy { it.lowercase() }) else hit
+                        },
+                    )
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: SignInRequiredException) {
+                signedOut("Your Opensolr sign-in stopped working. Sign in again.")
+            } catch (e: Exception) {
+                _state.update { it.copy(bulkTagging = false, bulkTagError = friendlyMessage(e, "The tags could not be saved.")) }
             }
         }
     }
