@@ -27,8 +27,15 @@ albums, duplicates or similar photos shows the words the results answer to inste
 
 ## Empty search box
 
-Every photo, newest first: `q=*:*`, `sort=taken_at desc, id asc`. The grid is grouped under date headings:
-*Today*, *Yesterday*, the month's name for this year, month and year before that.
+Every photo, newest first: `q=*:*`, `sort=taken_at desc, id asc`. The grid is grouped under date headings,
+on two levels. *Today*, *Yesterday* and the weekdays of the last six days stand on their own: each of them is
+already a day. Anything older is a month — *September*, or *September 2025* once the year has turned — with
+the days inside it under headings of their own, *Saturday 5*, *Friday 4*. A month whose photos all fall on
+one day is not split.
+
+The grouping is done on the phone in `buildRows`, from `taken_at`, which every hit already carries; it costs
+no request. A heading folds away with a tap and then says how many it hides; while selecting, a tap on a
+heading ticks its whole group — a month, or one day of it — meaning the photos loaded so far.
 
 ## Typed search
 
@@ -124,6 +131,7 @@ horizontally scrolling row.
 | Filter | Parameters |
 |---|---|
 | Year | `fq={!term f=year v=$f_year}` and `f_year=2024` |
+| Taken between | `fq={!lucene v=$taken_q}` and `taken_q=taken_at:[2025-07-01T00:00:00Z TO 2025-07-08T23:59:59Z]`. Both days included; the clause travels as one bound parameter, and its two ends are formatted from a Long, so they can only ever be timestamps |
 | Folder | `fq={!term f=folder v=$f_folder}` and `f_folder=DCIM/Camera/` |
 | Camera make | `fq={!term f=camera_make v=$f_make}` and `f_make=Google` |
 | Camera model | `fq={!term f=camera_model v=$f_camera}` and `f_camera=Pixel 8` |
