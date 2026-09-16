@@ -153,6 +153,28 @@ object SyncScheduler {
     }
 
     /**
+     * Stops whatever is queued, waiting or running and starts one sync now (Cip, 2026-09-16).
+     *
+     * A run that cannot meet its conditions - no network when it was queued, or waiting for a
+     * charger - sits in the queue for good, and enqueueing with KEEP left it exactly where it
+     * was, so Force Re-Sync did nothing at all. Everything under the app's tag goes first, then
+     * a fresh run is enqueued with REPLACE, and the photo watch is armed again because cancelling
+     * took it down with the rest.
+     */
+    fun restartNow(context: Context) {
+        val manager = WorkManager.getInstance(context)
+        manager.cancelAllWorkByTag(TAG)
+        val request = OneTimeWorkRequestBuilder<SyncWorker>()
+            .setConstraints(constraints)
+            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
+            .addTag(TAG)
+            .addTag(NOW)
+            .build()
+        manager.enqueueUniqueWork(NOW, ExistingWorkPolicy.REPLACE, request)
+        watchMedia(context)
+    }
+
+    /**
      * Live status of sync work.
      */
     fun status(context: Context): Flow<SyncStatus> =

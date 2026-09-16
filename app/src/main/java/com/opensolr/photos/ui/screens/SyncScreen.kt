@@ -77,7 +77,9 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
                     LinearProgressIndicator(Modifier.fillMaxWidth().height(6.dp), color = p.accent, trackColor = p.chip, strokeCap = StrokeCap.Butt)
                 }
             }
-            sync.queued -> Text("A sync is waiting for a network connection.", style = MaterialTheme.typography.titleMedium, color = p.ink)
+            // Queued means only that: waiting for its conditions. Saying which one would be a
+            // guess, and it used to blame the network while the network was fine (Cip, 2026-09-16).
+            sync.queued -> Text("A sync is waiting to start. Force Re-Sync starts one now.", style = MaterialTheme.typography.titleMedium, color = p.ink)
             else -> Text(statusLine(state), style = MaterialTheme.typography.titleMedium, color = p.ink)
         }
         Spacer(Modifier.height(20.dp))

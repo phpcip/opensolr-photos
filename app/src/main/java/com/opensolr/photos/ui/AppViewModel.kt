@@ -765,15 +765,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Force Re-Sync: starts a sync unless one is already queued or running, in which case the
-     * user is asked to be patient instead.
+     * Force Re-Sync: stops whatever is queued, waiting or running and starts a sync now.
+     *
+     * It used to refuse while anything was queued or running and ask the owner to be patient -
+     * which is the one moment it is needed, because a run stuck waiting for conditions it can
+     * never meet leaves no other way out (Cip, 2026-09-16). Only a run that is actually working
+     * is protected: interrupting it mid-flight would waste what it has paid for.
      */
     fun forceResync() {
-        if (_state.value.sync.busy || com.opensolr.photos.sync.SyncWorker.running.get()) {
+        if (_state.value.sync.running || com.opensolr.photos.sync.SyncWorker.running.get()) {
             _state.update { it.copy(showBusyDialog = true) }
             return
         }
-        SyncScheduler.runNow(context)
+        SyncScheduler.restartNow(context)
     }
 
     /**
@@ -784,7 +788,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * and the vectors are made again, which counts as new AI requests.
      */
     fun resetIndex() {
-        if (_state.value.sync.busy || com.opensolr.photos.sync.SyncWorker.running.get()) {
+        // Only a run that is actually working stops this; one stuck in the queue must not, or
+        // there is no way out of it (Cip, 2026-09-16).
+        if (_state.value.sync.running || com.opensolr.photos.sync.SyncWorker.running.get()) {
             _state.update { it.copy(showBusyDialog = true) }
             return
         }
@@ -1023,11 +1029,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (ids.isEmpty()) return
         prefs.resyncIds = prefs.resyncIds + ids
         _state.update { it.copy(selecting = false, selectedIds = emptySet()) }
-        if (_state.value.sync.busy || com.opensolr.photos.sync.SyncWorker.running.get()) {
+        // As above: a run that is working is left alone, a run stuck in the queue is replaced.
+        if (_state.value.sync.running || com.opensolr.photos.sync.SyncWorker.running.get()) {
             _state.update { it.copy(showBusyDialog = true) }
             return
         }
-        SyncScheduler.runNow(context)
+        SyncScheduler.restartNow(context)
     }
 
     /**
