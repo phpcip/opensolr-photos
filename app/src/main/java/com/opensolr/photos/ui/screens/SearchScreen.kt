@@ -1319,6 +1319,11 @@ private fun DetailsSheet(hit: PhotoHit, viewModel: AppViewModel, onDismiss: () -
                 HeaderItem("Similar", onClick = { onDismiss(); viewModel.showSimilar(hit) }) {
                     Icon(painterResource(R.drawable.ic_duplicates), contentDescription = "Show similar photos", tint = p.ink, modifier = Modifier.size(20.dp))
                 }
+                // The same sharing as the selection bar, for this one photo: the file itself goes
+                // straight from the phone, nothing through Opensolr.
+                HeaderItem("Share", onClick = { Actions.sharePhotos(context, listOf(hit)) }) {
+                    Icon(painterResource(R.drawable.ic_share), contentDescription = "Share this photo", tint = p.ink, modifier = Modifier.size(20.dp))
+                }
                 hit.latLon?.let { (lat, lon) ->
                     HeaderItem("Map", onClick = { onDismiss(); viewModel.openMap(MapFocus(lat, lon, 15.0)) }) {
                         Icon(painterResource(R.drawable.ic_map), contentDescription = "Show on map", tint = p.ink, modifier = Modifier.size(20.dp))

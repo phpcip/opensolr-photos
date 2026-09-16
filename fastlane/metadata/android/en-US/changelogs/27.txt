@@ -1,0 +1,1 @@
+A photo's details now offer Share, next to Edit, Gallery and Similar: the photo itself is handed to whatever you share with, straight from the phone.
