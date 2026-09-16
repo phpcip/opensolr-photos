@@ -1,0 +1,3 @@
+A bar down the right edge of the photos. Drag it and you cross months in one movement instead of flicking through a year of thumbnails, with the month you are passing shown beside your finger.
+
+It answers back as you go: a firmer tap each time you cross into another month, a lighter one for every day inside it, so you can feel how far you have travelled without watching the screen. It fades away when you stop scrolling.

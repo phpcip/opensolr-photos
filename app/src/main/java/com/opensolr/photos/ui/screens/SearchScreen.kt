@@ -68,6 +68,20 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DateRangePicker
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.lazy.grid.LazyGridState
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
+import com.opensolr.photos.ui.Haptics
+import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.input.pointer.pointerInput
+import kotlinx.coroutines.launch
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.HorizontalDivider
@@ -700,6 +714,10 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                     }
                 }
             }
+
+            // Over the grid, not inside it: a drag down the right edge crosses months in one
+            // movement, with a tap back at every heading it passes.
+            FastScroller(gridState, rows)
         }
     }
 
@@ -1041,6 +1059,18 @@ private fun scoreCut(hits: List<PhotoHit>): Int? {
 
 /** Fewer results than this are a short enough list to read without a heading. */
 private const val MIN_HITS_TO_CUT = 8
+
+/** Rows below which the fast scroller is not worth showing: a couple of screens. */
+private const val FAST_SCROLL_MIN_ROWS = 60
+
+/** The grab handle of the fast scroller: tall enough for a thumb to land on. */
+private val FAST_SCROLL_THUMB = 48.dp
+
+/** How wide the strip on the right edge is: narrow enough to leave a photo tappable. */
+private val FAST_SCROLL_WIDTH = 28.dp
+
+/** Room kept to the left of the bar for the month bubble while a finger is dragging. */
+private val FAST_SCROLL_LABEL_ROOM = 240.dp
 /** "Best matches" is never shorter than this, so a single strong hit does not stand alone. */
 private const val MIN_BEST_MATCHES = 3
 /** A photo below this share of the best score is what the vector brought along, not a match. */
@@ -1386,6 +1416,114 @@ private fun FilterSheet(
             Spacer(Modifier.height(12.dp))
             FilterActions(count, onClear = { onChange(SearchFilters()) }, onDone = onDismiss)
             Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+/**
+ * The bar down the right edge that a finger can drag to cross months in one movement, instead of
+ * flicking through a year of thumbnails (Cip, 2026-09-16).
+ *
+ * It rides the rows already in the grid - the same list the headings come from - so it needs no
+ * request of its own and cannot disagree with what is on screen. Crossing a heading gives a tap
+ * back: the heavier one for a month, the lighter one for a day inside it, which is what tells a
+ * thumb how far it has travelled without looking.
+ *
+ * It appears while the grid is moving and fades out when it stops, so it never sits over photos.
+ */
+@Composable
+private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>) {
+    val p = LocalPalette.current
+    val view = LocalView.current
+    val scope = rememberCoroutineScope()
+    val total = rows.size
+    var dragging by remember { mutableStateOf(false) }
+    // The row the finger is over, which is not where the grid is until it has caught up.
+    var aimed by remember { mutableIntStateOf(-1) }
+    // Too short to be worth a shortcut: a couple of screens are flicked through faster by hand.
+    if (total < FAST_SCROLL_MIN_ROWS) return
+
+    // The bar shows itself while the grid moves and fades when it stops, so it never sits over
+    // photos - but the strip stays touchable even when nothing is drawn, otherwise there would be
+    // nothing to take hold of from a standing start.
+    val alpha by animateFloatAsState(
+        targetValue = if (dragging || gridState.isScrollInProgress) 1f else 0f,
+        animationSpec = tween(durationMillis = if (dragging) 0 else 450),
+        label = "fastScrollerAlpha",
+    )
+
+    val index = if (dragging && aimed >= 0) aimed else gridState.firstVisibleItemIndex
+    val fraction = if (total <= 1) 0f else (index.toFloat() / (total - 1)).coerceIn(0f, 1f)
+
+    BoxWithConstraints(
+        Modifier
+            .align(Alignment.CenterEnd)
+            .fillMaxHeight()
+            // Wide enough for the month bubble to be drawn beside the bar; only the narrow strip
+            // inside it takes touches, so the rest of this box is see-through and tappable.
+            .width(FAST_SCROLL_LABEL_ROOM),
+    ) {
+        val travel = maxHeight - FAST_SCROLL_THUMB
+        val density = LocalDensity.current
+        val travelPx = with(density) { travel.toPx() }
+        val halfThumbPx = with(density) { FAST_SCROLL_THUMB.toPx() } / 2f
+        // A drag anywhere on the bar takes the thumb, wherever the finger landed.
+        fun aimAt(y: Float) {
+            val at = if (travelPx <= 0f) 0f else ((y - halfThumbPx) / travelPx).coerceIn(0f, 1f)
+            val target = ((total - 1) * at).roundToInt().coerceIn(0, total - 1)
+            if (target == aimed) return
+            // Every heading between where the finger was and where it is now; the month wins,
+            // so crossing a month boundary is never felt as just another day.
+            val from = if (aimed < 0) target else aimed
+            val crossed = rows.subList(minOf(from, target), maxOf(from, target) + 1)
+                .filterIsInstance<GridRow.Heading>()
+            if (crossed.isNotEmpty()) Haptics.tick(view, crossed.any { it.level == 0 })
+            aimed = target
+            scope.launch { gridState.scrollToItem(target) }
+        }
+
+        Box(
+            Modifier
+                .align(Alignment.CenterEnd)
+                .fillMaxHeight()
+                .width(FAST_SCROLL_WIDTH)
+                .pointerInput(total) {
+                    detectVerticalDragGestures(
+                        onDragStart = { offset -> dragging = true; aimAt(offset.y) },
+                        onDragEnd = { dragging = false; aimed = -1 },
+                        onDragCancel = { dragging = false; aimed = -1 },
+                        onVerticalDrag = { change, _ -> aimAt(change.position.y) },
+                    )
+                },
+        )
+
+        Box(
+            Modifier
+                .offset(y = travel * fraction)
+                .align(Alignment.TopEnd)
+                .padding(end = 4.dp)
+                .size(width = 10.dp, height = FAST_SCROLL_THUMB)
+                .alpha(alpha)
+                .background(if (dragging) p.accentFill else p.muted, Corner),
+        )
+
+        // While dragging, what the finger is standing on, so the jump is aimed rather than lucky.
+        if (dragging) {
+            val heading = rows.take(aimed.coerceAtLeast(0) + 1)
+                .filterIsInstance<GridRow.Heading>()
+                .lastOrNull { it.level == 0 }?.name
+            if (!heading.isNullOrBlank()) {
+                Box(
+                    Modifier
+                        .offset(y = travel * fraction)
+                        .align(Alignment.TopEnd)
+                        .padding(end = FAST_SCROLL_WIDTH, top = 6.dp)
+                        .background(p.ink, Corner)
+                        .padding(horizontal = 12.dp, vertical = 6.dp),
+                ) {
+                    Text(heading, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, color = p.paper, maxLines = 1)
+                }
+            }
         }
     }
 }
