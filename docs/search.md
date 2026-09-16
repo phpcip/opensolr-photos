@@ -33,6 +33,12 @@ already a day. Anything older is a month — *September*, or *September 2025* on
 the days inside it under headings of their own, *Saturday 5*, *Friday 4*. A month whose photos all fall on
 one day is not split.
 
+A bar down the right edge (`FastScroller`) drags the grid: one movement crosses months, with the month
+beside the finger. Crossing a heading gives haptic feedback — the heavier constant for a month, the lighter
+one for a day — played through the view (`Haptics.tick`), which needs no VIBRATE permission and obeys the
+phone's own haptics setting. Its visuals fade when the grid stops, but the strip stays touchable: gated on
+the same animation there would be nothing to grab from a standing start.
+
 The grouping is done on the phone in `buildRows`, from `taken_at`, which every hit already carries; it costs
 no request. A heading folds away with a tap and then says how many it hides; while selecting, a tap on a
 heading ticks its whole group — a month, or one day of it — meaning the photos loaded so far.
