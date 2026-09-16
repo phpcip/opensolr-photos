@@ -21,7 +21,9 @@ The top of the photos screen is one row of small bordered buttons, each an icon 
 | **Search** | Opens the search line |
 
 The search box is not on screen until it is asked for: the magnifier opens one compact line with the
-filters button on it, and tapping the magnifier again puts it away and clears the query.
+filters button on it, and tapping the magnifier again puts it away and clears the query. A query that is in
+force keeps the line on screen by itself (`searchOpen || state.query.isNotBlank()`), so coming back from
+albums, duplicates or similar photos shows the words the results answer to instead of only remembering them.
 
 ## Empty search box
 

@@ -52,10 +52,17 @@ the photo's own key for that stop (`fl=<field>`, which a schema of version 1.6 r
 `fq={!field f=<field> v=$anchorKey}` for everything carrying it, newest first, up to 200 photos. `{!field}`
 rather than `{!term}`, because `size_bytes` is a `plong` and `{!term}` does not read a points field.
 
-The anchor photo is ringed in the grid and labelled *This one*; **Back to &lt;file name&gt;** above the slider
-reopens its details over the grid. The count line reads *N like IMG_1234.jpg*, and *Select 1 of each
-duplicate* is hidden, since there is a single group. A stop where nothing else carries the key says
-*Nothing else in your index is like this photo at this setting.*
+It opens at stop 0, the loosest one, rather than inheriting wherever the duplicates slider was left.
+
+The anchor photo is ringed in the grid and labelled *This one*; **Back to search** above the slider leaves
+the view and runs the search that was in force again, with its query and filters (`AppViewModel.backToSearch`
+→ `clearDuplicates`). A photo's details are reopened with a long press, as everywhere else. The count line
+reads *N like IMG_1234.jpg*, and *Select 1 of each duplicate* is not drawn at all, since there is a single
+group. A stop where nothing else carries the key says *Nothing else in your index is like this photo at this
+setting.*
+
+Leaving the view — a typed search, a filter, an album, the duplicates icon, an index reset — drops the
+anchor with it, so neither the count line nor the way back can outlive it.
 
 ## Staying and leaving
 
