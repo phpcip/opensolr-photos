@@ -8,7 +8,7 @@ map key are involved.
 
 - **Map** in the header of the photos screen opens it framed around every photo of the current search and filters
   that has a position (`/select` with the same query, `fq=has_location:true`, `rows=1000`).
-- *Show on map* in a photo's details opens it centred on that photo at zoom 15.
+- *Map* in the row of actions of a photo's details opens it centred on that photo at zoom 15.
 
 ## Markers
 

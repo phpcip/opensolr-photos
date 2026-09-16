@@ -19,8 +19,10 @@ The words key is made of CLIP's first 1 to 5 labels, lower-cased, de-duplicated,
 md5. The EXIF key leaves out file size, pixel size, orientation and modification time, so a photo that went
 through a simple edit keeps it. Stops 6 to 10 hash the EXIF key together with the words key.
 
-The slider's colour follows the stop: black at 0, through green at 5, to red at 10; stops 11 and 12 are a
-neutral grey.
+The slider's colour follows the stop: the loosest tone at 0, through green at 5, to red at 10; stops 11 and
+12 are neutral. The scale has one set of colours for the light theme and another for the dark one
+(`DUPLICATE_*_LIGHT` / `DUPLICATE_*_DARK`), because the loose end used to be drawn in the colour of the dark
+background, which took the thumb, the track and the name under it with it.
 
 ## How the groups are found
 
@@ -41,6 +43,19 @@ reset was postponed has no duplicate keys yet; the app then says the index needs
 selection on and ticks one photo of every group (the last of each group; the first stays unticked) so you
 can look them over. The selection bar then shares, deletes or re-syncs them as usual
 ([deleting photos](search.md#deleting-photos)).
+
+## Similar to one photo
+
+*Similar*, in the row of actions of a photo's details, opens the same slider anchored to that photo
+(`AppViewModel.showSimilar`, `SearchRepository.similarTo`). Each stop is two requests instead of one facet:
+the photo's own key for that stop (`fl=<field>`, which a schema of version 1.6 returns from docValues), then
+`fq={!field f=<field> v=$anchorKey}` for everything carrying it, newest first, up to 200 photos. `{!field}`
+rather than `{!term}`, because `size_bytes` is a `plong` and `{!term}` does not read a points field.
+
+The anchor photo is ringed in the grid and labelled *This one*; **Back to &lt;file name&gt;** above the slider
+reopens its details over the grid. The count line reads *N like IMG_1234.jpg*, and *Select 1 of each
+duplicate* is hidden, since there is a single group. A stop where nothing else carries the key says
+*Nothing else in your index is like this photo at this setting.*
 
 ## Staying and leaving
 

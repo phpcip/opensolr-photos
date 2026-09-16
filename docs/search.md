@@ -99,7 +99,7 @@ horizontally scrolling row.
 The filter sheet is built from facets of the current results (`facet.field` on `year`, `folder`,
 `camera_make`, `camera_model`, `city`, `region`, `country`, `labels`, `custom_tags` and `orientation`), so
 every choice offered has photos behind it. The radius filter is set from the [map](map.md) (*Search this area*) or from a photo's
-*Photos nearby* (5 km), and adjusted on the sheet (0.5 to 100 km).
+*Nearby* (5 km), and adjusted on the sheet (0.5 to 100 km).
 
 ## Autocomplete
 
@@ -125,8 +125,10 @@ downloaded to draw the grid.
   permission granted). If the MediaStore id stored in the index went stale, the app finds the photo again
   by its path. If the photo is gone from the phone, it says so: the next Re-Sync removes it from the index.
 - **Press and hold** shows the details: date, camera, lens, settings, size, folder, location as *City,
-  Country* (with *Show on map*, which opens the app's [map](map.md) on the photo, and *Photos nearby*, a
-  5 km radius search), and the words Opensolr read the photo into.
+  Country*, and the words Opensolr read the photo into. At the bottom, one row of labelled icons:
+  *Edit* (tags and words), *Gallery* (open it in the gallery app), *Similar* (photos like this one, see
+  [duplicates](duplicates.md)), and, only when the photo carries a GPS position, *Map* (the app's
+  [map](map.md) centred on it) and *Nearby* (a 5 km radius search).
 - **Reload**: swipe down on the grid, tap the reload icon next to the count, or come back from another
   screen; the results are read again from the index. The swipe and the icon are asked for by hand
   (`AppViewModel.forceRefresh`), so they empty the [search cache](#search-cache) first and always reach
@@ -147,7 +149,7 @@ them back. If that delete fails, the next sync removes them anyway.
 
 ## Editing tags and words
 
-*Edit tags and words* in the details sheet (`EditSheet.kt`, `EditRepository.kt`) opens at full height:
+*Edit* in the details sheet (`EditSheet.kt`, `EditRepository.kt`) opens the editor at full height:
 
 - **My tags**: one per entry (commas split), removed with a tap. Stored in `custom_tags`; `custom_tags_text`
   is its tokenised copy, first in `qf` with boost 5.

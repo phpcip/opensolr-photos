@@ -72,7 +72,7 @@ They are tried again at every Re-Sync.
 Your plan does not include vector search, or this month's AI requests are used up. The note above the
 results says which.
 
-**The location filter or "Show on map" is missing.**
+**The location filter is missing, or a photo's details show no *Map* and no *Nearby*.**
 The photo has no GPS data, or photo-location access was not allowed when it was indexed. Allow it in
 Android settings → Apps → Opensolr Photos → Permissions. Photos indexed from then on carry their place;
 photos already indexed keep the details they were read with.
