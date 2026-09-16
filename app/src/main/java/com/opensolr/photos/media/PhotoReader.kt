@@ -142,6 +142,31 @@ object PhotoReader {
     }
 
     /**
+     * The names of the people in [photo], from the XMP property PersonInImage - written on the
+     * file by whatever recognised the faces (Google Photos, Lightroom, digiKam). Empty when the
+     * photo carries none.
+     *
+     * Read here rather than carried on the 640 px copy: ExifInterface converts the XMP packet
+     * byte array to a String as ASCII, so a name with diacritics comes out as "??u??u Du??u".
+     * The bytes are decoded as UTF-8 and the names travel to the server as JSON instead.
+     */
+    fun personsIn(context: Context, photo: LocalPhoto): List<String> = try {
+        val xmp = openExif(context, photo.uri)?.getAttributeBytes(ExifInterface.TAG_XMP)
+        if (xmp == null) emptyList() else {
+            val packet = String(xmp, Charsets.UTF_8)
+            XMP_PERSONS.find(packet)?.groupValues?.get(2)?.let { bag ->
+                XMP_LI.findAll(bag)
+                    .map { it.groupValues[1].trim() }
+                    .filter { it.isNotEmpty() }
+                    .distinct()
+                    .toList()
+            } ?: emptyList()
+        }
+    } catch (e: Exception) {
+        emptyList()
+    }
+
+    /**
      * Reads the EXIF metadata of [photo]. GPS is only readable when the user granted
      * "access media location"; without it Android removes the coordinates, and the photo is
      * indexed without a place.
@@ -182,12 +207,13 @@ object PhotoReader {
         ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY, ExifInterface.TAG_EXPOSURE_TIME, ExifInterface.TAG_F_NUMBER, ExifInterface.TAG_FOCAL_LENGTH, ExifInterface.TAG_FLASH,
         ExifInterface.TAG_GPS_LATITUDE, ExifInterface.TAG_GPS_LATITUDE_REF, ExifInterface.TAG_GPS_LONGITUDE, ExifInterface.TAG_GPS_LONGITUDE_REF,
         ExifInterface.TAG_GPS_ALTITUDE, ExifInterface.TAG_GPS_ALTITUDE_REF,
-        // The whole XMP packet, for XMP:PersonInImage - the names of the people in the photo,
-        // written by whatever recognised the faces (Google Photos, Lightroom, digiKam). The
-        // server reads them into persons_t. Carried whole because ExifInterface has no tag for
-        // a single XMP property.
-        ExifInterface.TAG_XMP,
     )
+
+    /** One <rdf:li> of an XMP bag: the text between the tags, attributes ignored. */
+    private val XMP_LI = Regex("<rdf:li[^>]*>(.*?)</rdf:li>", RegexOption.DOT_MATCHES_ALL)
+
+    /** The Iptc4xmpExt:PersonInImage property, whichever namespace prefix the writer used. */
+    private val XMP_PERSONS = Regex("<([A-Za-z0-9_]+:)?PersonInImage[^>]*>(.*?)</([A-Za-z0-9_]+:)?PersonInImage>", RegexOption.DOT_MATCHES_ALL)
 
     private fun openExif(context: Context, uri: Uri): ExifInterface? {
         val resolver = context.contentResolver

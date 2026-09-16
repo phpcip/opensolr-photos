@@ -1,0 +1,5 @@
+Photos now carry the names of the people in them. If something has already recognised the faces on your photos - Google Photos, Lightroom, digiKam - those names travel with the file, and Opensolr Photos now reads them and makes them searchable: type a name and you get that person's photos. Names with diacritics are found either way, written properly or plainly.
+
+This version resets your index so the names can be written into it. Your tags are kept.
+
+Also fixed: the strictest duplicates level, "Same file (exact copy)", never had any data to work with - the file fingerprint the app computes was being dropped before it reached the index. It works now.
