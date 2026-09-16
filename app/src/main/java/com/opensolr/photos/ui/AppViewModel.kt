@@ -250,6 +250,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /**
+     * "Back to search" above the slider: leaves the duplicates or similar view and runs the
+     * search that was in force again, with its query and filters, which were never cleared.
+     */
+    fun backToSearch() = clearDuplicates()
+
     /** "Not now" on the update notice: hides it until a newer version than this one appears. */
     fun dismissUpdate() {
         prefs.updateDismissed = _state.value.update?.version
@@ -576,7 +582,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         searchJob?.cancel()
         val start = if (reset) 0 else current.hits.size
         suggestJob?.cancel()
-        _state.update { it.copy(searching = true, searchError = null, suggestions = emptyList(), duplicateGroups = emptyList(), duplicatesMode = false, searchGeneration = if (reset) it.searchGeneration + 1 else it.searchGeneration) }
+        // Leaving the duplicates view drops the photo it was anchored to as well: the line above
+        // the grid and the way back read the anchor, not the mode (Cip, 2026-09-16).
+        _state.update { it.copy(searching = true, searchError = null, suggestions = emptyList(), duplicateGroups = emptyList(), duplicatesMode = false, similarToId = null, similarToHit = null, searchGeneration = if (reset) it.searchGeneration + 1 else it.searchGeneration) }
         // The suggestions come from their own words-only request, next to this one.
         if (reset) loadQueryFacets(current.query, current.filters)
         searchJob = viewModelScope.launch {
@@ -643,6 +651,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 selectedIds = emptySet(),
                 duplicateGroups = emptyList(),
                 duplicatesMode = false,
+                similarToId = null,
+                similarToHit = null,
             )
         }
         search(reset = true)
@@ -728,7 +738,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _state.update { it.copy(notice = "The index could not be emptied: ${e.message ?: "try again"}") }
                 return@launch
             }
-            _state.update { it.copy(hits = emptyList(), numFound = 0, duplicateGroups = emptyList(), duplicatesMode = false) }
+            // No search follows this one, so the anchor has to go with the mode here.
+            _state.update { it.copy(hits = emptyList(), numFound = 0, duplicateGroups = emptyList(), duplicatesMode = false, similarToId = null, similarToHit = null) }
             SyncScheduler.runNow(context)
         }
     }
@@ -781,7 +792,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun showSimilar(hit: PhotoHit) {
         _state.update {
-            it.copy(screen = Screen.Search, duplicatesMode = true, similarToId = hit.id, similarToHit = hit)
+            // Starts at the loosest stop (the same first word): anchored to one photo, the point
+            // is to see anything like it and tighten from there (Cip, 2026-09-16).
+            it.copy(screen = Screen.Search, duplicatesMode = true, duplicateLevel = 0, similarToId = hit.id, similarToHit = hit)
         }
         loadDuplicates(debounceMs = 0)
     }

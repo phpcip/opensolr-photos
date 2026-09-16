@@ -161,7 +161,11 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     var searchOpen by remember { mutableStateOf(false) }
     // Only the magnifier shows and hides the search line (Cip, 2026-09-15): applied filters
     // stay visible on their own row of pills, so they no longer hold the line open.
-    val searchBarVisible = searchOpen
+    // A query that is actually in force keeps it on screen too (Cip, 2026-09-16): coming back
+    // from albums, duplicates or the similar view, the words the results answer to must be
+    // visible, not only remembered. Closing with the magnifier clears the query, so the line
+    // still goes away on the second tap.
+    val searchBarVisible = searchOpen || state.query.isNotBlank()
     val searchFocus = remember { FocusRequester() }
     // Deleting is Android's job: from Android 11 the system shows its own confirmation and does
     // the removing, and only when it comes back OK are the photos dropped from the index too.
@@ -367,7 +371,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 state.selecting -> "${Actions.formatCount(state.selectedIds.size.toLong())} selected"
                 state.searching && state.hits.isEmpty() -> "Searching…"
                 // Anchored to one photo: one group, so say what it is like instead of counting groups.
-                state.similarToId != null ->
+                state.duplicatesMode && state.similarToId != null ->
                     "${Actions.formatCount(state.hits.size.toLong())} like ${state.similarToHit?.fileName ?: "this photo"}"
                 state.duplicatesMode ->
                     "${Actions.formatCount(state.hits.size.toLong())} photos in ${state.duplicateGroups.size} group${if (state.duplicateGroups.size == 1) "" else "s"}"
@@ -404,20 +408,19 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         // The kind of duplicates, 0..10 (Cip, 2026-09-15): from the loosest (the same first word)
         // through the same photo by its EXIF (green, the middle) to the strictest (EXIF and the
         // first five words, red). Every stop is one facet request, asked a moment after the move.
-        // Anchored to one photo: the way back to the details it was started from. The sheet
-        // opens over the grid, so closing it leaves the similar photos exactly as they were.
-        if (state.similarToId != null) {
-            val anchorHit = state.similarToHit
+        // The way out of the similar view: back to the search that was in force, with its query
+        // and filters intact (Cip, 2026-09-16). Getting back to a photo's details is a long press
+        // on it, so no button spends a row on that.
+        if (state.duplicatesMode && state.similarToId != null) {
             TextButton(
-                onClick = { anchorHit?.let { details = it } },
-                enabled = anchorHit != null,
+                onClick = { viewModel.backToSearch() },
                 contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
                 modifier = Modifier.padding(horizontal = 20.dp).height(30.dp),
             ) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = p.accent, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    "Back to ${anchorHit?.fileName ?: "the photo"}",
+                    "Back to search",
                     style = MaterialTheme.typography.labelMedium,
                     color = p.accent,
                     maxLines = 1,
@@ -429,9 +432,10 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             DuplicateLevelSlider(
                 level = state.duplicateLevel,
                 onLevel = { viewModel.setDuplicateLevel(it) },
+                canSelect = state.duplicateGroups.isNotEmpty(),
                 // "One of each" belongs to the whole index; anchored to one photo there is a
-                // single group and nothing to thin out.
-                canSelect = state.duplicateGroups.isNotEmpty() && state.similarToId == null,
+                // single group and nothing to thin out, so it is not shown at all.
+                showSelectOneOfEach = state.similarToId == null,
                 onSelectOneOfEach = { viewModel.selectOneOfEachDuplicate() },
             )
         }
@@ -564,7 +568,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                             val selected = hit.id in state.selectedIds
                             // The photo "Show similar photos" started from: ringed and named, so
                             // it is never a guess which one the others are being compared with.
-                            val anchor = hit.id == state.similarToId
+                            val anchor = state.duplicatesMode && hit.id == state.similarToId
                             Box(if (anchor) Modifier.border(2.dp, p.accent) else Modifier) {
                                 Thumbnail(
                                     hit = hit,
@@ -934,7 +938,7 @@ private fun SyncIcon(running: Boolean) {
  * view model waits for the finger to settle before asking the index.
  */
 @Composable
-private fun DuplicateLevelSlider(level: Int, onLevel: (Int) -> Unit, canSelect: Boolean, onSelectOneOfEach: () -> Unit) {
+private fun DuplicateLevelSlider(level: Int, onLevel: (Int) -> Unit, canSelect: Boolean, showSelectOneOfEach: Boolean, onSelectOneOfEach: () -> Unit) {
     val p = LocalPalette.current
     var value by remember { mutableStateOf(level.toFloat()) }
     LaunchedEffect(level) { if (value.roundToInt() != level) value = level.toFloat() }
@@ -972,13 +976,15 @@ private fun DuplicateLevelSlider(level: Int, onLevel: (Int) -> Unit, canSelect: 
         Text("$stop · ${DUPLICATE_KIND_NAMES[stop]}", style = MaterialTheme.typography.labelMedium, color = colour)
         // One tap selects one photo of every group (the last of each, the first one stays
         // unticked), for review; the selection dock then shares, deletes or re-syncs them.
-        TextButton(
-            onClick = onSelectOneOfEach,
-            enabled = canSelect,
-            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
-            modifier = Modifier.height(30.dp),
-        ) {
-            Text("Select 1 of each duplicate", style = MaterialTheme.typography.labelMedium, color = if (canSelect) p.accent else p.muted)
+        if (showSelectOneOfEach) {
+            TextButton(
+                onClick = onSelectOneOfEach,
+                enabled = canSelect,
+                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                modifier = Modifier.height(30.dp),
+            ) {
+                Text("Select 1 of each duplicate", style = MaterialTheme.typography.labelMedium, color = if (canSelect) p.accent else p.muted)
+            }
         }
     }
 }
