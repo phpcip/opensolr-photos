@@ -148,7 +148,8 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             // now that it has), except the ones still pausing after a miss. A missing place
             // never sends a photo again.
             val forced = prefs.resyncIds
-            forced.forEach { cache.clearWordRetry(it) }
+            forced.forEach { cache.clearWordRetry(it); cache.clearSkipped(it) }
+            val skippedSizes = cache.skippedSizes()
             val needWords = if (rebuild || !aiAvailable) emptySet() else solr.idsWithoutWords() - cache.wordRetriesWaiting(System.currentTimeMillis())
             val phase = if (rebuild) "Rebuilding your index" else "Indexing photos"
 
@@ -187,6 +188,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                         null
                     }
                     if (jpeg == null) {
+                        cache.markSkipped(photo, PhotoReader.unreadableReason(context, photo))
                         failed++
                         continue
                     }
@@ -213,6 +215,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                                 failed++
                             } else {
                                 added++
+                                cache.clearSkipped(item.photo.id)
                                 if (result.words) {
                                     cache.clearWordRetry(item.photo.id)
                                 } else {
@@ -226,6 +229,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                 progress(phase)
             }
             suspend fun queue(photo: LocalPhoto) {
+                if (skippedSizes[photo.id] == photo.sizeBytes) return
                 if (!sent.add(photo.id)) return
                 total++
                 pending += photo
@@ -265,7 +269,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                             // least this run reads. When the month's allowance covers fewer, say
                             // so once. However many there are, the run starts: it stops only if
                             // the battery gets low with no charger (Cip, 2026-09-16).
-                            val atLeast = (local.size - indexCount).coerceAtLeast(0) + forced.size + needWords.size
+                            val atLeast = (local.size - skippedSizes.size - indexCount).coerceAtLeast(0) + forced.size + needWords.size
                             expected = atLeast
                             if (aiAvailable && limits != null) {
                                 val left = limits.photosLeftThisMonth
@@ -316,6 +320,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             if (rebuild) prefs.rebuildApproved = false
             if (forced.isNotEmpty()) prefs.resyncIds = emptySet()
             cache.removeAllExcept(local.keys)
+            cache.keepSkippedOnly(local.keys)
             refreshAccount(session, connection)
             var message = ""
             if (shortAllowance.isNotEmpty()) message = shortAllowance

@@ -40,8 +40,12 @@ phone's own haptics setting. Its visuals fade when the grid stops, but the strip
 the same animation there would be nothing to grab from a standing start.
 
 The grouping is done on the phone in `buildRows`, from `taken_at`, which every hit already carries; it costs
-no request. A heading folds away with a tap and then says how many it hides; while selecting, a tap on a
-heading ticks its whole group — a month, or one day of it — meaning the photos loaded so far.
+no request. Headings sit on a solid band (dark grey on the light theme, white on the dark one) so they read as
+something to tap. A heading folds away with a tap and then says how many it hides, *September (1,480)*; the
+expand all / collapse all button on the count line folds or opens every group of the view on screen at once.
+While selecting, a tap on a heading ticks its whole group — a month, or one day of it — meaning the photos
+loaded so far. The next page of results is asked for halfway through the last page loaded, so it is usually
+there before the grid reaches it.
 
 ## Typed search
 
@@ -214,7 +218,11 @@ downloaded to draw the grid.
   (`AppViewModel.forceRefresh`), so they empty the [search cache](#search-cache) first and always reach
   the index.
 - **Duplicates**: the duplicates icon on the count line switches the grid to groups of alike photos
-  ([duplicates](duplicates.md)).
+  ([duplicates](duplicates.md)). Every step of its slider answers with a light tap.
+- **Could not be read**: a red icon next to it, only when there are such photos, lists the photos the phone
+  itself cannot open or decode (they never reach Opensolr). Each has a red frame, a red *!* and its file name
+  with the reason; it opens and selects like any other photo. They are kept in `PhotoCache.skipped` with
+  their file size and tried again only when the file changes, or when picked for *Re-sync*.
 - **Select**: the *Select* button turns selection on. The bar at the bottom then works on the ticked
   photos: **Share**, **Delete**, and **Re-sync N** to have them read again by CLIP (each counts as new AI
   requests).

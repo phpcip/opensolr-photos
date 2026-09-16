@@ -111,6 +111,10 @@ data class UiState(
     val duplicateGroupsTotal: Int = 0,
     /** True while the grid shows duplicates (even a kind with no groups at all). */
     val duplicatesMode: Boolean = false,
+    /** True while the grid shows the photos the phone could not read (never sent to Opensolr). */
+    val skippedMode: Boolean = false,
+    /** How many photos the phone could not read; the button over the grid shows only above 0. */
+    val skippedCount: Int = 0,
     /** The duplicates slider, 0..10 over SearchRepository.DUPLICATE_FIELDS; 4 = first five words. */
     val duplicateLevel: Int = 4,
     /** With "Show similar photos", the id of the photo the slider is anchored to; null for plain duplicates. */
@@ -180,6 +184,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val indexes = IndexManager(application, prefs, api)
     private val searches = SearchRepository(application)
     private val edits = EditRepository(application)
+    private val photoCache = com.opensolr.photos.data.PhotoCache(application)
 
     private val _state = MutableStateFlow(initialState())
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -223,6 +228,58 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             checkConfigVersion()
         }
         checkForUpdate()
+        refreshSkippedCount()
+    }
+
+    /**
+     * Reads how many photos the phone could not read, for the button over the grid. Leaves the
+     * skipped view when there are none left.
+     */
+    private fun refreshSkippedCount() {
+        viewModelScope.launch {
+            val count = withContext(Dispatchers.IO) { photoCache.skippedCount() }
+            _state.update { it.copy(skippedCount = count) }
+            if (count == 0 && _state.value.skippedMode) showSkipped()
+        }
+    }
+
+    /**
+     * The skipped photos on or off. On, the grid lists every photo the phone could not open or
+     * decode, straight from the phone (they are not in the index); tapping again goes back to
+     * the ordinary results.
+     */
+    fun showSkipped() {
+        if (_state.value.skippedMode) {
+            _state.update { it.copy(skippedMode = false, searchNotice = null) }
+            search(reset = true)
+            return
+        }
+        loadSkipped()
+    }
+
+    /**
+     * Fills the grid with the skipped photos, as hits built from what the phone knows of them.
+     */
+    private fun loadSkipped() {
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            val skipped = withContext(Dispatchers.IO) { photoCache.skipped() }
+            val hits = skipped.map { s ->
+                PhotoHit(
+                    id = s.id, mediaId = s.mediaId, path = s.path, fileName = s.fileName, folder = s.folder, mime = s.mime,
+                    takenAt = if (s.takenMs > 0) java.time.Instant.ofEpochMilli(s.takenMs).toString() else null,
+                    cameraMake = null, cameraModel = null, lens = null, iso = null, exposure = null, fNumber = null, focalLength = null,
+                    width = null, height = null, sizeBytes = s.sizeBytes, meaning = s.reason, location = null,
+                )
+            }
+            _state.update {
+                it.copy(
+                    skippedMode = true, skippedCount = hits.size, duplicatesMode = false, duplicateGroups = emptyList(),
+                    similarToId = null, similarToHit = null, hits = hits, numFound = hits.size.toLong(), searching = false,
+                    searchError = null, endReached = true, searchedQuery = "", searchGeneration = it.searchGeneration + 1,
+                )
+            }
+        }
     }
 
     /**
@@ -343,6 +400,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         collapsedHeadings[context] = next
         prefs.collapsedHeadings = collapsedHeadings
         _state.update { it.copy(collapsedHeadings = next) }
+    }
+
+    /**
+     * Folds away every heading in [keys] at once, or opens them all when [keys] is empty: the
+     * expand all / collapse all button over the grid, for the view on screen only (Cip, 2026-09-17).
+     */
+    fun setAllHeadings(keys: Set<String>) {
+        val context = contextKey(_state.value)
+        collapsedHeadings[context] = keys
+        prefs.collapsedHeadings = collapsedHeadings
+        _state.update { it.copy(collapsedHeadings = keys) }
     }
 
     /**
@@ -759,13 +827,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // Scrolling to the end of the duplicates asks for the next groups, not for another page
         // of a search: the grid is the same, what fills it is not.
         if (!reset && current.duplicatesMode) { loadMoreDuplicates(); return }
+        if (!reset && current.skippedMode) return
         if (!reset && (current.searching || current.endReached)) return
         searchJob?.cancel()
         val start = if (reset) 0 else current.hits.size
         suggestJob?.cancel()
         // Leaving the duplicates view drops the photo it was anchored to as well: the line above
         // the grid and the way back read the anchor, not the mode (Cip, 2026-09-16).
-        _state.update { it.copy(searching = true, searchError = null, suggestions = emptyList(), duplicateGroups = emptyList(), duplicatesMode = false, similarToId = null, similarToHit = null, searchGeneration = if (reset && !keepPosition) it.searchGeneration + 1 else it.searchGeneration) }
+        _state.update { it.copy(searching = true, searchError = null, suggestions = emptyList(), duplicateGroups = emptyList(), duplicatesMode = false, skippedMode = false, similarToId = null, similarToHit = null, searchGeneration = if (reset && !keepPosition) it.searchGeneration + 1 else it.searchGeneration) }
         // The suggestions come from their own words-only request, next to this one.
         if (reset) loadQueryFacets(current.query, current.filters)
         searchJob = viewModelScope.launch {
@@ -1062,7 +1131,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun showDuplicates() {
         if (_state.value.duplicatesMode) { clearDuplicates(); return }
         // The duplicates icon always means the whole index, never one photo's neighbours.
-        _state.update { it.copy(duplicatesMode = true, similarToId = null, similarToHit = null) }
+        _state.update { it.copy(duplicatesMode = true, skippedMode = false, similarToId = null, similarToHit = null) }
         loadDuplicates(debounceMs = 0)
     }
 
@@ -1173,7 +1242,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun refresh() {
         // A reload of the same search, so the grid stays where the owner left it.
-        if (_state.value.duplicatesMode) loadDuplicates(debounceMs = 0) else search(reset = true, keepPosition = true)
+        when {
+            _state.value.skippedMode -> loadSkipped()
+            _state.value.duplicatesMode -> loadDuplicates(debounceMs = 0)
+            else -> search(reset = true, keepPosition = true)
+        }
     }
 
     /**
@@ -1384,6 +1457,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (report?.status == "rebuild_required") _state.update { it.copy(rebuildRequired = true) }
         if (report?.status == "device_choice") askDeviceChoice()
         if (report?.status == "update_app") _state.update { it.copy(notice = report.message) }
+        refreshSkippedCount()
         if (_state.value.screen == Screen.Search) refresh()
     }
 

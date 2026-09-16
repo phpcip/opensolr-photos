@@ -63,8 +63,9 @@ words, empties the index, uploads the new configuration and syncs every photo ag
 while the photos are added back. **Later** leaves the index as it is, but syncing waits until you agree.
 
 **Some photos are counted as skipped.**
-They could not be decoded on the phone or were refused by the reader (damaged files, unusual formats).
-They are tried again at every Re-Sync.
+They could not be opened or decoded on the phone (damaged files, unusual formats). The red icon next to the
+duplicates icon on the Photos screen lists them, with the file name and the reason. They are not tried again
+until the file changes or you pick them for Re-sync.
 
 ## Search
 

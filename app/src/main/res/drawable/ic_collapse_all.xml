@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Collapse all: two chevrons pointing up, 2px stroke, the editorial style of the app. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path android:pathData="M6,11.5 L12,5.5 L18,11.5" android:strokeColor="#FF000000" android:strokeWidth="2" android:strokeLineJoin="miter" android:strokeLineCap="square" android:fillColor="#00000000" />
+    <path android:pathData="M6,18.5 L12,12.5 L18,18.5" android:strokeColor="#FF000000" android:strokeWidth="2" android:strokeLineJoin="miter" android:strokeLineCap="square" android:fillColor="#00000000" />
+</vector>

@@ -24,6 +24,9 @@ import java.nio.ByteOrder
  *   server was restarting, a photo it cannot read). Each is asked again only after a pause
  *   that grows with every miss (1 h, 4 h, 16 h, then daily), so a photo that never gets words
  *   can never keep the sync busy.
+ * - **skipped**: photos the phone itself cannot open or decode, so they never reach Opensolr.
+ *   Each is remembered with its file size and tried again only when the file changes; the
+ *   Photos screen lists them.
  */
 class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext, NAME, null, VERSION) {
 
@@ -51,10 +54,11 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
         db.execSQL("CREATE TABLE IF NOT EXISTS places (key TEXT PRIMARY KEY NOT NULL, place_json TEXT NOT NULL)")
         db.execSQL("CREATE TABLE IF NOT EXISTS edits (id TEXT PRIMARY KEY NOT NULL, tags_json TEXT NOT NULL, meaning TEXT, updated INTEGER NOT NULL)")
         db.execSQL(WORD_RETRIES_TABLE)
+        db.execSQL(SKIPPED_TABLE)
     }
 
     /**
-     * Versions 2, 3 and 4 only add tables; the photos (paid AI answers) are kept.
+     * Versions 2, 3, 4 and 5 only add tables; the photos (paid AI answers) are kept.
      */
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         if (oldVersion < 2) {
@@ -66,6 +70,96 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
         if (oldVersion < 4) {
             db.execSQL(WORD_RETRIES_TABLE)
         }
+        if (oldVersion < 5) {
+            db.execSQL(SKIPPED_TABLE)
+        }
+    }
+
+    /**
+     * A photo the phone could not read, as the Photos screen lists it.
+     *
+     * @property reason  why, in words for the owner
+     */
+    data class Skipped(
+        val id: String,
+        val sizeBytes: Long,
+        val mediaId: Long,
+        val path: String,
+        val folder: String,
+        val fileName: String,
+        val mime: String,
+        val takenMs: Long,
+        val reason: String,
+    )
+
+    /**
+     * Remembers that [photo] could not be read, for [reason], at its current size.
+     */
+    fun markSkipped(photo: com.opensolr.photos.media.LocalPhoto, reason: String) {
+        val values = ContentValues().apply {
+            put("id", photo.id)
+            put("size_bytes", photo.sizeBytes)
+            put("media_id", photo.mediaId)
+            put("path", photo.absolutePath)
+            put("folder", photo.folder)
+            put("file_name", photo.fileName)
+            put("mime", photo.mime)
+            put("taken_ms", if (photo.dateTakenMs > 0) photo.dateTakenMs else photo.modifiedSec * 1000L)
+            put("reason", reason)
+            put("at", System.currentTimeMillis())
+        }
+        writableDatabase.insertWithOnConflict("skipped", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    /**
+     * The size each skipped photo had when it failed, by id: a photo is tried again only once
+     * its size is different.
+     */
+    fun skippedSizes(): Map<String, Long> {
+        val out = HashMap<String, Long>()
+        readableDatabase.query("skipped", arrayOf("id", "size_bytes"), null, null, null, null, null).use { cursor ->
+            while (cursor.moveToNext()) out[cursor.getString(0)] = cursor.getLong(1)
+        }
+        return out
+    }
+
+    /**
+     * Every skipped photo, newest first.
+     */
+    fun skipped(): List<Skipped> {
+        val out = ArrayList<Skipped>()
+        readableDatabase.query(
+            "skipped",
+            arrayOf("id", "size_bytes", "media_id", "path", "folder", "file_name", "mime", "taken_ms", "reason"),
+            null, null, null, null, "taken_ms DESC",
+        ).use { c ->
+            while (c.moveToNext()) {
+                out += Skipped(c.getString(0), c.getLong(1), c.getLong(2), c.getString(3), c.getString(4), c.getString(5), c.getString(6), c.getLong(7), c.getString(8))
+            }
+        }
+        return out
+    }
+
+    /**
+     * How many photos are skipped right now.
+     */
+    fun skippedCount(): Int =
+        readableDatabase.rawQuery("SELECT COUNT(*) FROM skipped", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
+    /**
+     * Forgets [id] as skipped: it was read after all, or the owner asked for it again.
+     */
+    fun clearSkipped(id: String) {
+        writableDatabase.delete("skipped", "id = ?", arrayOf(id))
+    }
+
+    /**
+     * Drops the skipped photos that are no longer among [onPhone] (deleted, or out of the
+     * chosen folders).
+     */
+    fun keepSkippedOnly(onPhone: Set<String>) {
+        val gone = skippedSizes().keys.filter { it !in onPhone }
+        gone.forEach { clearSkipped(it) }
     }
 
     /**
@@ -270,6 +364,7 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
         writableDatabase.delete("photos", null, null)
         writableDatabase.delete("places", null, null)
         writableDatabase.delete("word_retries", null, null)
+        writableDatabase.delete("skipped", null, null)
     }
 
     /**
@@ -291,7 +386,8 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
 
     companion object {
         private const val NAME = "photo_cache.db"
-        private const val VERSION = 4
+        private const val VERSION = 5
+        private const val SKIPPED_TABLE = "CREATE TABLE IF NOT EXISTS skipped (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, media_id INTEGER NOT NULL, path TEXT NOT NULL, folder TEXT NOT NULL, file_name TEXT NOT NULL, mime TEXT NOT NULL, taken_ms INTEGER NOT NULL, reason TEXT NOT NULL, at INTEGER NOT NULL)"
         private const val WORD_RETRIES_TABLE = "CREATE TABLE IF NOT EXISTS word_retries (id TEXT PRIMARY KEY NOT NULL, attempts INTEGER NOT NULL, next_at INTEGER NOT NULL)"
     }
 }

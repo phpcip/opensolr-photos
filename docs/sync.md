@@ -119,7 +119,8 @@ grid shows a turning sync icon; tapping it opens the Sync screen with the phase 
 
 | Situation | What the app does |
 |---|---|
-| A photo cannot be decoded, or the server refuses it | Skips that photo, counts it as skipped, continues |
+| The phone cannot open or decode a photo | Skips it, remembers it with its file size (`PhotoCache.skipped`) and does not try it again until the file changes or it is picked for *Re-sync*; the Photos screen lists it under the red *could not be read* icon |
+| The server refuses a photo | Skips that photo, counts it as skipped, continues; tried again at the next sync |
 | Rate limit (per minute or per hour) | Waits as long as the server says, retries up to six times |
 | Monthly AI requests used up | Carries on: from the first refused request, photos are written without CLIP words and without vectors (`quotaHit`), kept out of the cache and without `clip_model`; `SolrClient.idsWithoutWords()` puts them back into the next sync once the allowance is back. The report says how many, with a notification |
 | Index over its disk space or bandwidth (HTTP 403) | Stops, notification with a link to pricing |

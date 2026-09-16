@@ -142,6 +142,19 @@ object PhotoReader {
     }
 
     /**
+     * Why [photo] could not be turned into a copy for Opensolr, in words for the owner.
+     */
+    fun unreadableReason(context: Context, photo: LocalPhoto): String {
+        if (photo.sizeBytes <= 0L) return "The file is empty"
+        val opened = try {
+            context.contentResolver.openInputStream(photo.uri)?.use { it.read() >= 0 } ?: false
+        } catch (e: Exception) {
+            false
+        }
+        return if (opened) "The picture cannot be decoded" else "The file cannot be opened"
+    }
+
+    /**
      * The names of the people in [photo], from the XMP property PersonInImage - written on the
      * file by whatever recognised the faces (Google Photos, Lightroom, digiKam). Empty when the
      * photo carries none.

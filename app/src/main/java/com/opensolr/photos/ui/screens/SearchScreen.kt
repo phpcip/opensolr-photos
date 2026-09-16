@@ -5,6 +5,9 @@ import androidx.compose.foundation.layout.systemBars
 import androidx.compose.ui.unit.Dp
 import android.app.Activity
 import android.os.Build
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -252,7 +255,9 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     val nearEnd by remember {
         derivedStateOf {
             val last = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            last >= gridState.layoutInfo.totalItemsCount - 12
+            // Halfway through the last page loaded, not at its very end: the next page is on its
+            // way (or already held in the cache) before the owner reaches it (Cip, 2026-09-17).
+            last >= gridState.layoutInfo.totalItemsCount - PREFETCH_REMAINING
         }
     }
     // The grid is taken where the view model says, once per change it announces: the place this
@@ -456,6 +461,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 state.selecting -> "${Actions.formatCount(state.selectedIds.size.toLong())} selected"
                 state.searching && state.hits.isEmpty() -> "Searching…"
                 // Anchored to one photo: one group, so say what it is like instead of counting groups.
+                state.skippedMode ->
+                    "${Actions.formatCount(state.hits.size.toLong())} photo${if (state.hits.size == 1) "" else "s"} your phone could not read"
                 state.duplicatesMode && state.similarToId != null ->
                     "${Actions.formatCount(state.hits.size.toLong())} like ${state.similarToHit?.fileName ?: "this photo"}"
                 state.duplicatesMode ->
@@ -498,6 +505,17 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 active = state.duplicatesMode,
                 onClick = { viewModel.showDuplicates() },
             )
+            // The photos the phone could not read, and so never sent to Opensolr: only there
+            // when there are some.
+            if (state.skippedCount > 0 || state.skippedMode) {
+                IconAction(
+                    icon = R.drawable.ic_skipped,
+                    label = if (!state.skippedMode) "Photos that could not be read" else "Back to all photos",
+                    active = state.skippedMode,
+                    danger = true,
+                    onClick = { viewModel.showSkipped() },
+                )
+            }
             // Fresh: recent photos are boosted among the matches, nothing is dropped or resorted.
             if (state.query.isNotBlank()) {
                 IconAction(
@@ -505,6 +523,23 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                     label = if (state.freshBias) "Stop favouring recent photos" else "Favour recent photos",
                     active = state.freshBias,
                     onClick = { viewModel.setFreshBias(!state.freshBias) },
+                )
+            }
+            // Every group of the view on screen folded away, or all of them opened again: only
+            // there when the grid has headings to fold (Cip, 2026-09-17).
+            val headingKeys = remember(state.hits, state.searchedQuery, state.duplicateGroups) {
+                buildRows(state.hits, byDate = state.searchedQuery.isBlank(), groups = state.duplicateGroups)
+                    .filterIsInstance<GridRow.Heading>().map { it.key }.toSet()
+            }
+            if (headingKeys.isNotEmpty()) {
+                val anyCollapsed = state.collapsedHeadings.any { it in headingKeys }
+                IconAction(
+                    icon = if (anyCollapsed) R.drawable.ic_expand_all else R.drawable.ic_collapse_all,
+                    label = if (anyCollapsed) "Expand all" else "Collapse all",
+                    onClick = {
+                        Haptics.tick(view, strong = false)
+                        viewModel.setAllHeadings(if (anyCollapsed) emptySet() else headingKeys)
+                    },
                 )
             }
             // Reloads the results from the index, for photos a sync added in the meantime.
@@ -675,9 +710,27 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                             // Google Photos style: the tick on a heading takes the whole group.
                             // A long press on it starts selecting with that group already ticked.
                             val allPicked = state.selecting && row.ids.isNotEmpty() && state.selectedIds.containsAll(row.ids)
+                            // A solid band, so a heading reads as something to tap (Cip,
+                            // 2026-09-17): white on the dark theme, dark grey on the light one.
+                            val darkTheme = p.ink.red > 0.5f
+                            val band = when {
+                                darkTheme && row.level > 0 -> HEADING_DAY_DARK
+                                darkTheme -> HEADING_MONTH_DARK
+                                row.level > 0 -> HEADING_DAY_LIGHT
+                                else -> HEADING_MONTH_LIGHT
+                            }
+                            val onBand = if (darkTheme) Color(0xFF111111) else Color.White
                             Row(
                                 Modifier
                                     .fillMaxWidth()
+                                    .padding(
+                                        start = if (row.level > 0) 22.dp else 8.dp,
+                                        end = 8.dp,
+                                        top = if (row.level > 0) 6.dp else 14.dp,
+                                        bottom = 6.dp,
+                                    )
+                                    .clip(Corner)
+                                    .background(band)
                                     .combinedClickable(
                                         // While selecting, a tap still takes the whole group, as
                                         // before; otherwise it folds the group away and opens it
@@ -691,9 +744,9 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                     // Big enough to aim a thumb at: a heading is the tick that
                                     // takes the whole group and the fold (Cip, 2026-09-16).
                                     .padding(
-                                        start = if (row.level > 0) 34.dp else 18.dp,
-                                        end = 18.dp,
-                                        top = if (row.level > 0) 14.dp else 22.dp,
+                                        start = 10.dp,
+                                        end = 10.dp,
+                                        top = if (row.level > 0) 8.dp else 10.dp,
                                         bottom = if (row.level > 0) 8.dp else 10.dp,
                                     ),
                                 verticalAlignment = Alignment.CenterVertically,
@@ -701,7 +754,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                 Icon(
                                     if (row.collapsed) Icons.Filled.KeyboardArrowRight else Icons.Filled.KeyboardArrowDown,
                                     contentDescription = if (row.collapsed) "Open this group" else "Fold this group away",
-                                    tint = if (row.level > 0) p.muted else p.ink,
+                                    tint = onBand,
                                     modifier = Modifier.size(if (row.level > 0) 20.dp else 26.dp),
                                 )
                                 Spacer(Modifier.width(if (row.level > 0) 6.dp else 8.dp))
@@ -709,7 +762,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                     row.text,
                                     style = if (row.level > 0) MaterialTheme.typography.titleMedium else MaterialTheme.typography.headlineSmall,
                                     fontWeight = FontWeight.Bold,
-                                    color = p.ink,
+                                    color = onBand,
                                     modifier = Modifier.weight(1f),
                                 )
                                 if (state.selecting) {
@@ -731,7 +784,13 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                             // The photo "Show similar photos" started from: ringed and named, so
                             // it is never a guess which one the others are being compared with.
                             val anchor = state.duplicatesMode && hit.id == state.similarToId
-                            Box(if (anchor) Modifier.border(2.dp, p.accent) else Modifier) {
+                            Box(
+                                when {
+                                    state.skippedMode -> Modifier.border(2.dp, SkippedRed)
+                                    anchor -> Modifier.border(2.dp, p.accent)
+                                    else -> Modifier
+                                },
+                            ) {
                                 Thumbnail(
                                     hit = hit,
                                     modifier = Modifier.combinedClickable(
@@ -752,7 +811,31 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                 // 2026-09-16): a small tag on a translucent dark square, so it
                                 // reads on a bright photo and on a dark one alike. While
                                 // selecting, the corner belongs to the tick instead.
-                                if (hit.customTags.isNotEmpty() && !state.selecting) {
+                                if (state.skippedMode && !state.selecting) {
+                                    Box(
+                                        Modifier
+                                            .align(Alignment.TopEnd)
+                                            .padding(4.dp)
+                                            .size(20.dp)
+                                            .background(SkippedRed, androidx.compose.foundation.shape.CircleShape),
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Text("!", color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelMedium)
+                                    }
+                                    Text(
+                                        "${hit.fileName} · ${hit.meaning}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color.White,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier
+                                            .align(Alignment.BottomStart)
+                                            .fillMaxWidth()
+                                            .background(Color(0x99000000))
+                                            .padding(horizontal = 4.dp, vertical = 2.dp),
+                                    )
+                                }
+                                if (hit.customTags.isNotEmpty() && !state.selecting && !state.skippedMode) {
                                     Box(
                                         Modifier
                                             .align(Alignment.TopEnd)
@@ -1042,7 +1125,7 @@ private sealed interface GridRow {
      * whether the group is folded away under it.
      */
     data class Heading(
-        /** What the heading says, which changes when it is folded ("Friday · 42"). */
+        /** What the heading says, which changes when it is folded ("Friday (42)"). */
         val text: String,
         val ids: List<String>,
         val collapsed: Boolean = false,
@@ -1088,7 +1171,7 @@ private fun buildRows(
         val folded = "h:$name" in collapsed
         // The name is what the group is, and never changes; the text is only what it says now.
         this += GridRow.Heading(
-            text = if (folded) "$text · ${photos.size}" else text,
+            text = if (folded) "$text (${Actions.formatCount(photos.size.toLong())})" else text,
             ids = photos.map { it.id },
             collapsed = folded,
             name = name,
@@ -1200,6 +1283,59 @@ private const val VIEWER_DISMISS_SHARE = 0.18f
 /** How far a double tap magnifies, as Google Photos does it. */
 private const val VIEWER_DOUBLE_TAP_SCALE = 3f
 
+/**
+ * Makes the viewer's dialog window cover the whole screen and returns how far its bottom still
+ * reaches past the screen's real bottom edge, so the actions can be lifted by exactly that much.
+ *
+ * The activity is edge to edge and lays out into the display cutout; a dialog window is not, and
+ * on MIUI / HyperOS it is pushed down below the camera cutout while keeping its full height, so
+ * its lower part sat outside the screen and the buttons under the photo were cut off whatever
+ * padding they had (Cip, 2026-09-17). The window gets the activity's cutout mode and the full
+ * size; the measured overflow covers any phone that still places it lower.
+ */
+@Composable
+private fun viewerWindowOverflow(): Dp {
+    val view = LocalView.current
+    val density = LocalDensity.current
+    var overflowPx by remember { mutableIntStateOf(0) }
+    val window = (view.parent as? DialogWindowProvider)?.window
+    SideEffect {
+        window?.let { w ->
+            w.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val attrs = w.attributes
+                val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+                    android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                else android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                if (attrs.layoutInDisplayCutoutMode != mode) {
+                    attrs.layoutInDisplayCutoutMode = mode
+                    w.attributes = attrs
+                }
+            }
+        }
+    }
+    DisposableEffect(view) {
+        val listener = android.view.ViewTreeObserver.OnGlobalLayoutListener {
+            val location = IntArray(2)
+            view.getLocationOnScreen(location)
+            val screenHeight = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                view.context.getSystemService(android.view.WindowManager::class.java).currentWindowMetrics.bounds.height()
+            } else {
+                @Suppress("DEPRECATION")
+                android.util.DisplayMetrics().also { view.display?.getRealMetrics(it) }.heightPixels
+            }
+            val past = (location[1] + view.height - screenHeight).coerceAtLeast(0)
+            if (screenHeight > 0 && past != overflowPx) overflowPx = past
+        }
+        view.viewTreeObserver.addOnGlobalLayoutListener(listener)
+        onDispose { view.viewTreeObserver.removeOnGlobalLayoutListener(listener) }
+    }
+    return with(density) { overflowPx.toDp() }
+}
+
+/** How many rows may still be below the screen when the next page of results is asked for. */
+private val PREFETCH_REMAINING = com.opensolr.photos.search.SearchRepository.PAGE / 2
+
 /** The least room kept under the viewer's actions, whatever a phone says its bars measure. */
 private val VIEWER_MIN_BOTTOM = 28.dp
 
@@ -1280,6 +1416,7 @@ private fun SyncIcon(running: Boolean) {
  */
 @Composable
 private fun DuplicateLevelSlider(level: Int, onLevel: (Int) -> Unit, canSelect: Boolean, showSelectOneOfEach: Boolean, onSelectOneOfEach: () -> Unit) {
+    val view = LocalView.current
     val p = LocalPalette.current
     var value by remember { mutableStateOf(level.toFloat()) }
     LaunchedEffect(level) { if (value.roundToInt() != level) value = level.toFloat() }
@@ -1302,7 +1439,10 @@ private fun DuplicateLevelSlider(level: Int, onLevel: (Int) -> Unit, canSelect: 
             onValueChange = {
                 value = it
                 val rounded = it.roundToInt()
-                if (rounded != level) onLevel(rounded)
+                if (rounded != level) {
+                    Haptics.tick(view, strong = false)
+                    onLevel(rounded)
+                }
             },
             valueRange = 0f..(DUPLICATE_KIND_NAMES.size - 1).toFloat(),
             steps = DUPLICATE_KIND_NAMES.size - 2,
@@ -1392,12 +1532,14 @@ private fun IconAction(
     label: String,
     active: Boolean = false,
     accent: Boolean = false,
+    danger: Boolean = false,
     enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
     val p = LocalPalette.current
     val tint = when {
         !enabled -> p.hairline
+        danger -> SkippedRed
         active || accent -> p.accent
         else -> p.ink
     }
@@ -1406,7 +1548,7 @@ private fun IconAction(
             .padding(start = 6.dp)
             .size(36.dp)
             .clip(Corner)
-            .border(1.dp, if (active) p.accent else p.hairline, Corner)
+            .border(1.dp, if (active) (if (danger) SkippedRed else p.accent) else p.hairline, Corner)
             .combinedClickableCompat { if (enabled) onClick() },
         contentAlignment = Alignment.Center,
     ) {
@@ -1461,7 +1603,7 @@ private fun Thumbnail(hit: PhotoHit, modifier: Modifier = Modifier) {
 @Composable
 private fun EmptyResults(state: UiState) {
     // Duplicates say it themselves ("No duplicates of this kind"): nothing else to add there.
-    if (state.duplicatesMode) return
+    if (state.duplicatesMode || state.skippedMode) return
     val p = LocalPalette.current
     val text = when {
         state.sync.busy && state.query.isBlank() -> "Your photos are being indexed. They appear here as they are added."
@@ -1717,7 +1859,7 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
             // The day under the month, so the bar says exactly where the finger is, not only
             // which month it is passing (Cip, 2026-09-16). Its text carries a count when the
             // day is folded away; only the name of the day belongs in the badge.
-            val day = above.lastOrNull { it.level == 1 }?.text?.substringBefore(" · ")
+            val day = above.lastOrNull { it.level == 1 }?.text?.substringBefore(" (")
             if (!heading.isNullOrBlank()) {
                 Box(
                     Modifier
@@ -1899,6 +2041,7 @@ internal fun PhotoViewer(
         onDismissRequest = onClose,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
     ) {
+        val overflow = viewerWindowOverflow()
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val closeAt = with(LocalDensity.current) { maxHeight.toPx() } * VIEWER_DISMISS_SHARE
             // The ground fades as the picture is carried down, so the grid shows through.
@@ -2080,7 +2223,7 @@ internal fun PhotoViewer(
                 Column(
                     Modifier
                         .align(Alignment.BottomCenter)
-                        .padding(bottom = maxOf(bottomInset, VIEWER_MIN_BOTTOM) + 104.dp)
+                        .padding(bottom = maxOf(bottomInset, VIEWER_MIN_BOTTOM) + overflow + 104.dp)
                         .graphicsLayer { translationY = rise * density },
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
@@ -2112,7 +2255,7 @@ internal fun PhotoViewer(
                             start = 12.dp,
                             end = 12.dp,
                             top = 12.dp,
-                            bottom = maxOf(bottomInset, VIEWER_MIN_BOTTOM) + 12.dp,
+                            bottom = maxOf(bottomInset, VIEWER_MIN_BOTTOM) + overflow + 12.dp,
                         ),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
@@ -2189,7 +2332,7 @@ private fun FacetSection(
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         shown.forEach { facet ->
             Chip(
-                label = if (facet.count > 0) "${label(facet.value)} · ${facet.count}" else label(facet.value),
+                label = if (facet.count > 0) "${label(facet.value)} (${Actions.formatCount(facet.count.toLong())})" else label(facet.value),
                 selected = facet.value in selected,
                 onClick = {
                     Haptics.tick(view, strong = facet.value !in selected)
@@ -2198,7 +2341,7 @@ private fun FacetSection(
             )
         }
         if (all.size > FACET_PREVIEW) {
-            Chip(label = if (expanded) "Show fewer" else "Show all · ${all.size}", selected = false, onClick = { expanded = !expanded })
+            Chip(label = if (expanded) "Show fewer" else "Show all (${Actions.formatCount(all.size.toLong())})", selected = false, onClick = { expanded = !expanded })
         }
     }
     Spacer(Modifier.height(18.dp))
@@ -2351,3 +2494,12 @@ private val REBUILD_PHASES = setOf("Resetting your index", "Updating the index c
  */
 @OptIn(ExperimentalFoundationApi::class)
 private fun Modifier.combinedClickableCompat(onClick: () -> Unit): Modifier = this.combinedClickable(onClick = onClick)
+
+/** The mark of a photo the phone could not read: a red frame and a red "!" (Cip, 2026-09-17). */
+private val SkippedRed = Color(0xFFE53E3E)
+
+/** The bands behind the grid's headings: month and day, per theme (Cip, 2026-09-17). */
+private val HEADING_MONTH_LIGHT = Color(0xFF343A40)
+private val HEADING_DAY_LIGHT = Color(0xFF6C757D)
+private val HEADING_MONTH_DARK = Color(0xFFFFFFFF)
+private val HEADING_DAY_DARK = Color(0xFFDEE2E6)

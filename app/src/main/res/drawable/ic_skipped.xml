@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Skipped: a picture frame with an exclamation mark, 2px stroke, the editorial style of the app. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M3.5,3.5 L20.5,3.5 L20.5,20.5 L3.5,20.5 Z"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineJoin="miter"
+        android:strokeLineCap="square"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M12,7.5 L12,13.5"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="square"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M10.8,15.8 L13.2,15.8 L13.2,18.2 L10.8,18.2 Z"
+        android:fillColor="#FF000000" />
+</vector>
