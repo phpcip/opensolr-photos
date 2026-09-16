@@ -183,9 +183,15 @@ tap away.
 Pages of 60, loaded as you scroll. Thumbnails are decoded from the photos on the phone; nothing is
 downloaded to draw the grid.
 
-- **Tap** opens the photo in the phone's gallery (`ACTION_VIEW` on its MediaStore URI, with read
-  permission granted). If the MediaStore id stored in the index went stale, the app finds the photo again
-  by its path. If the photo is gone from the phone, it says so: the next Re-Sync removes it from the index.
+- **Tap** opens the photo full screen inside the app (`PhotoViewer`), at its own size rather than from the
+  thumbnail. It is a `HorizontalPager` over the hits themselves, so a swipe left or right walks the result
+  set in its own order — the whole reason it exists: the gallery knows nothing about your search, so
+  swiping there walks the camera roll. Nearing the end of what is loaded asks for the next page, so the
+  swipe runs as far as the results do. Inside it: a tap shows the actions (*Edit*, *Gallery*, *Share*,
+  *Delete*), a swipe up opens the details sheet a long press gives on the grid, a swipe down returns to the
+  grid — drawn over it, so its scroll position is never disturbed. *Gallery* is `ACTION_VIEW` on the photo's
+  MediaStore URI with read permission granted; if the stored id went stale the app finds the photo again by
+  its path, and if it is gone from the phone it says so and the next Re-Sync removes it from the index.
 - **Press and hold** shows the details: date, camera, lens, settings, size, folder, location as *City,
   Country*, and the words Opensolr read the photo into. At the bottom, one row of labelled icons:
   *Edit* (tags and words), *Gallery* (open it in the gallery app), *Similar* (photos like this one, see
