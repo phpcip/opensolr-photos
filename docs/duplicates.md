@@ -5,7 +5,7 @@ alike. How alike is chosen with a slider.
 
 ## The slider
 
-13 stops, from 0 to 12, with the name of the kind under it. The default is stop 4.
+14 stops, from 0 to 13, with the name of the kind under it. The default is stop 4.
 
 | Stop | Name | Photos are grouped when they have the same… | Field |
 |---|---|---|---|
@@ -13,14 +13,15 @@ alike. How alike is chosen with a slider.
 | 5 | *Same photo (EXIF)* | EXIF: time taken, camera make, camera model, lens, ISO, exposure, f-number, focal length, GPS position, altitude | `dup_exif_hash` |
 | 6–10 | *Same photo + first word* … *Same photo + first 5 words* | EXIF as at stop 5, and the first 1 to 5 words | `dup_exif_w1_hash` … `dup_exif_w5_hash` |
 | 11 | *Same file name* | file name only, without the folder, since several folders can be indexed | `file_name` |
-| 12 | *Same file size* | size in bytes | `size_bytes` |
+| 12 | *Same file size* | size in bytes. Not the same as the same file: a camera pads its files to whole blocks, so unrelated photos share a size exactly | `size_bytes` |
+| 13 | *Same file (exact copy)* | the md5 of the original file, worked out on the phone — the server only ever sees the 640 px copy | `file_hash` |
 
 The words key is made of CLIP's first 1 to 5 labels, lower-cased, de-duplicated, sorted, and hashed with
 md5. The EXIF key leaves out file size, pixel size, orientation and modification time, so a photo that went
 through a simple edit keeps it. Stops 6 to 10 hash the EXIF key together with the words key.
 
-The slider's colour follows the stop: the loosest tone at 0, through green at 5, to red at 10; stops 11 and
-12 are neutral. The scale has one set of colours for the light theme and another for the dark one
+The slider's colour follows the stop: the loosest tone at 0, through green at 5, to red at 10; stops 11,
+12 and 13 are neutral. The scale has one set of colours for the light theme and another for the dark one
 (`DUPLICATE_*_LIGHT` / `DUPLICATE_*_DARK`), because the loose end used to be drawn in the colour of the dark
 background, which took the thumb, the track and the name under it with it.
 

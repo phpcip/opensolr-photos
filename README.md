@@ -53,8 +53,8 @@ one per phone. No photo backup, no Google account, no ads, no analytics.
 3. **The app sets up this phone's index**: creates it if it does not exist and uploads the
    [schema](docs/index-schema.md) that ships in [`solr/conf`](solr/conf).
 4. **Sync.** For every photo not yet in the index, the app makes a 640 px copy carrying the original's
-   EXIF and hands it, five at a time, to Opensolr's `photos_ingest` endpoint, together with your tags and
-   words for it when this phone has them. The server does the rest: reads the EXIF, asks CLIP what the
+   EXIF and hands it, five at a time, to Opensolr's `photos_ingest` endpoint, together with the names of
+   any people already written on the file, and your tags and words for it when this phone has them. The server does the rest: reads the EXIF, asks CLIP what the
    photo shows, turns those words into a search vector, reads the text printed in the photo when CLIP says
    there is any, turns the GPS position into a place, keeps the tags and words already in the index, and
    writes the complete document into your index itself. The phone's part ends with the upload
@@ -96,7 +96,7 @@ The APK is signed with the Opensolr Photos release key. SHA-256 of the signing c
 </p>
 
 - **Originals never leave the phone.** Only a 640 px re-encoded copy is sent to be indexed, carrying the
-  original's EXIF (time, camera, position) so the server can read it; the copy is processed in memory and
+  original's EXIF (time, camera, position) and the names of any people already written on the file; the copy is processed in memory and
   not stored. The position, rounded, is turned into a place name on the server.
 - **The map** draws OpenStreetMap tiles, requested only while the map screen is open. That is the only
   host besides Opensolr the app ever talks to.

@@ -15,6 +15,8 @@ Opensolr Index. The app talks to each of them over HTTPS and to nothing else.
 - Reads each photo's EXIF metadata itself: date, camera, lens, exposure, place.
 - Makes a small upright JPEG copy (640 px on the long edge) for the reader. The copy is re-encoded from
   pixels, so it carries no metadata.
+- Reads the photo's own facts from the file: its EXIF, and the names of the people in it when something has
+  already written them there (`PersonInImage` in XMP).
 - Writes the documents into the index and searches it directly.
 - Runs sync in the background with WorkManager, one sync at a time, and watches MediaStore so a sync runs
   on its own when photos change.

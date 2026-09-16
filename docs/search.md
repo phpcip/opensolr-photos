@@ -61,6 +61,23 @@ then retries once without them.
 `meaning` holds the labels CLIP gave the photo. `text` also collects the file name, the folder, the camera,
 the place and your tags, so *pixel* or *screenshots* find what you would expect.
 
+## The people in a photo
+
+If something has already recognised the faces on your photos — Google Photos, Lightroom, digiKam, Apple
+Photos — it writes the names onto the files themselves, in the XMP property `PersonInImage`. The app reads
+them from the file and indexes them as `persons_t`, copied into `text`, so typing a name finds that
+person's photos.
+
+Nothing recognises faces here: no face is measured, compared or stored, on the phone or on Opensolr. The
+names are read the way a file name is read, and a photo that carries none is indexed exactly as before.
+Accent folding applies as everywhere else, so a name written with diacritics is found without them and the
+other way round.
+
+The names are read on the phone rather than carried on the 640 px copy: `ExifInterface` converts the XMP
+packet to a `String` as ASCII, which turns a name with diacritics into question marks. `PhotoReader
+.personsIn` decodes the raw bytes as UTF-8 and the names travel to `photos_ingest` as JSON, in the `persons`
+field of the photo.
+
 ## The text printed in a photo
 
 `text` also collects `ocr_t`: the words printed **in** the photo, read on Opensolr's side when a photo

@@ -33,12 +33,14 @@ APK, so the app always uploads exactly what is in the repository.
 | `ocr_t` | text | The text printed **in** the photo, read with tesseract on Opensolr's OCR servers: a petrol receipt, an invoice, a shelf label, a screenshot. Separate from `meaning`, which is what the photo *shows* |
 | `labels` | string, multi | The CLIP labels one by one |
 | `custom_tags` | string, multi | The owner's tags; `custom_tags_text` is their tokenised copy for search |
+| `persons_t` | text | The names of the people in the photo, as one line, read from the XMP property `PersonInImage` that whatever recognised the faces wrote on the file. No declared field of its own: it matches the `*_t` dynamic field |
 | `embeddings` | dense vector, 1024, cosine | Vector of `meaning` (plans with vector search) |
 | `clip_model`, `embed_model` | string | What produced the labels and the vector |
 | `dup_w1_hash` … `dup_w5_hash`, `dup_exif_hash`, `dup_exif_w1_hash` … `dup_exif_w5_hash` | string (`*_hash`) | Duplicate keys, written by the server ([duplicates](duplicates.md)) |
+| `file_hash` | string (`*_hash`) | md5 of the original file, from the phone; the strictest duplicates stop |
 | `indexed_at` | date | When the document was written |
 
-Copy fields feed the search fields: `text` (meaning, the printed text `ocr_t`, file name, folder, camera, city, region, country, tags),
+Copy fields feed the search fields: `text` (meaning, the printed text `ocr_t`, the names in `persons_t`, file name, folder, camera, city, region, country, tags),
 `file_name_text`, `folder_text`, `camera_text`, `place_text`, `custom_tags_text`. Two more serve typing:
 `suggest` (stored, multi-valued: tags, labels, camera make and model, city, region, province, country) is the
 suggester's dictionary, and `spell` (tags, labels, file name, camera, places) is the spellchecker's. Dynamic

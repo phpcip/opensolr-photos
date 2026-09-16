@@ -8,7 +8,7 @@
 
 | Data | Goes to | Kept there? |
 |---|---|---|
-| A 640 px JPEG copy of each new photo, re-encoded from pixels and carrying the original's EXIF, with the file's name, folder and size, and your tags and words for it when this phone has them, five per call | api.opensolr.com `photos_ingest` | No: processed in memory, the document it produces goes into your index |
+| A 640 px JPEG copy of each new photo, re-encoded from pixels and carrying the original's EXIF, with the file's name, folder and size, the names of any people already written on the file, and your tags and words for it when this phone has them, five per call | api.opensolr.com `photos_ingest` | No: processed in memory, the document it produces goes into your index |
 | The same 640 px copy again, for photos CLIP says carry text, so the printed words can be read | opensolr.com `image_ocr`, then one Opensolr Solr server for the reading itself | No: read in memory on a temporary file that is deleted immediately; the text it produces goes into your index. The reading is cached against the picture's md5 so the same photo is never sent twice |
 | The words and tags of a photo you edited | api.opensolr.com `batch_embed` | No |
 | Your typed searches | api.opensolr.com `embed` (vector search plans), then your index `/select` | Not by the app; the query goes to your own index like any search on it |
