@@ -921,6 +921,43 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Reads the documents again: every photo that carries printed text is dropped from the index
+     * and a sync started, which finds them missing and puts them back (Cip, 2026-09-16).
+     *
+     * Costs nothing on the plan. What the reader and the models said about a photo is kept
+     * against the picture itself, so a photo read once is never read again - the rebuild simply
+     * writes the documents afresh, with the reading cleaned up as it comes out.
+     *
+     * Tags and wording this phone knows about are put back with them. Tags that live only in the
+     * index, added from another phone, go with the documents.
+     */
+    fun rebuildOcr() {
+        if (_state.value.sync.running || com.opensolr.photos.sync.SyncWorker.running.get()) {
+            _state.update { it.copy(showBusyDialog = true) }
+            return
+        }
+        viewModelScope.launch {
+            val gone = try {
+                val connection = prefs.connection ?: return@launch
+                val count = com.opensolr.photos.net.SolrClient(connection).deleteWithOcr()
+                searches.clearCache()
+                count
+            } catch (e: Exception) {
+                _state.update { it.copy(notice = "The documents could not be dropped: ${friendlyMessage(e, "try again")}") }
+                return@launch
+            }
+            _state.update {
+                it.copy(notice = if (gone == 0) "No photos with printed text to read again."
+                else "$gone photo${if (gone == 1) "" else "s"} with printed text will be read again.")
+            }
+            if (gone > 0) {
+                refresh()
+                SyncScheduler.runNow(context)
+            }
+        }
+    }
+
+    /**
      * Enters or leaves photo selection on the grid.
      */
     fun setSelecting(on: Boolean) {

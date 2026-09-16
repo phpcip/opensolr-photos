@@ -1,0 +1,3 @@
+A new button on the Sync screen: Rebuild OCR documents. It drops every photo that carries printed text out of the index and starts a sync, which puts them back with the reading cleaned up.
+
+It costs nothing on your plan. What was read from a photo is kept against the picture itself, so a photo read once is never read again - the rebuild only writes the documents afresh.

@@ -238,6 +238,23 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
     }
 
     /**
+     * Deletes every document that carries printed text, and says how many went.
+     *
+     * One delete-by-query rather than a walk over the ids: the count is asked for first, so the
+     * screen can say what happened, and the delete itself is a single request whatever the
+     * number. The photos themselves are untouched; the next sync finds them missing from the
+     * index and reads them again.
+     */
+    suspend fun deleteWithOcr(): Int = withContext(Dispatchers.IO) {
+        val found = select(listOf("q" to "*:*", "fq" to "ocr_t:*", "rows" to "0"))
+            .optJSONObject("response")?.optInt("numFound") ?: 0
+        if (found > 0) {
+            execute(request("/update?commit=true&wt=json").post("{\"delete\":{\"query\":\"ocr_t:*\"}}".toRequestBody(JSON)).build())
+        }
+        found
+    }
+
+    /**
      * Adds or replaces [docs]. They become searchable within ten seconds.
      */
     suspend fun add(docs: JSONArray) = withContext(Dispatchers.IO) {

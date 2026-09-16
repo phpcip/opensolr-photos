@@ -50,6 +50,7 @@ import com.opensolr.photos.ui.theme.LocalPalette
 fun SyncScreen(state: UiState, viewModel: AppViewModel) {
     val p = LocalPalette.current
     var confirmReset by remember { mutableStateOf(false) }
+    var confirmRebuildOcr by remember { mutableStateOf(false) }
     Column(
         Modifier
             .fillMaxSize()
@@ -127,6 +128,13 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
         GhostButton("Reset index", onClick = { confirmReset = true }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(6.dp))
         Text("Empties it, reads every photo again.", style = MaterialTheme.typography.bodySmall, color = p.muted)
+        Spacer(Modifier.height(14.dp))
+
+        // The same idea as a reset, but only for the photos that carry printed text: they go
+        // out of the index and the next sync puts them back (Cip, 2026-09-16).
+        GhostButton("Rebuild OCR documents", onClick = { confirmRebuildOcr = true }, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(6.dp))
+        Text("Reads the receipts, labels and screenshots again.", style = MaterialTheme.typography.bodySmall, color = p.muted)
         Spacer(Modifier.height(28.dp))
 
         SectionLabel("Automatic Re-Sync")
@@ -146,6 +154,19 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
         Spacer(Modifier.height(14.dp))
         GhostButton("Change folders", onClick = { viewModel.openFolders(Screen.Sync) }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(40.dp))
+    }
+
+    if (confirmRebuildOcr) {
+        AlertDialog(
+            onDismissRequest = { confirmRebuildOcr = false },
+            title = { Text("Read your documents again?") },
+            text = { Text("Photos that carry printed text go out of the index and the next sync puts them back, with the reading cleaned up. It costs nothing on your plan: a photo read once is never read again. Your tags are kept. Your photos are not touched.") },
+            confirmButton = { TextButton(onClick = { confirmRebuildOcr = false; viewModel.rebuildOcr() }) { Text("Rebuild", color = p.accent) } },
+            dismissButton = { TextButton(onClick = { confirmRebuildOcr = false }) { Text("Cancel", color = p.ink) } },
+            containerColor = p.paper,
+            titleContentColor = p.ink,
+            textContentColor = p.muted,
+        )
     }
 
     if (confirmReset) {
