@@ -1,5 +1,9 @@
 package com.opensolr.photos.ui.screens
 
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.ui.unit.Dp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -90,6 +94,11 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
     // confirmation before they are removed.
     var viewing by remember { mutableStateOf<com.opensolr.photos.search.PhotoHit?>(null) }
     var pendingDelete by remember { mutableStateOf<Set<String>>(emptySet()) }
+    // Read here, on the screen, where the system bars are reported correctly; the viewer runs in
+    // a dialog window, where some phones report nothing at all.
+    val systemBars = WindowInsets.systemBars.asPaddingValues()
+    val topInset = systemBars.calculateTopPadding()
+    val bottomInset = systemBars.calculateBottomPadding()
     val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK) viewModel.removeDeleted(pendingDelete)
         pendingDelete = emptySet()
@@ -230,6 +239,8 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
                 DetailsSheet(hit = photo, viewModel = viewModel, onDismiss = close, onLeave = { viewing = null }, onEdit = { openEdit(it); close() })
             },
             onEditSheet = { photo, close -> EditSheet(hit = photo, state = state, viewModel = viewModel, onDismiss = close) },
+            topInset = topInset,
+            bottomInset = bottomInset,
             onNeedMore = {},
             onDelete = { one ->
                 val sender = Actions.deleteRequest(context, Actions.contentUris(context, listOf(one)))

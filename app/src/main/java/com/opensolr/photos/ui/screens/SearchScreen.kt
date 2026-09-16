@@ -1,5 +1,8 @@
 package com.opensolr.photos.ui.screens
 
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.ui.unit.Dp
 import android.app.Activity
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -195,6 +198,11 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     // The photo opened full screen, from which the results are swiped through in their own order.
     var viewing by remember { mutableStateOf<PhotoHit?>(null) }
     val view = LocalView.current
+    // Read here, on the screen, where the system bars are reported correctly; the viewer runs in
+    // a dialog window, where some phones report nothing at all.
+    val systemBars = WindowInsets.systemBars.asPaddingValues()
+    val topInset = systemBars.calculateTopPadding()
+    val bottomInset = systemBars.calculateBottomPadding()
     var editing by remember { mutableStateOf<PhotoHit?>(null) }
     // Open while tags are being put on every photo of the view at once.
     var bulkTagging by remember { mutableStateOf(false) }
@@ -865,6 +873,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 )
             },
             onEditSheet = { photo, close -> EditSheet(hit = photo, state = state, viewModel = viewModel, onDismiss = close) },
+            topInset = topInset,
+            bottomInset = bottomInset,
             onNeedMore = { if (!state.endReached && !state.searching) viewModel.search(reset = false) },
             onDelete = { one ->
                 val sender = Actions.deleteRequest(context, Actions.contentUris(context, listOf(one)))
@@ -1188,6 +1198,9 @@ private const val VIEWER_DISMISS_SHARE = 0.18f
 
 /** How far a double tap magnifies, as Google Photos does it. */
 private const val VIEWER_DOUBLE_TAP_SCALE = 3f
+
+/** The least room kept under the viewer's actions, whatever a phone says its bars measure. */
+private val VIEWER_MIN_BOTTOM = 28.dp
 
 private const val FAST_SCROLL_MIN_ROWS = 60
 
@@ -1838,6 +1851,13 @@ internal fun PhotoViewer(
     /** The details, given the photo, a way to close them, and a way to open the tags. */
     onSheet: @Composable (PhotoHit, () -> Unit, (PhotoHit) -> Unit) -> Unit,
     onEditSheet: @Composable (PhotoHit, () -> Unit) -> Unit,
+    /**
+     * The system bars as the SCREEN sees them, not as the dialog does. Inside a dialog window
+     * some phones report nothing at all, and the labels under the icons ended up below the edge
+     * of the screen - on a Poco they disappeared entirely (Cip, 2026-09-16).
+     */
+    topInset: Dp,
+    bottomInset: Dp,
     onNeedMore: () -> Unit,
     onDelete: (PhotoHit) -> Unit,
 ) {
@@ -2023,8 +2043,7 @@ internal fun PhotoViewer(
                     color = Color.White,
                     modifier = Modifier
                         .align(Alignment.TopCenter)
-                        .statusBarsPadding()
-                        .padding(top = 12.dp),
+                        .padding(top = maxOf(topInset, 12.dp) + 12.dp),
                 )
                 // A quiet hint that the photo has more to say: three chevrons drifting upwards
                 // over the action bar, faintest at the top (Cip, 2026-09-16).
@@ -2038,8 +2057,7 @@ internal fun PhotoViewer(
                 Column(
                     Modifier
                         .align(Alignment.BottomCenter)
-                        .windowInsetsPadding(WindowInsets.safeDrawing)
-                        .padding(bottom = 104.dp)
+                        .padding(bottom = maxOf(bottomInset, VIEWER_MIN_BOTTOM) + 104.dp)
                         .graphicsLayer { translationY = rise * density },
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
@@ -2063,11 +2081,15 @@ internal fun PhotoViewer(
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .background(Color(0xCC000000))
-                        // safeDrawing and not navigationBars: inside a dialog window the latter
-                        // can report nothing at all, and the labels ended up on the very edge of
-                        // the screen (Cip, 2026-09-16). The extra room below is deliberate.
-                        .windowInsetsPadding(WindowInsets.safeDrawing)
-                        .padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 28.dp),
+                        // The room below is whatever this phone actually reserves, and never
+                        // less than VIEWER_MIN_BOTTOM: a gesture bar, a chin, a cutout - the
+                        // labels have to clear all of them, on any phone (Cip, 2026-09-16).
+                        .padding(
+                            start = 12.dp,
+                            end = 12.dp,
+                            top = 12.dp,
+                            bottom = maxOf(bottomInset, VIEWER_MIN_BOTTOM) + 12.dp,
+                        ),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
                     // It opens the tags straight away, so it says what it does.
