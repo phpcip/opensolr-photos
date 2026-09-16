@@ -53,12 +53,15 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -208,8 +211,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             HeaderItem("Opensolr", onClick = { Actions.openUrl(context, OPENSOLR_DASHBOARD_URL) }) {
                 // The launcher icon drawn small: its artwork sits in the middle two thirds of
                 // the adaptive canvas, so the canvas is drawn larger than the clipped square.
-                Box(Modifier.size(20.dp).clip(Corner).background(p.accent), contentAlignment = Alignment.Center) {
-                    Icon(painterResource(R.drawable.ic_launcher_foreground), contentDescription = "Opensolr dashboard", tint = p.onAccent, modifier = Modifier.requiredSize(32.dp))
+                Box(Modifier.size(20.dp).clip(Corner).background(p.accentFill), contentAlignment = Alignment.Center) {
+                    Icon(painterResource(R.drawable.ic_launcher_foreground), contentDescription = "Opensolr dashboard", tint = p.onAccentFill, modifier = Modifier.requiredSize(32.dp))
                 }
             }
             HeaderItem("Me", onClick = { viewModel.open(Screen.Account) }) {
@@ -363,6 +366,9 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             val countText = when {
                 state.selecting -> "${Actions.formatCount(state.selectedIds.size.toLong())} selected"
                 state.searching && state.hits.isEmpty() -> "Searching…"
+                // Anchored to one photo: one group, so say what it is like instead of counting groups.
+                state.similarToId != null ->
+                    "${Actions.formatCount(state.hits.size.toLong())} like ${state.similarToHit?.fileName ?: "this photo"}"
                 state.duplicatesMode ->
                     "${Actions.formatCount(state.hits.size.toLong())} photos in ${state.duplicateGroups.size} group${if (state.duplicateGroups.size == 1) "" else "s"}"
                 else -> "${Actions.formatCount(state.numFound)} photo${if (state.numFound == 1L) "" else "s"}"
@@ -398,11 +404,34 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         // The kind of duplicates, 0..10 (Cip, 2026-09-15): from the loosest (the same first word)
         // through the same photo by its EXIF (green, the middle) to the strictest (EXIF and the
         // first five words, red). Every stop is one facet request, asked a moment after the move.
+        // Anchored to one photo: the way back to the details it was started from. The sheet
+        // opens over the grid, so closing it leaves the similar photos exactly as they were.
+        if (state.similarToId != null) {
+            val anchorHit = state.similarToHit
+            TextButton(
+                onClick = { anchorHit?.let { details = it } },
+                enabled = anchorHit != null,
+                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp),
+                modifier = Modifier.padding(horizontal = 20.dp).height(30.dp),
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null, tint = p.accent, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    "Back to ${anchorHit?.fileName ?: "the photo"}",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = p.accent,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
         if (state.duplicatesMode) {
             DuplicateLevelSlider(
                 level = state.duplicateLevel,
                 onLevel = { viewModel.setDuplicateLevel(it) },
-                canSelect = state.duplicateGroups.isNotEmpty(),
+                // "One of each" belongs to the whole index; anchored to one photo there is a
+                // single group and nothing to thin out.
+                canSelect = state.duplicateGroups.isNotEmpty() && state.similarToId == null,
                 onSelectOneOfEach = { viewModel.selectOneOfEachDuplicate() },
             )
         }
@@ -521,11 +550,11 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                     Box(
                                         Modifier
                                             .size(22.dp)
-                                            .background(if (allPicked) p.accent else p.paper, Corner)
-                                            .border(1.dp, if (allPicked) p.accent else p.hairline, Corner),
+                                            .background(if (allPicked) p.accentFill else p.paper, Corner)
+                                            .border(1.dp, if (allPicked) p.accentFill else p.hairline, Corner),
                                         contentAlignment = Alignment.Center,
                                     ) {
-                                        if (allPicked) Icon(Icons.Filled.Check, contentDescription = null, tint = p.onAccent, modifier = Modifier.size(16.dp))
+                                        if (allPicked) Icon(Icons.Filled.Check, contentDescription = null, tint = p.onAccentFill, modifier = Modifier.size(16.dp))
                                     }
                                 }
                             }
@@ -533,7 +562,10 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                         is GridRow.Photo -> {
                             val hit = row.hit
                             val selected = hit.id in state.selectedIds
-                            Box {
+                            // The photo "Show similar photos" started from: ringed and named, so
+                            // it is never a guess which one the others are being compared with.
+                            val anchor = hit.id == state.similarToId
+                            Box(if (anchor) Modifier.border(2.dp, p.accent) else Modifier) {
                                 Thumbnail(
                                     hit = hit,
                                     modifier = Modifier.combinedClickable(
@@ -541,17 +573,30 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                         onLongClick = { if (state.selecting) viewModel.toggleSelected(hit.id) else details = hit },
                                     ),
                                 )
+                                if (anchor) {
+                                    Text(
+                                        "This one",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = p.onAccentFill,
+                                        maxLines = 1,
+                                        modifier = Modifier
+                                            .align(Alignment.BottomStart)
+                                            .padding(4.dp)
+                                            .background(p.accentFill, Corner)
+                                            .padding(horizontal = 6.dp, vertical = 2.dp),
+                                    )
+                                }
                                 if (state.selecting) {
                                     Box(
                                         Modifier
                                             .align(Alignment.TopEnd)
                                             .padding(6.dp)
                                             .size(22.dp)
-                                            .background(if (selected) p.accent else p.paper, Corner)
-                                            .border(1.dp, if (selected) p.accent else p.hairline, Corner),
+                                            .background(if (selected) p.accentFill else p.paper, Corner)
+                                            .border(1.dp, if (selected) p.accentFill else p.hairline, Corner),
                                         contentAlignment = Alignment.Center,
                                     ) {
-                                        if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = p.onAccent, modifier = Modifier.size(16.dp))
+                                        if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = p.onAccentFill, modifier = Modifier.size(16.dp))
                                     }
                                 }
                             }
@@ -894,11 +939,17 @@ private fun DuplicateLevelSlider(level: Int, onLevel: (Int) -> Unit, canSelect: 
     var value by remember { mutableStateOf(level.toFloat()) }
     LaunchedEffect(level) { if (value.roundToInt() != level) value = level.toFloat() }
     val stop = value.roundToInt().coerceIn(0, DUPLICATE_KIND_NAMES.size - 1)
+    // Which set of scale colours reads on the current background: ink is near-black on paper
+    // and near-white on a dark screen, so it says which theme is in force without asking.
+    val dark = p.ink.red > 0.5f
+    val loose = if (dark) DUPLICATE_LOOSE_DARK else DUPLICATE_LOOSE_LIGHT
+    val green = if (dark) DUPLICATE_GREEN_DARK else DUPLICATE_GREEN_LIGHT
+    val red = if (dark) DUPLICATE_RED_DARK else DUPLICATE_RED_LIGHT
     val colour = when {
-        stop <= 5 -> lerp(DUPLICATE_BLACK, DUPLICATE_GREEN, stop / 5f)
-        stop <= 10 -> lerp(DUPLICATE_GREEN, DUPLICATE_RED, (stop - 5) / 5f)
+        stop <= 5 -> lerp(loose, green, stop / 5f)
+        stop <= 10 -> lerp(green, red, (stop - 5) / 5f)
         // File name and size are not on the words / EXIF scale: a neutral colour of their own.
-        else -> DUPLICATE_NEUTRAL
+        else -> if (dark) DUPLICATE_NEUTRAL_DARK else DUPLICATE_NEUTRAL_LIGHT
     }
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
         Slider(
@@ -940,10 +991,21 @@ private val DUPLICATE_KIND_NAMES = listOf(
     "Same photo + first 5 words",
     "Same file name", "Same file size",
 )
-private val DUPLICATE_BLACK = Color(0xFF111111)
-private val DUPLICATE_NEUTRAL = Color(0xFF495057)
-private val DUPLICATE_GREEN = Color(0xFF2F9E44)
-private val DUPLICATE_RED = Color(0xFFE03131)
+/**
+ * The ends of the duplicates scale, one set per theme (Cip, 2026-09-16). On paper the loosest
+ * stop is near-black; on a dark screen that is the colour of the screen itself, so the thumb,
+ * the track, the ticks and the name under them all disappeared. The dark set turns that end
+ * light and lifts the others off the background as well.
+ */
+private val DUPLICATE_LOOSE_LIGHT = Color(0xFF111111)
+private val DUPLICATE_NEUTRAL_LIGHT = Color(0xFF495057)
+private val DUPLICATE_GREEN_LIGHT = Color(0xFF2F9E44)
+private val DUPLICATE_RED_LIGHT = Color(0xFFE03131)
+
+private val DUPLICATE_LOOSE_DARK = Color(0xFFF4F1EC)
+private val DUPLICATE_NEUTRAL_DARK = Color(0xFFADB5BD)
+private val DUPLICATE_GREEN_DARK = Color(0xFF51CF66)
+private val DUPLICATE_RED_DARK = Color(0xFFFF6B6B)
 
 /** Where the logo of the header leads: the Opensolr dashboard, in the default browser. */
 private const val OPENSOLR_DASHBOARD_URL = "https://opensolr.com/admin/solr_manager"
@@ -1053,7 +1115,7 @@ private fun FilterActions(count: Long, onClear: () -> Unit, onDone: () -> Unit) 
             onClick = onDone,
             modifier = Modifier.height(34.dp),
             shape = Corner,
-            colors = ButtonDefaults.buttonColors(containerColor = p.accent, contentColor = p.onAccent),
+            colors = ButtonDefaults.buttonColors(containerColor = p.accentFill, contentColor = p.onAccentFill),
             contentPadding = PaddingValues(horizontal = 12.dp),
             elevation = null,
         ) {
@@ -1123,7 +1185,7 @@ private fun FilterSheet(
                 Switch(
                     checked = draft.withLocation,
                     onCheckedChange = { onChange(draft.copy(withLocation = it)) },
-                    colors = SwitchDefaults.colors(checkedTrackColor = p.accent, checkedThumbColor = p.onAccent, uncheckedTrackColor = p.chip, uncheckedBorderColor = p.hairline, uncheckedThumbColor = p.muted),
+                    colors = SwitchDefaults.colors(checkedTrackColor = p.accentFill, checkedThumbColor = p.onAccentFill, uncheckedTrackColor = p.chip, uncheckedBorderColor = p.hairline, uncheckedThumbColor = p.muted),
                 )
             }
             HorizontalDivider(color = p.hairline)
@@ -1235,14 +1297,26 @@ private fun DetailsSheet(hit: PhotoHit, viewModel: AppViewModel, onDismiss: () -
             }
             SectionLabel("What the photo shows")
             Text(hit.meaning.ifBlank { "No words yet" }, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = p.ink, modifier = Modifier.padding(vertical = 12.dp))
-            GhostButton("Edit tags and words", onClick = { onEdit(hit) }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(12.dp))
-            AccentButton("Open in gallery", onClick = { Actions.openPhoto(context, hit) }, modifier = Modifier.fillMaxWidth())
-            hit.latLon?.let { (lat, lon) ->
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    GhostButton("Show on map", onClick = { onDismiss(); viewModel.openMap(MapFocus(lat, lon, 15.0)) }, modifier = Modifier.weight(1f))
-                    GhostButton("Photos nearby", onClick = { onDismiss(); viewModel.searchNear(lat, lon, 5.0) }, modifier = Modifier.weight(1f))
+            // Everything this photo can do, as one row of small bordered icons with their words,
+            // the same shape as the header of the photos screen (Cip, 2026-09-16): there are too
+            // many of them now for full-width buttons.
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                HeaderItem("Edit", onClick = { onEdit(hit) }) {
+                    Icon(Icons.Filled.Edit, contentDescription = "Edit tags and words", tint = p.ink, modifier = Modifier.size(20.dp))
+                }
+                HeaderItem("Gallery", onClick = { Actions.openPhoto(context, hit) }) {
+                    Icon(painterResource(R.drawable.ic_open), contentDescription = "Open in gallery", tint = p.ink, modifier = Modifier.size(20.dp))
+                }
+                HeaderItem("Similar", onClick = { onDismiss(); viewModel.showSimilar(hit) }) {
+                    Icon(painterResource(R.drawable.ic_duplicates), contentDescription = "Show similar photos", tint = p.ink, modifier = Modifier.size(20.dp))
+                }
+                hit.latLon?.let { (lat, lon) ->
+                    HeaderItem("Map", onClick = { onDismiss(); viewModel.openMap(MapFocus(lat, lon, 15.0)) }) {
+                        Icon(painterResource(R.drawable.ic_map), contentDescription = "Show on map", tint = p.ink, modifier = Modifier.size(20.dp))
+                    }
+                    HeaderItem("Nearby", onClick = { onDismiss(); viewModel.searchNear(lat, lon, 5.0) }) {
+                        Icon(Icons.Filled.LocationOn, contentDescription = "Photos nearby", tint = p.ink, modifier = Modifier.size(20.dp))
+                    }
                 }
             }
             Spacer(Modifier.height(24.dp))

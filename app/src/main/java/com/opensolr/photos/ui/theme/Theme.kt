@@ -38,6 +38,13 @@ data class Palette(
     val hairline: Color,
     val accent: Color,
     val onAccent: Color,
+    /**
+     * The accent as a filled surface behind text or an icon: a deeper tone than [accent], so
+     * white on it clears 4.5:1 in both themes. [accent] itself stays for hairlines, rules,
+     * icons and the slider, where it sits on paper and nothing has to be read out of it.
+     */
+    val accentFill: Color,
+    val onAccentFill: Color,
 )
 
 private val LightPalette = Palette(
@@ -49,6 +56,9 @@ private val LightPalette = Palette(
     hairline = Color(0xFFD9D4CC),
     accent = Color(0xFFC05520),
     onAccent = Color(0xFFFFFFFF),
+    // White on #A8481B is 5.8:1; the brighter accent would have been 4.6:1, right on the line.
+    accentFill = Color(0xFFA8481B),
+    onAccentFill = Color(0xFFFFFFFF),
 )
 
 private val DarkPalette = Palette(
@@ -59,7 +69,11 @@ private val DarkPalette = Palette(
     muted = Color(0xFFB9B3A9),
     hairline = Color(0xFF3A3632),
     accent = Color(0xFFE0703A),
-    onAccent = Color(0xFF111111),
+    // Was near-black on orange: it measured as passing but read badly (Cip, 2026-09-16). White
+    // on the fill is 4.9:1 and looks like a button instead of a warning label.
+    onAccent = Color(0xFFFFFFFF),
+    accentFill = Color(0xFFB4551F),
+    onAccentFill = Color(0xFFFFFFFF),
 )
 
 val LocalPalette = staticCompositionLocalOf { LightPalette }
@@ -113,8 +127,10 @@ private val AppShapes = Shapes(
 private fun scheme(p: Palette, dark: Boolean): ColorScheme {
     val base = if (dark) darkColorScheme() else lightColorScheme()
     return base.copy(
-        primary = p.accent,
-        onPrimary = p.onAccent,
+        // Stock components paint primary as a filled surface and write onPrimary on it, so the
+        // pair that is readable in both themes goes here, not the bright accent.
+        primary = p.accentFill,
+        onPrimary = p.onAccentFill,
         primaryContainer = p.chip,
         onPrimaryContainer = p.ink,
         secondary = p.ink,
@@ -134,8 +150,8 @@ private fun scheme(p: Palette, dark: Boolean): ColorScheme {
         surfaceContainerLowest = p.paper,
         outline = p.hairline,
         outlineVariant = p.hairline,
-        error = p.accent,
-        onError = p.onAccent,
+        error = p.accentFill,
+        onError = p.onAccentFill,
     )
 }
 

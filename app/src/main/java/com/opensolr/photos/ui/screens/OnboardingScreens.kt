@@ -6,6 +6,7 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -19,14 +20,21 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -219,45 +227,135 @@ fun PermissionsScreen(state: UiState, viewModel: AppViewModel) {
 }
 
 /**
- * Picks the folders to index. DCIM, where the camera saves, is proposed.
+ * One folder as the browser shows it: where it is, its name, how many photos are in it and
+ * everything below it, and whether there is anything below it to open.
+ */
+private data class FolderNode(val path: String, val name: String, val count: Int, val hasChildren: Boolean)
+
+/**
+ * The folders immediately under [path], with everything deeper counted into each one. Built
+ * from the flat list of MediaStore folders, so browsing costs no new query.
+ */
+private fun childFolders(all: List<com.opensolr.photos.media.PhotoFolder>, path: String): List<FolderNode> {
+    val counts = LinkedHashMap<String, Int>()
+    val withChildren = HashSet<String>()
+    all.forEach { folder ->
+        val rel = folder.relativePath
+        if (rel.length <= path.length || !rel.startsWith(path, ignoreCase = true)) return@forEach
+        val rest = rel.substring(path.length).trim('/')
+        if (rest.isEmpty()) return@forEach
+        val full = path + rest.substringBefore('/') + "/"
+        counts[full] = (counts[full] ?: 0) + folder.count
+        if (rest.contains('/')) withChildren += full
+    }
+    return counts.map { (full, count) ->
+        FolderNode(full, full.trimEnd('/').substringAfterLast('/'), count, full in withChildren)
+    }.sortedBy { it.name.lowercase() }
+}
+
+/**
+ * The chosen folder that already covers [path], or null when nothing does. A folder inside a
+ * chosen one is indexed anyway, so it is shown as included instead of being ticked again.
+ */
+private fun coveringFolder(selected: Set<String>, path: String): String? =
+    selected.firstOrNull { it.isNotEmpty() && !it.equals(path, ignoreCase = true) && path.startsWith(it, ignoreCase = true) }
+
+/**
+ * Picks the folders to index, by walking into them one level at a time (Cip, 2026-09-16): a
+ * library kept as year/month/day is thousands of folders, and a flat list of them is unusable.
+ *
+ * Ticking a folder takes everything below it, which is what the sync already does: it matches a
+ * photo's folder against the chosen ones by prefix.
  */
 @Composable
 fun FoldersScreen(state: UiState, viewModel: AppViewModel) {
     val p = LocalPalette.current
+    // Where the browser stands, as a MediaStore relative path; "" is the list of roots.
+    var path by remember { mutableStateOf("") }
+    val children = remember(state.folders, path) { childFolders(state.folders, path) }
+
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
         ScreenHeader("Photo folders", onBack = if (state.foldersReturnTo == Screen.Sync) ({ viewModel.back() }) else null)
         Text(
-            "Everything inside a folder is indexed. DCIM is your camera.",
+            "Open a folder to see what is inside it. Ticking one takes every photo in it, including the folders below it.",
             style = MaterialTheme.typography.bodyMedium, color = p.muted, modifier = Modifier.padding(horizontal = 4.dp),
         )
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
+
+        // Where you are, and a tap on any step to go back up to it.
+        val steps = path.trim('/').split('/').filter { it.isNotEmpty() }
+        Row(
+            Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text(
+                "All folders",
+                style = MaterialTheme.typography.labelLarge,
+                color = if (steps.isEmpty()) p.ink else p.accent,
+                modifier = Modifier.clickable { path = "" }.padding(end = 6.dp),
+            )
+            steps.forEachIndexed { index, step ->
+                Text("/", style = MaterialTheme.typography.labelLarge, color = p.muted, modifier = Modifier.padding(end = 6.dp))
+                val upTo = steps.take(index + 1).joinToString("/") + "/"
+                Text(
+                    step,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = if (index == steps.lastIndex) p.ink else p.accent,
+                    modifier = Modifier.clickable { path = upTo }.padding(end = 6.dp),
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+
         if (state.foldersLoading) {
             CircularProgressIndicator(color = p.accent, strokeWidth = 2.dp, modifier = Modifier.padding(16.dp))
         } else if (state.folders.isEmpty()) {
             Notice("No photos were found on this phone yet.")
+        } else if (children.isEmpty()) {
+            Notice("Nothing else inside this folder.")
         }
+
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 16.dp)) {
-            items(state.folders, key = { it.relativePath }) { folder ->
+            items(children, key = { it.path }) { folder ->
+                val covered = coveringFolder(state.selectedFolders, folder.path)
+                val ticked = folder.path in state.selectedFolders || covered != null
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        .clickable { viewModel.toggleFolder(folder.relativePath) }
+                        // The row opens the folder; the tick chooses it. A folder with nothing
+                        // below it has only the tick.
+                        .clickable { if (folder.hasChildren) path = folder.path else if (covered == null) viewModel.toggleFolder(folder.path) }
                         .padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Checkbox(
-                        checked = folder.relativePath in state.selectedFolders,
-                        onCheckedChange = { viewModel.toggleFolder(folder.relativePath) },
-                        colors = CheckboxDefaults.colors(checkedColor = p.accent, uncheckedColor = p.muted, checkmarkColor = p.onAccent),
+                        checked = ticked,
+                        enabled = covered == null,
+                        onCheckedChange = { viewModel.toggleFolder(folder.path) },
+                        colors = CheckboxDefaults.colors(checkedColor = p.accentFill, uncheckedColor = p.muted, checkmarkColor = p.onAccentFill),
                     )
                     Column(Modifier.weight(1f)) {
-                        Text(folder.relativePath.ifBlank { "/" }, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold), color = p.ink)
-                        Text("${Actions.formatCount(folder.count.toLong())} photos", style = MaterialTheme.typography.bodySmall, color = p.muted)
+                        Text(folder.name, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold), color = p.ink)
+                        Text(
+                            if (covered != null) "Already included by $covered"
+                            else "${Actions.formatCount(folder.count.toLong())} photos" + if (folder.hasChildren) ", with folders inside" else "",
+                            style = MaterialTheme.typography.bodySmall, color = p.muted,
+                        )
+                    }
+                    if (folder.hasChildren) {
+                        Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "Open ${folder.name}", tint = p.muted)
                     }
                 }
                 HorizontalDivider(color = p.hairline)
             }
         }
+
+        Text(
+            if (state.selectedFolders.isEmpty()) "Nothing chosen yet"
+            else state.selectedFolders.sorted().joinToString(", ") { it.trimEnd('/') },
+            style = MaterialTheme.typography.bodySmall, color = p.muted,
+            modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        )
         AccentButton(
             if (state.foldersReturnTo == Screen.Sync) "Save and sync" else "Continue",
             onClick = { viewModel.saveFolders() },

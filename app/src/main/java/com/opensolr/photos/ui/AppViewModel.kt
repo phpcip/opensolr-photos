@@ -103,6 +103,13 @@ data class UiState(
     val duplicatesMode: Boolean = false,
     /** The duplicates slider, 0..10 over SearchRepository.DUPLICATE_FIELDS; 4 = first five words. */
     val duplicateLevel: Int = 4,
+    /** With "Show similar photos", the id of the photo the slider is anchored to; null for plain duplicates. */
+    val similarToId: String? = null,
+    /**
+     * That photo itself, kept so the grid can mark it and the way back can open its details
+     * again, even at a stop where the index returns nothing.
+     */
+    val similarToHit: PhotoHit? = null,
     val rebuildRequired: Boolean = false,
     /** Counts fresh searches, so the grid scrolls back to the top for each. */
     val searchGeneration: Int = 0,
@@ -424,7 +431,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun toggleFolder(path: String) {
         _state.update {
-            val next = if (path in it.selectedFolders) it.selectedFolders - path else it.selectedFolders + path
+            val next = if (path in it.selectedFolders) {
+                it.selectedFolders - path
+            } else {
+                // A chosen folder already covers everything under it (MediaScanner matches on
+                // the prefix), so the folders it swallows are dropped instead of kept alongside.
+                it.selectedFolders.filterNot { chosen -> chosen.startsWith(path, ignoreCase = true) }.toSet() + path
+            }
             it.copy(selectedFolders = next)
         }
     }
@@ -757,7 +770,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun showDuplicates() {
         if (_state.value.duplicatesMode) { clearDuplicates(); return }
-        _state.update { it.copy(duplicatesMode = true) }
+        // The duplicates icon always means the whole index, never one photo's neighbours.
+        _state.update { it.copy(duplicatesMode = true, similarToId = null, similarToHit = null) }
+        loadDuplicates(debounceMs = 0)
+    }
+
+    /**
+     * "Show similar photos" in a photo's details: the same slider, anchored to [hit] instead of
+     * the whole index, so every stop asks what else carries this photo's key.
+     */
+    fun showSimilar(hit: PhotoHit) {
+        _state.update {
+            it.copy(screen = Screen.Search, duplicatesMode = true, similarToId = hit.id, similarToHit = hit)
+        }
         loadDuplicates(debounceMs = 0)
     }
 
@@ -780,18 +805,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         searchJob = viewModelScope.launch {
             if (debounceMs > 0) kotlinx.coroutines.delay(debounceMs)
             val level = _state.value.duplicateLevel
+            val anchor = _state.value.similarToId
             _state.update { it.copy(searching = true, searchError = null, suggestions = emptyList()) }
             try {
-                val (hits, groups) = searches.duplicates(level)
+                // Anchored to a photo, or over the whole index: the same slider, the same grid.
+                val (hits, groups) = if (anchor != null) searches.similarTo(anchor, level) else searches.duplicates(level)
                 _state.update {
-                    if (!it.duplicatesMode || it.duplicateLevel != level) it
+                    if (!it.duplicatesMode || it.duplicateLevel != level || it.similarToId != anchor) it
                     else it.copy(
                         searching = false,
                         hits = hits,
                         duplicateGroups = groups,
                         numFound = hits.size.toLong(),
                         endReached = true,
-                        searchNotice = if (hits.isEmpty()) "No duplicates of this kind in your index." else null,
+                        searchNotice = when {
+                            hits.isNotEmpty() -> null
+                            anchor != null -> "Nothing else in your index is like this photo at this setting."
+                            else -> "No duplicates of this kind in your index."
+                        },
                         resultsGeneration = it.resultsGeneration + 1,
                     )
                 }
@@ -846,7 +877,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Back to the ordinary results after looking at duplicates. */
     private fun clearDuplicates() {
         if (!_state.value.duplicatesMode) return
-        _state.update { it.copy(duplicatesMode = false, duplicateGroups = emptyList(), searchNotice = null) }
+        _state.update { it.copy(duplicatesMode = false, duplicateGroups = emptyList(), similarToId = null, similarToHit = null, searchNotice = null) }
         search(reset = true)
     }
 

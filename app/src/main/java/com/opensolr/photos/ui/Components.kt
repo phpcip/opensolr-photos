@@ -64,7 +64,7 @@ fun AccentButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifie
         enabled = enabled,
         modifier = modifier.height(52.dp),
         shape = Corner,
-        colors = ButtonDefaults.buttonColors(containerColor = p.accent, contentColor = p.onAccent, disabledContainerColor = p.chip, disabledContentColor = p.muted),
+        colors = ButtonDefaults.buttonColors(containerColor = p.accentFill, contentColor = p.onAccentFill, disabledContainerColor = p.chip, disabledContentColor = p.muted),
         contentPadding = PaddingValues(horizontal = 24.dp),
         elevation = null,
     ) {

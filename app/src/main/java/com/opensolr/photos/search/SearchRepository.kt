@@ -447,6 +447,47 @@ class SearchRepository(private val context: Context) {
     }
 
     /**
+     * The photos that share one photo's duplicate key at [level]: the same slider as duplicates,
+     * but anchored to this photo instead of the whole index. Two requests, both cacheable: the
+     * photo's own key for that stop, then everything carrying it.
+     *
+     * Returns the photos and one group holding them all, so the grid draws them exactly as it
+     * draws a duplicate group.
+     */
+    suspend fun similarTo(photoId: String, level: Int): Pair<List<PhotoHit>, List<Int>> {
+        val field = DUPLICATE_FIELDS[level.coerceIn(0, DUPLICATE_FIELDS.size - 1)]
+        // The duplicate keys are docValues without stored values; a schema of version 1.6 hands
+        // them to fl like any stored field.
+        val key = try {
+            select(
+                listOf(
+                    "q" to "*:*",
+                    "fq" to "{!term f=id v=\$anchorId}",
+                    "anchorId" to photoId,
+                    "fl" to field,
+                    "rows" to "1",
+                )
+            ).getJSONObject("response").optJSONArray("docs")?.optJSONObject(0)?.optString(field).orEmpty()
+        } catch (e: ServiceException) {
+            if (e.message?.contains("HTTP 400") == true) throw ServiceException("Finding similar photos needs your index reset for this version of the app. Open the app's photos screen to start it.")
+            throw e
+        }
+        if (key.isBlank()) return emptyList<PhotoHit>() to emptyList()
+
+        // {!field} instead of {!term}: size_bytes is numeric, and {!field} lets the field type
+        // read the value, which {!term} does not do for a points field.
+        val params = ArrayList<Pair<String, String>>()
+        params += "q" to "*:*"
+        params += "fq" to "{!field f=$field v=\$anchorKey}"
+        params += "anchorKey" to key
+        params += "fl" to FIELDS
+        params += "rows" to SIMILAR_ROWS.toString()
+        params += "sort" to "taken_at desc"
+        val hits = parse(select(params), false, null).hits
+        return hits to if (hits.isEmpty()) emptyList() else listOf(hits.size)
+    }
+
+    /**
      * Runs a /select, re-reading the index password once if it was refused.
      */
     private suspend fun select(params: List<Pair<String, String>>): JSONObject {
@@ -672,6 +713,8 @@ class SearchRepository(private val context: Context) {
             // same size in bytes, straight from the stored fields, which have docValues already.
             "file_name", "size_bytes",
         )
+        /** Most photos "Show similar photos" brings back for one anchor photo. */
+        private const val SIMILAR_ROWS = 200
         /** Photos an album needs before it is shown (Cip, 2026-09-15). */
         private const val ALBUM_MIN = 1
         /** CLIP words offered as albums: only the most used, never the whole vocabulary. */

@@ -115,7 +115,9 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
     val overlay = remember {
         PhotoClusterOverlay(
             context,
-            PhotoClusterOverlay.MarkerColors(p.chip.toArgb(), p.paper.toArgb(), p.hairline.toArgb(), p.accent.toArgb(), p.onAccent.toArgb()),
+            // The badge of a group carries its count, so it takes the fill tone and its white:
+            // the bright accent with white on it would be too faint to read on the map.
+            PhotoClusterOverlay.MarkerColors(p.chip.toArgb(), p.paper.toArgb(), p.hairline.toArgb(), p.accentFill.toArgb(), p.onAccentFill.toArgb()),
         ) { onTap(it) }.also { mapView.overlays.add(it) }
     }
 
