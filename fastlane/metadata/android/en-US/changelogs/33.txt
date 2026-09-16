@@ -1,0 +1,1 @@
+How many photos are left on your plan this month is now the number Opensolr itself reports, instead of one worked out in the app from a fixed ten photos per request. If the platform ever changes what a photo costs, the figure on your phone changes with it.

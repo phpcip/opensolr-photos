@@ -50,6 +50,13 @@ data class AccountLimits(
     /** The account's API rate limits, so the app paces itself instead of being refused. */
     val maxPerMinute: Int = 120,
     val maxPerHour: Int = 1200,
+    /**
+     * How many photos count as ONE metered AI request, as the platform reports it in
+     * get_account_summary (its own config decides it, not the app). Ten by default, which is
+     * what it has been since photos were charged a tenth each; a server that changes the
+     * divisor changes what the owner is told here too.
+     */
+    val photosPerRequest: Int = 10,
 ) {
 
     /**
@@ -68,13 +75,6 @@ data class AccountLimits(
         }
         return "€$amount / $period"
     }
-
-    /**
-     * Photos one AI request covers on a photo index: ten. Reading a photo (words and vector,
-     * through photos_ingest) counts a tenth of a request; editing its tags or words costs one
-     * whole request, for the new vector.
-     */
-    val photosPerRequest: Int get() = 10
 
     /**
      * How many photos the monthly AI allowance covers, or null when the plan has no cap.
@@ -140,6 +140,8 @@ data class AccountLimits(
             recurrence = if (json.has("recurrence")) json.optString("recurrence") else previous?.recurrence ?: "",
             maxPerMinute = if (json.has("max_per_minute")) json.optInt("max_per_minute").coerceAtLeast(1) else previous?.maxPerMinute ?: 120,
             maxPerHour = if (json.has("max_per_hour")) json.optInt("max_per_hour").coerceAtLeast(1) else previous?.maxPerHour ?: 1200,
+            // Never zero, or the photo counts below would divide the allowance into nothing.
+            photosPerRequest = if (json.has("photos_per_request")) json.optInt("photos_per_request").coerceAtLeast(1) else previous?.photosPerRequest ?: 10,
         )
     }
 }
