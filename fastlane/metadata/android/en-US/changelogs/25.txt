@@ -1,0 +1,1 @@
+Housekeeping only: the description of what the phone keeps about your photos was brought up to date in the source. Nothing changes in the app itself.

@@ -8,14 +8,18 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * What the phone already paid to learn about each photo: the Solr document built for it and
- * its search vector.
+ * Everything the phone keeps about its own photos, in three tables of one database:
  *
- * Reading a photo into words and embedding those words both count against the plan's AI
- * allowance. Keeping the result here means a photo is only ever sent once: when the index is
- * emptied, deleted or recreated, a Re-Sync pushes the cached documents back without a single
- * AI request. An entry is reused only while the file's size and modification time are
- * unchanged, so an edited photo is read again.
+ * - **photos**: the document Opensolr built for a photo and its search vector. Reading a photo
+ *   into words and turning those words into a vector both count against the plan's AI
+ *   allowance, so keeping the answer here means a photo is only ever paid for once: when the
+ *   index is emptied, deleted or recreated, a Re-Sync pushes these documents back without a
+ *   single AI request. An entry is reused only while the file's size and modification time are
+ *   unchanged, so an edited photo is read again.
+ * - **places**: the place already looked up for a rounded position, so the same spot is never
+ *   asked for twice. An empty answer means "looked up, and there is no place there".
+ * - **edits**: the tags and the wording the owner gave a photo. Every later write of that photo
+ *   puts them back over what Opensolr saw, so the owner's words always win.
  */
 class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext, NAME, null, VERSION) {
 
@@ -28,7 +32,8 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
     data class Entry(val docJson: String, val vector: FloatArray?)
 
     /**
-     * Creates the tables: the photos, and the places already looked up for a position.
+     * Creates the three tables: the photos, the places already looked up for a position, and
+     * the owner's edits.
      */
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
