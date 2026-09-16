@@ -1698,9 +1698,12 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
 
         // While dragging, what the finger is standing on, so the jump is aimed rather than lucky.
         if (dragging) {
-            val heading = rows.take(aimed.coerceAtLeast(0) + 1)
-                .filterIsInstance<GridRow.Heading>()
-                .lastOrNull { it.level == 0 }?.name
+            val above = rows.take(aimed.coerceAtLeast(0) + 1).filterIsInstance<GridRow.Heading>()
+            val heading = above.lastOrNull { it.level == 0 }?.name
+            // The day under the month, so the bar says exactly where the finger is, not only
+            // which month it is passing (Cip, 2026-09-16). Its text carries a count when the
+            // day is folded away; only the name of the day belongs in the badge.
+            val day = above.lastOrNull { it.level == 1 }?.text?.substringBefore(" · ")
             if (!heading.isNullOrBlank()) {
                 Box(
                     Modifier
@@ -1711,7 +1714,17 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
                         .background(p.accentFill, Corner)
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                 ) {
-                    Text(heading, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = p.onAccentFill, maxLines = 1)
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(heading, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = p.onAccentFill, maxLines = 1)
+                        if (!day.isNullOrBlank()) {
+                            Text(
+                                day,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = p.onAccentFill.copy(alpha = 0.75f),
+                                maxLines = 1,
+                            )
+                        }
+                    }
                 }
             }
         }
