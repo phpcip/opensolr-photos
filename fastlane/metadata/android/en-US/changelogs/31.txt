@@ -1,0 +1,1 @@
+A folded group can be opened again. Folding one renamed it on screen to show how many photos it was hiding, and the app remembered what was folded by those very words, so the next tap toggled a name that no longer matched and the group stayed shut for good.

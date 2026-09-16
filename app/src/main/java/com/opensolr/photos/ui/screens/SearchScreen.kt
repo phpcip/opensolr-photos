@@ -881,8 +881,19 @@ private sealed interface GridRow {
      * A full-width heading, with the photos of its group so its tick can take them all, and
      * whether the group is folded away under it.
      */
-    data class Heading(val text: String, val ids: List<String>, val collapsed: Boolean = false) : GridRow {
-        override val key: String get() = "h:$text"
+    data class Heading(
+        /** What the heading says, which changes when it is folded ("Friday · 42"). */
+        val text: String,
+        val ids: List<String>,
+        val collapsed: Boolean = false,
+        /**
+         * What the heading *is*, which never changes. Kept apart from [text] on purpose: the key
+         * used to be built from the words on screen, so folding a group renamed it, the next tap
+         * toggled a different name, and the group could never be opened again (Cip, 2026-09-16).
+         */
+        val name: String = text,
+    ) : GridRow {
+        override val key: String get() = "h:$name"
     }
 
     data class Photo(val hit: PhotoHit) : GridRow {
@@ -908,9 +919,15 @@ private fun buildRows(
 
     // One group: its heading, then its photos - unless it is folded away, in which case the
     // heading stands alone and says how many are under it (Cip, 2026-09-16).
-    fun MutableList<GridRow>.addGroup(text: String, photos: List<PhotoHit>) {
-        val folded = "h:$text" in collapsed
-        this += GridRow.Heading(if (folded) "$text · ${photos.size}" else text, photos.map { it.id }, folded)
+    fun MutableList<GridRow>.addGroup(name: String, photos: List<PhotoHit>) {
+        val folded = "h:$name" in collapsed
+        // The name is what the group is, and never changes; the text is only what it says now.
+        this += GridRow.Heading(
+            text = if (folded) "$name · ${photos.size}" else name,
+            ids = photos.map { it.id },
+            collapsed = folded,
+            name = name,
+        )
         if (!folded) photos.forEach { this += GridRow.Photo(it) }
     }
 
