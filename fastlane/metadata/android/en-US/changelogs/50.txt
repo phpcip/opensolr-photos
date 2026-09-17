@@ -1,0 +1,1 @@
+Clearer filters: OCR, Tagged, Has people and Has location are simple switches, one under the other, with Meaning right under OCR, so switching OCR on and picking "receipt" finds your paperwork. The Documents filter is gone, and My tags shows up once.

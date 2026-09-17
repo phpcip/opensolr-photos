@@ -1515,9 +1515,8 @@ private fun ActiveFilterChips(filters: SearchFilters, onRemove: (SearchFilters) 
         filters.tagged?.let { add((if (it) "Tagged" else "Not tagged") to filters.copy(tagged = null)) }
         filters.near?.let { add(it.label to filters.copy(near = null)) }
         filters.taken?.let { add(it.label to filters.copy(taken = null)) }
-        filters.hasOcr?.let { add((if (it) "Has OCR" else "No OCR") to filters.copy(hasOcr = null)) }
+        filters.hasOcr?.let { add((if (it) "OCR" else "No OCR") to filters.copy(hasOcr = null)) }
         filters.hasPeople?.let { add((if (it) "Has people" else "No people") to filters.copy(hasPeople = null)) }
-        filters.documents?.let { add((if (it) "Documents" else "Not documents") to filters.copy(documents = null)) }
     }
     LazyRow(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         // No key: the same label can be applied in two fields (a city and a word), and a
@@ -1701,8 +1700,9 @@ private fun FilterSheet(
             FilterActions(count, onClear = { onChange(SearchFilters()) }, onDone = onDismiss)
             Spacer(Modifier.height(12.dp))
 
-            // The order people reach for (Cip, 2026-09-17): when, then their own tags and papers,
-            // then where; everything else after.
+            // The order people reach for (Cip, 2026-09-17): when; then the switches one under
+            // the other, with Meaning right under OCR so "OCR on, then receipt" narrows to the
+            // paperwork; then the lists of tags, people and places; everything else after.
             val facetTitles = SearchFilters.FACETS.toMap()
             val facet: @Composable (String) -> Unit = { field ->
                 facetTitles[field]?.let { title ->
@@ -1714,35 +1714,19 @@ private fun FilterSheet(
             // for anything narrower than a whole year (Cip, 2026-09-16).
             DateRangeSection(draft.taken) { onChange(draft.copy(taken = it)) }
 
-            // Your own tags: three states, so two chips rather than a switch. Picking the one
-            // already chosen clears it and every photo is shown again.
-            SectionLabel("My tags")
-            Spacer(Modifier.height(10.dp))
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Chip(
-                    label = "Tagged",
-                    selected = draft.tagged == true,
-                    onClick = { onChange(draft.copy(tagged = if (draft.tagged == true) null else true)) },
-                )
-                Chip(
-                    label = "Not tagged",
-                    selected = draft.tagged == false,
-                    onClick = { onChange(draft.copy(tagged = if (draft.tagged == false) null else false)) },
-                )
-            }
-            Spacer(Modifier.height(18.dp))
+            FilterSwitch("OCR", "Only photos with text read out of them", draft.hasOcr == true) { onChange(draft.copy(hasOcr = if (it) true else null)) }
+            facet("labels")
+            FilterSwitch("Tagged", "Only photos you gave tags", draft.tagged == true) { onChange(draft.copy(tagged = if (it) true else null)) }
+            FilterSwitch("Has people", "Only photos with people named on them", draft.hasPeople == true) { onChange(draft.copy(hasPeople = if (it) true else null)) }
+            FilterSwitch("Has location", "Only photos with a GPS position", draft.withLocation) { onChange(draft.copy(withLocation = it)) }
+            Spacer(Modifier.height(12.dp))
+
             facet("custom_tags")
-            TriStateSection(
-                title = "Documents",
-                yes = "Documents", no = "Not documents",
-                state = draft.documents,
-                onChange = { onChange(draft.copy(documents = it)) },
-            )
+            facet("persons_ss")
             facet("city")
             facet("country")
-            facet("persons_ss")
             SearchFilters.FACETS.map { it.first }
-                .filter { it !in setOf("year", "custom_tags", "city", "country", "persons_ss") }
+                .filter { it !in setOf("year", "labels", "custom_tags", "persons_ss", "city", "country") }
                 .forEach { facet(it) }
 
             draft.near?.let { near ->
@@ -1763,23 +1747,6 @@ private fun FilterSheet(
                 Spacer(Modifier.height(18.dp))
             }
 
-            // Read and named: the same three-state shape as "My tags" above - picking the chip
-            // already chosen clears it and every photo is shown again.
-            TriStateSection(
-                title = "Printed text",
-                yes = "Has OCR", no = "No OCR",
-                state = draft.hasOcr,
-                onChange = { onChange(draft.copy(hasOcr = it)) },
-            )
-
-            Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                Text("Only photos with a location", style = MaterialTheme.typography.bodyLarge, color = p.ink, modifier = Modifier.weight(1f))
-                Switch(
-                    checked = draft.withLocation,
-                    onCheckedChange = { onChange(draft.copy(withLocation = it)) },
-                    colors = SwitchDefaults.colors(checkedTrackColor = p.accentFill, checkedThumbColor = p.onAccentFill, uncheckedTrackColor = p.chip, uncheckedBorderColor = p.hairline, uncheckedThumbColor = p.muted),
-                )
-            }
             HorizontalDivider(color = p.hairline)
             Spacer(Modifier.height(12.dp))
             FilterActions(count, onClear = { onChange(SearchFilters()) }, onDone = onDismiss)
@@ -1971,6 +1938,26 @@ private fun DateRangeSection(current: DateRange?, onChange: (DateRange?) -> Unit
                 modifier = Modifier.weight(1f),
             )
         }
+    }
+}
+
+/**
+ * One on / off filter of the filter sheet: on keeps only the photos that have the thing, off
+ * shows them all (Cip, 2026-09-17: switches, not "has / has not" chips).
+ */
+@Composable
+private fun FilterSwitch(title: String, hint: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    val p = LocalPalette.current
+    Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = p.ink)
+            Text(hint, style = MaterialTheme.typography.bodySmall, color = p.muted)
+        }
+        Switch(
+            checked = checked,
+            onCheckedChange = onChange,
+            colors = SwitchDefaults.colors(checkedTrackColor = p.accentFill, checkedThumbColor = p.onAccentFill, uncheckedTrackColor = p.chip, uncheckedBorderColor = p.hairline, uncheckedThumbColor = p.muted),
+        )
     }
 }
 

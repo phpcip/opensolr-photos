@@ -184,9 +184,10 @@ horizontally scrolling row.
 | Filter | Parameters |
 |---|---|
 | Year | `fq={!term f=year v=$f_year}` and `f_year=2024` |
-| Printed text | `fq=ocr_t:*`, or `-ocr_t:*` for photos without |
+| OCR (switch) | `fq=ocr_t:*` when on; off shows every photo |
+| Tagged (switch) | `fq=custom_tags:[* TO *]` when on |
+| Has people (switch) | `fq=persons_t:*` when on |
 | People | `fq={!terms f=persons_ss tag=persons_ss separator=\| v=$f_persons_ss}`: the names, each whole, from the `persons_ss` string field (`persons_t` is analysed text and stays for search) |
-| Documents | `fq={!lucene v=$doc_q}` with `doc_q=meaning:(receipt OR invoice OR certificate OR label OR …)` — the server's own TEXT_FAMILY_WORDS list run against `meaning`, which is those words joined. A document read badly is still a document, so this is not the same as having printed text |
 | Taken between | `fq={!lucene v=$taken_q}` and `taken_q=taken_at:[2025-07-01T00:00:00Z TO 2025-07-08T23:59:59Z]`. Both days included; the clause travels as one bound parameter, and its two ends are formatted from a Long, so they can only ever be timestamps |
 | Folder | `fq={!term f=folder v=$f_folder}` and `f_folder=DCIM/Camera/` |
 | Camera make | `fq={!term f=camera_make v=$f_make}` and `f_make=Google` |
@@ -195,7 +196,7 @@ horizontally scrolling row.
 | My tags | `fq={!term f=custom_tags v=$f_tag}` |
 | Meaning | `fq={!term f=labels v=$f_label}` |
 | Orientation | `fq={!term f=orientation v=$f_orientation}` (landscape, portrait, square) |
-| With location | `fq=has_location:true` |
+| Has location (switch) | `fq=has_location:true` |
 | Within N km | `fq={!geofilt sfield=location pt=$near_pt d=$near_d}` with `near_pt=lat,lon`, `near_d=km` |
 
 The filter sheet is built from facets of the current results (`facet.field` on `year`, `folder`,
