@@ -303,26 +303,25 @@ private fun AlbumSectionHeading(
     onLongClick: () -> Unit,
 ) {
     val p = LocalPalette.current
-    val dark = p.ink.red > 0.5f
-    val band = if (dark) HEADING_MONTH_DARK else HEADING_MONTH_LIGHT
-    val onBand = if (dark) Color(0xFF111111) else Color.White
+    val band = headingBand(0)
+    val onBand = p.ink
     Row(
         Modifier
             .fillMaxWidth()
-            .padding(top = 12.dp)
+            .padding(top = 10.dp)
             .clip(Corner)
             .background(band)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
-            .padding(horizontal = 10.dp, vertical = 10.dp),
+            .padding(start = 8.dp, end = 10.dp, top = 7.dp, bottom = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(
             if (folded) Icons.Filled.KeyboardArrowRight else Icons.Filled.KeyboardArrowDown,
             contentDescription = if (folded) "Open this section" else "Fold this section away",
-            tint = onBand,
-            modifier = Modifier.size(26.dp),
+            tint = p.accent,
+            modifier = Modifier.size(22.dp),
         )
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(6.dp))
         Text(
             if (folded) "$title (${Actions.formatCount(count.toLong())})" else title,
             style = headingStyle(0),

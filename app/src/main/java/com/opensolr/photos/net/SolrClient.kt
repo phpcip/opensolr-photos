@@ -68,13 +68,13 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
      * page costs the same as the first; the pages arrive in id order. The caller compares each
      * page with the phone's files as it comes, so the whole index is never held in memory.
      */
-    suspend fun forEachSizePage(pageSize: Int = 1000, onPage: suspend (total: Long, page: List<Pair<String, Long>>) -> Unit) {
+    suspend fun forEachSizePage(pageSize: Int = 1000, onPage: suspend (total: Long, page: List<Triple<String, Long, Long>>) -> Unit) {
         var cursor = "*"
         while (true) {
             val json = select(
                 listOf(
                     "q" to "*:*",
-                    "fl" to "id,size_bytes",
+                    "fl" to "id,size_bytes,indexed_at",
                     "sort" to "id asc",
                     "rows" to pageSize.toString(),
                     "cursorMark" to cursor,
@@ -82,10 +82,13 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
             )
             val response = json.getJSONObject("response")
             val docs = response.getJSONArray("docs")
-            val page = ArrayList<Pair<String, Long>>(docs.length())
+            // Each photo with the size it was indexed with and when it was written (epoch millis,
+            // 0 when unknown): the second is what lets "Re-read all" carry on where it stopped.
+            val page = ArrayList<Triple<String, Long, Long>>(docs.length())
             for (i in 0 until docs.length()) {
                 val d = docs.getJSONObject(i)
-                d.optString("id").takeIf { it.isNotEmpty() }?.let { page += it to d.optLong("size_bytes", -1L) }
+                val written = runCatching { java.time.Instant.parse(d.optString("indexed_at")).toEpochMilli() }.getOrDefault(0L)
+                d.optString("id").takeIf { it.isNotEmpty() }?.let { page += Triple(it, d.optLong("size_bytes", -1L), written) }
             }
             onPage(response.optLong("numFound"), page)
             val next = json.optString("nextCursorMark")
@@ -142,6 +145,16 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
             (0 until ids.length()).mapNotNull { k -> ids.optJSONObject(k)?.optString("val")?.takeIf { it.isNotEmpty() } }
                 .takeIf { it.size >= 2 }
         }
+    }
+
+    /**
+     * How many photos the index wrote before [millis] (epoch), in one request with no rows: what
+     * "Re-read all" still has to do, so its progress has a real total from the start.
+     */
+    suspend fun countWrittenBefore(millis: Long): Long {
+        val before = java.time.Instant.ofEpochMilli(millis).toString()
+        val json = select(listOf("q" to "*:*", "fq" to "indexed_at:[* TO $before}", "rows" to "0"))
+        return json.optJSONObject("response")?.optLong("numFound") ?: 0L
     }
 
     /**

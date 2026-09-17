@@ -55,6 +55,7 @@ import com.opensolr.photos.ui.theme.LocalPalette
 fun SyncScreen(state: UiState, viewModel: AppViewModel) {
     val p = LocalPalette.current
     var confirmReset by remember { mutableStateOf(false) }
+    var confirmReread by remember { mutableStateOf(false) }
     var confirmRebuildOcr by remember { mutableStateOf(false) }
     Column(
         Modifier
@@ -138,6 +139,9 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
                     modifier = Modifier.size(20.dp),
                 )
             }
+            HeaderItem("Re-read", onClick = { confirmReread = true }) {
+                Icon(painterResource(R.drawable.ic_reload), contentDescription = null, tint = p.ink, modifier = Modifier.size(20.dp))
+            }
             HeaderItem("Documents", onClick = { confirmRebuildOcr = true }) {
                 Icon(painterResource(R.drawable.ic_rebuild), contentDescription = null, tint = p.ink, modifier = Modifier.size(20.dp))
             }
@@ -147,7 +151,7 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            "Re-Sync takes new and deleted photos only. Stop ends the run that is going; the next one starts on its own. Documents reads the receipts, labels and screenshots again. Reset empties the index and reads every photo.",
+            "Re-Sync takes new and deleted photos only. Stop ends the run that is going; the next one starts on its own. Re-read sends every photo through Opensolr again without emptying anything, to pick up what Opensolr does better now. Documents reads the receipts, labels and screenshots again. Reset empties the index and reads every photo.",
             style = MaterialTheme.typography.bodySmall,
             color = p.muted,
         )
@@ -179,6 +183,27 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
             text = { Text("Photos that carry printed text go out of the index and the next sync puts them back, with the reading cleaned up. It costs nothing on your plan: a photo read once is never read again. Your tags are kept. Your photos are not touched.") },
             confirmButton = { TextButton(onClick = { confirmRebuildOcr = false; viewModel.rebuildOcr() }) { Text("Rebuild", color = p.accent) } },
             dismissButton = { TextButton(onClick = { confirmRebuildOcr = false }) { Text("Cancel", color = p.ink) } },
+            containerColor = p.paper,
+            titleContentColor = p.ink,
+            textContentColor = p.muted,
+        )
+    }
+
+    if (confirmReread) {
+        AlertDialog(
+            onDismissRequest = { confirmReread = false },
+            title = { Text("Re-read all photos?") },
+            text = {
+                Text(
+                    "Every photo goes through Opensolr again, as when it was first indexed, so it gets what Opensolr does now: " +
+                        "the words it is read into, the place, the people and its search vector. " +
+                        "Nothing is emptied: search keeps working the whole time, and each photo is simply written again. " +
+                        "Your tags, the people you named and your own wording are kept. Your photos are not touched. " +
+                        "If it stops, the next sync carries on where it was."
+                )
+            },
+            confirmButton = { TextButton(onClick = { confirmReread = false; viewModel.rereadAll() }) { Text("Re-read", color = p.accent) } },
+            dismissButton = { TextButton(onClick = { confirmReread = false }) { Text("Cancel", color = p.ink) } },
             containerColor = p.paper,
             titleContentColor = p.ink,
             textContentColor = p.muted,

@@ -1109,6 +1109,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * "Re-read all photos" (Cip, 2026-09-17): every photo goes through Opensolr again, as if
+     * picked for Re-sync, without emptying the index and without touching a file. The words,
+     * places, people and vectors are made again with whatever Opensolr does now; the owner's
+     * tags and wording are kept (from the phone, the files, or the index). Resumable: only
+     * photos written before now are read, so a stopped run carries on where it was.
+     */
+    fun rereadAll() {
+        if (_state.value.sync.running || com.opensolr.photos.sync.SyncWorker.running.get()) {
+            _state.update { it.copy(showBusyDialog = true) }
+            return
+        }
+        // A few minutes back, so a phone clock slightly ahead of the server's never makes a
+        // photo just written look old again.
+        prefs.rereadAllSince = System.currentTimeMillis() - 10 * 60 * 1000L
+        SyncScheduler.restartNow(context)
+    }
+
+    /**
      * Empties the index and syncs from nothing: the only way, from the phone, to have every
      * photo read again after Opensolr got better at reading them (Cip, 2026-09-15 - otherwise
      * a person stays on the old words for good, short of resetting the index on the website).

@@ -1,0 +1,1 @@
+Re-read on the Sync screen sends every photo through Opensolr again, to pick up everything it does better now, without emptying your index: search keeps working, your tags, people and wording are kept, and it carries on where it stopped. Group headings are smaller and quieter, on a faint band of the app's colour.

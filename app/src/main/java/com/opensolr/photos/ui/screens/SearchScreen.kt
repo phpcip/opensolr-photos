@@ -713,24 +713,18 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                             // Google Photos style: the tick on a heading takes the whole group.
                             // A long press on it starts selecting with that group already ticked.
                             val allPicked = state.selecting && row.ids.isNotEmpty() && state.selectedIds.containsAll(row.ids)
-                            // A solid band, so a heading reads as something to tap (Cip,
-                            // 2026-09-17): white on the dark theme, dark grey on the light one.
-                            val darkTheme = p.ink.red > 0.5f
-                            val band = when {
-                                darkTheme && row.level > 0 -> HEADING_DAY_DARK
-                                darkTheme -> HEADING_MONTH_DARK
-                                row.level > 0 -> HEADING_DAY_LIGHT
-                                else -> HEADING_MONTH_LIGHT
-                            }
-                            val onBand = if (darkTheme) Color(0xFF111111) else Color.White
+                            // A quiet band in the accent, so a heading still reads as something
+                            // to tap without shouting (Cip, 2026-09-17). Shared with the albums.
+                            val band = headingBand(row.level)
+                            val onBand = p.ink
                             Row(
                                 Modifier
                                     .fillMaxWidth()
                                     .padding(
                                         start = if (row.level > 0) 22.dp else 8.dp,
                                         end = 8.dp,
-                                        top = if (row.level > 0) 6.dp else 14.dp,
-                                        bottom = 6.dp,
+                                        top = if (row.level > 0) 4.dp else 10.dp,
+                                        bottom = 4.dp,
                                     )
                                     .clip(Corner)
                                     .background(band)
@@ -747,20 +741,20 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                     // Big enough to aim a thumb at: a heading is the tick that
                                     // takes the whole group and the fold (Cip, 2026-09-16).
                                     .padding(
-                                        start = 10.dp,
+                                        start = 8.dp,
                                         end = 10.dp,
-                                        top = if (row.level > 0) 8.dp else 10.dp,
-                                        bottom = if (row.level > 0) 8.dp else 10.dp,
+                                        top = if (row.level > 0) 5.dp else 7.dp,
+                                        bottom = if (row.level > 0) 5.dp else 7.dp,
                                     ),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Icon(
                                     if (row.collapsed) Icons.Filled.KeyboardArrowRight else Icons.Filled.KeyboardArrowDown,
                                     contentDescription = if (row.collapsed) "Open this group" else "Fold this group away",
-                                    tint = onBand,
-                                    modifier = Modifier.size(if (row.level > 0) 20.dp else 26.dp),
+                                    tint = p.accent,
+                                    modifier = Modifier.size(if (row.level > 0) 18.dp else 22.dp),
                                 )
-                                Spacer(Modifier.width(if (row.level > 0) 6.dp else 8.dp))
+                                Spacer(Modifier.width(6.dp))
                                 Text(
                                     row.text,
                                     style = headingStyle(row.level),
@@ -2525,11 +2519,14 @@ private fun Modifier.combinedClickableCompat(onClick: () -> Unit): Modifier = th
 /** The mark of a photo the phone could not read: a red frame and a red "!" (Cip, 2026-09-17). */
 private val SkippedRed = Color(0xFFE53E3E)
 
-/** The bands behind the grid's headings: month and day, per theme (Cip, 2026-09-17). */
-internal val HEADING_MONTH_LIGHT = Color(0xFF343A40)
-internal val HEADING_DAY_LIGHT = Color(0xFF6C757D)
-internal val HEADING_MONTH_DARK = Color(0xFFFFFFFF)
-internal val HEADING_DAY_DARK = Color(0xFFDEE2E6)
+/**
+ * The band behind a group heading (a month at level 0, a day under it), on the photos grid and in
+ * the albums alike: the app's accent, faint, stronger for a month than for a day. The text on it is
+ * the theme's own ink, so it reads the same on light and dark (Cip, 2026-09-17).
+ */
+@Composable
+internal fun headingBand(level: Int): Color =
+    LocalPalette.current.accent.copy(alpha = if (level > 0) 0.08f else 0.15f)
 
 /**
  * The type of a group heading: a month (level 0) or a day under it. A touch under the title
@@ -2537,5 +2534,5 @@ internal val HEADING_DAY_DARK = Color(0xFFDEE2E6)
  */
 @Composable
 internal fun headingStyle(level: Int): androidx.compose.ui.text.TextStyle =
-    if (level > 0) MaterialTheme.typography.titleMedium.copy(fontSize = 15.sp)
-    else MaterialTheme.typography.headlineSmall.copy(fontSize = 21.sp)
+    if (level > 0) MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp)
+    else MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp)

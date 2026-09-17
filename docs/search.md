@@ -40,8 +40,9 @@ phone's own haptics setting. Its visuals fade when the grid stops, but the strip
 the same animation there would be nothing to grab from a standing start.
 
 The grouping is done on the phone in `buildRows`, from `taken_at`, which every hit already carries; it costs
-no request. Headings sit on a solid band (dark grey on the light theme, white on the dark one) so they read as
-something to tap. A heading folds away with a tap and then says how many it hides, *September (1,480)*; the
+no request. Headings sit on a faint band of the app's accent (`headingBand`: 15% for a month, 8% for a day) with
+the theme's ink on it, so they read as something to tap on light and dark alike without competing with
+the photos. A heading folds away with a tap and then says how many it hides, *September (1,480)*; the
 expand all / collapse all button on the count line folds or opens every group of the view on screen at once.
 While selecting, a tap on a heading ticks its whole group — a month, or one day of it — meaning the photos
 loaded so far. The next page of results is asked for halfway through the last page loaded, so it is usually

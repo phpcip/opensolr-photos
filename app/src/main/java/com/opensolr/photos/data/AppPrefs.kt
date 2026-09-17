@@ -132,6 +132,15 @@ class AppPrefs(context: Context) {
      * Photo ids the user asked to read again ("Re-sync selected"). The next sync reads them
      * with CLIP regardless of the cache, then clears the set.
      */
+    /**
+     * "Re-read all photos" pressed at this time (epoch millis), 0 when not asked for: every photo
+     * the index wrote before it goes through Opensolr again. Cleared when a run has done them
+     * all, so a run that stops half way carries on from there (Cip, 2026-09-17).
+     */
+    var rereadAllSince: Long
+        get() = prefs.getLong(KEY_REREAD_ALL_SINCE, 0L)
+        set(value) = prefs.edit().putLong(KEY_REREAD_ALL_SINCE, value).apply()
+
     var resyncIds: Set<String>
         get() = prefs.getStringSet(KEY_RESYNC_IDS, emptySet())?.toSet() ?: emptySet()
         set(value) {
@@ -292,6 +301,7 @@ class AppPrefs(context: Context) {
         private const val KEY_REPORT = "last_report"
         private const val KEY_REBUILD = "rebuild_approved"
         private const val KEY_RESYNC_IDS = "resync_ids"
+        private const val KEY_REREAD_ALL_SINCE = "reread_all_since"
         private const val KEY_WARNED = "warned_keys"
         private const val KEY_CHOSEN_INDEX = "chosen_index"
         private const val KEY_NOTICE = "notice"

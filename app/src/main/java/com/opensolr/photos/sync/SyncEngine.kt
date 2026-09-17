@@ -150,6 +150,12 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             val forced = prefs.resyncIds
             forced.forEach { cache.clearWordRetry(it); cache.clearSkipped(it) }
             val skippedSizes = cache.skippedSizes()
+            val rereadSince = prefs.rereadAllSince
+            // How many photos Re-read still has to send, so the progress says "40 of 9,808" from
+            // the first photo on, never "20 of 20" (Cip, 2026-09-17).
+            val rereadCount = if (rereadSince > 0 && !rebuild) {
+                try { solr.countWrittenBefore(rereadSince).toInt() } catch (e: Exception) { 0 }
+            } else 0
             val needWords = if (rebuild || !aiAvailable) emptySet() else solr.idsWithoutWords() - cache.wordRetriesWaiting(System.currentTimeMillis())
             val phase = if (rebuild) "Rebuilding your index" else "Indexing photos"
 
@@ -258,7 +264,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                 // compares and acts on the page in hand: the download and the work overlap.
                 withFreshPassword(session, { connection = it; solr = SolrClient(it) }) {
                     coroutineScope {
-                    val pageChannel = Channel<Pair<Long, List<Pair<String, Long>>>>(capacity = 2)
+                    val pageChannel = Channel<Pair<Long, List<Triple<String, Long, Long>>>>(capacity = 2)
                     launch {
                         try {
                             solr.forEachSizePage { numFound, page -> pageChannel.send(numFound to page) }
@@ -275,14 +281,14 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                             // so once. However many there are, the run starts: it stops only if
                             // the battery gets low with no charger (Cip, 2026-09-16).
                             val atLeast = (local.size - skippedSizes.size - indexCount).coerceAtLeast(0) + forced.size + needWords.size
-                            expected = atLeast
+                            expected = atLeast + rereadCount
                             if (aiAvailable && limits != null) {
                                 val left = limits.photosLeftThisMonth
                                 if (left != null && left < atLeast) shortAllowance = warnShortAllowance(left, atLeast)
                             }
                         }
                         pages++
-                        for ((id, size) in page) {
+                        for ((id, size, written) in page) {
                             val photo = local[id]
                             if (photo == null) {
                                 toDelete += id
@@ -294,7 +300,9 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                             } else {
                                 unseen.remove(id)
                                 // A different size is a changed photo: everything again, as if new.
-                                if (size != photo.sizeBytes || id in forced || id in needWords) queue(photo)
+                                // "Re-read all photos": anything written before it was asked for.
+                                val reread = rereadSince > 0 && written < rereadSince
+                                if (size != photo.sizeBytes || id in forced || id in needWords || reread) queue(photo)
                             }
                         }
                         progress(if (total > 0) phase else "Comparing with your index")
@@ -324,6 +332,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             solr.commit()
             if (rebuild) prefs.rebuildApproved = false
             if (forced.isNotEmpty()) prefs.resyncIds = emptySet()
+            if (rereadSince > 0) prefs.rereadAllSince = 0L
             cache.removeAllExcept(local.keys)
             cache.keepSkippedOnly(local.keys)
             refreshAccount(session, connection)
