@@ -65,7 +65,9 @@ What you type is only ever sent to Solr as a bound parameter (`v=$uq`), and ever
 | Internet, network state | Opensolr | Yes |
 | Foreground service (data sync) | So Android does not stop a long sync half way | Yes |
 
-The app never writes to or moves your photos. It deletes one only when you select it and press *Delete*,
+The app never moves your photos and never changes the pictures. The only thing it writes into a file is the
+owner's own words, in XMP (`dc:subject` and `opensolr:Tags` for tags, `PersonInImage` for names,
+`opensolr:Meaning` for wording), when they are saved and after Android's write request. It deletes one only when you select it and press *Delete*,
 after its own warning; on Android 11 and newer Android asks for confirmation again and does the deleting.
 
 ## Threat model, briefly
