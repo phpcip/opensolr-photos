@@ -21,8 +21,8 @@ android {
         applicationId = "com.opensolr.photos"
         minSdk = 26
         targetSdk = 36
-        versionCode = 48
-        versionName = "2.3.0"
+        versionCode = 49
+        versionName = "2.3.1"
     }
 
     signingConfigs {

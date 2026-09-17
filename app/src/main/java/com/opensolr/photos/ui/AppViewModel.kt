@@ -578,7 +578,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             Actions.contentUris(context, listOf(hit)).firstOrNull()?.let { uri ->
                                 val keepTags = if (clean.isEmpty()) null else (PhotoReader.tagsIn(context, uri) + hit.customTags + clean).distinctWords()
                                 val keepNames = if (names.isEmpty()) null else (hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() } + names).distinctWords()
-                                PhotoReader.writeXmp(context, uri, hit.mime, keepNames, keepTags)
+                                // No wording field on this form: the owner's own wording, when this
+                                // phone keeps one, goes into the file with the tags; none, nothing
+                                // is touched (Cip, 2026-09-17).
+                                PhotoReader.writeXmp(context, uri, hit.mime, keepNames, keepTags, photoCache.getEdits(hit.id)?.meaning)
                             }
                         }
                     }

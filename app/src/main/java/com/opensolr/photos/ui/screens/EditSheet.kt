@@ -150,9 +150,12 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
         newPerson = ""
     }
 
+    // The owner's own wording, or null when the text is still what Opensolr saw.
+    fun ownWording(): String? = meaning.trim().takeIf { it.isNotEmpty() && it != clipWords }
+
     // Saves everything; tags and names go into the index whether or not the file could be written.
     fun finishSave(changedPersons: List<String>?) {
-        val wording = meaning.trim().takeIf { it.isNotEmpty() && it != clipWords }
+        val wording = ownWording()
         viewModel.saveEdits(hit, tags, wording, changedPersons, onDone = onDismiss)
     }
 
@@ -173,7 +176,7 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
         val namesChanged = persons != originalPersons
         if (result.resultCode == Activity.RESULT_OK) {
             Actions.contentUris(context, listOf(hit)).firstOrNull()?.let {
-                PhotoReader.writeXmp(context, it, hit.mime, if (namesChanged) persons else null, tags)
+                PhotoReader.writeXmp(context, it, hit.mime, if (namesChanged) persons else null, tags, ownWording(), clearMeaning = ownWording() == null)
             }
         }
         finishSave(if (namesChanged) persons else null)
@@ -408,7 +411,7 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                                     writeLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
                                 }
                                 else -> {
-                                    PhotoReader.writeXmp(context, uri, hit.mime, if (namesChanged) names else null, tags)
+                                    PhotoReader.writeXmp(context, uri, hit.mime, if (namesChanged) names else null, tags, ownWording(), clearMeaning = ownWording() == null)
                                     finishSave(if (namesChanged) names else null)
                                 }
                             }

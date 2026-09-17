@@ -198,7 +198,9 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                     // Tags edited on this phone first; otherwise the ones this app wrote into the file
                     // (opensolr:Tags only, never another app's keywords), so a reinstall keeps them.
                     val tags = edits?.tags ?: PhotoReader.opensolrTagsIn(context, photo)
-                    items += IngestItem(photo, jpeg, tags, edits?.meaning, PhotoReader.fileMd5(context, photo), edits?.persons ?: PhotoReader.personsIn(context, photo))
+                    // The same for the owner's wording of what the photo shows (opensolr:Meaning).
+                    val meaning = edits?.meaning ?: PhotoReader.opensolrMeaningIn(context, photo)
+                    items += IngestItem(photo, jpeg, tags, meaning, PhotoReader.fileMd5(context, photo), edits?.persons ?: PhotoReader.personsIn(context, photo))
                 }
                 if (items.isNotEmpty()) {
                     val results = try {

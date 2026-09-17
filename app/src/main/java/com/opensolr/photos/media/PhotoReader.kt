@@ -240,9 +240,17 @@ object PhotoReader {
      * turns the packet into bytes as ASCII, so "Țuțu" would otherwise be saved as "??u?u".
      * [personsIn] and exiftool both read the references back as the letters.
      */
-    fun writeXmp(context: Context, uri: Uri, mime: String, persons: List<String>?, tags: List<String>?): Boolean {
+    fun writeXmp(
+        context: Context,
+        uri: Uri,
+        mime: String,
+        persons: List<String>?,
+        tags: List<String>?,
+        meaning: String? = null,
+        clearMeaning: Boolean = false,
+    ): Boolean {
         if (mime !in setOf("image/jpeg", "image/png", "image/webp")) return false
-        if (persons == null && tags == null) return true
+        if (persons == null && tags == null && meaning == null && !clearMeaning) return true
         return try {
             context.contentResolver.openFileDescriptor(uri, "rw")?.use { pfd ->
                 val exif = ExifInterface(pfd.fileDescriptor)
@@ -253,6 +261,13 @@ object PhotoReader {
                 if (tags != null) {
                     packet = withProperty(packet, XMP_SUBJECT, bag("dc:subject", "xmlns:dc=\"http://purl.org/dc/elements/1.1/\"", tags))
                     packet = withProperty(packet, XMP_OPENSOLR_TAGS, bag("opensolr:Tags", "xmlns:opensolr=\"$OPENSOLR_NS\"", tags))
+                }
+                // The owner's own wording of what the photo shows, never CLIP's, which the
+                // server can always produce again (Cip, 2026-09-17).
+                if (meaning != null || clearMeaning) {
+                    val text = meaning?.trim()?.take(MEANING_MAX_CHARS).orEmpty()
+                    val property = if (text.isEmpty()) "" else "<opensolr:Meaning xmlns:opensolr=\"$OPENSOLR_NS\">${escapeXml(text)}</opensolr:Meaning>"
+                    packet = withProperty(packet, XMP_OPENSOLR_MEANING, property)
                 }
                 exif.setAttribute(ExifInterface.TAG_XMP, packet)
                 exif.saveAttributes()
@@ -294,6 +309,21 @@ object PhotoReader {
                     XMP_LI.findAll(bag).map { unescapeXml(it.groupValues[1]).trim() }.filter { it.isNotEmpty() }.distinct().toList()
                 }
             }
+    } catch (e: Exception) {
+        null
+    }
+
+    /**
+     * The owner's own wording this app wrote into [photo] (opensolr:Meaning), or null when the
+     * file carries none. Read at indexing, like [opensolrTagsIn].
+     */
+    fun opensolrMeaningIn(context: Context, photo: LocalPhoto): String? = try {
+        openExif(context, photo.uri)
+            ?.getAttributeBytes(ExifInterface.TAG_XMP)
+            ?.let { String(it, Charsets.UTF_8) }
+            ?.let { packet -> XMP_OPENSOLR_MEANING.find(packet)?.groupValues?.get(1) }
+            ?.let { unescapeXml(it).trim().take(MEANING_MAX_CHARS) }
+            ?.takeIf { it.isNotEmpty() }
     } catch (e: Exception) {
         null
     }
@@ -345,6 +375,12 @@ object PhotoReader {
 
     /** The namespace of the app's own XMP properties. */
     private const val OPENSOLR_NS = "https://opensolr.com/ns/photos/1.0/"
+
+    /** The longest wording kept, the same ceiling photos_ingest applies to meaning. */
+    const val MEANING_MAX_CHARS = 2000
+
+    /** The app's own copy of the owner's wording of what a photo shows. */
+    private val XMP_OPENSOLR_MEANING = Regex("<opensolr:Meaning(?:\\s[^>]*)?>(.*?)</opensolr:Meaning>", RegexOption.DOT_MATCHES_ALL)
 
     /** The app's own copy of the owner's tags. */
     private val XMP_OPENSOLR_TAGS = Regex("<opensolr:Tags(?:\\s[^>]*)?>(.*?)</opensolr:Tags>", RegexOption.DOT_MATCHES_ALL)

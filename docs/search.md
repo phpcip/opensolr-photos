@@ -123,6 +123,13 @@ a reinstall and keywords written by other apps never reach the index. The editor
 keywords of the file, to keep or remove; they go in only when saved. Edit writes exactly the saved list,
 Tag on a selection adds to what each file carries.
 
+The owner's own wording of what a photo shows goes into the file too, as `opensolr:Meaning`, capped at
+`PhotoReader.MEANING_MAX_CHARS` (2,000, the same ceiling `photos_ingest` applies). Only a wording the owner
+changed is written; CLIP's words are not, since the server can always produce them again, and *Reset* in
+the editor removes the property. Tag on a selection has no wording field: it writes the wording this phone
+keeps for a photo, if any, and otherwise leaves the property alone. At indexing the phone's own copy wins,
+then `opensolr:Meaning` from the file (`PhotoReader.opensolrMeaningIn`), then CLIP.
+
 ## The AI switch
 
 Next to the count above the grid, once something is typed. Greyed out and off where search by meaning

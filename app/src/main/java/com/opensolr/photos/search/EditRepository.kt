@@ -40,7 +40,7 @@ class EditRepository(private val context: Context) {
         val session = prefs.session ?: throw ServiceException("Sign in to edit photos")
         var connection = prefs.connection ?: throw ServiceException("Your index is not set up yet.")
         val clean = tags.distinctWords()
-        val wording = meaning?.trim()?.takeIf { it.isNotEmpty() }
+        val wording = meaning?.trim()?.take(com.opensolr.photos.media.PhotoReader.MEANING_MAX_CHARS)?.takeIf { it.isNotEmpty() }
         val names = persons?.distinctWords()
         cache.putEdits(id, PhotoCache.Edits(clean, wording, names ?: cache.getEdits(id)?.persons))
 

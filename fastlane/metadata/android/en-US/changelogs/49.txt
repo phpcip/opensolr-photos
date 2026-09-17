@@ -1,0 +1,1 @@
+Your own wording of what a photo shows is now saved into the photo file too, next to your tags and the people, so a reinstall or a reset of your index keeps all of it.
