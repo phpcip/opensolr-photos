@@ -53,22 +53,30 @@ What you type is trimmed to 300 characters and sent **only as the bound paramete
 
 ```
 uq          = dog on the beach
-lexicalRaw  = {!edismax qf="custom_tags_text^5 meaning^3 ocr_t^3 text file_name_text folder_text camera_text place_text" mm="2<65% 4<50% 8<40%" v=$uq}
+lexicalRaw  = {!edismax qf="custom_tags_text^5 meaning^2 ocr_t^3 persons_t^4 text file_name_text folder_text camera_text place_text^1" mm="2<65% 4<50% 8<40%" v=$uq}
 ```
+
+That is the words-only `qf`. In a hybrid search the lexical leg uses lighter weights, so the meaning leads
+and the words refine it: `custom_tags_text^0.5 meaning^0.2 ocr_t^0.4 persons_t^0.3 file_name_text
+folder_text camera_text place_text^0.1`.
 
 On a plan with vector search, the app first asks `embed` (with `is_query=1`) for the query's vector and
 hands both legs to Opensolr's `{!hybrid}` parser, the one search.opensolr.com runs:
 
 ```
 vectorQuery = {!knn f=embeddings topK=500}[0.0132, -0.0481, …]
-q           = {!hybrid lexical=$lexicalRaw vector=$vectorQuery mode=union alpha=0.5 topN=500}
+q           = {!hybrid lexical=$lexicalRaw vector=$vectorQuery mode=union alpha=0.8 topN=500}
 ```
 
 Each leg is scored on its own, normalised per query (BM25 to its maximum, kNN min-max over the candidates)
-and blended: `score = 0.5 * vector + 0.5 * lexical`. So a photo that matches the words (a tag, a name, a
-place) always ranks above one that only resembles them in meaning, and among word matches the meaning
-decides. The site search leans further toward meaning (alpha 0.85); photos carry hand-written tags, so the
-app blends evenly.
+and blended: `score = alpha * vector + (1 - alpha) * lexical`. `alpha` is `1 - AppPrefs.lexicalWeight`, the
+**Semantic ↔ Lexical Balance** slider in Me (0 = meaning only, 1 = words only, default 0.2, so alpha 0.8).
+No vector is asked for, and the search runs words only, on a plan without vector search, once the month's
+AI requests are used up, or for a single character (the embed endpoint refuses it). Nothing about that is
+shown on the photos screen; the reasons are in Me.
+
+The photo's own vector is made of, in order: the people, the owner's tags, what it shows, the country, the
+city and the region (`Api_lib::_photos_embedding_text` at indexing, `SyncEngine.embeddingText` on an edit).
 
 Without vector search, or when the month's AI requests are used up, or when the vector service does not
 answer, the same request runs with `q={!bool should=$lexicalRaw}` and the app says so above the results.
@@ -90,8 +98,12 @@ names are read the way a file name is read, and a photo that carries none is ind
 Accent folding applies as everywhere else, so a name written with diacritics is found without them and the
 other way round.
 
-You can add, change or remove the names yourself in **Edit**, under *People*. They are written into the
-file's XMP (`PhotoReader.writePersons`, after Android asks once for permission to change the photo), so
+You can add, change or remove the names yourself in **Edit**, under *People*, or add them to many photos at
+once from **Tag** in the selection bar; the names already in the index are suggested from a facet on
+`persons_ss` (`SearchRepository.personSuggestions`), where every name is kept whole. Two spellings of one
+name (case, diacritics, spaces: `Words.fold` on the phone, `Api_lib::photos_word_key` on the server) are
+kept once. They are written into the
+file's XMP (`PhotoReader.writeXmp`, after Android asks once for permission to change the photo), so
 any other app sees them too, and into `persons_t` in the index at once. Names outside ASCII are written
 as XML character references, which every XMP reader turns back into letters. The names are kept on the
 phone as well (`PhotoCache` edits), so a later read of the photo sends them again.
@@ -101,9 +113,20 @@ packet to a `String` as ASCII, which turns a name with diacritics into question 
 .personsIn` decodes the raw bytes as UTF-8 and the names travel to `photos_ingest` as JSON, in the `persons`
 field of the photo.
 
+## Tags written into the photos
+
+Saving tags (Edit, or Tag on a selection) writes them into the file's XMP on the phone, after Android's
+write request, twice: as `dc:subject`, the keywords every photo manager shows, and as `opensolr:Tags` in
+the app's own namespace (`https://opensolr.com/ns/photos/1.0/`), which other apps neither show nor change.
+At indexing only `opensolr:Tags` is read (`PhotoReader.opensolrTagsIn`), so the owner's tags come back after
+a reinstall and keywords written by other apps never reach the index. The editor does show the `dc:subject`
+keywords of the file, to keep or remove; they go in only when saved. Edit writes exactly the saved list,
+Tag on a selection adds to what each file carries.
+
 ## The AI switch
 
-Next to the count above the grid, once something is typed. On, the search blends meaning with words
+Next to the count above the grid, once something is typed. Greyed out and off where search by meaning
+cannot run (no vector search on the plan, or no AI requests left this month). On, the search blends meaning with words
 (the hybrid query below). Off, the vector leg is left out entirely and the search is purely lexical —
 which is what you want for an exact code, a receipt number or a product reference, where the vector
 only drags the answer away from the thing you asked for. The same switch search.opensolr.com carries.
@@ -155,7 +178,7 @@ horizontally scrolling row.
 |---|---|
 | Year | `fq={!term f=year v=$f_year}` and `f_year=2024` |
 | Printed text | `fq=ocr_t:*`, or `-ocr_t:*` for photos without |
-| People | `fq=persons_t:*`, or `-persons_t:*` |
+| People | `fq={!terms f=persons_ss tag=persons_ss separator=\| v=$f_persons_ss}`: the names, each whole, from the `persons_ss` string field (`persons_t` is analysed text and stays for search) |
 | Documents | `fq={!lucene v=$doc_q}` with `doc_q=meaning:(receipt OR invoice OR certificate OR label OR …)` — the server's own TEXT_FAMILY_WORDS list run against `meaning`, which is those words joined. A document read badly is still a document, so this is not the same as having printed text |
 | Taken between | `fq={!lucene v=$taken_q}` and `taken_q=taken_at:[2025-07-01T00:00:00Z TO 2025-07-08T23:59:59Z]`. Both days included; the clause travels as one bound parameter, and its two ends are formatted from a Long, so they can only ever be timestamps |
 | Folder | `fq={!term f=folder v=$f_folder}` and `f_folder=DCIM/Camera/` |
@@ -193,12 +216,17 @@ tap away.
 Pages of 60, loaded as you scroll. Thumbnails are decoded from the photos on the phone; nothing is
 downloaded to draw the grid.
 
+- **The buttons above the grid**, left to right: the AI switch (with a query), Filters, Duplicates, the red
+  *!* for photos the phone could not read (when there are some), Reload, Expand / Collapse all, and Check
+  all / none, which ticks every photo of the view so a whole result set can be tagged at once. The count
+  beside them is compact (`Actions.formatCompact`: 842, 1.2K), and while selecting it reads ✓ and the number.
 - **Tap** opens the photo full screen inside the app (`PhotoViewer`), at its own size rather than from the
   thumbnail. It is a `HorizontalPager` over the hits themselves, so a swipe left or right walks the result
   set in its own order — the whole reason it exists: the gallery knows nothing about your search, so
   swiping there walks the camera roll. Nearing the end of what is loaded asks for the next page, so the
-  swipe runs as far as the results do. Inside it: a tap shows the actions (*Edit*, *Gallery*, *Share*,
-  *Delete*), a swipe up opens the details sheet a long press gives on the grid, a swipe down returns to the
+  swipe runs as far as the results do. Inside it: a tap shows every action of the photo as a row of icons
+  (*Tag*, *Gallery*, *Similar*, *Share*, *Map* and *Nearby* with a GPS position, *Delete*), a swipe up opens
+  the details, which carry no buttons, a swipe down returns to the
   grid — drawn over it, so its scroll position is never disturbed. *Gallery* is `ACTION_VIEW` on the photo's
   MediaStore URI with read permission granted; if the stored id went stale the app finds the photo again by
   its path, and if it is gone from the phone it says so and the next Re-Sync removes it from the index.
@@ -214,11 +242,6 @@ downloaded to draw the grid.
   on (firmer) or off (lighter), *Done*, and the next page arriving. `Haptics.tick` plays it through the view
   (`performHapticFeedback`), so it needs no VIBRATE permission and obeys the phone's own setting; one switch
   in Me gates every call site.
-- **Press and hold** shows the details: date, camera, lens, settings, size, folder, location as *City,
-  Country*, and the words Opensolr read the photo into. At the bottom, one row of labelled icons:
-  *Edit* (tags and words), *Gallery* (open it in the gallery app), *Similar* (photos like this one, see
-  [duplicates](duplicates.md)), and, only when the photo carries a GPS position, *Map* (the app's
-  [map](map.md) centred on it) and *Nearby* (a 5 km radius search).
 - **Reload**: swipe down on the grid, tap the reload icon next to the count, or come back from another
   screen; the results are read again from the index. The swipe and the icon are asked for by hand
   (`AppViewModel.forceRefresh`), so they empty the [search cache](#search-cache) first and always reach

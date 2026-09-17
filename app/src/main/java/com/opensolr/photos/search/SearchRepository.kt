@@ -76,9 +76,12 @@ data class SearchFilters(
             "year" to "Year", "city" to "City", "country" to "Country",
             "camera_make" to "Camera make", "camera_model" to "Camera model", "custom_tags" to "My tags",
             "labels" to "Meaning", "orientation" to "Orientation",
+            // The names of the people, each whole (persons_ss), instead of only "has people"
+            // (Cip, 2026-09-17).
+            "persons_ss" to "People",
         )
         /** Facet fields an index on the previous configuration does not have. */
-        val NEWER_FACETS = setOf("city", "region", "country", "labels", "custom_tags")
+        val NEWER_FACETS = setOf("city", "region", "country", "labels", "custom_tags", "persons_ss")
 
         /**
          * What makes a photo paperwork, copied from TEXT_FAMILY_WORDS in stream_server.py -
@@ -420,6 +423,7 @@ class SearchRepository(private val context: Context) {
             .put("type", "terms").put("field", field).put("mincount", ALBUM_MIN).put("limit", limit).put("sort", sort)
             .put("facet", JSONObject().put("cover", cover).apply(extra))
         val facet = JSONObject()
+            .put("people", kind("persons_ss", 100))
             .put("tags", kind("custom_tags", 100))
             .put("things", kind("labels", ALBUM_THINGS))
             .put("cities", kind("city", 50))
@@ -444,8 +448,9 @@ class SearchRepository(private val context: Context) {
             val make = b.optJSONObject("make")?.optJSONArray("buckets")?.optJSONObject(0)?.optString("val").orEmpty().trim()
             if (make.isEmpty() || model.lowercase().startsWith(make.lowercase())) model else "$make $model"
         }
-        // My tags, then Years, then Places, then the rest (Cip, 2026-09-17).
+        // People, My tags, then Years, then Places, then the rest (Cip, 2026-09-17).
         return listOf(
+            AlbumSection("People", albumsOf("people", "persons_ss")),
             AlbumSection("My tags", albumsOf("tags", "custom_tags")),
             AlbumSection("Years", albumsOf("years", "year")),
             AlbumSection("Places", albumsOf("cities", "city") + albumsOf("countries", "country")),
@@ -482,6 +487,33 @@ class SearchRepository(private val context: Context) {
     }
 
     /**
+     * Names of people already in the index, for the People field of a photo: the most used
+     * with nothing typed, the ones containing [typed] anywhere, any case, while typing. Read from
+     * persons_ss, where every name is kept whole; persons_t is analysed text and gives words.
+     */
+    suspend fun personSuggestions(typed: String, exclude: Collection<String>): List<String> {
+        val text = typed.trim().take(50)
+        val limit = if (text.isEmpty()) 5 else 8
+        val skip = exclude.map { com.opensolr.photos.data.Words.fold(it) }.toSet()
+        val params = ArrayList<Pair<String, String>>()
+        params += "q" to "*:*"
+        params += "rows" to "0"
+        params += "facet" to "true"
+        params += "facet.mincount" to "1"
+        params += "facet.sort" to "count"
+        params += "facet.field" to "persons_ss"
+        params += "facet.limit" to (limit + skip.size).toString()
+        if (text.isNotEmpty()) {
+            params += "facet.contains" to text
+            params += "facet.contains.ignoreCase" to "true"
+        }
+        val pairs = select(params).optJSONObject("facet_counts")?.optJSONObject("facet_fields")?.optJSONArray("persons_ss") ?: return emptyList()
+        return (0 until pairs.length() / 2).map { pairs.optString(it * 2) }
+            .filter { it.isNotBlank() && com.opensolr.photos.data.Words.fold(it) !in skip }
+            .take(limit)
+    }
+
+    /**
      * Suggestions while tagging a photo, in ONE request: the owner's own tags first, then words
      * CLIP read the photos into, each ordered by how many photos carry it. With nothing typed,
      * the five most used of each; while typing, the ones containing [typed] anywhere, any case
@@ -492,7 +524,7 @@ class SearchRepository(private val context: Context) {
         val text = typed.trim().take(50)
         val tagLimit = if (text.isEmpty()) 5 else 8
         val wordLimit = 5
-        val skip = exclude.map { it.lowercase() }.toSet()
+        val skip = exclude.map { com.opensolr.photos.data.Words.fold(it) }.toSet()
         val params = ArrayList<Pair<String, String>>()
         params += "q" to "*:*"
         params += "rows" to "0"
@@ -514,9 +546,9 @@ class SearchRepository(private val context: Context) {
             val pairs = fields?.optJSONArray(key) ?: return emptyList()
             return (0 until pairs.length() / 2).map { pairs.optString(it * 2) }.filter { it.isNotBlank() }
         }
-        val mine = valuesOf("mine").filter { it.lowercase() !in skip }.take(tagLimit)
-        val offered = skip + mine.map { it.lowercase() }
-        val words = valuesOf("words").filter { it.lowercase() !in offered }.distinctBy { it.lowercase() }.take(wordLimit)
+        val mine = valuesOf("mine").filter { com.opensolr.photos.data.Words.fold(it) !in skip }.take(tagLimit)
+        val offered = skip + mine.map { com.opensolr.photos.data.Words.fold(it) }
+        val words = valuesOf("words").filter { com.opensolr.photos.data.Words.fold(it) !in offered }.distinctBy { com.opensolr.photos.data.Words.fold(it) }.take(wordLimit)
         return TagSuggestions(mine, words)
     }
 
@@ -689,17 +721,22 @@ class SearchRepository(private val context: Context) {
             params += "uq" to text
             // The lexical leg: the owner's tags outrank CLIP's words, which outrank the rest.
             // Same edismax shape and the same mm as Opensolr's own site search ("flexible").
-            val vector = if (!wordsOnly && prefs.account?.vectorAllowed == true) {
+            // A single character has no meaning to embed, and the embed endpoint refuses it (404),
+            // which used to show "Search by meaning is unavailable" (Cip, 2026-09-17): words only.
+            // No vector search at all on a plan without it, or with the month's AI requests used
+            // up: words only, even though the index still holds vectors (Cip, 2026-09-17).
+            val aiUsable = prefs.account?.let { a -> a.vectorAllowed && (a.maxAiRequests <= 0 || a.aiRequestsUsed < a.maxAiRequests) } == true
+            val vector = if (!wordsOnly && aiUsable && text.trim().length >= 2) {
                 try {
                     api.embedQuery(session, connection.indexName, text)
                 } catch (e: QuotaExceededException) {
-                    notice = "Your plan's AI requests for this month are used up, so this search matches words only."
+                    notice = null
                     null
                 } catch (e: VectorNotAllowedException) {
-                    notice = "Your plan does not include vector search, so this search matches words only."
+                    notice = null
                     null
                 } catch (e: ServiceException) {
-                    notice = "Search by meaning is unavailable right now, so this search matches words only."
+                    notice = null
                     null
                 }
             } else null
@@ -718,7 +755,7 @@ class SearchRepository(private val context: Context) {
                 // scored on their own, normalised per query and blended (alpha = the vector's
                 // share), candidates from either leg (union).
                 params += "vectorQuery" to "{!knn f=embeddings topK=$KNN_TOP_K}" + vector.joinToString(",", "[", "]")
-                "{!hybrid lexical=\$lexicalRaw vector=\$vectorQuery mode=union alpha=$HYBRID_ALPHA topN=$KNN_TOP_K}"
+                "{!hybrid lexical=\$lexicalRaw vector=\$vectorQuery mode=union alpha=${String.format(Locale.US, "%.2f", 1f - prefs.lexicalWeight)} topN=$KNN_TOP_K}"
             } else {
                 "{!bool should=\$lexicalRaw}"
             }
@@ -863,7 +900,6 @@ class SearchRepository(private val context: Context) {
          * meaning, and among word matches the meaning decides. Opensolr's site search leans
          * further toward meaning (0.85) because product catalogues have no hand-written tags.
          */
-        private const val HYBRID_ALPHA = "0.8"
         /**
          * Recency as a multiplier: 1.0 for a photo taken today, 0.5 a year later, 0.33 after two.
          * 3.16e-11 is 1/(a year in ms); max(0, ...) guards a date in the future, which would make

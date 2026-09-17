@@ -209,6 +209,14 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_HAPTICS, true)
         set(value) = prefs.edit().putBoolean(KEY_HAPTICS, value).apply()
 
+    /**
+     * How much the words weigh against the meaning in a search by meaning, 0 (meaning only) to 1
+     * (words only), set on Me (Cip, 2026-09-17). The hybrid query's alpha is 1 minus this.
+     */
+    var lexicalWeight: Float
+        get() = prefs.getFloat(KEY_LEXICAL_WEIGHT, DEFAULT_LEXICAL_WEIGHT).coerceIn(0f, 1f)
+        set(value) = prefs.edit().putFloat(KEY_LEXICAL_WEIGHT, value.coerceIn(0f, 1f)).apply()
+
     var cacheSeconds: Int
         get() = prefs.getInt(KEY_CACHE_SECONDS, SearchCache.DEFAULT_SECONDS)
             .coerceIn(SearchCache.MIN_SECONDS, SearchCache.MAX_SECONDS)
@@ -293,6 +301,8 @@ class AppPrefs(context: Context) {
         private const val KEY_CACHE_SECONDS = "cache_seconds"
         private const val KEY_COLLAPSED = "collapsed_headings"
         private const val KEY_HAPTICS = "haptics_enabled"
+        private const val KEY_LEXICAL_WEIGHT = "lexical_weight"
+        const val DEFAULT_LEXICAL_WEIGHT = 0.2f
         private const val KEY_AUTH_VERIFIER = "auth_verifier"
         private const val KEY_AUTH_STATE = "auth_state"
         private const val KEY_AUTH_STARTED = "auth_started"

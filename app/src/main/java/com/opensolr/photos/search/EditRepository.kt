@@ -1,5 +1,7 @@
 package com.opensolr.photos.search
 
+import com.opensolr.photos.data.distinctWords
+
 import android.content.Context
 import com.opensolr.photos.data.AppPrefs
 import com.opensolr.photos.data.PhotoCache
@@ -37,9 +39,9 @@ class EditRepository(private val context: Context) {
     suspend fun save(id: String, tags: List<String>, meaning: String?, persons: List<String>? = null): JSONObject {
         val session = prefs.session ?: throw ServiceException("Sign in to edit photos")
         var connection = prefs.connection ?: throw ServiceException("Your index is not set up yet.")
-        val clean = tags.map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }
+        val clean = tags.distinctWords()
         val wording = meaning?.trim()?.takeIf { it.isNotEmpty() }
-        val names = persons?.map { it.trim() }?.filter { it.isNotEmpty() }?.distinctBy { it.lowercase() }
+        val names = persons?.distinctWords()
         cache.putEdits(id, PhotoCache.Edits(clean, wording, names ?: cache.getEdits(id)?.persons))
 
         var solr = SolrClient(connection)
@@ -55,7 +57,16 @@ class EditRepository(private val context: Context) {
         current.remove("score")
         if (clean.isEmpty()) current.remove("custom_tags") else current.put("custom_tags", JSONArray(clean))
         if (names != null) {
-            if (names.isEmpty()) current.remove("persons_t") else current.put("persons_t", names.joinToString(", "))
+            if (names.isEmpty()) {
+                current.remove("persons_t")
+                current.remove("persons_ss")
+            } else {
+                current.put("persons_t", names.joinToString(", "))
+                current.put("persons_ss", JSONArray(names))
+            }
+        } else if (!current.has("persons_ss") && current.optString("persons_t").isNotBlank()) {
+            // A photo indexed before persons_ss existed: the names, each whole, for suggestions.
+            current.put("persons_ss", JSONArray(current.optString("persons_t").split(',').map { it.trim() }.filter { it.isNotEmpty() }))
         }
         if (wording != null) current.put("meaning", wording)
         else current.optJSONArray("labels")?.let { labels ->
@@ -95,11 +106,12 @@ class EditRepository(private val context: Context) {
      * Photos not in the index yet are skipped; their tags are kept on the phone anyway and go up
      * with them at the next sync.
      */
-    suspend fun addTagsToAll(ids: List<String>, tags: List<String>, onProgress: (Int, Int) -> Unit = { _, _ -> }): Int {
+    suspend fun addTagsToAll(ids: List<String>, tags: List<String>, persons: List<String> = emptyList(), onProgress: (Int, Int) -> Unit = { _, _ -> }): Int {
         val session = prefs.session ?: throw ServiceException("Sign in to edit photos")
         var connection = prefs.connection ?: throw ServiceException("Your index is not set up yet.")
-        val clean = tags.map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }
-        if (clean.isEmpty() || ids.isEmpty()) return 0
+        val clean = tags.distinctWords()
+        val names = persons.distinctWords()
+        if ((clean.isEmpty() && names.isEmpty()) || ids.isEmpty()) return 0
 
         var solr = SolrClient(connection)
         var written = 0
@@ -120,13 +132,23 @@ class EditRepository(private val context: Context) {
                     ?.let { a -> (0 until a.length()).map { a.optString(it) } }
                     ?.filter { it.isNotBlank() }
                     ?: emptyList()
-                val merged = (existing + clean).distinctBy { it.lowercase() }
-                doc.put("custom_tags", JSONArray(merged))
+                val merged = (existing + clean).distinctWords()
+                if (merged.isNotEmpty()) doc.put("custom_tags", JSONArray(merged))
+                // The names are added the same way, to persons_t (searched) and persons_ss (the
+                // People filter, albums and suggestions), keeping the ones already there.
+                var mergedNames: List<String>? = null
+                if (names.isNotEmpty()) {
+                    val had = doc.optJSONArray("persons_ss")?.let { a -> (0 until a.length()).map { a.optString(it) } }
+                        ?: doc.optString("persons_t").split(',').map { it.trim() }
+                    mergedNames = (had.filter { it.isNotBlank() } + names).distinctWords()
+                    doc.put("persons_t", mergedNames.joinToString(", "))
+                    doc.put("persons_ss", JSONArray(mergedNames))
+                }
                 // Kept on the phone too, so a later rewrite of the photo carries them again.
                 val id = doc.optString("id")
                 if (id.isNotEmpty()) {
                     val edits = cache.getEdits(id)
-                    cache.putEdits(id, PhotoCache.Edits(merged, edits?.meaning, edits?.persons))
+                    cache.putEdits(id, PhotoCache.Edits(if (clean.isEmpty()) edits?.tags ?: existing else merged, edits?.meaning, mergedNames ?: edits?.persons))
                 }
             }
 

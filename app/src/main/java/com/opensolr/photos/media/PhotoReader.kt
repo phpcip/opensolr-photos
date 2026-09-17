@@ -226,22 +226,35 @@ object PhotoReader {
     private val XMP_LI = Regex("<rdf:li[^>]*>(.*?)</rdf:li>", RegexOption.DOT_MATCHES_ALL)
 
     /**
-     * Writes [persons] into the XMP of the photo at [uri] as Iptc4xmpExt:PersonInImage, the
-     * property Google Photos, Lightroom and digiKam use, replacing any names already there and
-     * keeping the rest of the packet. An empty list removes the property. Returns false when the
-     * file cannot be written (a format ExifInterface cannot save, or no write access).
+     * Writes the owner's words into the XMP of the photo at [uri], on the phone, keeping the rest
+     * of the packet: [persons] as Iptc4xmpExt:PersonInImage (the property Google Photos,
+     * Lightroom and digiKam use for names) and [tags] twice - as dc:subject, the keywords every
+     * photo manager reads, and as opensolr:Tags, a property of the app's own namespace that
+     * other apps neither show nor touch. Only opensolr:Tags is ever read back into the index
+     * ([opensolrTagsIn]), so keywords written by any other app never reach it (Cip, 2026-09-17).
+     * A null list leaves those properties as they are, an empty one removes them.
+     * Returns false when the file cannot be written (a format ExifInterface cannot save, or no
+     * write access).
      *
      * Every character outside ASCII is written as an XML character reference: ExifInterface
      * turns the packet into bytes as ASCII, so "Țuțu" would otherwise be saved as "??u?u".
      * [personsIn] and exiftool both read the references back as the letters.
      */
-    fun writePersons(context: Context, uri: Uri, mime: String, persons: List<String>): Boolean {
+    fun writeXmp(context: Context, uri: Uri, mime: String, persons: List<String>?, tags: List<String>?): Boolean {
         if (mime !in setOf("image/jpeg", "image/png", "image/webp")) return false
+        if (persons == null && tags == null) return true
         return try {
             context.contentResolver.openFileDescriptor(uri, "rw")?.use { pfd ->
                 val exif = ExifInterface(pfd.fileDescriptor)
-                val old = exif.getAttributeBytes(ExifInterface.TAG_XMP)?.let { String(it, Charsets.UTF_8) }
-                exif.setAttribute(ExifInterface.TAG_XMP, withPersons(old, persons))
+                var packet = exif.getAttributeBytes(ExifInterface.TAG_XMP)?.let { String(it, Charsets.UTF_8) }
+                if (persons != null) {
+                    packet = withProperty(packet, XMP_PERSONS, bag("Iptc4xmpExt:PersonInImage", "xmlns:Iptc4xmpExt=\"http://iptc.org/std/Iptc4xmpExt/2008-02-29/\"", persons))
+                }
+                if (tags != null) {
+                    packet = withProperty(packet, XMP_SUBJECT, bag("dc:subject", "xmlns:dc=\"http://purl.org/dc/elements/1.1/\"", tags))
+                    packet = withProperty(packet, XMP_OPENSOLR_TAGS, bag("opensolr:Tags", "xmlns:opensolr=\"$OPENSOLR_NS\"", tags))
+                }
+                exif.setAttribute(ExifInterface.TAG_XMP, packet)
                 exif.saveAttributes()
                 true
             } ?: false
@@ -251,17 +264,54 @@ object PhotoReader {
     }
 
     /**
-     * [packet] (or a new one when there is none) with its PersonInImage replaced by [persons].
+     * The keywords already in the XMP of [photo] (dc:subject), for adding to them rather than
+     * replacing them.
      */
-    private fun withPersons(packet: String?, persons: List<String>): String {
-        val property = if (persons.isEmpty()) "" else
-            "<Iptc4xmpExt:PersonInImage xmlns:Iptc4xmpExt=\"http://iptc.org/std/Iptc4xmpExt/2008-02-29/\"><rdf:Bag>" +
-                persons.joinToString("") { "<rdf:li>${escapeXml(it)}</rdf:li>" } +
-                "</rdf:Bag></Iptc4xmpExt:PersonInImage>"
+    fun tagsIn(context: Context, uri: Uri): List<String> = try {
+        context.contentResolver.openInputStream(uri)?.use { ExifInterface(it) }
+            ?.getAttributeBytes(ExifInterface.TAG_XMP)
+            ?.let { String(it, Charsets.UTF_8) }
+            ?.let { packet ->
+                XMP_SUBJECT.find(packet)?.groupValues?.get(2)?.let { bag ->
+                    XMP_LI.findAll(bag).map { unescapeXml(it.groupValues[1]).trim() }.filter { it.isNotEmpty() }.distinct().toList()
+                }
+            } ?: emptyList()
+    } catch (e: Exception) {
+        emptyList()
+    }
+
+    /**
+     * The tags this app wrote into [photo] (opensolr:Tags), or null when the file carries none.
+     * Read at indexing, so the owner's tags come back after a reinstall; dc:subject is never
+     * read there, because any other app may have filled it.
+     */
+    fun opensolrTagsIn(context: Context, photo: LocalPhoto): List<String>? = try {
+        openExif(context, photo.uri)
+            ?.getAttributeBytes(ExifInterface.TAG_XMP)
+            ?.let { String(it, Charsets.UTF_8) }
+            ?.let { packet ->
+                XMP_OPENSOLR_TAGS.find(packet)?.groupValues?.get(1)?.let { bag ->
+                    XMP_LI.findAll(bag).map { unescapeXml(it.groupValues[1]).trim() }.filter { it.isNotEmpty() }.distinct().toList()
+                }
+            }
+    } catch (e: Exception) {
+        null
+    }
+
+    /** One XMP bag property named [name], declaring its own namespace, or "" for no values. */
+    private fun bag(name: String, namespace: String, values: List<String>): String =
+        if (values.isEmpty()) "" else
+            "<$name $namespace><rdf:Bag>" + values.joinToString("") { "<rdf:li>${escapeXml(it)}</rdf:li>" } + "</rdf:Bag></$name>"
+
+    /**
+     * [packet] (or a new one when there is none) with the property matched by [existing]
+     * replaced by [property].
+     */
+    private fun withProperty(packet: String?, existing: Regex, property: String): String {
         val base = packet?.takeIf { it.contains("</rdf:Description>") }
             ?: return "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">" +
                 "<rdf:Description rdf:about=\"\">$property</rdf:Description></rdf:RDF></x:xmpmeta>"
-        val cleared = XMP_PERSONS.replace(base, "")
+        val cleared = existing.replace(base, "")
         val at = cleared.indexOf("</rdf:Description>")
         return cleared.substring(0, at) + property + cleared.substring(at)
     }
@@ -292,6 +342,15 @@ object PhotoReader {
                 else -> "'"
             }
         }
+
+    /** The namespace of the app's own XMP properties. */
+    private const val OPENSOLR_NS = "https://opensolr.com/ns/photos/1.0/"
+
+    /** The app's own copy of the owner's tags. */
+    private val XMP_OPENSOLR_TAGS = Regex("<opensolr:Tags(?:\\s[^>]*)?>(.*?)</opensolr:Tags>", RegexOption.DOT_MATCHES_ALL)
+
+    /** The dc:subject keywords, whichever namespace prefix the writer used. */
+    private val XMP_SUBJECT = Regex("<([A-Za-z0-9_]+:)?subject(?:\\s[^>]*)?>(.*?)</([A-Za-z0-9_]+:)?subject>", RegexOption.DOT_MATCHES_ALL)
 
     /** The Iptc4xmpExt:PersonInImage property, whichever namespace prefix the writer used. */
     private val XMP_PERSONS = Regex("<([A-Za-z0-9_]+:)?PersonInImage[^>]*>(.*?)</([A-Za-z0-9_]+:)?PersonInImage>", RegexOption.DOT_MATCHES_ALL)

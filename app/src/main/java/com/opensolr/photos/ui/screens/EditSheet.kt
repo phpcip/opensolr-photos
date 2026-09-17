@@ -1,5 +1,7 @@
 package com.opensolr.photos.ui.screens
 
+import com.opensolr.photos.data.distinctWords
+
 import android.app.Activity
 import android.os.Build
 import android.provider.MediaStore
@@ -86,6 +88,10 @@ private val Corner = RoundedCornerShape(2.dp)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit) {
+    // The photo as the results hold it now: whoever opened this may still have the copy from
+    // before an earlier save (Cip, 2026-09-17).
+    @Suppress("NAME_SHADOWING")
+    val hit = state.hits.firstOrNull { it.id == hit.id } ?: hit
     val p = LocalPalette.current
     // A tap anywhere outside the fields takes the focus away, so the tag suggestions close.
     val focusManager = LocalFocusManager.current
@@ -98,6 +104,16 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
     val originalPersons = remember(hit.id) { hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() } }
     var persons by remember(hit.id) { mutableStateOf(originalPersons) }
     var newPerson by remember(hit.id) { mutableStateOf("") }
+    // Names already in the index, offered while the People field has focus.
+    var personFieldFocused by remember(hit.id) { mutableStateOf(false) }
+    // Closed by a touch outside the People field and its list, like the tag suggestions.
+    var peopleDismissed by remember(hit.id) { mutableStateOf(false) }
+    var personSuggestions by remember(hit.id) { mutableStateOf(emptyList<String>()) }
+    LaunchedEffect(newPerson, personFieldFocused, persons) {
+        if (!personFieldFocused) return@LaunchedEffect
+        if (newPerson.isNotEmpty()) delay(250)
+        personSuggestions = viewModel.personSuggestions(newPerson, persons)
+    }
     // Autocomplete of the tag field: shown while it has focus, asked again a short pause after
     // the last keystroke, and whenever the photo's tags change (a picked tag leaves the list).
     var tagFieldFocused by remember(hit.id) { mutableStateOf(false) }
@@ -112,6 +128,7 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
     var sheetCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var tagRowCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var suggestionListCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    var personAreaCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     // Reopening the list (suggestionsDismissed back to false) asks for fresh suggestions too.
     LaunchedEffect(newTag, tagFieldFocused, tags, suggestionsDismissed) {
         if (!tagFieldFocused || suggestionsDismissed) { suggestionsLoading = false; return@LaunchedEffect }
@@ -129,28 +146,42 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
     fun addPerson() {
         val parts = newPerson.split(',').map { it.trim() }.filter { it.isNotEmpty() }
         if (parts.isEmpty()) return
-        persons = (persons + parts).distinctBy { it.lowercase() }
+        persons = (persons + parts).distinctWords()
         newPerson = ""
     }
 
-    // Saves everything; the names go into the index whether or not the file could be written.
+    // Saves everything; tags and names go into the index whether or not the file could be written.
     fun finishSave(changedPersons: List<String>?) {
         val wording = meaning.trim().takeIf { it.isNotEmpty() && it != clipWords }
         viewModel.saveEdits(hit, tags, wording, changedPersons, onDone = onDismiss)
     }
 
     // Android asks the owner once before the app may change a photo it did not create; on yes
-    // the names are written into the file's XMP, so any other app sees them too (Cip, 2026-09-17).
-    val writeLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            Actions.contentUris(context, listOf(hit)).firstOrNull()?.let { PhotoReader.writePersons(context, it, hit.mime, persons) }
+    // the tags and the names are written into the file's XMP, on the phone, so any other app sees
+    // them too (Cip, 2026-09-17).
+    val originalTags = remember(hit.id) { hit.customTags }
+    // The keywords already written in the file (by Lightroom, digiKam, Windows...) are offered
+    // here, when the owner edits, never at indexing: the tags in the index are the owner's own
+    // and nothing else goes in unasked (Cip, 2026-09-17). Kept only if the owner saves them.
+    LaunchedEffect(hit.id) {
+        val fromFile = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            Actions.contentUris(context, listOf(hit)).firstOrNull()?.let { PhotoReader.tagsIn(context, it) } ?: emptyList()
         }
-        finishSave(persons)
+        if (fromFile.isNotEmpty()) tags = (tags + fromFile).distinctWords()
+    }
+    val writeLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        val namesChanged = persons != originalPersons
+        if (result.resultCode == Activity.RESULT_OK) {
+            Actions.contentUris(context, listOf(hit)).firstOrNull()?.let {
+                PhotoReader.writeXmp(context, it, hit.mime, if (namesChanged) persons else null, tags)
+            }
+        }
+        finishSave(if (namesChanged) persons else null)
     }
 
     // Adds a picked suggestion as a tag and empties the field for the next one.
     fun pick(tag: String) {
-        tags = (tags + tag).distinctBy { it.lowercase() }
+        tags = (tags + tag).distinctWords()
         newTag = ""
     }
 
@@ -158,7 +189,7 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
     fun addTag() {
         val parts = newTag.split(',').map { it.trim() }.filter { it.isNotEmpty() }
         if (parts.isEmpty()) return
-        tags = (tags + parts).distinctBy { it.lowercase() }
+        tags = (tags + parts).distinctWords()
         newTag = ""
     }
 
@@ -180,12 +211,17 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                         fun inside(target: LayoutCoordinates?): Boolean =
                             sheet != null && target != null && sheet.isAttached && target.isAttached &&
                                 sheet.localBoundingBoxOf(target, clipBounds = false).contains(down.position)
-                        if (inside(tagRowCoords)) {
+                        if (inside(personAreaCoords)) {
+                            peopleDismissed = false
+                            suggestionsDismissed = true
+                        } else if (inside(tagRowCoords)) {
+                            peopleDismissed = true
                             // Back into the tag field: the list opens again, whether or not the
                             // field's focus changes (it may still hold it after a dismissal).
                             suggestionsDismissed = false
                         } else if (!inside(suggestionListCoords)) {
                             suggestionsDismissed = true
+                            peopleDismissed = true
                             focusManager.clearFocus(force = true)
                         }
                     }
@@ -296,11 +332,12 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                 }
                 Spacer(Modifier.height(10.dp))
             }
+            Column(Modifier.onGloballyPositioned { personAreaCoords = it }) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = newPerson,
-                    onValueChange = { newPerson = it },
-                    modifier = Modifier.weight(1f),
+                    onValueChange = { newPerson = it; peopleDismissed = false },
+                    modifier = Modifier.weight(1f).onFocusChanged { personFieldFocused = it.isFocused },
                     placeholder = { Text("Add a name", color = p.muted) },
                     singleLine = true,
                     shape = Corner,
@@ -309,6 +346,24 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = p.accent, unfocusedBorderColor = p.hairline, cursorColor = p.accent, focusedTextColor = p.ink, unfocusedTextColor = p.ink),
                 )
                 TextButton(onClick = { addPerson() }, enabled = newPerson.isNotBlank()) { Text("Add", color = p.accent) }
+            }
+            if (personFieldFocused && !peopleDismissed && personSuggestions.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(p.paper, Corner)
+                        .border(1.dp, p.hairline, Corner)
+                ) {
+                    SuggestionHeading("People in your photos")
+                    personSuggestions.forEach { name ->
+                        SuggestionRow(name, onPick = {
+                            persons = (persons + name).distinctWords()
+                            newPerson = ""
+                        })
+                    }
+                }
+            }
             }
             Text("Saved into the photo itself, so other apps see the names too.", style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.padding(top = 6.dp))
             Spacer(Modifier.height(20.dp))
@@ -341,19 +396,20 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                         addPerson()
                         // The wording is an edit only when it differs from what Opensolr saw.
                         val names = persons
-                        if (names == originalPersons) {
-                            finishSave(null)
-                        } else {
+                        val namesChanged = names != originalPersons
+                        // Every save writes the tags into the file as well, changed or not: the
+                        // file and the index always carry the same tags (Cip, 2026-09-17).
+                        run {
                             val uri = Actions.contentUris(context, listOf(hit)).firstOrNull()
                             when {
-                                uri == null -> finishSave(names)
+                                uri == null -> finishSave(if (namesChanged) names else null)
                                 Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
                                     val request = MediaStore.createWriteRequest(context.contentResolver, listOf(uri))
                                     writeLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
                                 }
                                 else -> {
-                                    PhotoReader.writePersons(context, uri, hit.mime, names)
-                                    finishSave(names)
+                                    PhotoReader.writeXmp(context, uri, hit.mime, if (namesChanged) names else null, tags)
+                                    finishSave(if (namesChanged) names else null)
                                 }
                             }
                         }

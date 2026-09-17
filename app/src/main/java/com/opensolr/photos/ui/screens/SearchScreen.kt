@@ -232,6 +232,11 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     // still goes away on the second tap.
     val searchBarVisible = searchOpen || state.query.isNotBlank()
     val searchFocus = remember { FocusRequester() }
+    // The autocomplete closes on any tap outside the search line and its list, and comes back
+    // with the next keystroke.
+    var suggestionsHidden by remember { mutableStateOf(false) }
+    LaunchedEffect(state.query) { suggestionsHidden = false }
+    val outside = com.opensolr.photos.ui.rememberOutsideTap(onOutside = { suggestionsHidden = true })
     // Deleting is Android's job: from Android 11 the system shows its own confirmation and does
     // the removing, and only when it comes back OK are the photos dropped from the index too.
     var pendingDelete by remember { mutableStateOf(emptySet<String>()) }
@@ -310,7 +315,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             }
     }
 
-    Box(Modifier.fillMaxSize()) {
+    Box(with(outside) { Modifier.fillMaxSize().root() }) {
     Column(Modifier.fillMaxSize()) {
         // The header is the menu and only the menu (Cip, 2026-09-15): the app's logo first (the
         // Opensolr dashboard in the default browser), then every screen and action, each a small
@@ -369,7 +374,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         if (searchBarVisible) {
             LaunchedEffect(searchOpen) { if (searchOpen) searchFocus.requestFocus() }
             Row(
-                Modifier
+                with(outside) { Modifier.keep("search") }
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp, vertical = 4.dp)
                     .height(36.dp)
@@ -419,9 +424,9 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         }
 
         // Autocomplete: labels containing what was typed, shown under the search box.
-        if (searchBarVisible && state.suggestions.isNotEmpty() && state.query.isNotBlank()) {
+        if (searchBarVisible && !suggestionsHidden && state.suggestions.isNotEmpty() && state.query.isNotBlank()) {
             Column(
-                Modifier
+                with(outside) { Modifier.keep("suggestions") }
                     .fillMaxWidth()
                     .padding(horizontal = 16.dp)
                     .background(p.paper, Corner)
@@ -458,7 +463,9 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             // While selecting, this line says how many are picked: the header stays the menu.
             val countText = when {
-                state.selecting -> "${Actions.formatCount(state.selectedIds.size.toLong())} selected"
+                // Compact like the result count, with a tick before it instead of the word (Cip,
+                // 2026-09-17): "34 selected" did not fit beside the buttons.
+                state.selecting -> Actions.formatCompact(state.selectedIds.size.toLong())
                 state.searching && state.hits.isEmpty() -> "Searching…"
                 // Anchored to one photo: one group, so say what it is like instead of counting groups.
                 state.skippedMode ->
@@ -471,22 +478,30 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 // Compact, so it always fits beside the buttons and nothing moves (Cip, 2026-09-17).
                 else -> Actions.formatCompact(state.numFound)
             }
-            Text(countText, style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.weight(1f))
+            if (state.selecting) {
+                Icon(Icons.Filled.Check, contentDescription = "Selected", tint = p.accent, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(4.dp))
+            }
+            Text(countText, style = MaterialTheme.typography.bodySmall, color = if (state.selecting) p.accent else p.muted, modifier = Modifier.weight(1f))
             // AI: on, the search blends meaning with words; off, it matches words only. The same
             // switch search.opensolr.com carries, and it only means anything once something is
             // typed - browsing has no query to search by meaning (Cip, 2026-09-16). No border
             // around it: a switch already looks like something to touch, and a frame would make
             // it read as one more of the buttons beside it.
             if (state.query.isNotBlank()) {
+                // Greyed out and off where search by meaning cannot run: no vector search on the
+                // plan, or no AI requests left this month (Cip, 2026-09-17).
+                val aiUsable = state.account?.let { a -> a.vectorAllowed && (a.maxAiRequests <= 0 || a.aiRequestsUsed < a.maxAiRequests) } == true
                 Text(
                     "AI",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
-                    color = if (state.wordsOnly) p.muted else p.accent,
+                    color = if (state.wordsOnly || !aiUsable) p.muted else p.accent,
                     modifier = Modifier.padding(end = 2.dp),
                 )
                 Switch(
-                    checked = !state.wordsOnly,
+                    checked = aiUsable && !state.wordsOnly,
+                    enabled = aiUsable,
                     onCheckedChange = { viewModel.setWordsOnly(!it) },
                     colors = SwitchDefaults.colors(
                         checkedTrackColor = p.accentFill,
@@ -526,15 +541,6 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                     onClick = { viewModel.showSkipped() },
                 )
             }
-            // Fresh: recent photos are boosted among the matches, nothing is dropped or resorted.
-            if (state.query.isNotBlank()) {
-                IconAction(
-                    icon = R.drawable.ic_newest,
-                    label = if (state.freshBias) "Stop favouring recent photos" else "Favour recent photos",
-                    active = state.freshBias,
-                    onClick = { viewModel.setFreshBias(!state.freshBias) },
-                )
-            }
             // Reloads the results from the index, for photos a sync added in the meantime.
             // Reload keeps the view: duplicates stay duplicates, on the same slider stop. Pressed
             // on purpose, so held answers go and the index itself is asked.
@@ -559,6 +565,20 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                     onClick = {
                         Haptics.tick(view, strong = false)
                         viewModel.setAllHeadings(if (anyCollapsed) emptySet() else headingKeys)
+                    },
+                )
+            }
+            // Check all / check none: every photo of the view ticked at once, for tagging a whole
+            // result set - a search, an album, a group of look-alikes (Cip, 2026-09-17).
+            if (state.hits.isNotEmpty()) {
+                val allTicked = state.selecting && state.selectedIds.size >= state.hits.size && state.hits.all { it.id in state.selectedIds }
+                IconAction(
+                    icon = if (allTicked) R.drawable.ic_check_none else R.drawable.ic_check_all,
+                    label = if (allTicked) "Check none" else "Check all",
+                    active = allTicked,
+                    onClick = {
+                        Haptics.tick(view, strong = false)
+                        viewModel.selectAllPhotos(!allTicked)
                     },
                 )
             }
@@ -634,29 +654,6 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         // What the photos on screen have in common, straight from the facets the same /select
         // already returned: one tap narrows to it. Nothing here costs an extra request.
 
-        // A newer release on GitHub: a link to its page, the install is the user's and Android's.
-        state.update?.let { update ->
-            Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)) {
-                Notice(
-                    update.notes.ifBlank { "Download it from the releases page; it installs over this one and keeps everything." },
-                    title = "Version ${update.version} is available",
-                )
-                Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    AccentButton("Download", onClick = { Actions.openUrl(context, update.pageUrl) }, modifier = Modifier.weight(1f))
-                    GhostButton("Not now", onClick = { viewModel.dismissUpdate() }, modifier = Modifier.weight(1f))
-                }
-            }
-        }
-        // While the index is rebuilt for a newer configuration: search keeps working and finds
-        // the photos as they are written back (soft commit every 10 s).
-        if (state.sync.running && state.sync.phase in REBUILD_PHASES) {
-            Notice(
-                "Your photos are being added back; search finds them as they arrive" +
-                    (if (state.sync.total > 0) ": ${Actions.formatCount(state.sync.done.toLong())} of ${Actions.formatCount(state.sync.total.toLong())} photos written." else "."),
-                title = "Rebuilding your index",
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-            )
-        }
         // "Did you mean": the spellchecker's correction, one tap away.
         state.didYouMean?.takeIf { state.query.isNotBlank() }?.let { corrected ->
             Row(
@@ -671,10 +668,6 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             }
         }
         state.searchNotice?.let { Notice(it, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
-        // Words-only search, said once per typed search rather than silently.
-        if (state.query.isNotBlank() && state.searchNotice == null && state.hits.isNotEmpty() && state.account?.vectorAllowed == false) {
-            Notice("Words only: your plan has no photo recognition.", modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp))
-        }
         state.searchError?.let { Notice(it, title = "Search did not work", modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
 
         if (!state.searching && state.hits.isEmpty() && state.searchError == null) {
@@ -970,6 +963,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             topInset = topInset,
             bottomInset = bottomInset,
             onNeedMore = { if (!state.endReached && !state.searching) viewModel.search(reset = false) },
+            viewModel = viewModel,
             onDelete = { one ->
                 val sender = Actions.deleteRequest(context, Actions.contentUris(context, listOf(one)))
                 pendingDelete = setOf(one.id)
@@ -1746,8 +1740,9 @@ private fun FilterSheet(
             )
             facet("city")
             facet("country")
+            facet("persons_ss")
             SearchFilters.FACETS.map { it.first }
-                .filter { it !in setOf("year", "custom_tags", "city", "country") }
+                .filter { it !in setOf("year", "custom_tags", "city", "country", "persons_ss") }
                 .forEach { facet(it) }
 
             draft.near?.let { near ->
@@ -1775,12 +1770,6 @@ private fun FilterSheet(
                 yes = "Has OCR", no = "No OCR",
                 state = draft.hasOcr,
                 onChange = { onChange(draft.copy(hasOcr = it)) },
-            )
-            TriStateSection(
-                title = "People",
-                yes = "Has people", no = "No people",
-                state = draft.hasPeople,
-                onChange = { onChange(draft.copy(hasPeople = it)) },
             )
 
             Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -2038,6 +2027,8 @@ internal fun PhotoViewer(
     bottomInset: Dp,
     onNeedMore: () -> Unit,
     onDelete: (PhotoHit) -> Unit,
+    /** For the actions that lead elsewhere: similar photos, the map, photos nearby. */
+    viewModel: AppViewModel,
 ) {
     val context = LocalContext.current
     val pager = rememberPagerState(initialPage = start) { hits.size }
@@ -2312,15 +2303,25 @@ internal fun PhotoViewer(
                         ),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    // It opens the tags straight away, so it says what it does.
-                    ViewerAction("Tag", R.drawable.ic_tag) { editFor = hit }
-                    ViewerAction("Gallery", R.drawable.ic_open) { Actions.openPhoto(context, hit) }
+                    // Every action of a photo lives here, and only here: the details below the
+                    // photo carry none (Cip, 2026-09-17). Icons without words, a little bigger.
+                    // The ones that lead elsewhere close the photo first.
+                    ViewerAction("Tags, people and words", R.drawable.ic_tag) { editFor = hit }
+                    ViewerAction("Open in gallery", R.drawable.ic_open) { Actions.openPhoto(context, hit) }
+                    ViewerAction("Similar photos", R.drawable.ic_duplicates) { onClose(); viewModel.showSimilar(hit) }
                     ViewerAction("Share", R.drawable.ic_share) { Actions.sharePhotos(context, listOf(hit)) }
+                    hit.latLon?.let { (lat, lon) ->
+                        ViewerAction("Show on map", R.drawable.ic_map) { onClose(); viewModel.openMap(MapFocus(lat, lon, 15.0)) }
+                        ViewerIconAction("Photos nearby", Icons.Filled.LocationOn) { onClose(); viewModel.searchNear(lat, lon, 5.0) }
+                    }
                     ViewerAction("Delete", R.drawable.ic_delete) { onDelete(hit) }
                 }
             }
             // Closing the details is felt too, the firmer one, as opening them was (Cip, 2026-09-16).
-            sheetFor?.let { photo ->
+            // Always the photo as it is now in the results, never the copy taken when the sheet was
+            // opened: after a save the old copy lacked the new names (Cip, 2026-09-17).
+            sheetFor?.let { held ->
+                val photo = hits.firstOrNull { it.id == held.id } ?: held
                 onSheet(
                     photo,
                     { Haptics.tick(view, strong = true); sheetFor = null },
@@ -2329,7 +2330,8 @@ internal fun PhotoViewer(
             }
             // Leaving the tags puts the photo's details back, where they were entered from -
             // and with whatever was just saved showing on them (Cip, 2026-09-16).
-            editFor?.let { photo ->
+            editFor?.let { held ->
+                val photo = hits.firstOrNull { it.id == held.id } ?: held
                 onEditSheet(photo) {
                     editFor = null
                     sheetFor = photo
@@ -2341,24 +2343,37 @@ internal fun PhotoViewer(
 }
 
 /**
- * One action under the full screen photo: icon over a short label, on the dark bar.
+ * One action under the full screen photo: a framed icon on the dark bar, no word under it (Cip,
+ * 2026-09-17); [label] is what a screen reader says.
  */
 @Composable
 private fun RowScope.ViewerAction(label: String, icon: Int, onClick: () -> Unit) {
-    Column(
+    ViewerActionFrame(onClick) {
+        Icon(painterResource(icon), contentDescription = label, tint = Color.White, modifier = Modifier.size(26.dp))
+    }
+}
+
+/** The same action as [ViewerAction], for an icon that is a vector rather than a drawable. */
+@Composable
+private fun RowScope.ViewerIconAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+    ViewerActionFrame(onClick) {
+        Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(26.dp))
+    }
+}
+
+/** The frame every action under the full screen photo sits in. */
+@Composable
+private fun RowScope.ViewerActionFrame(onClick: () -> Unit, content: @Composable () -> Unit) {
+    Box(
         Modifier
             .weight(1f)
             .clip(Corner)
             // Framed like every other action in the app, so they read as buttons on the picture.
             .border(1.dp, Color.White.copy(alpha = 0.45f), Corner)
             .combinedClickableCompat(onClick)
-            .padding(vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(painterResource(icon), contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.height(3.dp))
-        Text(label, fontSize = 10.sp, lineHeight = 12.sp, color = Color.White, maxLines = 1, softWrap = false)
-    }
+            .padding(vertical = 10.dp),
+        contentAlignment = Alignment.Center,
+    ) { content() }
 }
 
 /**
@@ -2502,34 +2517,6 @@ internal fun DetailsSheet(
             if (hit.ocrText.isNotBlank()) {
                 SectionLabel("Text printed in the photo")
                 Text(hit.ocrText, style = MaterialTheme.typography.bodyMedium, color = p.muted, modifier = Modifier.padding(vertical = 12.dp))
-            }
-            // Everything this photo can do, as one row of small bordered icons with their words,
-            // the same shape as the header of the photos screen (Cip, 2026-09-16): there are too
-            // many of them now for full-width buttons.
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                // The same word and the same mark as on the photo itself: it opens the tags.
-                HeaderItem("Tag", onClick = { onEdit(hit) }) {
-                    Icon(painterResource(R.drawable.ic_tag), contentDescription = "Tags and words", tint = p.ink, modifier = Modifier.size(20.dp))
-                }
-                HeaderItem("Gallery", onClick = { Actions.openPhoto(context, hit) }) {
-                    Icon(painterResource(R.drawable.ic_open), contentDescription = "Open in gallery", tint = p.ink, modifier = Modifier.size(20.dp))
-                }
-                HeaderItem("Similar", onClick = { onDismiss(); onLeave(); viewModel.showSimilar(hit) }) {
-                    Icon(painterResource(R.drawable.ic_duplicates), contentDescription = "Show similar photos", tint = p.ink, modifier = Modifier.size(20.dp))
-                }
-                // The same sharing as the selection bar, for this one photo: the file itself goes
-                // straight from the phone, nothing through Opensolr.
-                HeaderItem("Share", onClick = { Actions.sharePhotos(context, listOf(hit)) }) {
-                    Icon(painterResource(R.drawable.ic_share), contentDescription = "Share this photo", tint = p.ink, modifier = Modifier.size(20.dp))
-                }
-                hit.latLon?.let { (lat, lon) ->
-                    HeaderItem("Map", onClick = { onDismiss(); onLeave(); viewModel.openMap(MapFocus(lat, lon, 15.0)) }) {
-                        Icon(painterResource(R.drawable.ic_map), contentDescription = "Show on map", tint = p.ink, modifier = Modifier.size(20.dp))
-                    }
-                    HeaderItem("Nearby", onClick = { onDismiss(); onLeave(); viewModel.searchNear(lat, lon, 5.0) }) {
-                        Icon(Icons.Filled.LocationOn, contentDescription = "Photos nearby", tint = p.ink, modifier = Modifier.size(20.dp))
-                    }
-                }
             }
             Spacer(Modifier.height(24.dp))
         }

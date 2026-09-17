@@ -1,5 +1,7 @@
 package com.opensolr.photos.ui
 
+import com.opensolr.photos.data.distinctWords
+
 import android.app.Application
 import android.content.Context
 import android.net.Uri
@@ -14,6 +16,7 @@ import com.opensolr.photos.data.SyncSchedule
 import com.opensolr.photos.index.IndexManager
 import com.opensolr.photos.media.MediaScanner
 import com.opensolr.photos.media.PhotoFolder
+import com.opensolr.photos.media.PhotoReader
 import com.opensolr.photos.net.AccountIndex
 import com.opensolr.photos.net.IndexLimitException
 import com.opensolr.photos.net.OpensolrApi
@@ -156,6 +159,8 @@ data class UiState(
     val updateResult: String? = null,
     /** How long an answer from the index may be reused, in seconds; the owner sets it in Me. */
     val cacheSeconds: Int = com.opensolr.photos.data.SearchCache.DEFAULT_SECONDS,
+    /** Semantic (0) to lexical (1) balance of a search by meaning, from Me. */
+    val lexicalWeight: Float = AppPrefs.DEFAULT_LEXICAL_WEIGHT,
     /** Whether the app answers gestures with a tap you can feel. */
     val hapticsEnabled: Boolean = true,
     /** How many answers are held right now, shown beside the button that clears them. */
@@ -334,7 +339,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshCacheInfo() {
         viewModelScope.launch {
             val held = withContext(Dispatchers.IO) { searches.cachedCount() }
-            _state.update { it.copy(cacheSeconds = prefs.cacheSeconds, cachedCount = held, hapticsEnabled = prefs.hapticsEnabled) }
+            _state.update { it.copy(cacheSeconds = prefs.cacheSeconds, cachedCount = held, hapticsEnabled = prefs.hapticsEnabled, lexicalWeight = prefs.lexicalWeight) }
         }
     }
 
@@ -342,6 +347,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * The owner sets how long an answer from the index may be reused. Never below a minute;
      * [AppPrefs.cacheSeconds] keeps it inside what the cache allows.
      */
+    /** The semantic / lexical balance of a search by meaning; the next search uses it. */
+    fun setLexicalWeight(value: Float) {
+        prefs.lexicalWeight = value
+        _state.update { it.copy(lexicalWeight = prefs.lexicalWeight) }
+    }
+
     /** The owner's choice about taps you can feel; taken up at once, everywhere. */
     fun setHaptics(on: Boolean) {
         prefs.hapticsEnabled = on
@@ -542,22 +553,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * making the owner watch (Cip, 2026-09-16). Written in batches, so it costs one AI request
      * per batch rather than one per photo.
      */
-    fun tagPhotos(tags: List<String>) {
+    fun tagPhotos(tags: List<String>, persons: List<String> = emptyList(), writeFiles: Boolean = false) {
         // One at a time: a second run started over the first would write the same photos twice
         // and the count on screen would mean nothing.
         if (_state.value.bulkTagging) return
         val targets = photosToTag()
         val ids = targets.map { it.id }
-        val clean = tags.map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }
-        if (ids.isEmpty() || clean.isEmpty()) return
+        val clean = tags.distinctWords()
+        val names = persons.distinctWords()
+        if (ids.isEmpty() || (clean.isEmpty() && names.isEmpty())) return
         _state.update { it.copy(bulkTagging = true, bulkTagError = null, bulkTagDone = 0, bulkTagTotal = ids.size) }
         viewModelScope.launch {
             try {
-                edits.addTagsToAll(ids, clean) { done, total ->
+                edits.addTagsToAll(ids, clean, names) { done, total ->
                     _state.update { it.copy(bulkTagDone = done, bulkTagTotal = total) }
                 }
                 // The index just changed: no cached answer may outlive the owner's own tags.
                 searches.clearCache()
+                // The tags go into each photo file too, on the phone, added to the keywords it
+                // already carries (Cip, 2026-09-17). Only when Android allowed the change.
+                if (writeFiles) {
+                    withContext(Dispatchers.IO) {
+                        targets.forEach { hit ->
+                            Actions.contentUris(context, listOf(hit)).firstOrNull()?.let { uri ->
+                                val keepTags = if (clean.isEmpty()) null else (PhotoReader.tagsIn(context, uri) + hit.customTags + clean).distinctWords()
+                                val keepNames = if (names.isEmpty()) null else (hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() } + names).distinctWords()
+                                PhotoReader.writeXmp(context, uri, hit.mime, keepNames, keepTags)
+                            }
+                        }
+                    }
+                }
                 // The photos on screen carry the new tags without asking the index again.
                 val tagged = ids.toSet()
                 _state.update { s ->
@@ -566,7 +591,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         selecting = false,
                         selectedIds = emptySet(),
                         hits = s.hits.map { hit ->
-                            if (hit.id in tagged) hit.copy(customTags = (hit.customTags + clean).distinctBy { it.lowercase() }) else hit
+                            if (hit.id !in tagged) hit else hit.copy(
+                                customTags = (hit.customTags + clean).distinctWords(),
+                                persons = if (names.isEmpty()) hit.persons else (hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() } + names).distinctWords().joinToString(", "),
+                            )
                         },
                     )
                 }
@@ -789,6 +817,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * Updates the search text without searching yet.
      */
+    /** Names already in the index for the People field; empty when the index cannot be asked. */
+    suspend fun personSuggestions(typed: String, onPhoto: Collection<String>): List<String> =
+        try {
+            searches.personSuggestions(typed, onPhoto)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            emptyList()
+        }
+
     /**
      * Suggestions for the tag field of the edit sheet: the owner's tags, then words from the
      * photos' meanings, matching [typed]. Empty when the index cannot be asked right now; a
@@ -921,6 +959,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Picks or unpicks a whole album section on the albums screen. */
     fun toggleSectionSelected(title: String) {
         _state.update { it.copy(selectedSections = if (title in it.selectedSections) it.selectedSections - title else it.selectedSections + title) }
+    }
+
+    /**
+     * Ticks every photo the view has loaded (a search, an album, the duplicates), or none when
+     * [all] is false, so a whole result set can be tagged at once (Cip, 2026-09-17).
+     */
+    fun selectAllPhotos(all: Boolean) {
+        _state.update {
+            if (all) it.copy(selecting = true, selectedIds = it.hits.map { h -> h.id }.toSet())
+            else it.copy(selecting = false, selectedIds = emptySet())
+        }
     }
 
     /** Picks every album section at once, or none when [all] is false. */

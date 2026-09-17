@@ -11,6 +11,7 @@ library: the current search and filters do not apply to them.
 
 | Section | Field | What is in it |
 |---|---|---|
+| **People** | `persons_ss` | Every person named on your photos |
 | **My tags** | `custom_tags` | Every tag you gave a photo |
 | **Years** | `year` | One album per year |
 | **Places** | `city`, then `country` | Cities first, then countries |

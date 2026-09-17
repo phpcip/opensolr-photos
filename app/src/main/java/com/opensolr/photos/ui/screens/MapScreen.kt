@@ -242,6 +242,7 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
             topInset = topInset,
             bottomInset = bottomInset,
             onNeedMore = {},
+            viewModel = viewModel,
             onDelete = { one ->
                 val sender = Actions.deleteRequest(context, Actions.contentUris(context, listOf(one)))
                 pendingDelete = setOf(one.id)

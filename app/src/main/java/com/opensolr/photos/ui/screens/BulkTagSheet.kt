@@ -1,5 +1,7 @@
 package com.opensolr.photos.ui.screens
 
+import com.opensolr.photos.data.distinctWords
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -83,6 +85,22 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
     var tagFieldFocused by remember { mutableStateOf(false) }
     var suggestions by remember { mutableStateOf(TagSuggestions(emptyList(), emptyList())) }
     var suggestionsLoading by remember { mutableStateOf(false) }
+    // Names of people to add, with the names already in the index offered as you type.
+    var persons by remember { mutableStateOf(emptyList<String>()) }
+    var newPerson by remember { mutableStateOf("") }
+    var personFieldFocused by remember { mutableStateOf(false) }
+    var personSuggestions by remember { mutableStateOf(emptyList<String>()) }
+    LaunchedEffect(newPerson, personFieldFocused, persons) {
+        if (!personFieldFocused) return@LaunchedEffect
+        if (newPerson.isNotEmpty()) delay(250)
+        personSuggestions = viewModel.personSuggestions(newPerson, persons)
+    }
+    fun addPerson() {
+        val parts = newPerson.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+        if (parts.isEmpty()) return
+        persons = (persons + parts).distinctWords()
+        newPerson = ""
+    }
 
     // The same autocomplete as one photo's editor: the owner's own tags first, then words the
     // photos were read into, asked again a short pause after the last keystroke.
@@ -98,16 +116,39 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
     }
 
     fun pick(tag: String) {
-        tags = (tags + tag).distinctBy { it.lowercase() }
+        tags = (tags + tag).distinctWords()
         newTag = ""
     }
 
     fun addTag() {
         val parts = newTag.split(',').map { it.trim() }.filter { it.isNotEmpty() }
         if (parts.isEmpty()) return
-        tags = (tags + parts).distinctBy { it.lowercase() }
+        tags = (tags + parts).distinctWords()
         newTag = ""
     }
+
+    // One request from Android for every photo of the batch; on yes the tags go into each file
+    // too. The sheet stays until Android answers, so the answer has somewhere to land.
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var pendingTags by remember { mutableStateOf(emptyList<String>()) }
+    var pendingPersons by remember { mutableStateOf(emptyList<String>()) }
+    val writeLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        viewModel.tagPhotos(pendingTags, pendingPersons, writeFiles = result.resultCode == android.app.Activity.RESULT_OK)
+        onDismiss()
+    }
+
+    // Any tap outside a field and its suggestions closes the suggestions (Cip, 2026-09-17).
+    var tagsDismissed by remember { mutableStateOf(false) }
+    var peopleDismissed by remember { mutableStateOf(false) }
+    val outside = com.opensolr.photos.ui.rememberOutsideTap(
+        onInside = { area ->
+            if (area == "tags") tagsDismissed = false
+            if (area == "people") peopleDismissed = false
+        },
+        onOutside = { tagsDismissed = true; peopleDismissed = true },
+    )
 
     ModalBottomSheet(
         onDismissRequest = { if (!state.bulkTagging) onDismiss() },
@@ -116,7 +157,7 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
         shape = Corner,
     ) {
         Column(
-            Modifier
+            with(outside) { Modifier.root() }
                 .fillMaxWidth()
                 .fillMaxHeight()
                 .verticalScroll(rememberScrollState())
@@ -160,10 +201,10 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
                 }
                 Spacer(Modifier.height(10.dp))
             }
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(with(outside) { Modifier.keep("tags") }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(
                     value = newTag,
-                    onValueChange = { newTag = it },
+                    onValueChange = { newTag = it; tagsDismissed = false },
                     modifier = Modifier.weight(1f).onFocusChanged { tagFieldFocused = it.isFocused },
                     placeholder = { Text("Add a tag, e.g. Maria, holiday 2021", color = p.muted) },
                     singleLine = true,
@@ -182,10 +223,10 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
                     LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp), color = p.accent, trackColor = p.chip)
                 }
             }
-            if (tagFieldFocused && !suggestions.isEmpty) {
+            if (tagFieldFocused && !tagsDismissed && !suggestions.isEmpty) {
                 Spacer(Modifier.height(6.dp))
                 Column(
-                    Modifier
+                    with(outside) { Modifier.keep("tagList") }
                         .fillMaxWidth()
                         .background(p.paper, Corner)
                         .border(1.dp, p.hairline, Corner)
@@ -204,6 +245,63 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
                 }
             }
 
+            Spacer(Modifier.height(20.dp))
+            SectionLabel("People to add")
+            Spacer(Modifier.height(10.dp))
+            if (persons.isNotEmpty()) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    persons.forEach { person ->
+                        Row(
+                            Modifier
+                                .clip(Corner)
+                                .background(p.paper)
+                                .border(1.dp, p.accent, Corner)
+                                .clickable(enabled = !state.bulkTagging) { persons = persons - person }
+                                .padding(horizontal = 10.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(person, style = MaterialTheme.typography.labelSmall, color = p.accent)
+                            Spacer(Modifier.size(4.dp))
+                            Icon(Icons.Filled.Close, contentDescription = "Remove", tint = p.accent, modifier = Modifier.size(14.dp))
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+            }
+            Row(with(outside) { Modifier.keep("people") }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = newPerson,
+                    onValueChange = { newPerson = it; peopleDismissed = false },
+                    modifier = Modifier.weight(1f).onFocusChanged { personFieldFocused = it.isFocused },
+                    placeholder = { Text("Add a name", color = p.muted) },
+                    singleLine = true,
+                    enabled = !state.bulkTagging,
+                    shape = Corner,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { addPerson() }),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = p.accent, unfocusedBorderColor = p.hairline, cursorColor = p.accent, focusedTextColor = p.ink, unfocusedTextColor = p.ink),
+                )
+                TextButton(onClick = { addPerson() }, enabled = newPerson.isNotBlank() && !state.bulkTagging) { Text("Add", color = p.accent) }
+            }
+            if (personFieldFocused && !peopleDismissed && personSuggestions.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Column(
+                    with(outside) { Modifier.keep("peopleList") }
+                        .fillMaxWidth()
+                        .background(p.paper, Corner)
+                        .border(1.dp, p.hairline, Corner)
+                ) {
+                    BulkSuggestionHeading("People in your photos")
+                    personSuggestions.forEach { name ->
+                        BulkSuggestionRow(name, onPick = {
+                            persons = (persons + name).distinctWords()
+                            newPerson = ""
+                        })
+                    }
+                }
+            }
+            Text("The names each photo already has are kept. They are saved into the photos themselves too.", style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.padding(top = 6.dp))
+
             state.bulkTagError?.let {
                 Spacer(Modifier.height(12.dp))
                 Notice(it, title = "Not saved")
@@ -215,12 +313,22 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
                 AccentButton(
                     "Save",
                     onClick = {
-                        // Straight to the index, in the background: the sheet closes at once.
-                        viewModel.tagPhotos(tags + newTag.split(',').map { it.trim() }.filter { it.isNotEmpty() })
-                        onDismiss()
+                        // To the index in the background, and into the files once Android allows it.
+                        val all = (tags + newTag.split(',').map { it.trim() }.filter { it.isNotEmpty() }).distinctWords()
+                        val names = (persons + newPerson.split(',').map { it.trim() }.filter { it.isNotEmpty() }).distinctWords()
+                        val uris = Actions.contentUris(context, targets)
+                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && uris.isNotEmpty()) {
+                            pendingTags = all
+                            pendingPersons = names
+                            val request = android.provider.MediaStore.createWriteRequest(context.contentResolver, uris)
+                            writeLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(request.intentSender).build())
+                        } else {
+                            viewModel.tagPhotos(all, names, writeFiles = true)
+                            onDismiss()
+                        }
                     },
                     modifier = Modifier.weight(1f),
-                    enabled = tags.isNotEmpty() || newTag.isNotBlank(),
+                    enabled = tags.isNotEmpty() || newTag.isNotBlank() || persons.isNotEmpty() || newPerson.isNotBlank(),
                 )
             }
             Spacer(Modifier.height(24.dp))

@@ -195,7 +195,10 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                     val edits = cache.getEdits(photo.id)
                     // The md5 of the file itself goes up with it: the server only sees the small
                     // re-encoded copy, so it could never work this out on its own.
-                    items += IngestItem(photo, jpeg, edits?.tags, edits?.meaning, PhotoReader.fileMd5(context, photo), edits?.persons ?: PhotoReader.personsIn(context, photo))
+                    // Tags edited on this phone first; otherwise the ones this app wrote into the file
+                    // (opensolr:Tags only, never another app's keywords), so a reinstall keeps them.
+                    val tags = edits?.tags ?: PhotoReader.opensolrTagsIn(context, photo)
+                    items += IngestItem(photo, jpeg, tags, edits?.meaning, PhotoReader.fileMd5(context, photo), edits?.persons ?: PhotoReader.personsIn(context, photo))
                 }
                 if (items.isNotEmpty()) {
                     val results = try {
@@ -545,13 +548,19 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
         private const val HOUR_MS = 60 * 60 * 1000L
 
         /**
-         * The text a photo's vector is made of: what it shows (CLIP's words, or the owner's
-         * own wording), followed by the owner's tags. One place, shared with the edit path.
+         * The text a photo's vector is made of, in order of importance (Cip, 2026-09-17): the
+         * people in it, the owner's tags, what it shows (CLIP's words, or the owner's own
+         * wording), then the country, city and region. The server builds the same text at
+         * indexing (Api_lib::_photos_embedding_text). One place, shared with the edit path.
          */
         fun embeddingText(doc: JSONObject): String {
-            val tags = doc.optJSONArray("custom_tags")?.let { a -> (0 until a.length()).map { a.optString(it) }.filter { it.isNotBlank() } } ?: emptyList()
+            fun list(field: String) = doc.optJSONArray(field)?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList()
+            val persons = list("persons_ss").ifEmpty { doc.optString("persons_t").split(',') }
             val meaning = doc.optString("meaning").ifBlank { doc.optString("file_name").substringBeforeLast('.') }
-            return if (tags.isEmpty()) meaning else meaning + ", " + tags.joinToString(", ")
+            return (persons + list("custom_tags") + listOf(meaning, doc.optString("country"), doc.optString("city"), doc.optString("region")))
+                .map { it.trim() }
+                .filter { it.isNotEmpty() }
+                .joinToString(", ")
         }
     }
 }

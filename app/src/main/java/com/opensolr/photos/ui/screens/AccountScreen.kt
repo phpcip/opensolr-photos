@@ -79,6 +79,16 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
             enabled = !state.updateChecking,
             modifier = Modifier.fillMaxWidth(),
         )
+        // A newer release found by the daily check is said here, never on the photos screen
+        // (Cip, 2026-09-17: the main screen carries as few messages as possible).
+        if (state.updateResult == null) {
+            state.update?.let { newer ->
+                Spacer(Modifier.height(12.dp))
+                Notice(newer.notes.ifBlank { "Download it from the releases page; it installs over this one and keeps everything." }, title = "Version ${newer.version} is available")
+                Spacer(Modifier.height(10.dp))
+                AccentButton("Download ${newer.version}", onClick = { Actions.openUrl(context, newer.pageUrl) }, modifier = Modifier.fillMaxWidth())
+            }
+        }
         state.updateResult?.let { result ->
             Spacer(Modifier.height(12.dp))
             Notice(result, title = if (state.update != null) "Update available" else "Version")
@@ -159,6 +169,60 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                 onCheckedChange = { viewModel.setHaptics(it) },
                 colors = SwitchDefaults.colors(checkedTrackColor = p.accentFill, checkedThumbColor = p.onAccentFill, uncheckedTrackColor = p.chip, uncheckedBorderColor = p.hairline, uncheckedThumbColor = p.muted),
             )
+        }
+        Spacer(Modifier.height(28.dp))
+
+        // Semantic <-> lexical balance of a search by meaning, as the search platform's settings
+        // have it (Cip, 2026-09-17): 0 is meaning only, 1 is words only.
+        SectionLabel("Search tuning")
+        Spacer(Modifier.height(10.dp))
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Semantic \u2194 Lexical Balance", style = MaterialTheme.typography.bodyLarge, color = p.ink)
+                Text("Controls how much keyword matching contributes vs. semantic meaning.", style = MaterialTheme.typography.bodySmall, color = p.muted)
+            }
+            Spacer(Modifier.width(12.dp))
+            GhostButton(
+                "Reset",
+                onClick = { viewModel.setLexicalWeight(com.opensolr.photos.data.AppPrefs.DEFAULT_LEXICAL_WEIGHT) },
+                enabled = state.lexicalWeight != com.opensolr.photos.data.AppPrefs.DEFAULT_LEXICAL_WEIGHT &&
+                    state.account?.vectorAllowed == true,
+            )
+        }
+        // Only means something where search by meaning runs: with vector search on the plan and
+        // AI requests left this month. Otherwise shown greyed out, with the reason (Cip, 2026-09-17).
+        val limits = state.account
+        val balanceUsable = limits != null && limits.vectorAllowed &&
+            (limits.maxAiRequests <= 0 || limits.aiRequestsUsed < limits.maxAiRequests)
+        if (!balanceUsable) {
+            Text(
+                if (limits?.vectorAllowed == true) "Your plan's AI requests for this month are used up, so search matches words only and this has no effect until they reset."
+                else "Your plan does not include search by meaning, so search matches words only and this has no effect.",
+                style = MaterialTheme.typography.bodySmall, color = p.muted,
+                modifier = Modifier.padding(top = 6.dp),
+            )
+        }
+        val balanceView = androidx.compose.ui.platform.LocalView.current
+        var balance by remember(state.lexicalWeight) { mutableStateOf(state.lexicalWeight) }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text("Semantic", style = MaterialTheme.typography.bodySmall, color = p.muted)
+            androidx.compose.material3.Slider(
+                value = balance,
+                onValueChange = { v ->
+                    val stepped = (Math.round(v * 20) / 20f).coerceIn(0f, 1f)
+                    if (stepped != balance) com.opensolr.photos.ui.Haptics.tick(balanceView, strong = false)
+                    balance = stepped
+                },
+                onValueChangeFinished = { viewModel.setLexicalWeight(balance) },
+                valueRange = 0f..1f,
+                steps = 19,
+                enabled = balanceUsable,
+                colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = p.accentFill, activeTrackColor = p.accentFill, inactiveTrackColor = p.chip, activeTickColor = p.accentFill, inactiveTickColor = p.hairline),
+                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+            )
+            Text("Lexical", style = MaterialTheme.typography.bodySmall, color = p.muted)
+            Spacer(Modifier.width(10.dp))
+            Text(String.format(java.util.Locale.US, "%.2f", balance), style = MaterialTheme.typography.bodyLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = p.ink)
         }
         Spacer(Modifier.height(28.dp))
 
