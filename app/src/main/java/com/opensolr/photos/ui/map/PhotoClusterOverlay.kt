@@ -193,7 +193,12 @@ class PhotoClusterOverlay(
             .allowHardware(false)
             .target(
                 onSuccess = { drawable ->
-                    (drawable as? BitmapDrawable)?.bitmap?.let { thumbs.put(id, it) }
+                    (drawable as? BitmapDrawable)?.bitmap?.let {
+                        thumbs.put(id, it)
+                        // Once cached the photo may be asked for again: the cache holds 64, and a
+                        // thumbnail it drops must load again instead of staying a blank chip.
+                        loading.remove(id)
+                    }
                     mapView.postInvalidate()
                 },
                 onError = { loading.remove(id) },

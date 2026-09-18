@@ -1,0 +1,1 @@
+Map: photo thumbnails no longer turn into dark squares after zooming in and out. A thumbnail that left the phone's memory is loaded again instead of staying blank.
