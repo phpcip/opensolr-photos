@@ -324,7 +324,7 @@ private fun GroupSheet(cluster: PhotoCluster, onDismiss: () -> Unit, onShowPhoto
                 items(cluster.pins, key = { it.hit.id }) { pin ->
                     val uri = remember(pin.hit.mediaId) { ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, pin.hit.mediaId) }
                     AsyncImage(
-                        model = ImageRequest.Builder(context).data(uri).size(320).crossfade(true).build(),
+                        model = ImageRequest.Builder(context).data(uri).size(320).setParameter("bytes", pin.hit.sizeBytes).crossfade(true).build(),
                         contentDescription = pin.hit.meaning.ifBlank { pin.hit.fileName },
                         contentScale = ContentScale.Crop,
                         modifier = Modifier

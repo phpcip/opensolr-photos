@@ -317,24 +317,42 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * A picture on the phone was added, changed or deleted. After three quiet seconds (an
-     * editor saving a file reports several changes in a row), a sync is started when any of
-     * the changes is in a folder the owner chose. A sync that finds nothing new costs no
-     * request, and one already running is followed by another, since it may have read the
-     * folder before the change.
+     * A picture on the phone was added, changed or deleted. Once the burst settles (an editor
+     * saving a file reports several changes in a row), a sync is started only when a change is
+     * in a folder the owner chose: a screenshot or a chat picture elsewhere starts nothing.
      */
     private fun onMediaChanged(uris: Collection<Uri>) {
         if (prefs.session == null || prefs.connection == null) return
         changedUris.addAll(uris)
         mediaChangeJob?.cancel()
         mediaChangeJob = viewModelScope.launch {
-            kotlinx.coroutines.delay(3000)
+            kotlinx.coroutines.delay(MEDIA_SETTLE_MS)
             val batch = changedUris.toList()
             changedUris.clear()
-            val relevant = withContext(Dispatchers.IO) { MediaScanner.touchesFolders(context, batch, prefs.folders) }
-            if (!relevant) return@launch
-            if (_state.value.sync.running) mediaChangedDuringSync = true else SyncScheduler.runNow(context)
+            val relevant = withContext(Dispatchers.IO) { MediaScanner.touchesFolders(context, batch, prefs.folders, prefs.folderStamp) }
+            if (relevant) syncForChange()
         }
+    }
+
+    /**
+     * The app came to the front. If the process was gone meanwhile, nothing was listening to the
+     * pictures, so the chosen folders are compared with how the last sync left them - one
+     * MediaStore query - and a sync runs only when they differ.
+     */
+    fun onAppResumed() {
+        if (prefs.session == null || prefs.connection == null) return
+        viewModelScope.launch {
+            val stamp = withContext(Dispatchers.IO) { MediaScanner.folderStamp(context, prefs.folders) }
+            if (stamp != null && stamp != prefs.folderStamp) syncForChange()
+        }
+    }
+
+    /**
+     * Starts a sync for a change in the chosen folders, or queues one more after the sync that
+     * is running now, which may have read the folders before the change.
+     */
+    private fun syncForChange() {
+        if (_state.value.sync.running) mediaChangedDuringSync = true else SyncScheduler.runNow(context)
     }
 
     /**
@@ -898,6 +916,20 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         searchJob = viewModelScope.launch {
             val groups = withContext(Dispatchers.IO) { buildSkeleton(photoCache.takenTimes()) }
             val count = withContext(Dispatchers.IO) { photoCache.docCount() }
+            // Reloading the same view keeps the photos it shows, read again from the phone's copy
+            // in one query: emptying the list left the grid with headings only, it lost the photo
+            // it was anchored to, and every sync that wrote something threw the owner somewhere
+            // else in the list (Cip, 2026-09-18). Photos gone since drop out; new ones are fetched
+            // by their group, into their own place.
+            val shown = _state.value.hits
+            val kept = if (keepPosition && shown.isNotEmpty() && _state.value.searchedQuery.isEmpty()) {
+                withContext(Dispatchers.IO) {
+                    // In the order they were on screen: photos taken at the same moment have no
+                    // order of their own, and re-sorting shuffled them under the owner's finger.
+                    val fresh = photoCache.docsByIds(shown.map { it.id }).map { searches.hitOf(org.json.JSONObject(it)) }.associateBy { it.id }
+                    shown.mapNotNull { fresh[it.id] }
+                }
+            } else emptyList()
             kotlinx.coroutines.delay(SPINNER_MS)
             _state.update {
                 it.copy(
@@ -909,7 +941,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     skippedMode = false,
                     similarToId = null,
                     similarToHit = null,
-                    hits = emptyList(),
+                    hits = kept,
                     numFound = count.toLong(),
                     endReached = true,
                     searchedQuery = "",
@@ -2249,6 +2281,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
          * in no time, and a spinner that appears and vanishes in the same frame reads as broken.
          */
         private const val SPINNER_MS = 350L
+
+        /** How long the photo changes have to be quiet before they are looked at. */
+        private const val MEDIA_SETTLE_MS = 1500L
 
         /** How often the bar of a long piece of work is allowed to move. */
         private const val PROGRESS_MS = 100L

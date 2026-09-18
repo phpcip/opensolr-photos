@@ -142,6 +142,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -301,10 +302,14 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     }
     // Written back only after the grid has been put where it belongs, so the restore is never
     // overwritten by the 0 of a grid that has not been placed yet.
+    // The key is read from the rows on screen now, not from the list this effect started with:
+    // it outlives every reload, and the old list's row at the same number is another photo, so
+    // the grid was put back on the wrong one after each sync (Cip, 2026-09-18).
+    val currentRows by rememberUpdatedState(rows)
     LaunchedEffect(restored) {
         if (!restored) return@LaunchedEffect
         snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
-            .collect { (index, offset) -> viewModel.rememberGridPosition(rows.getOrNull(index)?.key, index, offset) }
+            .collect { (index, offset) -> viewModel.rememberGridPosition(currentRows.getOrNull(index)?.key, index, offset) }
     }
     LaunchedEffect(nearEnd, state.hits.size) {
         if (nearEnd && state.hits.isNotEmpty() && !state.endReached && !state.searching) {
@@ -1746,7 +1751,9 @@ private fun Thumbnail(hit: PhotoHit, modifier: Modifier = Modifier) {
     // Built once per photo, not once per redraw: a thumbnail is redrawn on every tick of a scroll
     // through ten thousand of them, and each rebuild was a new request object for the same picture
     // (Cip, 2026-09-18).
-    val request = remember(uri) { ImageRequest.Builder(context).data(uri).size(360).crossfade(true).build() }
+    // The file's size is part of the cache key: an edit in another app keeps the photo's address
+    // and changes its size, so the edited picture is drawn instead of the one held in memory.
+    val request = remember(uri, hit.sizeBytes) { ImageRequest.Builder(context).data(uri).size(360).setParameter("bytes", hit.sizeBytes).crossfade(true).build() }
     AsyncImage(
         model = request,
         contentDescription = hit.meaning.ifBlank { hit.fileName },
@@ -2315,7 +2322,7 @@ internal fun PhotoViewer(
                 }
                 AsyncImage(
                     // No size: the original, not the thumbnail the grid is drawn from.
-                    model = ImageRequest.Builder(context).data(uri).crossfade(true).build(),
+                    model = ImageRequest.Builder(context).data(uri).setParameter("bytes", hit.sizeBytes).crossfade(true).build(),
                     contentDescription = hit.meaning.ifBlank { hit.fileName },
                     contentScale = ContentScale.Fit,
                     modifier = Modifier
@@ -2676,7 +2683,7 @@ internal fun DetailsSheet(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 Box(Modifier.size(104.dp).clip(Corner).background(p.chip)) {
                     AsyncImage(
-                        model = ImageRequest.Builder(context).data(uri).size(360).build(),
+                        model = ImageRequest.Builder(context).data(uri).size(360).setParameter("bytes", hit.sizeBytes).build(),
                         contentDescription = hit.meaning,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),

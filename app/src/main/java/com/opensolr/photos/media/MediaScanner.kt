@@ -253,30 +253,73 @@ object MediaScanner {
     }
 
     /**
-     * True when at least one of [uris] (MediaStore rows reported as changed) is a picture in
-     * one of [folders], or when that cannot be told: nothing reported, Android older than 10
-     * (no RELATIVE_PATH), or a row already gone, which a sync must notice as a delete. False
-     * only when every change is somewhere else, such as a screenshot or a chat picture.
+     * A short fingerprint of the photos in [folders]: how many there are and the latest write
+     * among them. Adding or deleting a photo changes the count; editing one, in any app, moves
+     * the latest write. From Android 11 that is MediaStore's own write counter, which goes up
+     * on every change whatever time the file claims; before, the file's modification time.
+     * One MediaStore query with the folders in its WHERE and a single narrow column, so
+     * MediaStore does the filtering and the phone does not walk the library. Null when it
+     * cannot be read.
      */
-    fun touchesFolders(context: Context, uris: Collection<Uri>, folders: Set<String>): Boolean {
-        if (uris.isEmpty() || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true
-        if (folders.isEmpty()) return false
-        val resolver = context.contentResolver
-        for (uri in uris) {
-            // The collection itself, not one row: the change cannot be placed in a folder.
-            if (uri.lastPathSegment?.toLongOrNull() == null) return true
-            val folder = try {
-                resolver.query(uri, arrayOf(MediaStore.Images.Media.RELATIVE_PATH), null, null, null)?.use { c ->
-                    if (c.moveToFirst()) c.getString(0) ?: "" else return true
-                } ?: return true
-            } catch (e: Exception) {
-                return true
-            }
-            val normalized = normalizeFolder(folder)
-            if (folders.any { normalized == it || normalized.startsWith(it) }) return true
+    @Suppress("DEPRECATION")
+    fun folderStamp(context: Context, folders: Set<String>): String? {
+        val prefixes = folders.map { normalizeFolder(it) }.filter { it.isNotEmpty() }
+        if (prefixes.isEmpty()) return "0:0"
+        val byRelative = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+        val column = if (byRelative) MediaStore.Images.Media.RELATIVE_PATH else MediaStore.Images.Media.DATA
+        val root = Environment.getExternalStorageDirectory().absolutePath.trimEnd('/') + "/"
+        val where = prefixes.joinToString(" OR ") { "$column LIKE ? ESCAPE '\\'" }
+        val args = prefixes.map { (if (byRelative) it else root + it).likePrefix() }.toTypedArray()
+        val written = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) MediaStore.MediaColumns.GENERATION_MODIFIED else MediaStore.Images.Media.DATE_MODIFIED
+        return try {
+            context.contentResolver.query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                arrayOf(written),
+                where, args,
+                "$written DESC",
+            )?.use { c -> "${c.count}:${if (c.moveToFirst()) c.getLong(0) else 0L}" }
+        } catch (e: Exception) {
+            null
         }
-        return false
     }
+
+    /**
+     * True when at least one of [uris] (MediaStore rows reported as changed) is a picture in
+     * one of [folders]. When a change cannot be placed - no row id, a row already deleted,
+     * nothing reported - the fingerprint of the folders is compared with [lastStamp], the one
+     * taken at the last sync that finished: unchanged means the change was somewhere else,
+     * such as a screenshot deleted. Without a stamp to compare, the answer is yes.
+     */
+    fun touchesFolders(context: Context, uris: Collection<Uri>, folders: Set<String>, lastStamp: String?): Boolean {
+        if (folders.isEmpty()) return false
+        val prefixes = folders.map { normalizeFolder(it) }
+        var unknown = uris.isEmpty() || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q
+        if (!unknown) {
+            val resolver = context.contentResolver
+            for (uri in uris) {
+                if (uri.lastPathSegment?.toLongOrNull() == null) { unknown = true; continue }
+                val folder = try {
+                    resolver.query(uri, arrayOf(MediaStore.Images.Media.RELATIVE_PATH), null, null, null)?.use { c ->
+                        if (c.moveToFirst()) c.getString(0) else null
+                    }
+                } catch (e: Exception) {
+                    null
+                }
+                if (folder == null) { unknown = true; continue }
+                val normalized = normalizeFolder(folder)
+                if (prefixes.any { normalized.startsWith(it, ignoreCase = true) }) return true
+            }
+        }
+        if (!unknown) return false
+        return lastStamp == null || folderStamp(context, folders) != lastStamp
+    }
+
+    /**
+     * [this] as the argument of a LIKE that matches everything starting with it: the LIKE
+     * wildcards in folder names ("WhatsApp_Images") are escaped so they match themselves.
+     */
+    private fun String.likePrefix(): String =
+        replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
     /**
      * Relative folder of an absolute path on phones older than Android 10, which have no

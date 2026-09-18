@@ -1,0 +1,1 @@
+Syncs only for changes in your chosen folders, and checks them when you come back to the app. The list stays exactly where you left it after a sync. Edited photos show their new picture right away.

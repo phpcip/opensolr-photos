@@ -75,7 +75,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
      * chose, or when that cannot be told. See [MediaScanner.touchesFolders].
      */
     private fun touchesChosenFolders(prefs: AppPrefs): Boolean =
-        MediaScanner.touchesFolders(applicationContext, triggeredContentUris, prefs.folders)
+        MediaScanner.touchesFolders(applicationContext, triggeredContentUris, prefs.folders, prefs.folderStamp)
 
     /**
      * Shows or updates the foreground progress notification.

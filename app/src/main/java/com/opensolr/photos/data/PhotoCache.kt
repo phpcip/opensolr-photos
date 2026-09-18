@@ -559,6 +559,25 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         return out
     }
 
+    /**
+     * The stored documents of [ids], in no particular order; ids the copy no longer holds are
+     * left out. Looked up by primary key, a few hundred ids per query (SQLite caps the number
+     * of bound values), never one query per photo.
+     */
+    fun docsByIds(ids: Collection<String>): List<String> {
+        val out = ArrayList<String>(ids.size)
+        ids.chunked(500).forEach { chunk ->
+            val marks = chunk.joinToString(",") { "?" }
+            readableDatabase.rawQuery(
+                "SELECT json FROM docs WHERE id IN ($marks) AND json IS NOT NULL",
+                chunk.toTypedArray(),
+            ).use { c ->
+                while (c.moveToNext()) out += c.getString(0)
+            }
+        }
+        return out
+    }
+
     /** How many photos the phone's copy of the index holds. */
     fun docCount(): Int =
         readableDatabase.rawQuery("SELECT COUNT(*) FROM docs", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }

@@ -121,6 +121,9 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             }
 
             onProgress(Progress("Looking for photos", 0, 0))
+            // Taken before the scan, so a change made while this run works is newer than it and
+            // the next look at the folders still sees it.
+            val foldersBefore = MediaScanner.folderStamp(context, prefs.folders)
             val local = MediaScanner.scan(context, prefs.folders)
             localCount = local.size
 
@@ -387,6 +390,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                     "$n indexed without being read into words: the monthly AI requests of your plan are used up. They are read at the first sync after the allowance resets, or now after an upgrade."
             }
             val indexAfter = cache.docCount()
+            prefs.folderStamp = foldersBefore
             return report("ok", added, deleted, failed, localCount, indexCount, message, recreated, indexAfter)
         } catch (e: CancellationException) {
             throw e

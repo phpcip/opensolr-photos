@@ -36,6 +36,15 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
+     * Back in front, from the gallery or anywhere else: the view model checks whether the
+     * chosen folders changed meanwhile and syncs only if they did.
+     */
+    override fun onResume() {
+        super.onResume()
+        viewModel.onAppResumed()
+    }
+
+    /**
      * Handles intents delivered while the activity is already open.
      */
     override fun onNewIntent(intent: Intent) {

@@ -167,6 +167,16 @@ class AppPrefs(context: Context) {
             prefs.edit().putStringSet(KEY_WARNED, value.toSet()).commit()
         }
 
+    /**
+     * The fingerprint of the chosen folders (see MediaScanner.folderStamp) as the last sync that
+     * finished found them. A different one now means something there changed since.
+     */
+    var folderStamp: String?
+        get() = prefs.getString(KEY_FOLDER_STAMP, null)
+        set(value) {
+            prefs.edit().putString(KEY_FOLDER_STAMP, value).apply()
+        }
+
     /** When a sync started by the photo watch last ran, so a stream of changes does not run one every few minutes. */
     var lastWatchSyncAt: Long
         get() = prefs.getLong(KEY_WATCH_SYNC, 0L)
@@ -346,6 +356,7 @@ class AppPrefs(context: Context) {
         private const val KEY_NOTICE = "notice"
         private const val KEY_UPDATE_CHECKED = "update_checked_at"
         private const val KEY_WATCH_SYNC = "watch_sync_at"
+        private const val KEY_FOLDER_STAMP = "folder_stamp"
         private const val KEY_UPDATE_DISMISSED = "update_dismissed"
         private const val KEY_CACHE_SECONDS = "cache_seconds"
         private const val KEY_COLLAPSED = "collapsed_headings"
