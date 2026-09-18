@@ -75,7 +75,7 @@ id,media_id,path,file_name,folder,mime,size_bytes,file_hash,
 taken_at,indexed_at,modified_at,year,month,width,height,orientation,
 camera_make,camera_model,lens,iso,exposure,f_number,focal_length,flash,
 has_location,location,altitude,city,region,province,community,country,country_code,
-labels,meaning,ocr_t,persons_t,persons_ss,custom_tags,clip_model
+labels,meaning,ocr_t,persons_t,persons_ss,custom_tags,clip_model,embed_model
 ```
 
 From then on syncing and browsing never walk the index again: every write keeps the copy in step with what
@@ -88,9 +88,13 @@ never be copied down, and `*_hash` is docValues-only, so the duplicate keys stay
 duplicates view facets on them.
 
 Out of each document the copy pulls a few values into columns of their own — `id`, `size_bytes`,
-`indexed_at`, `taken_at`, `custom_tags`, the names, `meaning`, `ocr_t`, `city`, `country` and the
-modification flag — with the whole document alongside as JSON. Those columns are what answers browsing,
-sync and the tagging sheet with no request at all.
+`indexed_at`, `taken_at` (also as a number, `taken_ms`, indexed), `custom_tags`, the names, `meaning`,
+`ocr_t`, `city`, `country`, `embed_model`, `file_hash` and the modification flag — with the whole document
+alongside as JSON. Every tag, name and word of `meaning` also has a row of its own in a `doc_words` table,
+so the suggestion lists are one count over it. Those columns are what answers browsing, sync and the
+tagging sheet with no request at all, each from an index of its own (2.5.2), without reading the stored
+documents. An update from an earlier version fills the new columns once, from the documents already on the
+phone, in pages, with no request to the index.
 
 There is no `day` field in the schema. Browsing is Year > Month > Day, and the day level is worked out on
 the phone from `taken_at` in the copy. `year` and `month` remain for the filter facets, which are asked for

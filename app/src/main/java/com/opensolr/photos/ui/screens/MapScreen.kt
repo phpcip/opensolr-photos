@@ -230,10 +230,13 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
         GroupSheet(cluster, onDismiss = { group = null }, onShowPhoto = { hit -> viewing = hit })
     }
     viewing?.let { hit ->
-        val photos = group?.pins?.map { it.hit } ?: listOf(hit)
+        // The group's photos and where the opened one sits among them, worked out when it opens -
+        // not again on every redraw behind it (Cip, 2026-09-18).
+        val photos = remember(group, hit.id) { group?.pins?.map { it.hit } ?: listOf(hit) }
+        val startAt = remember(photos, hit.id) { photos.indexOfFirst { it.id == hit.id }.coerceAtLeast(0) }
         PhotoViewer(
             hits = photos,
-            start = photos.indexOfFirst { it.id == hit.id }.coerceAtLeast(0),
+            start = startAt,
             onClose = { viewing = null },
             onSheet = { photo, close, openEdit ->
                 DetailsSheet(hit = photo, viewModel = viewModel, onDismiss = close, onLeave = { viewing = null }, onEdit = { openEdit(it); close() })

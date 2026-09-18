@@ -92,6 +92,10 @@ q           = {!hybrid lexical=$lexicalRaw vector=$vectorQuery mode=union alpha=
 Each leg is scored on its own, normalised per query (BM25 to its maximum, kNN min-max over the candidates)
 and blended: `score = alpha * vector + (1 - alpha) * lexical`. `alpha` is `1 - AppPrefs.lexicalWeight`, the
 **Semantic ↔ Lexical Balance** slider in Me (0 = meaning only, 1 = words only, default 0.2, so alpha 0.8).
+The vector of a typed search is asked for once and then reused for 30 minutes (the last 8 searches are
+held, per index): the pages under the first one, the groups of days you open and the suggestions beside the
+box all use the same one, since the same words always make the same vector. Before 2.5.2 each of those was
+its own `embed` call, counted against the month's AI requests.
 No vector is asked for, and the search runs words only, on a plan without vector search, once the month's
 AI requests are used up, or for a single character (the embed endpoint refuses it). Nothing about that is
 shown on the photos screen; the reasons are in Me.
@@ -218,8 +222,8 @@ separator=| v=$f_year}` with `f_year=2025|2026`) and AND-ed across fields. Value
 parameters, so no value can change the query. Each field's facet excludes that field's own filter
 (`facet.field={!ex=year key=year}year`), so a section keeps offering all its values.
 
-On the filter sheet every tap applies at once; long lists show the twelve most frequent values with *Show
-all*. Every group on the sheet carries the same heading the grid gives it, folds away with a tap, and shows
+On the filter sheet every tap applies at once. Values are listed alphabetically (years oldest first), up
+to 80 per field; long lists show the first twelve with *Show all*. Every group on the sheet carries the same heading the grid gives it, folds away with a tap, and shows
 a badge with how many of its own filters are on. All groups are folded when the sheet is first opened, and
 what you unfold is remembered between visits. Small **Clear all** and **Done (N)** buttons, where N is the
 number of photos shown with the current filters, sit both at the top and at the bottom of the sheet. Active
@@ -233,9 +237,8 @@ filters show as removable pills on one horizontally scrolling row.
 | Has people (switch) | `fq=persons_t:*` when on |
 | People | `fq={!terms f=persons_ss tag=persons_ss separator=\| v=$f_persons_ss}`: the names, each whole, from the `persons_ss` string field (`persons_t` is analysed text and stays for search) |
 | Taken between | `fq={!lucene v=$taken_q}` and `taken_q=taken_at:[2025-07-01T00:00:00Z TO 2025-07-08T23:59:59Z]`. Both days included; the clause travels as one bound parameter, and its two ends are formatted from a Long, so they can only ever be timestamps |
-| Folder | `fq={!term f=folder v=$f_folder}` and `f_folder=DCIM/Camera/` |
 | Camera model | `fq={!term f=camera_model v=$f_camera}` and `f_camera=Pixel 8` |
-| City / Region / Country | `fq={!term f=city v=$f_city}` (likewise `region`, `country`) |
+| City / Country | `fq={!term f=city v=$f_city}` (likewise `country`) |
 | My tags | `fq={!term f=custom_tags v=$f_tag}` |
 | Meaning | `fq={!term f=labels v=$f_label}` |
 | Orientation | `fq={!term f=orientation v=$f_orientation}` (landscape, portrait, square) |
@@ -246,9 +249,11 @@ filters show as removable pills on one horizontally scrolling row.
 there, instead of on the current month; and once days are chosen, the years are put aside, since the days
 already say which years are meant.
 
-The filter sheet is built from facets of the current results (`facet.field` on `year`, `folder`,
-`camera_model`, `city`, `region`, `country`, `labels`, `custom_tags` and `orientation`), so
-every choice offered has photos behind it. The lists are asked for once and then held until a sync actually
+The filter sheet is built from facets of the current results (`facet.field` on `year`, `camera_model`,
+`city`, `country`, `labels`, `custom_tags`, `orientation` and `persons_ss`; folder, region and camera make
+are still indexed and searched by words, but are no longer filters), so
+every choice offered has photos behind it. The facets travel only with the first page of a search
+(`facet.sort=index`); the pages after it do not ask for them again. The lists are asked for once and then held until a sync actually
 writes something, so opening and closing the sheet costs nothing. The radius filter is set from the
 [map](map.md) (*Search this area*) or from a photo's *Nearby* (5 km), and adjusted on the sheet (0.5 to
 100 km).
@@ -363,13 +368,15 @@ anywhere else.
 
 The key is the request itself: index name, handler and every parameter with its value, order-independent,
 hashed. Two requests share an entry only when the index would answer them identically. At most 400 answers
-are kept, the oldest dropped first, and an answer over 2 MB is served but not stored.
+are kept, the oldest dropped first, and an answer over 700,000 characters is served but not stored. The
+answer is stored as the text the index sent, never written out again from the parsed result.
 
 | Cached | Never cached |
 |---|---|
 | `/select` through `SearchRepository.select`: typed searches and their pages, the facets behind the filters, albums, the documents of duplicate groups, map photos | Writing and deleting (`/update`), the words a sync carries up (`photos_words`), the one-time pull of the phone's copy after an install, and `IndexManager.configVersion`/`hasPhotoSchema` |
 | `/suggest`: autocomplete, keyed on the lowercased prefix | |
-| The duplicate-group facet, per slider stop (`cachedDuplicateGroups`) | |
+| The duplicate-group facet, per slider stop (`cachedDuplicateGroups`); the last 4 stops are also held already parsed in memory, so moving the slider back and forth does not read them again | |
+| The vector of a typed search, in memory, 30 minutes, the last 8 searches (`SearchRepository.embedOnce`) | |
 
 The uncached paths are uncached on purpose: a write must reach the index as it is, and the one-time pull of
 the phone's copy has to be the index's own truth, not an answer held from before.

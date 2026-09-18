@@ -92,12 +92,6 @@ object PhotoReader {
     }
 
     /**
-     * The copy of [photo] that goes to Opensolr for indexing: the 640 px upright JPEG, carrying
-     * the original's EXIF (when, which camera, where, exposure), so the server reads it there
-     * and the phone does nothing else with it. Orientation is set upright because the pixels
-     * already are. Null when the file cannot be decoded.
-     */
-    /**
      * The md5 of the photo file itself, lower-case hex, or null when it cannot be read.
      *
      * Of the original bytes, not of the copy sent to be read into words: that copy is
@@ -105,8 +99,14 @@ object PhotoReader {
      * are byte for byte the same apart from everything that merely looks alike (Cip,
      * 2026-09-16). Streamed in blocks, so a large photo never sits in memory whole.
      */
-    fun fileMd5(context: Context, photo: LocalPhoto): String? = try {
-        context.contentResolver.openInputStream(photo.uri)?.use { input ->
+    fun fileMd5(context: Context, photo: LocalPhoto): String? = fileMd5(context, photo.uri)
+
+    /**
+     * The md5 of whatever [uri] points at, for a caller that already holds it and has no reason to
+     * look the photo up again.
+     */
+    fun fileMd5(context: Context, uri: android.net.Uri): String? = try {
+        context.contentResolver.openInputStream(uri)?.use { input ->
             val digest = java.security.MessageDigest.getInstance("MD5")
             val buffer = ByteArray(1 shl 16)
             while (true) {
@@ -114,12 +114,29 @@ object PhotoReader {
                 if (read <= 0) break
                 digest.update(buffer, 0, read)
             }
-            digest.digest().joinToString("") { "%02x".format(it) }
+            // Spelled out by hand, like the id of a photo: a format string per byte is the slow way
+            // to write sixteen bytes, and a sync weighs a great many photos (Cip, 2026-09-18).
+            val bytes = digest.digest()
+            val hex = CharArray(bytes.size * 2)
+            for (i in bytes.indices) {
+                val v = bytes[i].toInt() and 0xff
+                hex[i * 2] = HEX[v ushr 4]
+                hex[i * 2 + 1] = HEX[v and 0x0f]
+            }
+            String(hex)
         }
     } catch (e: Exception) {
         null
     }
 
+    private val HEX = "0123456789abcdef".toCharArray()
+
+    /**
+     * The copy of [photo] that goes to Opensolr for indexing: the 640 px upright JPEG, carrying
+     * the original's EXIF (when, which camera, where, exposure), so the server reads it there
+     * and the phone does nothing else with it. Orientation is set upright because the pixels
+     * already are. Null when the file cannot be decoded.
+     */
     fun copyForIngest(context: Context, photo: LocalPhoto): ByteArray? {
         val exif = openExif(context, photo.uri)
         val jpeg = shrinkForClip(context, photo.uri, exif?.rotationDegrees ?: 0) ?: return null
@@ -152,31 +169,6 @@ object PhotoReader {
             false
         }
         return if (opened) "The picture cannot be decoded" else "The file cannot be opened"
-    }
-
-    /**
-     * The names of the people in [photo], from the XMP property PersonInImage - written on the
-     * file by whatever recognised the faces (Google Photos, Lightroom, digiKam). Empty when the
-     * photo carries none.
-     *
-     * Read here rather than carried on the 640 px copy: ExifInterface converts the XMP packet
-     * byte array to a String as ASCII, so a name with diacritics comes out as "??u??u Du??u".
-     * The bytes are decoded as UTF-8 and the names travel to the server as JSON instead.
-     */
-    fun personsIn(context: Context, photo: LocalPhoto): List<String> = try {
-        val xmp = openExif(context, photo.uri)?.getAttributeBytes(ExifInterface.TAG_XMP)
-        if (xmp == null) emptyList() else {
-            val packet = String(xmp, Charsets.UTF_8)
-            XMP_PERSONS.find(packet)?.groupValues?.get(2)?.let { bag ->
-                XMP_LI.findAll(bag)
-                    .map { unescapeXml(it.groupValues[1]).trim() }
-                    .filter { it.isNotEmpty() }
-                    .distinct()
-                    .toList()
-            } ?: emptyList()
-        }
-    } catch (e: Exception) {
-        emptyList()
     }
 
     /**
@@ -296,37 +288,37 @@ object PhotoReader {
     }
 
     /**
-     * The tags this app wrote into [photo] (opensolr:Tags), or null when the file carries none.
-     * Read at indexing, so the owner's tags come back after a reinstall; dc:subject is never
-     * read there, because any other app may have filled it.
+     * What a photo's XMP carries, read in one go.
+     *
+     * @property tags     opensolr:Tags, or null when the file carries none
+     * @property meaning  opensolr:Meaning, or null when the file carries none
+     * @property persons  PersonInImage, empty when the file names nobody
      */
-    fun opensolrTagsIn(context: Context, photo: LocalPhoto): List<String>? = try {
-        openExif(context, photo.uri)
-            ?.getAttributeBytes(ExifInterface.TAG_XMP)
-            ?.let { String(it, Charsets.UTF_8) }
-            ?.let { packet ->
-                XMP_OPENSOLR_TAGS.find(packet)?.groupValues?.get(1)?.let { bag ->
-                    XMP_LI.findAll(bag).map { unescapeXml(it.groupValues[1]).trim() }.filter { it.isNotEmpty() }.distinct().toList()
-                }
-            }
-    } catch (e: Exception) {
-        null
-    }
+    data class XmpWords(val tags: List<String>?, val meaning: String?, val persons: List<String>)
 
     /**
-     * The owner's own wording this app wrote into [photo] (opensolr:Meaning), or null when the
-     * file carries none. Read at indexing, like [opensolrTagsIn].
+     * The three things the sync reads off a photo's own header before sending it, from a single
+     * opening of the file. They used to be three calls, each opening the photo and pulling the same
+     * XMP packet out of it again - three reads of every photo of a library being indexed
+     * (Cip, 2026-09-18).
      */
-    fun opensolrMeaningIn(context: Context, photo: LocalPhoto): String? = try {
-        openExif(context, photo.uri)
+    fun xmpWordsIn(context: Context, photo: LocalPhoto): XmpWords = try {
+        val packet = openExif(context, photo.uri)
             ?.getAttributeBytes(ExifInterface.TAG_XMP)
             ?.let { String(it, Charsets.UTF_8) }
-            ?.let { packet -> XMP_OPENSOLR_MEANING.find(packet)?.groupValues?.get(1) }
-            ?.let { unescapeXml(it).trim().take(MEANING_MAX_CHARS) }
-            ?.takeIf { it.isNotEmpty() }
+        if (packet == null) XmpWords(null, null, emptyList()) else XmpWords(
+            tags = XMP_OPENSOLR_TAGS.find(packet)?.groupValues?.get(1)?.let { liValues(it) },
+            meaning = XMP_OPENSOLR_MEANING.find(packet)?.groupValues?.get(1)
+                ?.let { unescapeXml(it).trim().take(MEANING_MAX_CHARS) }?.takeIf { it.isNotEmpty() },
+            persons = XMP_PERSONS.find(packet)?.groupValues?.get(2)?.let { liValues(it) } ?: emptyList(),
+        )
     } catch (e: Exception) {
-        null
+        XmpWords(null, null, emptyList())
     }
+
+    /** The values of an rdf:Bag, unescaped, blanks and repeats dropped. */
+    private fun liValues(bag: String): List<String> =
+        XMP_LI.findAll(bag).map { unescapeXml(it.groupValues[1]).trim() }.filter { it.isNotEmpty() }.distinct().toList()
 
     /** One XMP bag property named [name], declaring its own namespace, or "" for no values. */
     private fun bag(name: String, namespace: String, values: List<String>): String =

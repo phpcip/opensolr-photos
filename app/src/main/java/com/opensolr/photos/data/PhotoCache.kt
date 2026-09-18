@@ -28,7 +28,7 @@ import java.nio.ByteOrder
  *   Each is remembered with its file size and tried again only when the file changes; the
  *   Photos screen lists them.
  */
-class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext, NAME, null, VERSION) {
+class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(context.applicationContext, NAME, null, VERSION) {
 
     /**
      * A cached photo.
@@ -54,7 +54,14 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
         db.execSQL("CREATE TABLE IF NOT EXISTS places (key TEXT PRIMARY KEY NOT NULL, place_json TEXT NOT NULL)")
         db.execSQL(EDITS_TABLE)
         db.execSQL(DOCS_TABLE)
+        db.execSQL(DOCS_TAKEN_INDEX)
+        db.execSQL(DOCS_INDEXED_INDEX)
+        db.execSQL(DOCS_STAMP_INDEX)
+        db.execSQL(DOCS_WORDLESS_INDEX)
+        db.execSQL(WORDS_TABLE)
+        db.execSQL(WORDS_INDEX)
         db.execSQL(ACTIONS_TABLE)
+        db.execSQL(ACTIONS_KIND_INDEX)
         db.execSQL(WORD_RETRIES_TABLE)
         db.execSQL(SKIPPED_TABLE)
     }
@@ -101,6 +108,166 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
             addColumnIfMissing(db, "docs", "modified", "INTEGER NOT NULL DEFAULT 0")
             addColumnIfMissing(db, "docs", "json", "TEXT")
         }
+        if (oldVersion < 11) {
+            // The date a photo was taken, kept as a number and indexed: the grid asks "which photos
+            // are in this month" constantly, and reading it out of the text of every row meant a
+            // pass over the whole library for every group opened (Cip, 2026-09-18).
+            addColumnIfMissing(db, "docs", "taken_ms", "INTEGER NOT NULL DEFAULT 0")
+            db.execSQL(DOCS_TAKEN_INDEX)
+            backfillTakenMs(db)
+        }
+        if (oldVersion < 12) {
+            addColumnIfMissing(db, "docs", "embed_model", "TEXT")
+            db.execSQL(DOCS_INDEXED_INDEX)
+            db.execSQL(WORDS_TABLE)
+            db.execSQL(WORDS_INDEX)
+            backfillWords(db)
+        }
+        if (oldVersion < 13) {
+            // The fingerprint of the file, out of the document and into a column of its own: the
+            // sync asks for it once per photo it suspects, and reading it meant fetching and taking
+            // apart the whole document each time (Cip, 2026-09-18).
+            addColumnIfMissing(db, "docs", "file_hash", "TEXT")
+            db.execSQL(DOCS_STAMP_INDEX)
+            db.execSQL(ACTIONS_KIND_INDEX)
+            backfillFileHash(db)
+            // Built after the fingerprints and the models are in, so it starts out holding only the
+            // photos that really have no words.
+            db.execSQL(DOCS_WORDLESS_INDEX)
+        }
+    }
+
+    /**
+     * Fills the fingerprint, and the vector's model for a database that never got one, out of the
+     * documents already stored.
+     *
+     * The model matters as much as the fingerprint: a photo whose `embed_model` is empty counts as
+     * one the server still owes words, so leaving the column unfilled would send the whole library
+     * back through the paid reader on the next sync (Cip, 2026-09-18).
+     */
+    private fun backfillFileHash(db: SQLiteDatabase) {
+        db.compileStatement("UPDATE docs SET file_hash = ?, embed_model = coalesce(?, embed_model) WHERE id = ?").use { update ->
+            forEachPage(db, "docs", arrayOf("id", "json"), "json IS NOT NULL") { id, row ->
+                val json = row[1] ?: return@forEachPage
+                // Read properly, not by looking for the field's name in the text: a photo's stored
+                // text contains whatever was printed in the picture, and a scan for a name can pick
+                // up the wrong thing. This runs once per photo, once ever (Cip, 2026-09-18).
+                val (hash, model) = try {
+                    val o = org.json.JSONObject(json)
+                    o.optString("file_hash").ifBlank { null } to o.optString("embed_model").ifBlank { null }
+                } catch (e: Exception) {
+                    null to null
+                }
+                if (hash == null && model == null) return@forEachPage
+                update.clearBindings()
+                if (hash == null) update.bindNull(1) else update.bindString(1, hash)
+                if (model == null) update.bindNull(2) else update.bindString(2, model)
+                update.bindString(3, id)
+                update.executeUpdateDelete()
+            }
+        }
+    }
+
+    /**
+     * Walks a table in pages of [MIGRATION_PAGE] rows and hands each row to [work].
+     *
+     * Reading a whole library into memory to change it - documents and all - is what an update must
+     * never do on a phone (Cip, 2026-09-18). The paging is by the key, not by an offset: the rows
+     * are being rewritten as they are read, and an offset over a moving table can skip one.
+     *
+     * No transaction is opened here, deliberately. Android already runs the whole upgrade inside
+     * one, and a transaction inside it that ends without being marked successful marks THAT one as
+     * failed too - the schema changes and the new version number would roll back and the same
+     * upgrade would run again on every start, for ever (Cip, 2026-09-18).
+     */
+    private fun forEachPage(
+        db: SQLiteDatabase,
+        table: String,
+        columns: Array<String>,
+        where: String?,
+        work: (String, Array<String?>) -> Unit,
+    ) {
+        var after = ""
+        while (true) {
+            val page = ArrayList<Array<String?>>(MIGRATION_PAGE)
+            val clause = if (where == null) "id > ?" else "id > ? AND ($where)"
+            db.query(table, columns, clause, arrayOf(after), null, null, "id ASC", MIGRATION_PAGE.toString()).use { c ->
+                while (c.moveToNext()) {
+                    page += Array(columns.size) { i -> if (c.isNull(i)) null else c.getString(i) }
+                }
+            }
+            if (page.isEmpty()) return
+            page.forEach { row ->
+                val id = row[0] ?: return@forEach
+                work(id, row)
+            }
+            after = page.last()[0] ?: return
+            if (page.size < MIGRATION_PAGE) return
+        }
+    }
+
+    /**
+     * Fills the new date column from what the rows already hold, so nothing has to be read from the
+     * index again after an update.
+     */
+    private fun backfillTakenMs(db: SQLiteDatabase) {
+        db.compileStatement("UPDATE docs SET taken_ms = ? WHERE id = ?").use { update ->
+            forEachPage(db, "docs", arrayOf("id", "taken_at"), "taken_at IS NOT NULL") { id, row ->
+                val at = com.opensolr.photos.ui.Actions.solrDateMillis(row[1]) ?: return@forEachPage
+                update.clearBindings()
+                update.bindLong(1, at)
+                update.bindString(2, id)
+                update.executeUpdateDelete()
+            }
+        }
+    }
+
+    /**
+     * Fills the words table from the documents already stored, so an update costs one pass here
+     * instead of a question to the index.
+     */
+    private fun backfillWords(db: SQLiteDatabase) {
+        // Only the three word columns, never the documents themselves; the vector's model is filled
+        // in by the step that follows. Nothing is deleted first either: the table was created empty
+        // moments ago in this same step (Cip, 2026-09-18).
+        db.compileStatement("INSERT OR IGNORE INTO doc_words (id, kind, word) VALUES (?, ?, ?)").use { insert ->
+            forEachPage(db, "docs", arrayOf("id", "meaning", "tags_json", "persons_json"), null) { id, row ->
+                fun write(kind: String, word: String) {
+                    val clean = word.trim()
+                    if (clean.isEmpty()) return
+                    insert.clearBindings()
+                    insert.bindString(1, id)
+                    insert.bindString(2, kind)
+                    insert.bindString(3, clean)
+                    insert.executeInsert()
+                }
+                jsonWords(row[2]).forEach { write(WORD_TAG, it) }
+                jsonWords(row[3]).forEach { write(WORD_PERSON, it) }
+                row[1]?.split(',')?.forEach { write(WORD_MEANING, it) }
+            }
+        }
+    }
+
+    /**
+     * Replaces the words stored for one photo.
+     */
+    private fun writeWords(db: SQLiteDatabase, id: String, tags: List<String>, persons: List<String>, meaning: String?) {
+        db.delete("doc_words", "id = ?", arrayOf(id))
+        // Named for what it does and NOT "put": inside ContentValues.apply, a local put(String,
+        // String) shadows ContentValues.put and the row-writer calls itself for ever
+        // (Cip, 2026-09-18: the app died with a StackOverflowError on start).
+        fun writeWord(kind: String, word: String) {
+            val clean = word.trim()
+            if (clean.isEmpty()) return
+            val values = ContentValues()
+            values.put("id", id)
+            values.put("kind", kind)
+            values.put("word", clean)
+            db.insertWithOnConflict("doc_words", null, values, SQLiteDatabase.CONFLICT_IGNORE)
+        }
+        tags.forEach { writeWord(WORD_TAG, it) }
+        persons.forEach { writeWord(WORD_PERSON, it) }
+        meaning?.split(',')?.forEach { writeWord(WORD_MEANING, it) }
     }
 
     /**
@@ -281,6 +448,16 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
          * without changing its size would otherwise go unnoticed (Cip, 2026-09-18). 0 = unknown.
          */
         val modified: Long = 0,
+        /**
+         * Which model made the photo's vector, or null when it has none. A column of its own so
+         * that "which photos still owe the server a reading" is a question the database answers.
+         */
+        val embedModel: String? = null,
+        /**
+         * The md5 of the file itself as the index holds it. A column of its own so that the sync
+         * can ask for it without fetching and taking apart the whole document (Cip, 2026-09-18).
+         */
+        val fileHash: String? = null,
     )
 
     /**
@@ -300,8 +477,21 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
             if (doc.country == null) putNull("country") else put("country", doc.country)
             if (doc.json == null) putNull("json") else put("json", doc.json)
             put("modified", doc.modified)
+            put("taken_ms", com.opensolr.photos.ui.Actions.solrDateMillis(doc.takenAt) ?: 0L)
+            // Taken from the caller, which already has the document open, rather than parsed out of
+            // the stored text here: writing a photo is the innermost step of tagging a whole
+            // library, and it did that parse once per photo (Cip, 2026-09-18).
+            if (doc.embedModel == null) putNull("embed_model") else put("embed_model", doc.embedModel)
+            if (doc.fileHash == null) putNull("file_hash") else put("file_hash", doc.fileHash)
         }
-        writableDatabase.insertWithOnConflict("docs", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        writableDatabase.beginTransaction()
+        try {
+            writableDatabase.insertWithOnConflict("docs", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+            writeWords(writableDatabase, doc.id, doc.tags, doc.persons, doc.meaning)
+            writableDatabase.setTransactionSuccessful()
+        } finally {
+            writableDatabase.endTransaction()
+        }
     }
 
     /**
@@ -311,11 +501,8 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
      * photos are worth looking at (Cip, 2026-09-18).
      */
     fun docFileHash(id: String): String? {
-        val json = doc(id)?.json ?: return null
-        return try {
-            org.json.JSONObject(json).optString("file_hash").ifBlank { null }
-        } catch (e: Exception) {
-            null
+        readableDatabase.query("docs", arrayOf("file_hash"), "id = ?", arrayOf(id), null, null, null, "1").use { c ->
+            return if (c.moveToFirst() && !c.isNull(0)) c.getString(0).ifBlank { null } else null
         }
     }
 
@@ -348,29 +535,28 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
      */
     fun takenTimes(): List<Long> {
         val out = ArrayList<Long>()
-        readableDatabase.query("docs", arrayOf("taken_at"), "taken_at IS NOT NULL", null, null, null, null).use { c ->
-            while (c.moveToNext()) {
-                com.opensolr.photos.ui.Actions.solrDateMillis(c.getString(0))?.let { out += it }
-            }
+        readableDatabase.query("docs", arrayOf("taken_ms"), "taken_ms > 0", null, null, null, "taken_ms DESC").use { c ->
+            while (c.moveToNext()) out += c.getLong(0)
         }
-        out.sortDescending()
         return out
     }
 
     /**
      * The documents taken between two instants, newest first: how the grid is filled while
-     * browsing, with nothing asked of the index (Cip, 2026-09-18).
+     * browsing, with nothing asked of the index (Cip, 2026-09-18). [limit] is the same ceiling the
+     * index is asked for, so opening or ticking a group holds the same photos either way.
      */
-    fun docsBetween(from: Long, to: Long): List<String> {
-        val out = ArrayList<Pair<Long, String>>()
-        readableDatabase.query("docs", arrayOf("taken_at", "json"), "taken_at IS NOT NULL AND json IS NOT NULL", null, null, null, null).use { c ->
-            while (c.moveToNext()) {
-                val at = com.opensolr.photos.ui.Actions.solrDateMillis(c.getString(0)) ?: continue
-                if (at in from..to) out += at to c.getString(1)
-            }
+    fun docsBetween(from: Long, to: Long, limit: Int): List<String> {
+        val out = ArrayList<String>()
+        readableDatabase.query(
+            "docs", arrayOf("json"),
+            "taken_ms BETWEEN ? AND ? AND json IS NOT NULL",
+            arrayOf(from.toString(), to.toString()),
+            null, null, "taken_ms DESC", limit.coerceAtLeast(1).toString(),
+        ).use { c ->
+            while (c.moveToNext()) out += c.getString(0)
         }
-        out.sortByDescending { it.first }
-        return out.map { it.second }
+        return out
     }
 
     /** How many photos the phone's copy of the index holds. */
@@ -383,20 +569,14 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
      */
     fun docsWithoutWords(): List<String> {
         val out = ArrayList<String>()
-        readableDatabase.query("docs", arrayOf("id", "meaning", "json"), null, null, null, null, null).use { c ->
-            while (c.moveToNext()) {
-                val noMeaning = c.isNull(1) || c.getString(1).isBlank()
-                // A photo can carry words kept from before and still have no vector of its own -
-                // written while the plan had no AI. It is offered again when the AI is back
-                // (Cip, 2026-09-18).
-                val noVector = try {
-                    val json = if (c.isNull(2)) null else org.json.JSONObject(c.getString(2))
-                    json == null || json.optString("embed_model").isBlank()
-                } catch (e: Exception) {
-                    true
-                }
-                if (noMeaning || noVector) out += c.getString(0)
-            }
+        // A photo can carry words kept from before and still have no vector of its own - written
+        // while the plan had no AI. Both cases are a column the database can test.
+        readableDatabase.query(
+            "docs", arrayOf("id"),
+            "meaning IS NULL OR meaning = '' OR embed_model IS NULL OR embed_model = ''",
+            null, null, null, null,
+        ).use { c ->
+            while (c.moveToNext()) out += c.getString(0)
         }
         return out
     }
@@ -409,13 +589,15 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
      */
     fun docsLikeDocuments(words: List<String>): List<String> {
         val needles = words.map { it.trim('"').lowercase() }.filter { it.isNotEmpty() }
+        val where = StringBuilder("(ocr IS NOT NULL AND ocr != '')")
+        val args = ArrayList<String>()
+        needles.forEach {
+            where.append(" OR lower(meaning) LIKE ?")
+            args += "%$it%"
+        }
         val out = ArrayList<String>()
-        readableDatabase.query("docs", arrayOf("id", "ocr", "meaning"), null, null, null, null, null).use { c ->
-            while (c.moveToNext()) {
-                val hasOcr = !c.isNull(1) && c.getString(1).isNotBlank()
-                val meaning = if (c.isNull(2)) "" else c.getString(2).lowercase()
-                if (hasOcr || needles.any { meaning.contains(it) }) out += c.getString(0)
-            }
+        readableDatabase.query("docs", arrayOf("id"), where.toString(), args.toTypedArray(), null, null, null).use { c ->
+            while (c.moveToNext()) out += c.getString(0)
         }
         return out
     }
@@ -441,8 +623,13 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
         // different file now: its md5 has to travel with the rest, or every later sync would see a
         // photo whose fingerprint does not match and read the picture again (Cip, 2026-09-18).
         if (fileHash == null) return
-        val doc = doc(id) ?: return
-        val json = doc.json ?: return
+        writableDatabase.execSQL("UPDATE docs SET file_hash = ? WHERE id = ?", arrayOf<Any>(fileHash, id))
+        // The stored document is what the grid draws a photo from, so it has to say the same as the
+        // columns beside it. Only the document of this one photo is read, and only when the app has
+        // really just written into the file.
+        val json = readableDatabase.query("docs", arrayOf("json"), "id = ?", arrayOf(id), null, null, null, "1").use { c ->
+            if (c.moveToFirst() && !c.isNull(0)) c.getString(0) else null
+        } ?: return
         val updated = try {
             org.json.JSONObject(json).put("file_hash", fileHash).put("size_bytes", size).toString()
         } catch (e: Exception) {
@@ -453,19 +640,33 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
 
     /** Forgets the phone's copy of [ids] - they are no longer in the index. */
     fun removeDocs(ids: Collection<String>) {
+        deleteByIds("docs", ids)
+        deleteByIds("doc_words", ids)
+    }
+
+    /**
+     * Deletes [ids] from [table] a few hundred at a time - one statement per batch instead of one
+     * per photo, which is what emptying a library of ten thousand used to cost (Cip, 2026-09-18).
+     */
+    private fun deleteByIds(table: String, ids: Collection<String>) {
         if (ids.isEmpty()) return
-        writableDatabase.beginTransaction()
+        val db = writableDatabase
+        db.beginTransaction()
         try {
-            ids.forEach { writableDatabase.delete("docs", "id = ?", arrayOf(it)) }
-            writableDatabase.setTransactionSuccessful()
+            ids.chunked(DELETE_BATCH).forEach { batch ->
+                val marks = batch.joinToString(",") { "?" }
+                db.delete(table, "id IN ($marks)", batch.toTypedArray())
+            }
+            db.setTransactionSuccessful()
         } finally {
-            writableDatabase.endTransaction()
+            db.endTransaction()
         }
     }
 
     /** Empties the phone's copy of the index (a reset, a new index, a rebuild). */
     fun clearDocs() {
         writableDatabase.delete("docs", null, null)
+        writableDatabase.delete("doc_words", null, null)
         writableDatabase.delete("actions", null, null)
     }
 
@@ -477,14 +678,14 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
         val tags = HashMap<String, Int>()
         val persons = HashMap<String, Int>()
         val meanings = HashMap<String, Int>()
-        readableDatabase.query("docs", arrayOf("tags_json", "persons_json", "meaning"), null, null, null, null, null).use { c ->
+        readableDatabase.rawQuery("SELECT kind, word, COUNT(*) FROM doc_words GROUP BY kind, word", null).use { c ->
             while (c.moveToNext()) {
-                jsonWords(c.getString(0)).forEach { tags[it] = (tags[it] ?: 0) + 1 }
-                jsonWords(c.getString(1)).forEach { persons[it] = (persons[it] ?: 0) + 1 }
-                if (!c.isNull(2)) {
-                    c.getString(2).split(',').map { it.trim() }.filter { it.isNotEmpty() }
-                        .forEach { meanings[it] = (meanings[it] ?: 0) + 1 }
+                val into = when (c.getString(0)) {
+                    WORD_TAG -> tags
+                    WORD_PERSON -> persons
+                    else -> meanings
                 }
+                into[c.getString(1)] = c.getInt(2)
             }
         }
         return Triple(tags, persons, meanings)
@@ -498,10 +699,14 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
         val persons = HashMap<String, Int>()
         ids.chunked(400).forEach { batch ->
             val marks = batch.joinToString(",") { "?" }
-            readableDatabase.rawQuery("SELECT tags_json, persons_json FROM docs WHERE id IN ($marks)", batch.toTypedArray()).use { c ->
+            val args = batch.toTypedArray()
+            readableDatabase.rawQuery(
+                "SELECT kind, word, COUNT(*) FROM doc_words WHERE kind IN ('$WORD_TAG','$WORD_PERSON') AND id IN ($marks) GROUP BY kind, word",
+                args,
+            ).use { c ->
                 while (c.moveToNext()) {
-                    jsonWords(c.getString(0)).forEach { tags[it] = (tags[it] ?: 0) + 1 }
-                    jsonWords(c.getString(1)).forEach { persons[it] = (persons[it] ?: 0) + 1 }
+                    val into = if (c.getString(0) == WORD_TAG) tags else persons
+                    into[c.getString(1)] = (into[c.getString(1)] ?: 0) + c.getInt(2)
                 }
             }
         }
@@ -514,13 +719,7 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
      * that "gone" beats everything and "read the picture again" beats "the words changed".
      */
     fun queueAction(id: String, kind: String) {
-        val current = actionOf(id)
-        val winner = when {
-            current == null -> kind
-            current == ACTION_DELETE || kind == ACTION_DELETE -> ACTION_DELETE
-            current == ACTION_INDEX || kind == ACTION_INDEX -> ACTION_INDEX
-            else -> kind
-        }
+        val winner = winningAction(actionOf(id), kind)
         val values = ContentValues().apply {
             put("id", id)
             put("kind", winner)
@@ -529,16 +728,63 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
         writableDatabase.insertWithOnConflict("actions", null, values, SQLiteDatabase.CONFLICT_REPLACE)
     }
 
-    /** Queues the same action for many photos at once. */
-    fun queueActions(ids: Collection<String>, kind: String) {
-        if (ids.isEmpty()) return
+    /**
+     * Runs [work] as one transaction. A thousand photos tagged at once means thousands of small
+     * writes, and one transaction turns them into one commit instead of one each
+     * (Cip, 2026-09-18).
+     */
+    fun <T> inTransaction(work: () -> T): T {
         writableDatabase.beginTransaction()
-        try {
-            ids.forEach { queueAction(it, kind) }
+        return try {
+            val result = work()
             writableDatabase.setTransactionSuccessful()
+            result
         } finally {
             writableDatabase.endTransaction()
         }
+    }
+
+    /**
+     * Queues the same action for many photos at once, in one transaction and with what is already
+     * queued read once rather than per photo.
+     */
+    fun queueActions(ids: Collection<String>, kind: String) {
+        if (ids.isEmpty()) return
+        val current = HashMap<String, String>()
+        readableDatabase.query("actions", arrayOf("id", "kind"), null, null, null, null, null).use { c ->
+            while (c.moveToNext()) current[c.getString(0)] = c.getString(1)
+        }
+        val now = System.currentTimeMillis()
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            // One statement, prepared once and filled in per photo: building a row of values and
+            // having the database work out the SQL again for each of ten thousand photos is most of
+            // what tagging a whole library used to cost (Cip, 2026-09-18).
+            db.compileStatement("INSERT OR REPLACE INTO actions (id, kind, at) VALUES (?, ?, ?)").use { statement ->
+                ids.forEach { id ->
+                    statement.clearBindings()
+                    statement.bindString(1, id)
+                    statement.bindString(2, winningAction(current[id], kind))
+                    statement.bindLong(3, now)
+                    statement.executeInsert()
+                }
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /**
+     * Which of two things waiting for one photo wins: gone beats everything, and reading the
+     * picture again beats a change of words.
+     */
+    private fun winningAction(current: String?, incoming: String): String = when {
+        current == null -> incoming
+        current == ACTION_DELETE || incoming == ACTION_DELETE -> ACTION_DELETE
+        current == ACTION_INDEX || incoming == ACTION_INDEX -> ACTION_INDEX
+        else -> incoming
     }
 
     /** What is waiting for [id], or null when nothing is. */
@@ -566,14 +812,7 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
      * one sweep at the end: a run stopped half way must leave the rest waiting (Cip, 2026-09-18).
      */
     fun clearActions(ids: Collection<String>) {
-        if (ids.isEmpty()) return
-        writableDatabase.beginTransaction()
-        try {
-            ids.forEach { writableDatabase.delete("actions", "id = ?", arrayOf(it)) }
-            writableDatabase.setTransactionSuccessful()
-        } finally {
-            writableDatabase.endTransaction()
-        }
+        deleteByIds("actions", ids)
     }
 
     /** The words of a stored JSON array. */
@@ -600,6 +839,8 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
         country = if (c.isNull(9)) null else c.getString(9),
         json = if (c.isNull(10)) null else c.getString(10),
         modified = c.getLong(11),
+        embedModel = if (c.isNull(12)) null else c.getString(12),
+        fileHash = if (c.isNull(13)) null else c.getString(13),
     )
 
     /**
@@ -608,6 +849,17 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
      *
      */
     data class Edits(val tags: List<String>, val meaning: String?, val persons: List<String>? = null)
+
+    /**
+     * The photos this phone has edits for, all at once.
+     */
+    fun editedIds(): Set<String> {
+        val out = HashSet<String>()
+        readableDatabase.query("edits", arrayOf("id"), null, null, null, null, null).use { c ->
+            while (c.moveToNext()) out += c.getString(0)
+        }
+        return out
+    }
 
     /**
      * The owner's edits of [id], or null when there are none.
@@ -800,9 +1052,64 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
 
     companion object {
         private const val NAME = "photo_cache.db"
-        private const val VERSION = 10
+        private const val VERSION = 13
 
-        private const val DOCS_TABLE = "CREATE TABLE IF NOT EXISTS docs (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, indexed_at INTEGER NOT NULL, taken_at TEXT, tags_json TEXT, persons_json TEXT, meaning TEXT, ocr TEXT, city TEXT, country TEXT, json TEXT, modified INTEGER NOT NULL DEFAULT 0)"
+        /**
+         * The one handle on this database for the whole app.
+         *
+         * Every screen, every sync and every edit opened one of its own and none of them was ever
+         * closed, so each run left a connection behind for the collector to complain about and the
+         * writes of one had to wait on the locks of another (Cip, 2026-09-18).
+         */
+        @Volatile private var shared: PhotoCache? = null
+
+        /** The shared handle, made on first use. */
+        fun of(context: Context): PhotoCache = shared ?: synchronized(this) {
+            shared ?: PhotoCache(context.applicationContext).also { shared = it }
+        }
+
+        private const val DOCS_TABLE = "CREATE TABLE IF NOT EXISTS docs (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, indexed_at INTEGER NOT NULL, taken_at TEXT, tags_json TEXT, persons_json TEXT, meaning TEXT, ocr TEXT, city TEXT, country TEXT, json TEXT, modified INTEGER NOT NULL DEFAULT 0, taken_ms INTEGER NOT NULL DEFAULT 0, embed_model TEXT, file_hash TEXT)"
+        /** When each photo was taken, as a number: the grid asks for a stretch of time constantly. */
+        private const val DOCS_TAKEN_INDEX = "CREATE INDEX IF NOT EXISTS docs_taken_ms ON docs (taken_ms)"
+
+        /** "Which photos were written before this moment" - asked by Re-read at every sync. */
+        private const val DOCS_INDEXED_INDEX = "CREATE INDEX IF NOT EXISTS docs_indexed_at ON docs (indexed_at)"
+
+        /**
+         * The three things a sync compares the phone's folders against, together in one index. The
+         * whole document sits in the same row, after them, so reading them off the rows meant
+         * pulling the entire library - tens of megabytes - through the database for a question that
+         * needs a few bytes per photo. Answered from this index, the rows are never touched
+         * (Cip, 2026-09-18).
+         */
+        private const val DOCS_STAMP_INDEX = "CREATE INDEX IF NOT EXISTS docs_stamp ON docs (id, size_bytes, modified)"
+
+        /** "What is waiting to be indexed, oldest first" - asked at every sync and after every edit. */
+        private const val ACTIONS_KIND_INDEX = "CREATE INDEX IF NOT EXISTS actions_kind_at ON actions (kind, at)"
+
+        /**
+         * The photos that still owe the server a reading, and only those. A partial index: it holds
+         * a row for a photo with no words and nothing for the rest, so the question "which photos
+         * have none" is answered from a list that is usually empty instead of a walk over the whole
+         * library - and that walk had to pull every stored document off its overflow pages to reach
+         * the two columns it was testing (Cip, 2026-09-18).
+         */
+        private const val DOCS_WORDLESS_INDEX = "CREATE INDEX IF NOT EXISTS docs_wordless ON docs (id) WHERE meaning IS NULL OR meaning = '' OR embed_model IS NULL OR embed_model = ''"
+
+        /**
+         * Every word of every photo, one row each: the owner's tags, the names of the people, and
+         * the words the photos were read into. The suggestion lists and the "already on these
+         * photos" counts are a GROUP BY over this, instead of reading and taking apart the whole
+         * library on every keystroke (Cip, 2026-09-18).
+         */
+        private const val WORDS_TABLE = "CREATE TABLE IF NOT EXISTS doc_words (id TEXT NOT NULL, kind TEXT NOT NULL, word TEXT NOT NULL, PRIMARY KEY (id, kind, word))"
+        private const val WORDS_INDEX = "CREATE INDEX IF NOT EXISTS doc_words_kind ON doc_words (kind, word)"
+
+        /** The three kinds of word a photo carries. */
+        const val WORD_TAG = "tag"
+        const val WORD_PERSON = "person"
+        const val WORD_MEANING = "meaning"
+
         private const val ACTIONS_TABLE = "CREATE TABLE IF NOT EXISTS actions (id TEXT PRIMARY KEY NOT NULL, kind TEXT NOT NULL, at INTEGER NOT NULL)"
 
         /** A photo whose picture has to be read again: new, or its file changed. */
@@ -814,7 +1121,13 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
         /** The photo is gone from the phone, so it goes from the index. */
         const val ACTION_DELETE = "delete"
 
-        private val DOC_COLUMNS = arrayOf("id", "size_bytes", "indexed_at", "taken_at", "tags_json", "persons_json", "meaning", "ocr", "city", "country", "json", "modified")
+        private val DOC_COLUMNS = arrayOf("id", "size_bytes", "indexed_at", "taken_at", "tags_json", "persons_json", "meaning", "ocr", "city", "country", "json", "modified", "embed_model", "file_hash")
+
+        /** How many rows an update converts at once, so no library is ever held in memory whole. */
+        private const val MIGRATION_PAGE = 500
+
+        /** How many photos one delete names. SQLite takes 999 bound values, so this stays under it. */
+        private const val DELETE_BATCH = 400
         private val EDIT_COLUMNS = arrayOf("tags_json", "meaning", "persons_json")
         private const val EDITS_TABLE = "CREATE TABLE IF NOT EXISTS edits (id TEXT PRIMARY KEY NOT NULL, tags_json TEXT NOT NULL, meaning TEXT, updated INTEGER NOT NULL, persons_json TEXT, pending INTEGER NOT NULL DEFAULT 0, tags_mode TEXT, persons_mode TEXT)"
         private const val SKIPPED_TABLE = "CREATE TABLE IF NOT EXISTS skipped (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, media_id INTEGER NOT NULL, path TEXT NOT NULL, folder TEXT NOT NULL, file_name TEXT NOT NULL, mime TEXT NOT NULL, taken_ms INTEGER NOT NULL, reason TEXT NOT NULL, at INTEGER NOT NULL)"

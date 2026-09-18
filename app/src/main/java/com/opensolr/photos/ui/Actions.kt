@@ -87,12 +87,40 @@ object Actions {
      * The MediaStore content URIs of [hits] that are still on the phone, looked up by path when
      * the id stored in the index went stale.
      */
-    fun contentUris(context: Context, hits: List<PhotoHit>): List<Uri> = hits.mapNotNull { hit ->
-        val mediaId = when {
-            hit.mediaId > 0 && MediaScanner.exists(context, hit.mediaId) -> hit.mediaId
-            else -> MediaScanner.findByPath(context, hit.path)?.mediaId
+    fun contentUris(context: Context, hits: List<PhotoHit>): List<Uri> {
+        if (hits.isEmpty()) return emptyList()
+        // Which of the remembered media ids still exist, asked in ONE query for the whole batch,
+        // not one per photo: tagging a thousand photos used to mean a thousand round trips to
+        // MediaStore before a single word was written (Cip, 2026-09-18).
+        val wanted = hits.mapNotNull { it.mediaId.takeIf { id -> id > 0 } }.toSet()
+        val alive = MediaScanner.existing(context, wanted)
+        return hits.mapNotNull { hit ->
+            val mediaId = when {
+                hit.mediaId > 0 && hit.mediaId in alive -> hit.mediaId
+                // Only a photo whose row has moved costs a lookup of its own, by path.
+                else -> MediaScanner.findByPath(context, hit.path)?.mediaId
+            }
+            mediaId?.let { ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, it) }
         }
-        mediaId?.let { ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, it) }
+    }
+
+    /**
+     * The same as [contentUris], but keyed by photo, for a caller that has to write to each file in
+     * turn and must not look each one up on its own.
+     */
+    fun contentUrisByPhoto(context: Context, hits: List<PhotoHit>): Map<String, Uri> {
+        if (hits.isEmpty()) return emptyMap()
+        val wanted = hits.mapNotNull { it.mediaId.takeIf { id -> id > 0 } }.toSet()
+        val alive = MediaScanner.existing(context, wanted)
+        val out = HashMap<String, Uri>(hits.size)
+        hits.forEach { hit ->
+            val mediaId = when {
+                hit.mediaId > 0 && hit.mediaId in alive -> hit.mediaId
+                else -> MediaScanner.findByPath(context, hit.path)?.mediaId
+            }
+            if (mediaId != null) out[hit.id] = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, mediaId)
+        }
+        return out
     }
 
     /**
@@ -154,8 +182,17 @@ object Actions {
     /**
      * mm/dd/yyyy hh:mm:ss in the phone's time zone, from epoch millis.
      */
-    fun formatDate(millis: Long): String =
-        SimpleDateFormat("MM/dd/yyyy HH:mm:ss", Locale.US).format(millis)
+    fun formatDate(millis: Long): String = stamp.get()!!.format(millis)
+
+    /** One formatter per thread, kept: building one per call showed up on the grid. */
+    private val stamp = ThreadLocal.withInitial { SimpleDateFormat("MM/dd/yyyy HH:mm:ss", Locale.US) }
+    private val dayName = ThreadLocal.withInitial { SimpleDateFormat("EEEE", Locale.US) }
+    private val monthOnly = ThreadLocal.withInitial { SimpleDateFormat("MMMM", Locale.US) }
+    private val monthYear = ThreadLocal.withInitial { SimpleDateFormat("MMMM yyyy", Locale.US) }
+    private val yearOnly = ThreadLocal.withInitial { SimpleDateFormat("yyyy", Locale.US) }
+    private val dayKeyFormat = ThreadLocal.withInitial { SimpleDateFormat("yyyy-MM-dd", Locale.US) }
+    private val monthKeyFormat = ThreadLocal.withInitial { SimpleDateFormat("yyyy-MM", Locale.US) }
+    private val dayInMonth = ThreadLocal.withInitial { SimpleDateFormat("EEEE d", Locale.US) }
 
     /**
      * mm/dd/yyyy hh:mm:ss in the phone's time zone, from a Solr UTC date.
@@ -167,12 +204,52 @@ object Actions {
      */
     fun solrDateMillis(value: String?): Long? {
         if (value.isNullOrBlank()) return null
-        return try {
-            SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
-                .parse(value.replace(Regex("\\.\\d+Z$"), "Z"))?.time
-        } catch (e: Exception) {
-            null
+        // Read digit by digit instead of through a date formatter. This is called for every photo
+        // on the grid, on every rebuild of the rows, and a formatter built and thrown away each
+        // time was the single most expensive thing in drawing a big library (Cip, 2026-09-18).
+        // Shape: yyyy-MM-ddTHH:mm:ssZ, with optional fractional seconds before the Z.
+        if (value.length < 20 || value[4] != '-' || value[7] != '-' || value[10] != 'T' ||
+            value[13] != ':' || value[16] != ':'
+        ) {
+            return legacyDateMillis(value)
         }
+        fun digits(from: Int, to: Int): Int {
+            var n = 0
+            for (i in from until to) {
+                val c = value[i]
+                if (c < '0' || c > '9') return -1
+                n = n * 10 + (c - '0')
+            }
+            return n
+        }
+        val year = digits(0, 4)
+        val month = digits(5, 7)
+        val day = digits(8, 10)
+        val hour = digits(11, 13)
+        val minute = digits(14, 16)
+        val second = digits(17, 19)
+        if (year < 0 || month < 1 || month > 12 || day < 1 || day > 31 || hour < 0 || minute < 0 || second < 0) {
+            return legacyDateMillis(value)
+        }
+        // Days since the epoch, by the civil-from-days algorithm: no calendar object, no time zone
+        // lookup, no allocation.
+        val y = if (month <= 2) year - 1 else year
+        val era = (if (y >= 0) y else y - 399) / 400
+        val yoe = y - era * 400
+        val doy = (153 * (month + (if (month > 2) -3 else 9)) + 2) / 5 + day - 1
+        val doe = yoe * 365 + yoe / 4 - yoe / 100 + doy
+        val days = era * 146097L + doe - 719468L
+        return days * 86_400_000L + hour * 3_600_000L + minute * 60_000L + second * 1000L
+    }
+
+    /**
+     * The slow path, for a date that is not in the shape above: a formatter, as before.
+     */
+    private fun legacyDateMillis(value: String): Long? = try {
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+            .parse(value.replace(Regex("\\.\\d+Z$"), "Z"))?.time
+    } catch (e: Exception) {
+        null
     }
 
     /**
@@ -190,9 +267,9 @@ object Actions {
         return when {
             taken.timeInMillis >= startOfToday.timeInMillis -> "Today"
             daysAgo < 1 -> "Yesterday"
-            daysAgo < 6 -> SimpleDateFormat("EEEE", Locale.US).format(millis)
-            taken.get(Calendar.YEAR) == now.get(Calendar.YEAR) -> SimpleDateFormat("MMMM", Locale.US).format(millis)
-            else -> SimpleDateFormat("MMMM yyyy", Locale.US).format(millis)
+            daysAgo < 6 -> dayName.get()!!.format(millis)
+            taken.get(Calendar.YEAR) == now.get(Calendar.YEAR) -> monthOnly.get()!!.format(millis)
+            else -> monthYear.get()!!.format(millis)
         }
     }
 
@@ -213,30 +290,28 @@ object Actions {
      * on screen is [dayHeading]; this is what the folded/selected state is kept by, because a
      * key built from the words on screen breaks the moment the words change.
      */
-    fun dayKey(millis: Long): String =
-        SimpleDateFormat("yyyy-MM-dd", Locale.US).format(millis)
+    fun dayKey(millis: Long): String = dayKeyFormat.get()!!.format(millis)
 
     /**
      * A day inside a month: "Tuesday 16". The month is already written above it, so it is not
      * repeated here.
      */
-    fun dayHeading(millis: Long): String =
-        SimpleDateFormat("EEEE d", Locale.US).format(millis)
+    fun dayHeading(millis: Long): String = dayInMonth.get()!!.format(millis)
 
     /**
      * The year a photo belongs to, as the heading says it and as its key: "2016".
      */
-    fun yearHeading(millis: Long): String = SimpleDateFormat("yyyy", Locale.US).format(millis)
+    fun yearHeading(millis: Long): String = yearOnly.get()!!.format(millis)
 
     /**
      * The month inside its year: "January". The year stands above it, so it is not repeated.
      */
-    fun monthHeading(millis: Long): String = SimpleDateFormat("MMMM", Locale.US).format(millis)
+    fun monthHeading(millis: Long): String = monthOnly.get()!!.format(millis)
 
     /**
      * The month a photo belongs to, as a key that never changes wording: 2016-01.
      */
-    fun monthKey(millis: Long): String = SimpleDateFormat("yyyy-MM", Locale.US).format(millis)
+    fun monthKey(millis: Long): String = monthKeyFormat.get()!!.format(millis)
 
     /**
      * The whole year [millis] falls in, by the same reckoning as [daySpan].

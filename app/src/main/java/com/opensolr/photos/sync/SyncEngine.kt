@@ -63,7 +63,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
 
     private val prefs = AppPrefs(context)
     private val api = OpensolrApi()
-    private val cache = PhotoCache(context)
+    private val cache = PhotoCache.of(context)
     private val indexes = IndexManager(context, prefs, api)
     private val edits = com.opensolr.photos.search.EditRepository(context)
 
@@ -93,6 +93,10 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
         var deleted = 0
         var failed = 0
         var recreated = false
+        // The fingerprints worked out while comparing, kept for the photos that go on to be sent:
+        // 32 characters per changed photo, and it saves reading each of those files whole a second
+        // time (Cip, 2026-09-18).
+        val weighed = HashMap<String, String>()
         quotaHit = false
         withoutWords = 0
         shortAllowance = ""
@@ -198,11 +202,15 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                     // re-encoded copy, so it could never work this out on its own.
                     // Tags edited on this phone first; otherwise the ones this app wrote into the file
                     // (opensolr:Tags only, never another app's keywords), so a reinstall keeps them.
-                    val tags = edits?.tags ?: PhotoReader.opensolrTagsIn(context, photo)
+                    // The file's own header is opened once for all three, and not at all when this
+                    // phone already holds every one of them (Cip, 2026-09-18).
+                    val xmp = if (edits?.tags != null && edits.meaning != null && edits.persons != null) null
+                        else PhotoReader.xmpWordsIn(context, photo)
+                    val tags = edits?.tags ?: xmp?.tags
                     // The same for the owner's wording of what the photo shows (opensolr:Meaning).
-                    val meaning = edits?.meaning ?: PhotoReader.opensolrMeaningIn(context, photo)
-                    val names = edits?.persons ?: PhotoReader.personsIn(context, photo)
-                    items += IngestItem(photo, jpeg, tags, meaning, PhotoReader.fileMd5(context, photo), names)
+                    val meaning = edits?.meaning ?: xmp?.meaning
+                    val names = edits?.persons ?: xmp?.persons ?: emptyList()
+                    items += IngestItem(photo, jpeg, tags, meaning, weighed[photo.id] ?: PhotoReader.fileMd5(context, photo), names)
                 }
                 if (items.isNotEmpty()) {
                     val results = try {
@@ -216,6 +224,10 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                         null
                     }
                     results?.let { r ->
+                      // One commit for the batch, not four per photo: writing a photo's document,
+                      // dropping it from the queue and clearing its two retry marks were four
+                      // separate transactions each (Cip, 2026-09-18).
+                      cache.inTransaction {
                         items.forEachIndexed { k, item ->
                             val result = r.getOrNull(k)
                             if (result == null) {
@@ -235,6 +247,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                                 }
                             }
                         }
+                      }
                     }
                 }
                 progress(phase)
@@ -269,6 +282,10 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                 // Photos with no words although the plan has AI, unless they are still pausing
                 // after a miss; and, for "Re-read all", everything written before it was asked for.
                 val waiting = cache.wordRetriesWaiting(System.currentTimeMillis())
+                // What is already queued, read once: asking the database per photo meant one query
+                // for every photo in the library, every sync (Cip, 2026-09-18).
+                val queuedWords = cache.actions(PhotoCache.ACTION_WORDS).toSet()
+                val toIndex = ArrayList<String>()
                 val needWords = if (!aiAvailable) emptySet() else cache.docsWithoutWords().toSet() - waiting
                 val reread = if (rereadSince > 0) cache.docsIndexedBefore(rereadSince).toSet() else emptySet()
                 // Everything this run has to read, known before it starts: no estimate needed.
@@ -279,7 +296,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                     // photos indexed before the phone kept one must not all be read again.
                     val changed = stamp == null || stamp.first != photo.sizeBytes ||
                         (stamp.second > 0 && stamp.second != photo.modifiedSec)
-                    val waitingWords = cache.actionOf(photo.id) == PhotoCache.ACTION_WORDS
+                    val waitingWords = photo.id in queuedWords
                     if (changed && waitingWords && stamp != null) {
                         // The app itself wrote this file moments ago, putting the owner's words in
                         // its header. Only the words go up; the phone's copy takes the file as it
@@ -295,22 +312,29 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                         // now stands. Neither the size nor the time it was written can be trusted
                         // on their own (Cip, 2026-09-18).
                         val was = cache.docFileHash(photo.id)
-                        if (was != null && was == PhotoReader.fileMd5(context, photo)) {
+                        // Weighed once. The photo that turns out to have really changed is sent a
+                        // moment later and its fingerprint travels with it, so reading the whole
+                        // file a second time for the same number is pure waste (Cip, 2026-09-18).
+                        val now = PhotoReader.fileMd5(context, photo)
+                        if (now != null) weighed[photo.id] = now
+                        if (was != null && was == now) {
                             cache.updateDocSize(photo.id, photo.sizeBytes, photo.modifiedSec)
                             if (photo.id !in forced && photo.id !in needWords && photo.id !in reread) return@forEach
                         }
                     }
                     if (changed || photo.id in forced || photo.id in needWords || photo.id in reread) {
-                        cache.queueAction(photo.id, PhotoCache.ACTION_INDEX)
+                        toIndex += photo.id
                     }
                 }
+                // One transaction for the lot, not one write per photo.
+                cache.queueActions(toIndex, PhotoCache.ACTION_INDEX)
             } else {
                 indexCount = 0
                 // A rebuild empties the index, so the phone's copy of it goes with it and every
                 // photo is written again.
                 cache.clearDocs()
                 prefs.cloneComplete = true
-                local.values.forEach { cache.queueAction(it.id, PhotoCache.ACTION_INDEX) }
+                cache.queueActions(local.keys, PhotoCache.ACTION_INDEX)
             }
 
             if (toDelete.isNotEmpty()) {
@@ -454,9 +478,12 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
      * rule the server applies.
      */
     private suspend fun keepOwnersEdits(solr: SolrClient) {
+        // Which photos already have edits on this phone, read once: asking per document meant a
+        // query for every photo in the index (Cip, 2026-09-18).
+        val alreadyMine = cache.editedIds()
         solr.forEachDoc("id,custom_tags,meaning,labels") { doc ->
             val id = doc.optString("id")
-            if (id.isEmpty() || cache.getEdits(id) != null) return@forEachDoc
+            if (id.isEmpty() || id in alreadyMine) return@forEachDoc
             val tags = doc.optJSONArray("custom_tags")?.let { a -> (0 until a.length()).map { a.optString(it).trim() }.filter { it.isNotEmpty() } } ?: emptyList()
             val labels = doc.optJSONArray("labels")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList()
             val meaning = doc.optString("meaning").trim()

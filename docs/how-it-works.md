@@ -142,7 +142,7 @@ reinstalled and differs on every other phone. So:
 | api.opensolr.com | `POST /solr_manager/api/photos_ingest` | Once per 5 new or changed photos. Nothing is read from the picture without vector search on the plan |
 | opensolr.com | `POST /solr_manager/api/image_ocr` | Server to server, for photos that carry text — the phone never calls it |
 | api.opensolr.com | `POST /solr_manager/api/photos_words` | A sync that carries up words you edited: 50 photos per call, no pictures |
-| api.opensolr.com | `POST /solr_manager/api/embed` | Once per typed search (vector search plans only) |
+| api.opensolr.com | `POST /solr_manager/api/embed` | Once per typed search (vector search plans only); the same words reuse their vector for 30 minutes, across pages and groups |
 | your index | `POST /select` | Typed search (with spellcheck), the filter lists, map pins, albums (one JSON facet), duplicates (one facet per slider stop), and the one full read at install or reinstall |
 | your index | `GET /opensolr-photos-config` | Start of a sync: the index's configuration version |
 | your index | `POST /suggest` | Autocomplete |

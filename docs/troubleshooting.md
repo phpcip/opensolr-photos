@@ -175,3 +175,14 @@ already, with counts, so check that list before using Replace.
 
 **A photo without a date of its own jumped to today after I tagged it.**
 Fixed in 2.5. The index keeps the date the photo had when its tags are written into the file.
+
+**A tag I had just saved disappeared from the grid until the sync finished.**
+Fixed in 2.5.2. A save now updates the whole document the grid draws from, not only the tag columns.
+
+**The pull-to-refresh spinner stayed half way down.**
+Fixed in 2.5.2. Browsing is answered by the phone, so the refresh finished before the spinner could see it
+start; it now always sees the run begin and end.
+
+**Tagging, sharing or deleting a large selection froze the screen.**
+Fixed in 2.5.2. The files of the whole selection are found in one query, off the screen's thread, instead
+of one lookup per photo.

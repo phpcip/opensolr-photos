@@ -26,12 +26,21 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
     /**
      * Runs /select with [params] (a name may repeat, e.g. several fq) and returns the parsed answer.
      */
-    suspend fun select(params: List<Pair<String, String>>): JSONObject = withContext(Dispatchers.IO) {
+    suspend fun select(params: List<Pair<String, String>>): JSONObject = JSONObject(selectText(params))
+
+    /**
+     * The same question, with the answer left as the text the index sent.
+     *
+     * The answer is kept on the phone for as long as the owner chose, and keeping it meant writing
+     * the parsed answer back out as text again - a second copy of every document of the page, built
+     * for nothing when the text it came from was still in hand (Cip, 2026-09-18).
+     */
+    suspend fun selectText(params: List<Pair<String, String>>): String = withContext(Dispatchers.IO) {
         val form = FormBody.Builder().apply {
             params.forEach { (name, value) -> add(name, value) }
             add("wt", "json")
         }.build()
-        JSONObject(execute(request("/select").post(form).build()))
+        execute(request("/select").post(form).build())
     }
 
     /**

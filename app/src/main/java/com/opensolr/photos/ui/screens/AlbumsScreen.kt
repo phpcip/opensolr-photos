@@ -54,7 +54,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -86,6 +88,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
     val p = LocalPalette.current
     val context = LocalContext.current
     val view = LocalView.current
+    val albumScope = rememberCoroutineScope()
     // Long press on a section title or an album picks it; while anything is picked, a tap picks
     // or unpicks, and the bar at the bottom deletes or shares their photos (Cip, 2026-09-17).
     val selecting = state.selectedAlbums.isNotEmpty() || state.selectedSections.isNotEmpty()
@@ -223,7 +226,13 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             DockAction(R.drawable.ic_share, "Share", enabled = shareEnabled) {
-                viewModel.withSelectedAlbumPhotos { photos -> Actions.sharePhotos(context, photos) }
+                // Whole albums can be thousands of photos, and finding their files asks the phone's
+                // media store about each one: off the screen's thread (Cip, 2026-09-18).
+                viewModel.withSelectedAlbumPhotos { photos ->
+                    albumScope.launch {
+                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Actions.sharePhotos(context, photos) }
+                    }
+                }
             }
             DockAction(R.drawable.ic_delete, "Delete", enabled = !state.albumsWorking) { confirmDelete = true }
             Column(
@@ -251,14 +260,18 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
                 TextButton(onClick = {
                     confirmDelete = false
                     viewModel.withSelectedAlbumPhotos { photos ->
-                    val sender = Actions.deleteRequest(context, Actions.contentUris(context, photos))
-                    pendingDelete = photos.map { it.id }.toSet()
-                    if (sender != null) {
-                        deleteLauncher.launch(IntentSenderRequest.Builder(sender).build())
-                    } else {
-                        viewModel.albumPhotosDeleted(pendingDelete)
-                        pendingDelete = emptySet()
-                    }
+                        pendingDelete = photos.map { it.id }.toSet()
+                        albumScope.launch {
+                            val sender = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                Actions.deleteRequest(context, Actions.contentUris(context, photos))
+                            }
+                            if (sender != null) {
+                                deleteLauncher.launch(IntentSenderRequest.Builder(sender).build())
+                            } else {
+                                viewModel.albumPhotosDeleted(pendingDelete)
+                                pendingDelete = emptySet()
+                            }
+                        }
                     }
                 }) { Text("Delete", color = Color(0xFFE53E3E)) }
             },

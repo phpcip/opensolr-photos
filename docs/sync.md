@@ -25,7 +25,8 @@ that copy, on the phone, and a first sync compares against an empty copy, so eve
 5. **Hand to Opensolr** every photo that the copy does not hold, every photo whose file size or
    modification time differs from the copy's, every photo chosen for *Re-sync selected*, and every photo
    indexed without words while the plan had no AI or while the AI server could not answer. A photo that
-   looks touched is weighed exactly before it is read again: the md5 of the file is compared with the md5
+   looks touched is weighed exactly before it is read again (once: the md5 worked out here travels with the
+   photo if it is sent): the md5 of the file is compared with the md5
    the copy holds, and an equal md5 means only the header was written (your own words, by this app), so
    nothing is read and the copy simply takes the file as it now stands. A photo that comes back without
    words again is left out for a pause that grows each time (1 hour, 4 hours, 16 hours, then once a day;

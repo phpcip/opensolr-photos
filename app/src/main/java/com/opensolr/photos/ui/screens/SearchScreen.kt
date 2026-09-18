@@ -247,17 +247,25 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         if (result.resultCode == Activity.RESULT_OK) viewModel.removeDeleted(pendingDelete)
         pendingDelete = emptySet()
     }
+    val deleteScope = rememberCoroutineScope()
     val deleteSelected = {
         val chosen = viewModel.photosToTag()
-        val sender = Actions.deleteRequest(context, Actions.contentUris(context, chosen))
         pendingDelete = chosen.map { it.id }.toSet()
-        if (sender != null) {
-            deleteLauncher.launch(IntentSenderRequest.Builder(sender).build())
-        } else {
-            // Below Android 11 nothing asks on the app's behalf, so the app asked first.
-            viewModel.removeDeleted(pendingDelete)
-            pendingDelete = emptySet()
+        // Finding the files of a whole selection asks the phone's media store about every one of
+        // them, so it is done off the screen's thread (Cip, 2026-09-18).
+        deleteScope.launch {
+            val sender = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                Actions.deleteRequest(context, Actions.contentUris(context, chosen))
+            }
+            if (sender != null) {
+                deleteLauncher.launch(IntentSenderRequest.Builder(sender).build())
+            } else {
+                // Below Android 11 nothing asks on the app's behalf, so the app asked first.
+                viewModel.removeDeleted(pendingDelete)
+                pendingDelete = emptySet()
+            }
         }
+        Unit
     }
 
     val nearEnd by remember(rows) {
@@ -936,9 +944,13 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     // which is the whole point: the gallery cannot swipe through a search of yours, because it
     // knows nothing about it (Cip, 2026-09-16).
     viewing?.let { hit ->
+        // Where the opened photo sits in the results, worked out when it opens and when the
+        // results change - not on every redraw behind it, which on ten thousand photos was a walk
+        // through the whole list each time (Cip, 2026-09-18).
+        val startAt = remember(hit.id, state.hits) { state.hits.indexOfFirst { it.id == hit.id }.coerceAtLeast(0) }
         PhotoViewer(
             hits = state.hits,
-            start = state.hits.indexOfFirst { it.id == hit.id }.coerceAtLeast(0),
+            start = startAt,
             onClose = { viewing = null },
             // Anything that leads somewhere else closes the picture first, or the new screen is
             // built behind a photo still filling the display (Cip, 2026-09-16).
@@ -1174,12 +1186,34 @@ private fun buildSkeletonRows(
     collapsed: Set<String>,
 ): List<GridRow> {
     val rows = ArrayList<GridRow>(hits.size + skeleton.size)
-    // The photos of each stretch of time, found once for all the groups.
-    val dated = hits.mapNotNull { hit -> Actions.solrDateMillis(hit.takenAt)?.let { it to hit } }
-    val undated = hits.filter { Actions.solrDateMillis(it.takenAt) == null }
-    undated.forEach { rows += GridRow.Photo(it) }
+    // Every photo filed under the groups it belongs to, in ONE pass, keyed exactly as the skeleton
+    // names them. Looking for each group's photos by walking the whole list meant the loaded
+    // photos times the groups - a library of ten thousand across two hundred groups was two
+    // million comparisons for every redraw (Cip, 2026-09-18).
+    val byName = HashMap<String, MutableList<PhotoHit>>()
+    hits.forEach { hit ->
+        val at = hit.takenMs
+        if (at == null) {
+            rows += GridRow.Photo(hit)
+            return@forEach
+        }
+        if (Actions.isRecentDay(at)) {
+            byName.getOrPut(Actions.dateHeading(at)) { ArrayList() } += hit
+            return@forEach
+        }
+        byName.getOrPut(Actions.yearHeading(at)) { ArrayList() } += hit
+        byName.getOrPut(Actions.monthKey(at)) { ArrayList() } += hit
+        byName.getOrPut(Actions.dayKey(at)) { ArrayList() } += hit
+    }
     // A month is only drawn under its year, and a day under its month, so folding a year folds
     // everything inside it.
+    // One pass: a group has children when the group before it in the list is its parent, which is
+    // how the skeleton is built - year, then its months, then that month's days.
+    val withChildren = HashSet<String>()
+    for (i in skeleton.indices) {
+        val next = skeleton.getOrNull(i + 1) ?: continue
+        if (next.level > skeleton[i].level) withChildren += skeleton[i].name
+    }
     var yearFolded = false
     var monthFolded = false
     skeleton.forEach { group ->
@@ -1188,7 +1222,7 @@ private fun buildSkeletonRows(
         val folded = "h:${group.name}" in collapsed
         if (group.level == 0) { yearFolded = folded; monthFolded = false }
         if (group.level == 1) monthFolded = folded
-        val mine = dated.filter { it.first in group.from..group.to }.map { it.second }
+        val mine = byName[group.name] ?: emptyList()
         rows += GridRow.Heading(
             text = if (folded) "${group.text} (${Actions.formatCount(group.count.toLong())})" else group.text,
             ids = mine.map { it.id },
@@ -1201,9 +1235,9 @@ private fun buildSkeletonRows(
         if (folded) return@forEach
         // The photos belong to the deepest open group that holds them: a year with months under
         // it, or a month with days under it, shows none of its own. Today and the last few days
-        // have nothing under them, so they show theirs.
-        val hasChildren = skeleton.any { it.level == group.level + 1 && it.from >= group.from && it.to <= group.to }
-        if (hasChildren) return@forEach
+        // have nothing under them, so they show theirs. Which groups have children is worked out
+        // once, above, and not by scanning every group for every group (Cip, 2026-09-18).
+        if (group.name in withChildren) return@forEach
         mine.forEach { rows += GridRow.Photo(it) }
     }
     return rows
@@ -1286,7 +1320,7 @@ private fun buildRows(
     var lastMonth: String? = null
     var lastRecent: String? = null
     hits.forEach { hit ->
-        val millis = Actions.solrDateMillis(hit.takenAt)
+        val millis = hit.takenMs
         when {
             millis != null && Actions.isRecentDay(millis) -> {
                 val heading = Actions.dateHeading(millis)
@@ -1313,22 +1347,22 @@ private fun buildRows(
     loose.forEach { rows += GridRow.Photo(it) }
     // The last few days, by themselves, as they have always been.
     recent.forEach { (heading, photos) ->
-        val millis = photos.firstNotNullOfOrNull { Actions.solrDateMillis(it.takenAt) }
+        val millis = photos.firstNotNullOfOrNull { it.takenMs }
         rows.addGroup(heading, photos, level = 0, range = millis?.let { Actions.daySpan(it) })
     }
     years.forEach { (year, months) ->
         val yearPhotos = months.values.flatten()
-        val yearMillis = yearPhotos.firstNotNullOfOrNull { Actions.solrDateMillis(it.takenAt) }
+        val yearMillis = yearPhotos.firstNotNullOfOrNull { it.takenMs }
         if (rows.addGroup(year, yearPhotos, level = 0, range = yearMillis?.let { Actions.yearSpan(it) })) return@forEach
         // The year's own photos were written by addGroup; its months replace them.
         repeat(yearPhotos.size) { rows.removeAt(rows.size - 1) }
         months.forEach { (monthKey, monthPhotos) ->
-            val monthMillis = monthPhotos.firstNotNullOfOrNull { Actions.solrDateMillis(it.takenAt) }
+            val monthMillis = monthPhotos.firstNotNullOfOrNull { it.takenMs }
             val monthText = monthMillis?.let { Actions.monthHeading(it) } ?: monthKey
             if (rows.addGroup(monthKey, monthPhotos, text = monthText, level = 1, range = monthMillis?.let { Actions.monthSpan(it) })) return@forEach
             val days = LinkedHashMap<String, MutableList<PhotoHit>>()
             monthPhotos.forEach { hit ->
-                val key = Actions.solrDateMillis(hit.takenAt)?.let { Actions.dayKey(it) } ?: days.keys.lastOrNull()
+                val key = hit.takenMs?.let { Actions.dayKey(it) } ?: days.keys.lastOrNull()
                 if (key == null) days.getOrPut("") { ArrayList() } += hit else days.getOrPut(key) { ArrayList() } += hit
             }
             // Every month is spelled out by its days; only photos with no date at all stay
@@ -1336,7 +1370,7 @@ private fun buildRows(
             if (days.keys.any { it.isEmpty() }) return@forEach
             repeat(monthPhotos.size) { rows.removeAt(rows.size - 1) }
             days.forEach { (dayKey, dayPhotos) ->
-                val millis = dayPhotos.firstNotNullOfOrNull { Actions.solrDateMillis(it.takenAt) }
+                val millis = dayPhotos.firstNotNullOfOrNull { it.takenMs }
                 rows.addGroup(dayKey, dayPhotos, text = millis?.let { Actions.dayHeading(it) } ?: dayKey, level = 2, range = millis?.let { Actions.daySpan(it) })
             }
         }
@@ -1697,8 +1731,12 @@ private fun Thumbnail(hit: PhotoHit, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
     val context = LocalContext.current
     val uri = remember(hit.mediaId) { ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, hit.mediaId) }
+    // Built once per photo, not once per redraw: a thumbnail is redrawn on every tick of a scroll
+    // through ten thousand of them, and each rebuild was a new request object for the same picture
+    // (Cip, 2026-09-18).
+    val request = remember(uri) { ImageRequest.Builder(context).data(uri).size(360).crossfade(true).build() }
     AsyncImage(
-        model = ImageRequest.Builder(context).data(uri).size(360).crossfade(true).build(),
+        model = request,
         contentDescription = hit.meaning.ifBlank { hit.fileName },
         contentScale = ContentScale.Crop,
         modifier = modifier
@@ -1988,10 +2026,14 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
             // month are felt - a year firmly, a month faintly; days go by in silence, or a long
             // library would buzz without stopping (Cip, 2026-09-18).
             val from = if (aimed < 0) target else aimed
-            val crossed = rows.subList(minOf(from, target), maxOf(from, target) + 1)
-                .filterIsInstance<GridRow.Heading>()
-                .filter { it.level <= 1 }
-            if (crossed.isNotEmpty()) Haptics.tick(view, crossed.any { it.level == 0 })
+            var crossedMonth = false
+            var crossedYear = false
+            for (i in minOf(from, target)..maxOf(from, target)) {
+                val row = rows[i]
+                if (row !is GridRow.Heading) continue
+                if (row.level == 0) crossedYear = true else if (row.level == 1) crossedMonth = true
+            }
+            if (crossedYear || crossedMonth) Haptics.tick(view, crossedYear)
             aimed = target
             scope.launch { gridState.scrollToItem(target) }
         }
@@ -2024,12 +2066,23 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
 
         // While dragging, what the finger is standing on, so the jump is aimed rather than lucky.
         if (dragging) {
-            val above = rows.take(aimed.coerceAtLeast(0) + 1).filterIsInstance<GridRow.Heading>()
-            val heading = above.lastOrNull { it.level == 0 }?.name
-            // The day under the month, so the bar says exactly where the finger is, not only
-            // which month it is passing (Cip, 2026-09-16). Its text carries a count when the
-            // day is folded away; only the name of the day belongs in the badge.
-            val day = above.lastOrNull { it.level == 1 }?.text?.substringBefore(" (")
+            // Walked backwards from the finger and stopped as soon as both are found: copying the
+            // list and filtering it again for every frame of a drag was the scroller's own cost
+            // (Cip, 2026-09-18).
+            var heading: String? = null
+            var day: String? = null
+            var walk = aimed.coerceAtLeast(0).coerceAtMost(rows.lastIndex)
+            while (walk >= 0 && (heading == null || day == null)) {
+                val row = rows[walk]
+                if (row is GridRow.Heading) {
+                    if (row.level == 0 && heading == null) heading = row.name
+                    // The day under the month, so the bar says exactly where the finger is, not
+                    // only which month it is passing (Cip, 2026-09-16). Its text carries a count
+                    // when the day is folded away; only the name of the day belongs in the badge.
+                    if (row.level == 1 && day == null) day = row.text.substringBefore(" (")
+                }
+                walk--
+            }
             if (!heading.isNullOrBlank()) {
                 Box(
                     Modifier

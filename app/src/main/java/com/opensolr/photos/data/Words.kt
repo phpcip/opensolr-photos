@@ -31,8 +31,27 @@ object Words {
         return tidy(out.toString()).lowercase()
     }
 
+    /**
+     * Runs of blanks, compiled once. Building it inside [tidy] meant a fresh pattern for every
+     * word compared - and every keystroke in the tag box compares the whole library's words
+     * (Cip, 2026-09-18).
+     */
+    private val BLANKS = Regex("\\s+")
+
     /** [text] with its spaces trimmed and collapsed, as it is kept. */
-    fun tidy(text: String): String = text.trim().replace(Regex("\\s+"), " ")
+    fun tidy(text: String): String {
+        val trimmed = text.trim()
+        // A word written with single spaces - nearly all of them - needs nothing done to it.
+        var collapse = false
+        for (i in trimmed.indices) {
+            val c = trimmed[i]
+            if (c.isWhitespace() && (c != ' ' || (i > 0 && trimmed[i - 1] == ' '))) {
+                collapse = true
+                break
+            }
+        }
+        return if (collapse) trimmed.replace(BLANKS, " ") else trimmed
+    }
 }
 
 /**

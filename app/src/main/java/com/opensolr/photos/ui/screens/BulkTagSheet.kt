@@ -44,6 +44,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,6 +64,7 @@ import com.opensolr.photos.ui.SectionLabel
 import com.opensolr.photos.ui.UiState
 import com.opensolr.photos.ui.theme.LocalPalette
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val Corner = RoundedCornerShape(2.dp)
 
@@ -154,6 +156,7 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
     // One request from Android for every photo of the batch; on yes the words go into each file
     // too. The sheet stays until Android answers, so the answer has somewhere to land.
     val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
     val writeLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
@@ -350,12 +353,20 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
                 AccentButton(
                     "Save",
                     onClick = {
-                        val uris = Actions.contentUris(context, targets)
-                        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && uris.isNotEmpty()) {
-                            val request = android.provider.MediaStore.createWriteRequest(context.contentResolver, uris)
-                            writeLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(request.intentSender).build())
-                        } else {
-                            viewModel.tagPhotos(typedTags(), tagsReplace, typedPersons(), personsReplace, writeFiles = true)
+                        // Looking the files up asks the phone's media store about every ticked
+                        // photo, so it happens off the screen's own thread: on a selection of
+                        // thousands it froze the sheet before anything was written
+                        // (Cip, 2026-09-18).
+                        scope.launch {
+                            val uris = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                Actions.contentUris(context, targets)
+                            }
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && uris.isNotEmpty()) {
+                                val request = android.provider.MediaStore.createWriteRequest(context.contentResolver, uris)
+                                writeLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(request.intentSender).build())
+                            } else {
+                                viewModel.tagPhotos(typedTags(), tagsReplace, typedPersons(), personsReplace, writeFiles = true)
+                            }
                         }
                     },
                     modifier = Modifier.weight(1f),

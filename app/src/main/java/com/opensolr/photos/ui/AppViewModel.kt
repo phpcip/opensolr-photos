@@ -234,7 +234,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val indexes = IndexManager(application, prefs, api)
     private val searches = SearchRepository(application)
     private val edits = EditRepository(application)
-    private val photoCache = com.opensolr.photos.data.PhotoCache(application)
+    private val photoCache = com.opensolr.photos.data.PhotoCache.of(application)
 
     private val _state = MutableStateFlow(initialState())
     val state: StateFlow<UiState> = _state.asStateFlow()
@@ -464,13 +464,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * What the photos on screen answer to: the words searched for, the filters, and whether the
      * grid is showing duplicates or the photos like one photo.
      */
-    private fun contextKey(s: UiState): String =
+    private fun contextKey(s: UiState): String {
         // Each kind of view is keyed by what actually decides its photos, and by nothing else.
         // The slider stop used to be in the key even for an ordinary search, so moving the slider
         // inside the duplicates view changed the key of the search waiting behind it and losing
         // its place (Cip, 2026-09-16).
-        if (s.duplicatesMode) "duplicates|${s.similarToId}|${s.duplicateLevel}"
+        //
+        // Built once per view rather than per scrolled row: the grid reports its position on every
+        // frame of a scroll, and the filters print themselves into the key (Cip, 2026-09-18).
+        val cached = contextKeyCache
+        if (cached != null && cached.first === s.filters && cached.second == s.duplicatesMode &&
+            cached.third == "${s.similarToId}|${s.duplicateLevel}|${s.searchedQuery}|${s.freshBias}|${s.wordsOnly}"
+        ) {
+            return contextKeyValue!!
+        }
+        val key = if (s.duplicatesMode) "duplicates|${s.similarToId}|${s.duplicateLevel}"
         else "search|${s.searchedQuery}|${s.filters}|${s.freshBias}|${s.wordsOnly}"
+        contextKeyCache = Triple(s.filters, s.duplicatesMode, "${s.similarToId}|${s.duplicateLevel}|${s.searchedQuery}|${s.freshBias}|${s.wordsOnly}")
+        contextKeyValue = key
+        return key
+    }
+
+    private var contextKeyCache: Triple<SearchFilters, Boolean, String>? = null
+    private var contextKeyValue: String? = null
 
     /**
      * Remembers where the grid stands for the search it is showing: the row at the top by its
@@ -627,9 +643,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     prefs.facetsJson = null
                     // The words were just written into the file too, so it is a few bytes longer.
                     // The picture is unchanged, and the sync must not read it again over that.
-                    Actions.contentUris(context, listOf(hit)).firstOrNull()?.let {
-                        val (size, modified) = fileStampOf(it)
-                        photoCache.updateDocSize(hit.id, size, modified, fileHashOf(hit))
+                    Actions.contentUris(context, listOf(hit)).firstOrNull()?.let { uri ->
+                        val (size, modified) = fileStampOf(uri)
+                        photoCache.updateDocSize(hit.id, size, modified, fileHashOf(uri))
                     }
                 }
                 // Held answers would still carry the old words, and the photo on screen shows the
@@ -704,8 +720,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 // Into the files, while the permission Android just gave is good for this batch.
                 if (writeFiles) {
                     withContext(Dispatchers.IO) {
+                        // Every photo's file resolved in ONE go for the whole batch, instead of a
+                        // MediaStore lookup per photo inside the loop (Cip, 2026-09-18).
+                        val uris = Actions.contentUrisByPhoto(context, targets)
+                        // How often the bar is allowed to move. Telling the screen after every
+                        // single photo redrew the whole grid behind the sheet a thousand times over
+                        // (Cip, 2026-09-18).
+                        var shownAt = 0L
                         targets.forEachIndexed { index, hit ->
-                            Actions.contentUris(context, listOf(hit)).firstOrNull()?.let { uri ->
+                            uris[hit.id]?.let { uri ->
                                 val keepTags = when {
                                     clean == null -> null
                                     tagsReplace -> clean
@@ -725,9 +748,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                                 // Without this the next sync would see a changed file and send the
                                 // photo up whole, five per call, instead of the words alone.
                                 val (newSize, newModified) = fileStampOf(uri)
-                                photoCache.updateDocSize(hit.id, newSize, newModified, fileHashOf(hit))
+                                photoCache.updateDocSize(hit.id, newSize, newModified, fileHashOf(uri))
                             }
-                            _state.update { it.copy(bulkTagDone = index + 1) }
+                            val done = index + 1
+                            val at = System.currentTimeMillis()
+                            if (done == targets.size || at - shownAt >= PROGRESS_MS) {
+                                shownAt = at
+                                _state.update { it.copy(bulkTagDone = done) }
+                            }
                         }
                     }
                 }
@@ -808,9 +836,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun browseLocally(keepPosition: Boolean) {
         searchJob?.cancel()
+        // Answered by the phone, so this takes no time at all - but the screen still has to see a
+        // run start and finish, or the pull-to-refresh spinner is left hanging half way down with
+        // nothing to tell it the work is over (Cip, 2026-09-18).
+        _state.update { it.copy(searching = true, searchError = null) }
         searchJob = viewModelScope.launch {
             val groups = withContext(Dispatchers.IO) { buildSkeleton(photoCache.takenTimes()) }
             val count = withContext(Dispatchers.IO) { photoCache.docCount() }
+            kotlinx.coroutines.delay(SPINNER_MS)
             _state.update {
                 it.copy(
                     searching = false,
@@ -919,7 +952,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // Today and the last few days are groups of their own, above the years. A year, a month or
         // a day older than that must therefore stop short of them, or ticking a year would take in
         // today's photos as well - they are inside that year too (Cip, 2026-09-18).
-        val recentStart = times.filter { Actions.isRecentDay(it) }.minOrNull()?.let { Actions.daySpan(it).first }
+        // Found while the photos are being filed above, not by walking all of them a second time.
+        val recentStart = recent.values.asSequence().flatten().minOrNull()?.let { Actions.daySpan(it).first }
         fun clamp(span: Pair<Long, Long>): Pair<Long, Long> =
             if (recentStart == null) span else span.first to minOf(span.second, recentStart - 1)
 
@@ -959,14 +993,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(loadingGroup = true) }
         viewModelScope.launch {
             try {
-                // One group at a time, but every group that asked gets its turn: opening them all
-                // at once used to load the first and drop the rest, leaving empty months behind
-                // (Cip, 2026-09-18).
-                groupLoads.withLock {
+                val local = browsingLocally()
+                // Reading the phone's own copy is an indexed query, so those run as they come; only
+                // the ones that have to ask the index queue up behind each other. Opening a dozen
+                // groups at once must not leave eleven of them empty (Cip, 2026-09-18).
+                val load = suspend {
                     val s = _state.value
-                    val photos = if (browsingLocally()) {
+                    val photos = if (local) {
                         withContext(Dispatchers.IO) {
-                            photoCache.docsBetween(from, to).map { searches.hitOf(org.json.JSONObject(it)) }
+                            photoCache.docsBetween(from, to, com.opensolr.photos.search.SearchRepository.GROUP_TICK_MAX).map { searches.hitOf(org.json.JSONObject(it)) }
                         }
                     } else {
                         searches.photosBetween(s.searchedQuery, s.filters, from, to, s.freshBias, s.wordsOnly, full = true)
@@ -978,10 +1013,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         else state.copy(
                             // Browsing is in date order, so photos that arrived late take their own
                             // place in the list rather than the end of it.
-                            hits = (state.hits + added).sortedByDescending { Actions.solrDateMillis(it.takenAt) ?: 0L },
+                            hits = (state.hits + added).sortedByDescending { it.takenMs ?: 0L },
                         )
                     }
                 }
+                if (local) load() else groupLoads.withLock { load() }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -996,8 +1032,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * The md5 of [hit]'s file as it now stands, or null when it cannot be read.
      */
-    private fun fileHashOf(hit: PhotoHit): String? =
-        com.opensolr.photos.media.MediaScanner.findByPath(context, hit.path)?.let { PhotoReader.fileMd5(context, it) }
+    private fun fileHashOf(uri: android.net.Uri): String? = PhotoReader.fileMd5(context, uri)
 
     /**
      * How large the file behind [uri] is right now and when it was last written, or zeroes when it
@@ -1363,7 +1398,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         searching = false,
                         hits = hits,
                         numFound = page.numFound,
-                        facets = if (reset || it.facets.isEmpty()) page.facets else it.facets,
+                        // Only a first page carries the counts; a later page leaves them as they are.
+                        facets = if (reset || page.facets.isNotEmpty()) page.facets else it.facets,
                         smart = page.smart,
                         searchNotice = page.notice,
                         didYouMean = if (reset) page.didYouMean else it.didYouMean,
@@ -1754,7 +1790,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val s = _state.value
                 val whole = if (browsingLocally()) {
                     withContext(Dispatchers.IO) {
-                        photoCache.docsBetween(range.first, range.second).map { searches.hitOf(org.json.JSONObject(it)) }
+                        photoCache.docsBetween(range.first, range.second, com.opensolr.photos.search.SearchRepository.GROUP_TICK_MAX).map { searches.hitOf(org.json.JSONObject(it)) }
                     }
                 } else {
                     searches.photosBetween(s.searchedQuery, s.filters, range.first, range.second, s.freshBias, s.wordsOnly)
@@ -2053,7 +2089,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun signOut() {
         SyncScheduler.cancelAll(context)
-        viewModelScope.launch(Dispatchers.IO) { PhotoCache(context).clear() }
+        viewModelScope.launch(Dispatchers.IO) { PhotoCache.of(context).clear() }
         signedOut(null)
     }
 
@@ -2147,6 +2183,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         /** How long a passing line ("Saved…") stays on the grid. */
         private const val FLASH_MS = 4000L
+
+        /**
+         * The shortest a refresh is allowed to look like it took. Browsing is answered by the phone
+         * in no time, and a spinner that appears and vanishes in the same frame reads as broken.
+         */
+        private const val SPINNER_MS = 350L
+
+        /** How often the bar of a long piece of work is allowed to move. */
+        private const val PROGRESS_MS = 100L
 
         /** How long the word counts of the whole library stand before they are worked out again. */
         private const val WORD_COUNTS_MS = 3000L

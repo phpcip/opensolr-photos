@@ -60,8 +60,14 @@ class PhotoClusterOverlay(
     var pins: List<PhotoPin> = emptyList()
         set(value) {
             field = value
+            // The position of a photo never changes, so its map point is made once here and not
+            // once per photo on every frame of a pan (Cip, 2026-09-18).
+            points = value.map { GeoPoint(it.lat, it.lon) }
             clusters = emptyList()
         }
+
+    /** The map point of each pin, in the same order, made once when the pins arrive. */
+    private var points: List<GeoPoint> = emptyList()
 
     private val density = context.resources.displayMetrics.density
     private val markerSize = 56f * density
@@ -115,20 +121,24 @@ class PhotoClusterOverlay(
         val width = projection.width
         val height = projection.height
         val margin = markerSize
-        val cells = LinkedHashMap<Long, ArrayList<Pair<PhotoPin, Point>>>()
-        pins.forEach { pin ->
-            val p = projection.toPixels(GeoPoint(pin.lat, pin.lon), point)
-            if (p.x < -margin || p.y < -margin || p.x > width + margin || p.y > height + margin) return@forEach
-            val cx = Math.floorDiv(p.x, cellSize.toInt()).toLong()
-            val cy = Math.floorDiv(p.y, cellSize.toInt()).toLong()
-            cells.getOrPut(cx * 1_000_003L + cy) { ArrayList() }.add(pin to Point(p))
+        val cell = cellSize.toInt()
+        // The members of each cell and, beside them, the running sum of their screen positions:
+        // this runs for every frame of a pan, so nothing is built here that can be counted as it
+        // goes (Cip, 2026-09-18).
+        val cells = LinkedHashMap<Long, ArrayList<PhotoPin>>()
+        val sums = HashMap<Long, LongArray>()
+        for (i in pins.indices) {
+            val p = projection.toPixels(points[i], point)
+            if (p.x < -margin || p.y < -margin || p.x > width + margin || p.y > height + margin) continue
+            val key = Math.floorDiv(p.x, cell).toLong() * 1_000_003L + Math.floorDiv(p.y, cell).toLong()
+            cells.getOrPut(key) { ArrayList() }.add(pins[i])
+            val sum = sums.getOrPut(key) { LongArray(2) }
+            sum[0] += p.x.toLong()
+            sum[1] += p.y.toLong()
         }
-        return cells.values.map { members ->
-            PhotoCluster(
-                members.map { it.first },
-                members.map { it.second.x }.average().toFloat(),
-                members.map { it.second.y }.average().toFloat(),
-            )
+        return cells.map { (key, members) ->
+            val sum = sums[key]!!
+            PhotoCluster(members, sum[0].toFloat() / members.size, sum[1].toFloat() / members.size)
         }
     }
 

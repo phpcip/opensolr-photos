@@ -156,9 +156,6 @@ data class DuplicatePage(
 data class PhotoPin(val hit: PhotoHit, val lat: Double, val lon: Double)
 
 /**
- * One photo in the results.
- */
-/**
  * One album: the photos holding [value] in [field], shown as [title]. [covers] are the media
  * ids of its newest photos, newest first, for the stacked cover.
  */
@@ -177,6 +174,9 @@ data class TagSuggestions(val mine: List<String>, val fromMeanings: List<String>
  */
 data class AlbumSection(val title: String, val albums: List<Album>)
 
+/**
+ * One photo in the results.
+ */
 data class PhotoHit(
     val id: String,
     val mediaId: Long,
@@ -212,6 +212,17 @@ data class PhotoHit(
 ) {
     /** The GPS position parsed from Solr's "lat,lon", or null without one. */
     val latLon: Pair<Double, Double>? get() = parseLatLon(location)
+
+    /**
+     * When the photo was taken, as a number; null when it carries no date of its own.
+     *
+     * Worked out once, here, rather than every time something asks. The grid sorts the whole list
+     * by it and then lays it out in years, months and days, so reading it out of the text again
+     * each time meant hundreds of thousands of dates being read for a single screen of photos -
+     * which is why the headings fell behind a fast scroll through ten thousand photos
+     * (Cip, 2026-09-18).
+     */
+    val takenMs: Long? = com.opensolr.photos.ui.Actions.solrDateMillis(takenAt)
 }
 
 /**
@@ -264,13 +275,18 @@ class SearchRepository(private val context: Context) {
      * Answers this phone already paid for. Only the reads below go through it; writing,
      * deleting and the sync's walk over the index never do.
      */
-    private val cache = SearchCache(context)
+    private val cache = SearchCache.of(context)
 
     /**
      * Forgets every cached answer. Called by the button in the account screen and by anything
      * in the app that changes the index, so what the owner just did is never missing.
      */
-    fun clearCache() = cache.clear()
+    fun clearCache() {
+        cache.clear()
+        // What is held ready must go with what is stored, or a write would leave the duplicates
+        // saying what they said before it.
+        synchronized(GROUPED) { GROUPED.clear() }
+    }
 
     /**
      * How many answers are cached right now, for the account screen.
@@ -326,7 +342,7 @@ class SearchRepository(private val context: Context) {
         params += "facet.mincount" to "1"
         params += "facet.limit" to "200"
         FACET_FIELDS.forEach { params += "facet.field" to it }
-        params += "f.year.facet.sort" to "index"
+        params += "facet.sort" to "index"
         return parse(select(params), smart = false, notice = null).facets
     }
 
@@ -385,6 +401,29 @@ class SearchRepository(private val context: Context) {
     )
 
     /**
+     * The vector of a typed search, worked out once and then remembered for a while.
+     *
+     * The same words are turned into a vector for the first page, for every page under it, for the
+     * suggestions beside it and for every group of days the owner opens - and each of those was a
+     * request to the AI server, charged against the month's allowance, for an answer that cannot
+     * change: the same words always make the same vector (Cip, 2026-09-18).
+     */
+    private suspend fun embedOnce(session: com.opensolr.photos.data.Session, indexName: String, text: String): FloatArray {
+        val key = "$indexName|$text"
+        val now = System.currentTimeMillis()
+        synchronized(EMBEDDED) {
+            EMBEDDED[key]?.let { (at, vector) -> if (now - at < EMBED_HOLD_MS) return vector }
+        }
+        val vector = api.embedQuery(session, indexName, text)
+        synchronized(EMBEDDED) {
+            EMBEDDED[key] = now to vector
+            // A handful of searches is all that is ever asked for twice; the oldest go.
+            while (EMBEDDED.size > EMBED_HELD) EMBEDDED.remove(EMBEDDED.keys.first())
+        }
+        return vector
+    }
+
+    /**
      * One search request; [legacy] leaves out the fields an older configuration lacks.
      */
     private suspend fun search(query: String, filters: SearchFilters, start: Int, rows: Int, legacy: Boolean, freshBias: Boolean, wordsOnly: Boolean): SearchPage {
@@ -400,12 +439,22 @@ class SearchRepository(private val context: Context) {
         // Up to a few hundred: a reload of a view the owner has scrolled through asks for
         // everything that was on it in one request (Cip, 2026-09-18).
         params += "rows" to rows.coerceIn(1, 1000).toString()
-        params += "facet" to "true"
-        params += "facet.mincount" to "1"
-        params += "facet.limit" to "80"
-        FACET_FIELDS.filter { !legacy || it !in SearchFilters.NEWER_FACETS }
-            .forEach { params += "facet.field" to "{!ex=$it key=$it}$it" }
-        params += "f.year.facet.sort" to "index"
+        // The filter counts come with the first page and stand for the whole search: the pages
+        // after it kept asking the index to count every value of eight fields over the whole
+        // result, and the answer was thrown away every time (Cip, 2026-09-18).
+        if (start <= 0) {
+            params += "facet" to "true"
+            params += "facet.mincount" to "1"
+            params += "facet.limit" to "80"
+            // The index puts the values in order, in this one request, and they stay in that order
+            // for as long as the answer is held: alphabetically, which is the only order eighty
+            // names, places or cameras can be looked through in (Cip, 2026-09-18). "index" is
+            // Solr's word for the order the values are stored in, which for these fields is the
+            // alphabet; the years come out oldest first, as they always did.
+            params += "facet.sort" to "index"
+            FACET_FIELDS.filter { !legacy || it !in SearchFilters.NEWER_FACETS }
+                .forEach { params += "facet.field" to "{!ex=$it key=$it}$it" }
+        }
         val page = parse(select(params), smart, notice)
         return page.copy(didYouMean = collation(page, text))
     }
@@ -806,13 +855,15 @@ class SearchRepository(private val context: Context) {
         // not enough: the cancellation is raised inside the call, before the put is reached
         // (Cip, 2026-09-16).
         return withContext(NonCancellable) {
-            val json = try {
-                SolrClient(connection).select(params)
+            // The answer is kept and parsed from the very text the index sent, so it is never
+            // written back out again to be stored (Cip, 2026-09-18).
+            val body = try {
+                SolrClient(connection).selectText(params)
             } catch (e: SolrAuthException) {
-                SolrClient(IndexManager(context, prefs, api).refreshConnection(session)).select(params)
+                SolrClient(IndexManager(context, prefs, api).refreshConnection(session)).selectText(params)
             }
-            cache.put(key, json.toString())
-            json
+            cache.put(key, body)
+            JSONObject(body)
         }
     }
 
@@ -822,14 +873,25 @@ class SearchRepository(private val context: Context) {
      */
     private suspend fun cachedDuplicateGroups(connection: IndexConnection, field: String): List<List<String>> {
         val key = SearchCache.key(connection.indexName, "/duplicates", listOf("field" to field))
-        cache.get(key, prefs.cacheSeconds)?.let { stored ->
+        val ttl = prefs.cacheSeconds
+        // Already taken apart once. The slider walks back and forth over the same few kinds and
+        // every page of the grid asks again, and the groups of a big library are tens of thousands
+        // of ids: reading them out of their text each time is the whole cost (Cip, 2026-09-18).
+        if (ttl > 0) {
+            synchronized(GROUPED) {
+                GROUPED[key]?.let { (at, groups) ->
+                    if (System.currentTimeMillis() - at < ttl * 1000L) return groups
+                }
+            }
+        }
+        cache.get(key, ttl)?.let { stored ->
             runCatching {
                 val outer = JSONArray(stored)
                 (0 until outer.length()).map { i ->
                     val inner = outer.getJSONArray(i)
                     (0 until inner.length()).map { k -> inner.getString(k) }
                 }
-            }.getOrNull()?.let { return it }
+            }.getOrNull()?.let { return rememberGroups(key, it) }
         }
         // One uncancellable step, for the same reason as in select(): the slider cancels this job
         // on every stop it crosses, and an answer the index has already given must not be lost
@@ -837,8 +899,17 @@ class SearchRepository(private val context: Context) {
         return withContext(NonCancellable) {
             val groups = SolrClient(connection).duplicateGroups(field)
             cache.put(key, JSONArray(groups.map { JSONArray(it) }).toString())
-            groups
+            rememberGroups(key, groups)
         }
+    }
+
+    /** Keeps [groups] under [key], ready to be handed back without being read again. */
+    private fun rememberGroups(key: String, groups: List<List<String>>): List<List<String>> {
+        synchronized(GROUPED) {
+            GROUPED[key] = System.currentTimeMillis() to groups
+            while (GROUPED.size > GROUPS_HELD) GROUPED.remove(GROUPED.keys.first())
+        }
+        return groups
     }
 
     /**
@@ -874,7 +945,7 @@ class SearchRepository(private val context: Context) {
             val aiUsable = prefs.account?.let { a -> a.vectorAllowed && (a.maxAiRequests <= 0 || a.aiRequestsUsed < a.maxAiRequests) } == true
             val vector = if (!wordsOnly && aiUsable && text.trim().length >= 2) {
                 try {
-                    api.embedQuery(session, connection.indexName, text)
+                    embedOnce(session, connection.indexName, text)
                 } catch (e: QuotaExceededException) {
                     notice = null
                     null
@@ -1017,6 +1088,25 @@ class SearchRepository(private val context: Context) {
 
         /** Ids per request when counting what a selection already carries. */
         private const val WORDS_OF_CHUNK = 1000
+
+        /**
+         * The vectors of the last few typed searches, by index and words, with when each was made.
+         * Held for the whole app, not per screen: paging the grid, opening a group of days and the
+         * suggestions beside the box all ask for the same one (Cip, 2026-09-18).
+         */
+        private val EMBEDDED = LinkedHashMap<String, Pair<Long, FloatArray>>()
+
+        /** How many searches' vectors are kept. */
+        private const val EMBED_HELD = 8
+
+        /** The duplicate groups already taken apart, by index and kind, with when each was read. */
+        private val GROUPED = LinkedHashMap<String, Pair<Long, List<List<String>>>>()
+
+        /** How many kinds of duplicate are kept ready; the slider offers eleven. */
+        private const val GROUPS_HELD = 4
+
+        /** How long one is reused: long enough for a session of scrolling, short enough to be fresh. */
+        private const val EMBED_HOLD_MS = 30 * 60 * 1000L
         /** Candidates of the vector leg and of the fusion, as on search.opensolr.com. */
         private const val KNN_TOP_K = 500
         /**

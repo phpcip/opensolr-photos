@@ -60,9 +60,25 @@ object MediaScanner {
      * index are always built the same way.
      */
     fun photoId(absolutePath: String): String {
-        val digest = MessageDigest.getInstance("MD5").digest(absolutePath.toByteArray(Charsets.UTF_8))
-        return digest.joinToString("") { "%02x".format(it) }
+        val digest = MD5.get()!!
+        digest.reset()
+        val bytes = digest.digest(absolutePath.toByteArray(Charsets.UTF_8))
+        // Written out by hand rather than with a format string per byte: this runs for every photo
+        // on the phone in every scan, and sixteen format calls each is most of what a scan of ten
+        // thousand photos costs (Cip, 2026-09-18).
+        val out = CharArray(bytes.size * 2)
+        for (i in bytes.indices) {
+            val v = bytes[i].toInt() and 0xff
+            out[i * 2] = HEX[v ushr 4]
+            out[i * 2 + 1] = HEX[v and 0x0f]
+        }
+        return String(out)
     }
+
+    /** The digest, one per thread: asking the platform for a new one costs more than the hashing. */
+    private val MD5 = ThreadLocal.withInitial { MessageDigest.getInstance("MD5") }
+
+    private val HEX = "0123456789abcdef".toCharArray()
 
     /**
      * Every folder that holds at least one photo, with its photo count, largest first.
@@ -88,11 +104,11 @@ object MediaScanner {
         val prefixes = folders.map { normalizeFolder(it) }
         val result = LinkedHashMap<String, LocalPhoto>()
         if (prefixes.isEmpty()) return result
-        query(context) { row ->
-            val folder = normalizeFolder(row.folder)
-            if (prefixes.any { folder.startsWith(it, ignoreCase = true) }) {
-                result[row.id] = row
-            }
+        // The folder decides before the photo is built, not after: a phone whose chosen folders hold
+        // a tenth of its pictures was hashing the path of every one of the other nine tenths for
+        // nothing (Cip, 2026-09-18).
+        query(context, keep = { folder -> prefixes.any { folder.startsWith(it, ignoreCase = true) } }) { row ->
+            result[row.id] = row
         }
         return result
     }
@@ -102,7 +118,16 @@ object MediaScanner {
      * went stale (the gallery re-scanned the file). Returns null when the file is gone.
      */
     fun findByPath(context: Context, absolutePath: String): LocalPhoto? {
+        if (absolutePath.isBlank()) return null
+        // Asked of MediaStore by path, not by walking every photo on the phone: this is called once
+        // per photo when the owner's words are written into a batch of them, and a walk each time
+        // meant a full scan of the library per photo (Cip, 2026-09-18).
         var found: LocalPhoto? = null
+        query(context, where = "${MediaStore.Images.Media.DATA} = ?", args = arrayOf(absolutePath)) { row ->
+            if (found == null) found = row
+        }
+        if (found != null) return found
+        // A phone that reports no DATA column value for the row: fall back to the walk, once.
         query(context) { row -> if (found == null && row.absolutePath == absolutePath) found = row }
         return found
     }
@@ -121,10 +146,43 @@ object MediaScanner {
     }
 
     /**
+     * Which of [mediaIds] MediaStore still has, in one query however many there are. Asking row by
+     * row is what made sharing, deleting and tagging a large selection slow (Cip, 2026-09-18).
+     */
+    fun existing(context: Context, mediaIds: Collection<Long>): Set<Long> {
+        if (mediaIds.isEmpty()) return emptySet()
+        val out = HashSet<Long>(mediaIds.size)
+        mediaIds.chunked(500).forEach { batch ->
+            val marks = batch.joinToString(",") { "?" }
+            try {
+                context.contentResolver.query(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    arrayOf(MediaStore.Images.Media._ID),
+                    "${MediaStore.Images.Media._ID} IN ($marks)",
+                    batch.map { it.toString() }.toTypedArray(),
+                    null,
+                )?.use { c ->
+                    while (c.moveToNext()) out += c.getLong(0)
+                }
+            } catch (e: Exception) {
+                // Unreadable: treat those ids as gone, and each falls back to a lookup by path.
+            }
+        }
+        return out
+    }
+
+    /**
      * Runs one MediaStore query over all images and hands every usable row to [onRow].
      */
     @Suppress("DEPRECATION")
-    private fun query(context: Context, onRow: (LocalPhoto) -> Unit) {
+    private fun query(
+        context: Context,
+        where: String? = null,
+        args: Array<String>? = null,
+        /** Which folders are wanted, asked before the photo is built; null takes every row. */
+        keep: ((String) -> Boolean)? = null,
+        onRow: (LocalPhoto) -> Unit,
+    ) {
         val hasRelativePath = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
         val projection = mutableListOf(
             MediaStore.Images.Media._ID,
@@ -144,7 +202,7 @@ object MediaScanner {
             context.contentResolver.query(
                 MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                 projection.toTypedArray(),
-                null, null,
+                where, args,
                 "${MediaStore.Images.Media.DATE_MODIFIED} DESC"
             )
         } catch (e: SecurityException) {
@@ -173,13 +231,14 @@ object MediaScanner {
                     relative != null -> root + relative + name
                     else -> continue
                 }
-                val folder = relative ?: folderFromPath(absolute, root)
+                val folder = normalizeFolder(relative ?: folderFromPath(absolute, root))
+                if (keep != null && !keep(folder)) continue
                 onRow(
                     LocalPhoto(
                         id = photoId(absolute),
                         mediaId = mediaId,
                         absolutePath = absolute,
-                        folder = normalizeFolder(folder),
+                        folder = folder,
                         fileName = name,
                         mime = it.getString(mimeCol) ?: "image/jpeg",
                         sizeBytes = it.getLong(sizeCol),

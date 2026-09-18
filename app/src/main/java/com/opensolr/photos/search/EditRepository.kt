@@ -22,7 +22,7 @@ class EditRepository(private val context: Context) {
 
     private val prefs = AppPrefs(context)
     private val api = OpensolrApi()
-    private val cache = PhotoCache(context)
+    private val cache = PhotoCache.of(context)
 
     /**
      * One photo's editor: [tags], [persons] and [meaning] are exactly what the photo is to carry
@@ -34,9 +34,38 @@ class EditRepository(private val context: Context) {
         val wording = meaning?.trim()?.take(com.opensolr.photos.media.PhotoReader.MEANING_MAX_CHARS)?.takeIf { it.isNotEmpty() }
         cache.putEdits(id, PhotoCache.Edits(clean, wording, names))
         cache.doc(id)?.let { doc ->
-            cache.putDoc(doc.copy(tags = clean, persons = names ?: doc.persons, meaning = wording ?: doc.meaning))
+            val finalNames = names ?: doc.persons
+            val finalMeaning = wording ?: doc.meaning
+            cache.putDoc(
+                doc.copy(
+                    tags = clean,
+                    persons = finalNames,
+                    meaning = finalMeaning,
+                    json = withWords(doc.json, clean, finalNames, finalMeaning),
+                )
+            )
         }
         cache.queueAction(id, PhotoCache.ACTION_WORDS)
+    }
+
+    /**
+     * The stored document with the owner's words put into it, so the phone's copy says the same
+     * thing whichever part of it is read. The grid draws a photo from the document, so leaving it
+     * as it was meant a tag disappearing again the moment the screen was rebuilt, until the sync
+     * had been round (Cip, 2026-09-18).
+     */
+    private fun withWords(json: String?, tags: List<String>, persons: List<String>, meaning: String?): String? {
+        if (json == null) return null
+        return try {
+            JSONObject(json).apply {
+                put("custom_tags", org.json.JSONArray(tags))
+                put("persons_ss", org.json.JSONArray(persons))
+                put("persons_t", persons.joinToString(", "))
+                if (meaning != null) put("meaning", meaning)
+            }.toString()
+        } catch (e: Exception) {
+            json
+        }
     }
 
     /**
@@ -52,24 +81,31 @@ class EditRepository(private val context: Context) {
         if (tags == null && persons == null) return
         val addTags = tags?.distinctWords()
         val addNames = persons?.distinctWords()
-        ids.forEach { id ->
-            val doc = cache.doc(id)
-            val edits = cache.getEdits(id)
-            val hadTags = doc?.tags ?: edits?.tags ?: emptyList()
-            val hadNames = doc?.persons ?: edits?.persons ?: emptyList()
-            val finalTags = when {
-                addTags == null -> hadTags
-                tagsReplace -> addTags
-                else -> (hadTags + addTags).distinctWords()
+        cache.inTransaction {
+            ids.forEach { id ->
+                val doc = cache.doc(id)
+                val edits = cache.getEdits(id)
+                val hadTags = doc?.tags ?: edits?.tags ?: emptyList()
+                val hadNames = doc?.persons ?: edits?.persons ?: emptyList()
+                val finalTags = when {
+                    addTags == null -> hadTags
+                    tagsReplace -> addTags
+                    else -> (hadTags + addTags).distinctWords()
+                }
+                val finalNames = when {
+                    addNames == null -> hadNames
+                    personsReplace -> addNames
+                    else -> (hadNames + addNames).distinctWords()
+                }
+                cache.putEdits(id, PhotoCache.Edits(finalTags, edits?.meaning, finalNames))
+                doc?.let {
+                    cache.putDoc(it.copy(tags = finalTags, persons = finalNames, json = withWords(it.json, finalTags, finalNames, it.meaning)))
+                }
             }
-            val finalNames = when {
-                addNames == null -> hadNames
-                personsReplace -> addNames
-                else -> (hadNames + addNames).distinctWords()
-            }
-            cache.putEdits(id, PhotoCache.Edits(finalTags, edits?.meaning, finalNames))
-            doc?.let { cache.putDoc(it.copy(tags = finalTags, persons = finalNames)) }
-            cache.queueAction(id, PhotoCache.ACTION_WORDS)
+            // All of them at once, at the end: queuing each photo on its own asked the database what
+            // was already waiting for it, once per photo, which on a whole library is thousands of
+            // questions for an answer that is read in one (Cip, 2026-09-18).
+            cache.queueActions(ids, PhotoCache.ACTION_WORDS)
         }
     }
 
@@ -94,13 +130,16 @@ class EditRepository(private val context: Context) {
         waiting.chunked(WORDS_BATCH).forEach { batch ->
             val items = batch.map { id ->
                 val edits = cache.getEdits(id)
+                // The photo's row is read once and everything taken from it: the fingerprint used to
+                // be a second read of the same row, plus taking the whole document apart for one
+                // field of it (Cip, 2026-09-18).
                 val doc = cache.doc(id)
                 WordsItem(
                     id = id,
                     tags = edits?.tags ?: doc?.tags,
                     persons = edits?.persons ?: doc?.persons,
                     meaning = edits?.meaning,
-                    fileHash = cache.docFileHash(id),
+                    fileHash = doc?.fileHash,
                 )
             }
             val results = api.photosWords(session, connection.indexName, items)
@@ -154,10 +193,16 @@ class EditRepository(private val context: Context) {
         val persons = words("persons_ss").ifEmpty {
             answer.optString("persons_t").split(',').map { it.trim() }.filter { it.isNotEmpty() }
         }
+        // The two values the answer may not carry, worked out first; the phone's own copy is read
+        // once, and only when one of them is really missing. It used to be read again for each of
+        // them, once per photo of a whole library being brought in step (Cip, 2026-09-18).
+        val size = if (answer.has("size_bytes")) answer.optLong("size_bytes") else null
+        val modified = com.opensolr.photos.ui.Actions.solrDateMillis(answer.optString("modified_at"))?.div(1000)
+        val had = if (size != null && modified != null) null else cache.doc(id)
         cache.putDoc(
             PhotoCache.Doc(
                 id = id,
-                sizeBytes = answer.optLong("size_bytes", cache.doc(id)?.sizeBytes ?: 0L),
+                sizeBytes = size ?: had?.sizeBytes ?: 0L,
                 indexedAt = indexedAt,
                 takenAt = answer.optString("taken_at").ifBlank { null },
                 tags = words("custom_tags"),
@@ -167,7 +212,9 @@ class EditRepository(private val context: Context) {
                 city = answer.optString("city").ifBlank { null },
                 country = answer.optString("country").ifBlank { null },
                 json = answer.toString(),
-                modified = com.opensolr.photos.ui.Actions.solrDateMillis(answer.optString("modified_at"))?.div(1000) ?: cache.doc(id)?.modified ?: 0L,
+                modified = modified ?: had?.modified ?: 0L,
+                embedModel = answer.optString("embed_model").ifBlank { null },
+                fileHash = answer.optString("file_hash").ifBlank { null },
             )
         )
     }
@@ -188,6 +235,6 @@ class EditRepository(private val context: Context) {
             "taken_at,indexed_at,modified_at,year,month,width,height,orientation," +
             "camera_make,camera_model,lens,iso,exposure,f_number,focal_length,flash," +
             "has_location,location,altitude,city,region,province,community,country,country_code," +
-            "labels,meaning,ocr_t,persons_t,persons_ss,custom_tags,clip_model"
+            "labels,meaning,ocr_t,persons_t,persons_ss,custom_tags,clip_model,embed_model"
     }
 }
