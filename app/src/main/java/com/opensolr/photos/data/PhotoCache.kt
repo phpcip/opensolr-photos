@@ -582,22 +582,27 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
     }
 
     /**
-     * The photos that are paperwork: the ones text has already been read out of, and the ones whose
-     * words say they are a receipt, a label, a screenshot - the same list the server runs before it
-     * sends a photo to be read at all (Cip, 2026-09-18). Both, because a document whose text came
-     * back empty is still a document and must be offered again.
+     * The photos that are paperwork by the server's own rule: the ones whose words (`meaning`)
+     * carry a word of the text family - receipt, label, screenshot - which is what Api_lib's
+     * OCR gate sends to be read (Cip, 2026-09-18). A document whose text came back empty is
+     * still a document and is offered again.
+     *
+     * Whole words only, as the server matches them (`\b...\b` in _ocr_gate_from_labels): a
+     * plain substring took "printer stands" for "print". SQLite has no word boundary, so LIKE
+     * narrows the rows and the regex decides.
      */
     fun docsLikeDocuments(words: List<String>): List<String> {
         val needles = words.map { it.trim('"').lowercase() }.filter { it.isNotEmpty() }
-        val where = StringBuilder("(ocr IS NOT NULL AND ocr != '')")
-        val args = ArrayList<String>()
-        needles.forEach {
-            where.append(" OR lower(meaning) LIKE ?")
-            args += "%$it%"
-        }
+        if (needles.isEmpty()) return emptyList()
+        val whole = Regex("\\b(" + needles.joinToString("|") { Regex.escape(it) } + ")\\b")
+        val where = needles.joinToString(" OR ") { "lower(meaning) LIKE ?" }
+        val args = needles.map { "%$it%" }.toTypedArray()
         val out = ArrayList<String>()
-        readableDatabase.query("docs", arrayOf("id"), where.toString(), args.toTypedArray(), null, null, null).use { c ->
-            while (c.moveToNext()) out += c.getString(0)
+        readableDatabase.query("docs", arrayOf("id", "meaning"), where, args, null, null, null).use { c ->
+            while (c.moveToNext()) {
+                val meaning = if (c.isNull(1)) "" else c.getString(1).lowercase()
+                if (whole.containsMatchIn(meaning)) out += c.getString(0)
+            }
         }
         return out
     }

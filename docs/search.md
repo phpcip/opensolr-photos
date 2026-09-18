@@ -301,7 +301,7 @@ downloaded to draw the grid.
     and the swipe to the next photo dies with them.
   - **Tag** opens the tags over the photo; leaving them puts the photo's details back.
 - **Selecting photos**: there is no *Select* button and no *Check all*. A long press on a photo starts
-  selection, as every gallery does, and it ends by itself when the last tick goes. The bar at the bottom
+  selection, as every gallery does, and it ends by itself when the last tick goes, or at once with a tap on the ✓ count above the grid, which clears every tick. The bar at the bottom
   works on the ticked photos: **Tag**, **Share**, **Delete**, and **Re-sync N** to have them read again by
   CLIP (each counts as new AI requests).
 - **A tap you can feel** answers picking photos, crossing a year or a month on the scroll bar, a filter going

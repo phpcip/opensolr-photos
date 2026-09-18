@@ -1665,10 +1665,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch {
-            // Which photos are documents is a question the phone can answer by itself, by the
-            // server's own rule: the ones whose words say receipt, label, screenshot, and the ones
-            // text was already read out of. They go through Opensolr again, picture and all, and
-            // nothing is deleted first - the new document takes the old one's place
+            // Which photos are documents is decided as the server decides what to read: by their
+            // words (meaning), against the text family. The OCR filter is a different question -
+            // only what text was really read out of. They go through Opensolr again, picture and
+            // all, and nothing is deleted first - the new document takes the old one's place
             // (Cip, 2026-09-18).
             val ids = withContext(Dispatchers.IO) {
                 photoCache.docsLikeDocuments(com.opensolr.photos.search.SearchFilters.DOCUMENT_WORDS)

@@ -1,0 +1,1 @@
+Documents on the Sync screen picks your paperwork the way Opensolr does, by whole words only, so a shelf of "printer stands" no longer counts as a document. A tap on the ✓ count above the grid ends a selection at once. Includes everything in 2.5.2.

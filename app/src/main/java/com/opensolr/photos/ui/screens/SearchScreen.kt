@@ -473,11 +473,23 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 // Compact, so it always fits beside the buttons and nothing moves (Cip, 2026-09-17).
                 else -> Actions.formatCompact(state.numFound)
             }
-            if (state.selecting) {
-                Icon(Icons.Filled.Check, contentDescription = "Selected", tint = p.accent, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
+            // While selecting, a tap on the tick and the count ends the selection: every tick goes
+            // and the checkboxes with it (Cip, 2026-09-18). Outside a selection it is only a count.
+            Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    modifier = if (state.selecting) Modifier.combinedClickable(onClick = {
+                        Haptics.tick(view, strong = false)
+                        viewModel.setSelecting(false)
+                    }).padding(vertical = 6.dp, horizontal = 2.dp) else Modifier,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (state.selecting) {
+                        Icon(Icons.Filled.Check, contentDescription = "End selection", tint = p.accent, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(4.dp))
+                    }
+                    Text(countText, style = MaterialTheme.typography.bodySmall, color = if (state.selecting) p.accent else p.muted)
+                }
             }
-            Text(countText, style = MaterialTheme.typography.bodySmall, color = if (state.selecting) p.accent else p.muted, modifier = Modifier.weight(1f))
             // AI: on, the search blends meaning with words; off, it matches words only. The same
             // switch search.opensolr.com carries, and it only means anything once something is
             // typed - browsing has no query to search by meaning (Cip, 2026-09-16). No border
