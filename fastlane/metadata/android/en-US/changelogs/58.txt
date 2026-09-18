@@ -1,0 +1,1 @@
+Photos changed in another app, such as a picture edited in the gallery, are picked up within seconds while Opensolr Photos is running. No need to sync by hand.

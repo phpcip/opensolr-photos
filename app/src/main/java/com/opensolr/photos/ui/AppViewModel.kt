@@ -258,6 +258,31 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private val collapsedHeadings = HashMap<String, Set<String>>(prefs.collapsedHeadings)
         .also { com.opensolr.photos.ui.Haptics.enabled = prefs.hapticsEnabled }
 
+    /** Waits for a burst of photo changes to settle before one sync is asked for. */
+    private var mediaChangeJob: Job? = null
+
+    /** The pictures that changed while [mediaChangeJob] waited, to tell whether any is in a chosen folder. */
+    private val changedUris = LinkedHashSet<Uri>()
+
+    /** A photo changed while a sync was already running: one more runs when that one ends. */
+    private var mediaChangedDuringSync = false
+
+    /**
+     * Listens to the phone's pictures for as long as the app is alive, open or in the
+     * background (Cip, 2026-09-18). The WorkManager watch alone fires a minute after a change
+     * at best, and then holds back for 15 minutes after any sync, so a photo edited in the
+     * gallery was not seen on coming back to the app until a sync was run by hand.
+     */
+    private val mediaObserver = object : android.database.ContentObserver(android.os.Handler(android.os.Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean, uri: Uri?) {
+            onMediaChanged(listOfNotNull(uri))
+        }
+
+        override fun onChange(selfChange: Boolean, uris: Collection<Uri>, flags: Int) {
+            onMediaChanged(uris)
+        }
+    }
+
     // Both maps are declared ABOVE init on purpose. init starts the first search, and a search
     // answered from the cache finishes without ever suspending - so it reached targetScroll()
     // while these were still null and the app opened saying "Search failed" (Cip, 2026-09-16).
@@ -280,6 +305,36 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         checkForUpdate()
         refreshSkippedCount()
         ensureClone()
+        context.contentResolver.registerContentObserver(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, mediaObserver)
+    }
+
+    /**
+     * Stops listening to the phone's pictures when the app goes away for good.
+     */
+    override fun onCleared() {
+        context.contentResolver.unregisterContentObserver(mediaObserver)
+        super.onCleared()
+    }
+
+    /**
+     * A picture on the phone was added, changed or deleted. After three quiet seconds (an
+     * editor saving a file reports several changes in a row), a sync is started when any of
+     * the changes is in a folder the owner chose. A sync that finds nothing new costs no
+     * request, and one already running is followed by another, since it may have read the
+     * folder before the change.
+     */
+    private fun onMediaChanged(uris: Collection<Uri>) {
+        if (prefs.session == null || prefs.connection == null) return
+        changedUris.addAll(uris)
+        mediaChangeJob?.cancel()
+        mediaChangeJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(3000)
+            val batch = changedUris.toList()
+            changedUris.clear()
+            val relevant = withContext(Dispatchers.IO) { MediaScanner.touchesFolders(context, batch, prefs.folders) }
+            if (!relevant) return@launch
+            if (_state.value.sync.running) mediaChangedDuringSync = true else SyncScheduler.runNow(context)
+        }
     }
 
     /**
@@ -2140,6 +2195,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun onSyncFinished() {
         val report = prefs.lastReport
+        // A photo changed while this sync ran: it may not have been seen, so one more sync runs.
+        if (mediaChangedDuringSync) {
+            mediaChangedDuringSync = false
+            SyncScheduler.runNow(context)
+        }
         // Only a sync that actually wrote something makes the held answers wrong. Almost every
         // sync of an ordinary day writes nothing at all - it wakes on a photo somewhere, finds
         // the index already in step, and ends - and emptying the cache on those defeated the

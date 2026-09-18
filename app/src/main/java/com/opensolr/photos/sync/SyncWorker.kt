@@ -3,12 +3,12 @@ package com.opensolr.photos.sync
 import android.content.Context
 import android.content.pm.ServiceInfo
 import android.os.Build
-import android.provider.MediaStore
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.opensolr.photos.data.AppPrefs
+import com.opensolr.photos.media.MediaScanner
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -72,28 +72,10 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
     /**
      * True when at least one of the pictures that woke this run is in a folder the owner
-     * chose, or when that cannot be told (nothing reported, or a picture already deleted,
-     * which the sync must notice). False only when every change is somewhere else.
+     * chose, or when that cannot be told. See [MediaScanner.touchesFolders].
      */
-    private fun touchesChosenFolders(prefs: AppPrefs): Boolean {
-        val uris = triggeredContentUris
-        if (uris.isEmpty() || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true
-        val folders = prefs.folders
-        if (folders.isEmpty()) return false
-        val resolver = applicationContext.contentResolver
-        for (uri in uris) {
-            val folder = try {
-                resolver.query(uri, arrayOf(MediaStore.Images.Media.RELATIVE_PATH), null, null, null)?.use { c ->
-                    if (c.moveToFirst()) c.getString(0) ?: "" else return true
-                } ?: return true
-            } catch (e: Exception) {
-                return true
-            }
-            val normalized = folder.trim().trimStart('/').let { if (it.isEmpty() || it.endsWith("/")) it else "$it/" }
-            if (folders.any { normalized == it || normalized.startsWith(it) }) return true
-        }
-        return false
-    }
+    private fun touchesChosenFolders(prefs: AppPrefs): Boolean =
+        MediaScanner.touchesFolders(applicationContext, triggeredContentUris, prefs.folders)
 
     /**
      * Shows or updates the foreground progress notification.

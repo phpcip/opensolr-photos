@@ -253,6 +253,32 @@ object MediaScanner {
     }
 
     /**
+     * True when at least one of [uris] (MediaStore rows reported as changed) is a picture in
+     * one of [folders], or when that cannot be told: nothing reported, Android older than 10
+     * (no RELATIVE_PATH), or a row already gone, which a sync must notice as a delete. False
+     * only when every change is somewhere else, such as a screenshot or a chat picture.
+     */
+    fun touchesFolders(context: Context, uris: Collection<Uri>, folders: Set<String>): Boolean {
+        if (uris.isEmpty() || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return true
+        if (folders.isEmpty()) return false
+        val resolver = context.contentResolver
+        for (uri in uris) {
+            // The collection itself, not one row: the change cannot be placed in a folder.
+            if (uri.lastPathSegment?.toLongOrNull() == null) return true
+            val folder = try {
+                resolver.query(uri, arrayOf(MediaStore.Images.Media.RELATIVE_PATH), null, null, null)?.use { c ->
+                    if (c.moveToFirst()) c.getString(0) ?: "" else return true
+                } ?: return true
+            } catch (e: Exception) {
+                return true
+            }
+            val normalized = normalizeFolder(folder)
+            if (folders.any { normalized == it || normalized.startsWith(it) }) return true
+        }
+        return false
+    }
+
+    /**
      * Relative folder of an absolute path on phones older than Android 10, which have no
      * RELATIVE_PATH column.
      */
