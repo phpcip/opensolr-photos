@@ -186,13 +186,11 @@ object Actions {
 
     /** One formatter per thread, kept: building one per call showed up on the grid. */
     private val stamp = ThreadLocal.withInitial { SimpleDateFormat("MM/dd/yyyy HH:mm:ss", Locale.US) }
-    private val dayName = ThreadLocal.withInitial { SimpleDateFormat("EEEE", Locale.US) }
-    private val monthOnly = ThreadLocal.withInitial { SimpleDateFormat("MMMM", Locale.US) }
-    private val monthYear = ThreadLocal.withInitial { SimpleDateFormat("MMMM yyyy", Locale.US) }
+    private val monthYear = ThreadLocal.withInitial { SimpleDateFormat("MMM'.' yyyy", Locale.US) }
     private val yearOnly = ThreadLocal.withInitial { SimpleDateFormat("yyyy", Locale.US) }
     private val dayKeyFormat = ThreadLocal.withInitial { SimpleDateFormat("yyyy-MM-dd", Locale.US) }
     private val monthKeyFormat = ThreadLocal.withInitial { SimpleDateFormat("yyyy-MM", Locale.US) }
-    private val dayInMonth = ThreadLocal.withInitial { SimpleDateFormat("EEEE d", Locale.US) }
+    private val fullDay = ThreadLocal.withInitial { SimpleDateFormat("EEE'.' MMM'.' d yyyy", Locale.US) }
 
     /**
      * mm/dd/yyyy hh:mm:ss in the phone's time zone, from a Solr UTC date.
@@ -254,8 +252,8 @@ object Actions {
 
     /**
      * The heading a photo taken at [millis] belongs under, in the phone's time zone: the day
-     * for the last week ("Today", "Yesterday", "Monday"), the month before that ("June 2026"),
-     * and the month with no year while it is the current one.
+     * for the last week ("Today", "Yesterday", "Mon. Sep. 14 2026") and the month before that
+     * ("Jun. 2026"). Every heading carries its year, so none can be read as another year's.
      */
     fun dateHeading(millis: Long): String {
         val now = Calendar.getInstance()
@@ -267,8 +265,7 @@ object Actions {
         return when {
             taken.timeInMillis >= startOfToday.timeInMillis -> "Today"
             daysAgo < 1 -> "Yesterday"
-            daysAgo < 6 -> dayName.get()!!.format(millis)
-            taken.get(Calendar.YEAR) == now.get(Calendar.YEAR) -> monthOnly.get()!!.format(millis)
+            daysAgo < 6 -> fullDay.get()!!.format(millis)
             else -> monthYear.get()!!.format(millis)
         }
     }
@@ -293,10 +290,10 @@ object Actions {
     fun dayKey(millis: Long): String = dayKeyFormat.get()!!.format(millis)
 
     /**
-     * A day inside a month: "Tuesday 16". The month is already written above it, so it is not
-     * repeated here.
+     * A day, whole: "Sun. Mar. 15 2026" (Cip, 2026-09-18). A heading scrolled far from its
+     * month and year still says which day it is.
      */
-    fun dayHeading(millis: Long): String = dayInMonth.get()!!.format(millis)
+    fun dayHeading(millis: Long): String = fullDay.get()!!.format(millis)
 
     /**
      * The year a photo belongs to, as the heading says it and as its key: "2016".
@@ -304,9 +301,9 @@ object Actions {
     fun yearHeading(millis: Long): String = yearOnly.get()!!.format(millis)
 
     /**
-     * The month inside its year: "January". The year stands above it, so it is not repeated.
+     * A month with its year: "Jun. 2026" (Cip, 2026-09-18).
      */
-    fun monthHeading(millis: Long): String = monthOnly.get()!!.format(millis)
+    fun monthHeading(millis: Long): String = monthYear.get()!!.format(millis)
 
     /**
      * The month a photo belongs to, as a key that never changes wording: 2016-01.

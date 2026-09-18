@@ -21,6 +21,9 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -2009,6 +2012,10 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
     var dragging by remember { mutableStateOf(false) }
     // The row the finger is over, which is not where the grid is until it has caught up.
     var aimed by remember { mutableIntStateOf(-1) }
+    // The rows as they are now, read by the drag, which outlives any one list: filters, groups
+    // opening and photos loading all change it under a finger. A drag that went on reading the
+    // list it started with walked past the end of a shorter one and crashed the app (Cip, 2026-09-18).
+    val currentRows by rememberUpdatedState(rows)
     // Too short to be worth a shortcut: a couple of screens are flicked through faster by hand.
     if (total < FAST_SCROLL_MIN_ROWS) return
 
@@ -2038,17 +2045,21 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
         val halfThumbPx = with(density) { FAST_SCROLL_THUMB.toPx() } / 2f
         // A drag anywhere on the bar takes the thumb, wherever the finger landed.
         fun aimAt(y: Float) {
+            val now = currentRows
+            if (now.isEmpty()) return
+            val last = now.lastIndex
             val at = if (travelPx <= 0f) 0f else ((y - halfThumbPx) / travelPx).coerceIn(0f, 1f)
-            val target = ((total - 1) * at).roundToInt().coerceIn(0, total - 1)
+            val target = (last * at).roundToInt().coerceIn(0, last)
             if (target == aimed) return
             // Every heading between where the finger was and where it is now. Only a year and a
             // month are felt - a year firmly, a month faintly; days go by in silence, or a long
             // library would buzz without stopping (Cip, 2026-09-18).
-            val from = if (aimed < 0) target else aimed
+            // A place aimed at in a longer list is brought inside this one.
+            val from = if (aimed < 0) target else aimed.coerceAtMost(last)
             var crossedMonth = false
             var crossedYear = false
             for (i in minOf(from, target)..maxOf(from, target)) {
-                val row = rows[i]
+                val row = now[i]
                 if (row !is GridRow.Heading) continue
                 if (row.level == 0) crossedYear = true else if (row.level == 1) crossedMonth = true
             }
@@ -2062,13 +2073,20 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
                 .align(Alignment.CenterEnd)
                 .fillMaxHeight()
                 .width(FAST_SCROLL_WIDTH)
-                .pointerInput(total) {
-                    detectVerticalDragGestures(
-                        onDragStart = { offset -> dragging = true; aimAt(offset.y) },
-                        onDragEnd = { dragging = false; aimed = -1 },
-                        onDragCancel = { dragging = false; aimed = -1 },
-                        onVerticalDrag = { change, _ -> aimAt(change.position.y) },
-                    )
+                .pointerInput(travelPx) {
+                    try {
+                        detectVerticalDragGestures(
+                            onDragStart = { offset -> dragging = true; aimAt(offset.y) },
+                            onDragEnd = { dragging = false; aimed = -1 },
+                            onDragCancel = { dragging = false; aimed = -1 },
+                            onVerticalDrag = { change, _ -> aimAt(change.position.y) },
+                        )
+                    } finally {
+                        // Taken down mid-drag (the bar resized), no end or cancel is reported:
+                        // the drag is over all the same, and its aim must not outlive it.
+                        dragging = false
+                        aimed = -1
+                    }
                 },
         )
 
@@ -2626,9 +2644,13 @@ private fun FacetValues(
 ) {
     if (values.isNullOrEmpty() && selected.isEmpty()) return
     val view = LocalView.current
+    val all = values.orEmpty().ifEmpty { selected.map { FacetValue(it, 0) } }
+    if (all.size > FACET_SEARCH_OVER) {
+        FacetSearch(all, selected, label, onToggle)
+        return
+    }
     // Long lists (the CLIP words) start with the most frequent values; "Show all" opens the rest.
     var expanded by remember(values) { mutableStateOf(false) }
-    val all = values.orEmpty().ifEmpty { selected.map { FacetValue(it, 0) } }
     val shown = if (expanded || all.size <= FACET_PREVIEW) all else all.take(FACET_PREVIEW) + all.drop(FACET_PREVIEW).filter { it.value in selected }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         shown.forEach { facet ->
@@ -2643,6 +2665,135 @@ private fun FacetValues(
         }
         if (all.size > FACET_PREVIEW) {
             Chip(label = if (expanded) "Show fewer" else "Show all (${Actions.formatCount(all.size.toLong())})", selected = false, onClick = { expanded = !expanded })
+        }
+    }
+    Spacer(Modifier.height(18.dp))
+}
+
+/**
+ * A filter with too many values to lay out as chips (Cip, 2026-09-18): the values picked so far
+ * as chips, to take off with a tap, and under them a small search field. Tapping it lists every
+ * value; typing narrows the list; each tap on a value puts it on or takes it off and the list
+ * stays open, so several can be picked one after another, as with tags.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun FacetSearch(
+    all: List<FacetValue>,
+    selected: Set<String>,
+    label: (String) -> String,
+    onToggle: (String) -> Unit,
+) {
+    val p = LocalPalette.current
+    val view = LocalView.current
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    var text by remember(all) { mutableStateOf("") }
+    var open by remember { mutableStateOf(false) }
+    // Folded once per list, not once per keystroke for every value.
+    val folded = remember(all) { all.map { com.opensolr.photos.data.Words.fold(label(it.value)) } }
+    // Nothing typed: the most frequent values, a short list to start from. Typed: the values
+    // that contain it. Either way no more than FACET_SEARCH_ROWS are drawn (Cip, 2026-09-18).
+    val matches = remember(all, text) {
+        val needle = com.opensolr.photos.data.Words.fold(text)
+        if (needle.isEmpty()) all.sortedByDescending { it.count }
+        else all.filterIndexed { i, _ -> folded[i].contains(needle) }
+    }
+    if (selected.isNotEmpty()) {
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            selected.forEach { value ->
+                val count = all.firstOrNull { it.value == value }?.count ?: 0
+                Chip(
+                    label = if (count > 0) "${label(value)} (${Actions.formatCount(count.toLong())})" else label(value),
+                    selected = true,
+                    onClick = {
+                        Haptics.tick(view, strong = false)
+                        onToggle(value)
+                    },
+                )
+            }
+        }
+        Spacer(Modifier.height(8.dp))
+    }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .border(1.dp, if (open) p.accent else p.hairline, Corner)
+            .padding(horizontal = 10.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Filled.Search, contentDescription = null, tint = p.muted, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.size(8.dp))
+        Box(Modifier.weight(1f)) {
+            if (text.isEmpty()) {
+                Text("Search ${Actions.formatCount(all.size.toLong())} values", style = MaterialTheme.typography.bodySmall, color = p.muted)
+            }
+            androidx.compose.foundation.text.BasicTextField(
+                value = text,
+                onValueChange = { text = it },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodySmall.copy(color = p.ink),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(p.accent),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { focus.clearFocus() }),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { open = it.isFocused },
+            )
+        }
+        if (open) {
+            Text(
+                "Done",
+                style = MaterialTheme.typography.labelSmall,
+                color = p.accent,
+                modifier = Modifier.clickable { text = ""; focus.clearFocus() }.padding(start = 8.dp),
+            )
+        }
+    }
+    if (open) {
+        Spacer(Modifier.height(6.dp))
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .heightIn(max = 300.dp)
+                .background(p.paper, Corner)
+                .border(1.dp, p.hairline, Corner)
+                .verticalScroll(rememberScrollState()),
+        ) {
+            if (matches.isEmpty()) {
+                Text("No value matches.", style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
+            }
+            // Never all of them: a list of thousands would be thousands of rows built for a finger
+            // that reads twenty.
+            matches.take(FACET_SEARCH_ROWS).forEach { facet ->
+                val on = facet.value in selected
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            Haptics.tick(view, strong = !on)
+                            onToggle(facet.value)
+                        }
+                        .padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "${label(facet.value)} (${Actions.formatCount(facet.count.toLong())})",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = if (on) p.accent else p.ink,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (on) Icon(Icons.Filled.Check, contentDescription = "Selected", tint = p.accent, modifier = Modifier.size(16.dp))
+                }
+            }
+            if (matches.size > FACET_SEARCH_ROWS) {
+                Text(
+                    "${Actions.formatCount((matches.size - FACET_SEARCH_ROWS).toLong())} more, type to narrow",
+                    style = MaterialTheme.typography.bodySmall, color = p.muted,
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                )
+            }
         }
     }
     Spacer(Modifier.height(18.dp))
@@ -2795,7 +2946,13 @@ internal fun PickTick(selected: Boolean, onClick: () -> Unit, modifier: Modifier
 }
 
 /** Facet values shown before "Show all". */
-private const val FACET_PREVIEW = 12
+private const val FACET_PREVIEW = 10
+
+/** Above this many values a filter is a search field instead of chips (Cip, 2026-09-18). */
+private const val FACET_SEARCH_OVER = 50
+
+/** How many values the search field lists at once. */
+private const val FACET_SEARCH_ROWS = 50
 
 /** Sync phases during which the index is being rebuilt and search is unavailable. */
 private val REBUILD_PHASES = setOf("Resetting your index", "Updating the index configuration", "Rebuilding your index")

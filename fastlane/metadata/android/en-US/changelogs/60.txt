@@ -1,0 +1,1 @@
+Headings carry their year: months read Jun. 2026, days Sun. Mar. 15 2026. With a search or filter on, the list keeps its order and every photo already loaded after an edit or a pull to refresh. Filters with more than 50 values open as a small search field. Fixed a crash when dragging the fast scroll bar.

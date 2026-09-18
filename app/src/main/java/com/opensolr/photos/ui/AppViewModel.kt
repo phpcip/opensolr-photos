@@ -1468,14 +1468,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 // As many photos as were loaded, in one request. It cannot be worked out from how
                 // far down the owner is: with groups folded away, a screen near the top can stand
                 // over hundreds of photos that are still in the list but not drawn (Cip, 2026-09-18).
-                val rows = if (keepLoaded) current.hits.size.coerceIn(SearchRepository.PAGE, RELOAD_MAX) else SearchRepository.PAGE
+                // Plus a margin, so photos that moved down a little (an edit changes how well a
+                // photo matches) are still inside the answer (Cip, 2026-09-18).
+                val rows = if (keepLoaded) (current.hits.size + RELOAD_MARGIN).coerceIn(SearchRepository.PAGE, RELOAD_MAX) else SearchRepository.PAGE
                 val page = searches.search(current.query, current.filters, start, rows = rows, freshBias = current.freshBias, wordsOnly = current.wordsOnly)
                 _state.update {
                     // A photo already on the grid is never added twice. Consecutive pages can
                     // overlap when several photos share the value being sorted on, and the grid
                     // keys its items by photo id: a repeat used to crash the app the moment it
                     // was drawn, which is what fast scrolling produced (Cip, 2026-09-16).
-                    val hits = if (reset) {
+                    val hits = if (reset && keepPosition && it.hits.isNotEmpty()) {
+                        // The same view reloaded (a sync, coming back from the gallery): the photos
+                        // stay in the order the owner was looking at, each one as the index now has
+                        // it, and only photos new to the answer go after them. A photo edited in the
+                        // gallery matches a little differently afterwards, and re-ranking moved it
+                        // and everything after it (Cip, 2026-09-18).
+                        val fresh = page.hits.associateBy { hit -> hit.id }
+                        val kept = it.hits.mapNotNull { hit -> fresh[hit.id] }
+                        val seen = kept.mapTo(HashSet()) { hit -> hit.id }
+                        kept + page.hits.filter { hit -> seen.add(hit.id) }
+                    } else if (reset) {
                         page.hits
                     } else {
                         val seen = it.hits.mapTo(HashSet()) { hit -> hit.id }
@@ -2038,7 +2050,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // Pulling the list down is a gesture made at the top, by someone who wants to start
             // again from the top: one ordinary page, and the grid goes up with it. The reload
             // button is the opposite - it is pressed where the owner is standing (Cip, 2026-09-18).
-            if (toTop && !_state.value.duplicatesMode && !_state.value.skippedMode) search(reset = true)
+            // Still as many photos as were loaded: the groups folded away hold them too, and a
+            // pull used to leave a search that had them all with its first page only (Cip, 2026-09-18).
+            if (toTop && !_state.value.duplicatesMode && !_state.value.skippedMode) search(reset = true, keepLoaded = true)
             else refresh()
         }
     }
@@ -2300,6 +2314,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         /** Most photos one reload may bring back at once, when the view had that many on it. */
         private const val RELOAD_MAX = 1000
+
+        /** How many more than were loaded a reload asks for. */
+        private const val RELOAD_MARGIN = 100
 
     }
 }
