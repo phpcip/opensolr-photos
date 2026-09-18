@@ -340,7 +340,9 @@ class SearchRepository(private val context: Context) {
         params += "rows" to "0"
         params += "facet" to "true"
         params += "facet.mincount" to "1"
-        params += "facet.limit" to "200"
+        // Every value, no cap: the lists are in alphabetical order, so a cap cut them off at "B"
+        // and the rest of the library could not be filtered on (Cip, 2026-09-18).
+        params += "facet.limit" to "-1"
         FACET_FIELDS.forEach { params += "facet.field" to it }
         params += "facet.sort" to "index"
         return parse(select(params), smart = false, notice = null).facets
@@ -445,7 +447,8 @@ class SearchRepository(private val context: Context) {
         if (start <= 0) {
             params += "facet" to "true"
             params += "facet.mincount" to "1"
-            params += "facet.limit" to "80"
+            // Every value, no cap - see browseFacets (Cip, 2026-09-18).
+            params += "facet.limit" to "-1"
             // The index puts the values in order, in this one request, and they stay in that order
             // for as long as the answer is held: alphabetically, which is the only order eighty
             // names, places or cameras can be looked through in (Cip, 2026-09-18). "index" is
@@ -528,7 +531,8 @@ class SearchRepository(private val context: Context) {
             params += "facet" to "true"
             params += "facet.mincount" to "1"
             params += "facet.sort" to "count"
-            params += "facet.limit" to "200"
+            // Every name and tag the batch carries, not the first 200 (Cip, 2026-09-18).
+            params += "facet.limit" to "-1"
             params += "facet.field" to "persons_ss"
             params += "facet.field" to "custom_tags"
             val fields = select(params).optJSONObject("facet_counts")?.optJSONObject("facet_fields")

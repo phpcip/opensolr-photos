@@ -352,7 +352,9 @@ class AppPrefs(context: Context) {
         private const val KEY_OPEN_FILTERS = "open_filter_sections"
         private const val KEY_CLONE_COMPLETE = "clone_complete"
         private const val KEY_CLONE_FORMAT = "clone_format"
-        private const val KEY_FACETS = "browse_facets"
+        // v2: the lists held before 2.6.1 were cut at 200 values per field; a new key makes every
+        // phone ask for the whole lists once instead of keeping the cut ones (Cip, 2026-09-18).
+        private const val KEY_FACETS = "browse_facets_v2"
 
         /** What the phone's copy of a document holds; raised whenever that changes. */
         private const val CLONE_FORMAT = 2

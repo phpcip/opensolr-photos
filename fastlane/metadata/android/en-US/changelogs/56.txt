@@ -1,0 +1,1 @@
+Filters show every value again: Meaning, People, City, Camera model and the rest were cut off after the first letters of the alphabet. Tagging a selection also lists every name and tag it already carries.
