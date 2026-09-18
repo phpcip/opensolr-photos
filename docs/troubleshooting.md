@@ -105,7 +105,15 @@ still indexed by date, camera, place, file name and your own tags and names, and
 **A filter group looks missing.**
 Every filter group is folded when you open the Filters screen, and each one remembers whether you left it
 open. The badge on a heading counts how many filters are on inside that group. **Camera make** was removed
-on purpose: the model already reads "Nikon Z6".
+on purpose: the model already reads "Nikon Z6". A group with more than 50 values shows a small search field
+instead of its values: tap it for the 50 most frequent, or type to find the rest.
+
+**A photo I edited in the gallery no longer shows up in the same search.**
+Expected. An edit saved as a copy is a new file, so a new photo to the app (its id is the md5 of its path),
+read from scratch. It does not carry the tags, people or wording of the original either: gallery editors
+re-encode the picture and drop the XMP those live in. A filter or a crop can also change what the photo is
+read as, so a kiss in the woods may still be found by "kiss" and no longer by "woods". Search for what the
+edited photo shows, or tag it again. An edit that overwrites the original keeps your own words.
 
 **A photo's details show no *Map* and no *Nearby*, or the location filter has nothing in it.**
 The photo has no GPS data, or photo-location access was not allowed when it was indexed. Allow it in
