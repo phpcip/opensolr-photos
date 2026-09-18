@@ -218,8 +218,10 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     // drop in score, where the vector's near misses begin.
     // Grouped by the search that produced the hits, not by the text being typed: typing alone
     // never regroups the grid; Enter (a new search) does.
-    val rows = remember(state.hits, state.searchedQuery, state.duplicateGroups, state.collapsedHeadings) {
-        buildRows(state.hits, byDate = state.searchedQuery.isBlank(), groups = state.duplicateGroups, collapsed = state.collapsedHeadings)
+    val rows = remember(state.hits, state.searchedQuery, state.duplicateGroups, state.collapsedHeadings, state.skeleton) {
+        if (state.skeleton.isNotEmpty() && state.searchedQuery.isBlank() && state.duplicateGroups.isEmpty()) {
+            buildSkeletonRows(state.skeleton, state.hits, state.collapsedHeadings)
+        } else buildRows(state.hits, byDate = state.searchedQuery.isBlank(), groups = state.duplicateGroups, collapsed = state.collapsedHeadings)
     }
     // The search box is out of the way until asked for: the magnifier in the header opens it.
     // Active filters keep it on screen, so the filters button next to it stays reachable.
@@ -246,7 +248,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         pendingDelete = emptySet()
     }
     val deleteSelected = {
-        val chosen = state.hits.filter { it.id in state.selectedIds }
+        val chosen = viewModel.photosToTag()
         val sender = Actions.deleteRequest(context, Actions.contentUris(context, chosen))
         pendingDelete = chosen.map { it.id }.toSet()
         if (sender != null) {
@@ -282,7 +284,10 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         // how a delete used to land the grid in a random place (Cip, 2026-09-16). The number is
         // only the fallback, for when that row is gone from the list altogether.
         val byKey = state.gridKey?.let { key -> rows.indexOfFirst { it.key == key } }?.takeIf { it >= 0 }
-        val target = byKey ?: state.gridIndex.coerceAtMost(rows.lastIndex)
+        // The row is gone and the number points past the end of a shorter list: that is not "where
+        // the owner was", it is the bottom of something else, so the grid goes to the top instead
+        // (Cip, 2026-09-18).
+        val target = byKey ?: state.gridIndex.takeIf { it <= rows.lastIndex } ?: 0
         gridState.scrollToItem(target.coerceAtLeast(0), if (byKey != null) state.gridOffset else 0)
         restored = true
     }
@@ -295,8 +300,6 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     }
     LaunchedEffect(nearEnd, state.hits.size) {
         if (nearEnd && state.hits.isNotEmpty() && !state.endReached && !state.searching) {
-            // The end of what is loaded, and the next page on its way: a light tap says so.
-            Haptics.tick(view, strong = false)
             viewModel.search(reset = false)
         }
     }
@@ -309,7 +312,6 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             .collect { pushedAtBottom ->
                 val now = latestState
                 if (pushedAtBottom && now.hits.isNotEmpty() && !now.endReached && !now.searching) {
-                    Haptics.tick(view, strong = false)
                     viewModel.search(reset = false)
                 }
             }
@@ -337,23 +339,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             HeaderItem("Albums", onClick = { viewModel.openAlbums() }) {
                 Icon(painterResource(R.drawable.ic_albums), contentDescription = "Albums", tint = p.ink, modifier = Modifier.size(20.dp))
             }
-            // Selection: tap photos, then share, delete or re-sync them.
-            HeaderItem(
-                if (state.selecting) "Done" else "Select",
-                active = state.selecting,
-                onClick = {
-                    // Entering the picking mode is felt, however it is entered (Cip, 2026-09-16).
-                    if (!state.selecting) Haptics.tick(view, strong = true)
-                    viewModel.setSelecting(!state.selecting)
-                },
-            ) {
-                Icon(
-                    if (state.selecting) Icons.Filled.Close else Icons.Filled.CheckCircle,
-                    contentDescription = if (state.selecting) "Stop selecting" else "Select photos",
-                    tint = if (state.selecting) p.accent else p.ink,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
+            // Nothing here for picking at all: a long press starts it and unticking the last photo
+            // ends it (Cip, 2026-09-18).
             // Search: tapping again puts the line away and clears the query. In the accent while
             // open, and while closed with filters applied: something is narrowing the photos.
             HeaderItem("Search", active = searchOpen || state.filters.count > 0, onClick = {
@@ -553,10 +540,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             )
             // Every group of the view on screen folded away, or all of them opened again: only
             // there when the grid has headings to fold (Cip, 2026-09-17).
-            val headingKeys = remember(state.hits, state.searchedQuery, state.duplicateGroups) {
-                buildRows(state.hits, byDate = state.searchedQuery.isBlank(), groups = state.duplicateGroups)
-                    .filterIsInstance<GridRow.Heading>().map { it.key }.toSet()
-            }
+            val headingKeys = remember(rows) { rows.filterIsInstance<GridRow.Heading>().map { it.key }.toSet() }
             if (headingKeys.isNotEmpty()) {
                 val anyCollapsed = state.collapsedHeadings.any { it in headingKeys }
                 IconAction(
@@ -565,20 +549,6 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                     onClick = {
                         Haptics.tick(view, strong = false)
                         viewModel.setAllHeadings(if (anyCollapsed) emptySet() else headingKeys)
-                    },
-                )
-            }
-            // Check all / check none: every photo of the view ticked at once, for tagging a whole
-            // result set - a search, an album, a group of look-alikes (Cip, 2026-09-17).
-            if (state.hits.isNotEmpty()) {
-                val allTicked = state.selecting && state.selectedIds.size >= state.hits.size && state.hits.all { it.id in state.selectedIds }
-                IconAction(
-                    icon = if (allTicked) R.drawable.ic_check_none else R.drawable.ic_check_all,
-                    label = if (allTicked) "Check none" else "Check all",
-                    active = allTicked,
-                    onClick = {
-                        Haptics.tick(view, strong = false)
-                        viewModel.selectAllPhotos(!allTicked)
                     },
                 )
             }
@@ -668,9 +638,30 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             }
         }
         state.searchNotice?.let { Notice(it, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
+        // A line that says what just happened and goes by itself: tags saved, the index catching
+        // up in the background. Never a warning - those live in Me (Cip, 2026-09-17).
+        state.flash?.let {
+            Text(
+                it,
+                style = MaterialTheme.typography.bodySmall,
+                color = p.muted,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+            )
+        }
+        if (state.selectingGroup) {
+            Text(
+                "Ticking the whole group…",
+                style = MaterialTheme.typography.bodySmall,
+                color = p.muted,
+                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+            )
+        }
         state.searchError?.let { Notice(it, title = "Search did not work", modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
 
-        if (!state.searching && state.hits.isEmpty() && state.searchError == null) {
+        // Nothing on the grid is only "nothing indexed" when the library itself is empty: while
+        // browsing, the photos live inside groups and every group can be folded away
+        // (Cip, 2026-09-18).
+        if (!state.searching && state.hits.isEmpty() && state.skeleton.isEmpty() && state.searchError == null) {
             EmptyResults(state)
         }
 
@@ -681,7 +672,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         val pullState = rememberPullToRefreshState()
         PullToRefreshBox(
             isRefreshing = pulled && state.searching,
-            onRefresh = { pulled = true; viewModel.forceRefresh() },
+            onRefresh = { pulled = true; viewModel.forceRefresh(toTop = true); viewModel.syncNow() },
             state = pullState,
             modifier = Modifier.fillMaxSize(),
             indicator = {
@@ -710,9 +701,17 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 ) { row ->
                     when (row) {
                         is GridRow.Heading -> {
+                            // An open group whose photos are not among the loaded pages asks for
+                            // exactly its own stretch of time, once (Cip, 2026-09-18).
+                            if (!row.collapsed && row.range != null && row.ids.size < row.count) {
+                                LaunchedEffect(row.key, row.count, row.ids.size) {
+                                    viewModel.loadGroupPhotos(row.key, row.range.first, row.range.second, row.ids.size, row.count)
+                                }
+                            }
                             // Google Photos style: the tick on a heading takes the whole group.
                             // A long press on it starts selecting with that group already ticked.
-                            val allPicked = state.selecting && row.ids.isNotEmpty() && state.selectedIds.containsAll(row.ids)
+                            val allPicked = state.selecting &&
+                                (row.key in state.selectedGroups || (row.ids.isNotEmpty() && state.selectedIds.containsAll(row.ids)))
                             // A quiet band in the accent, so a heading still reads as something
                             // to tap without shouting (Cip, 2026-09-17). Shared with the albums.
                             val band = headingBand(row.level)
@@ -721,38 +720,42 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                 Modifier
                                     .fillMaxWidth()
                                     .padding(
-                                        start = if (row.level > 0) 22.dp else 8.dp,
+                                        start = 8.dp + (row.level * 12).dp,
                                         end = 8.dp,
-                                        top = if (row.level > 0) 4.dp else 10.dp,
-                                        bottom = 4.dp,
+                                        top = if (row.level > 0) 5.dp else 10.dp,
+                                        bottom = 5.dp,
                                     )
                                     .clip(Corner)
                                     .background(band)
                                     .combinedClickable(
                                         // While selecting, a tap still takes the whole group, as
                                         // before; otherwise it folds the group away and opens it
-                                        // again (Cip, 2026-09-16).
+                                        // again (Cip, 2026-09-16). A group whose edge moves with
+                                        // every page that arrives ("Best matches", "Also similar")
+                                        // cannot be taken whole, so there it only folds.
                                         onClick = {
-                                            if (state.selecting) viewModel.toggleSelectedGroup(row.ids)
+                                            if (state.selecting && row.selectable) viewModel.toggleSelectedGroup(row.key, row.ids, row.range)
                                             else viewModel.toggleHeading(row.key)
                                         },
-                                        onLongClick = { viewModel.toggleSelectedGroup(row.ids) },
+                                        onLongClick = {
+                                            if (row.selectable) {
+                                                if (!state.selecting) Haptics.tick(view, strong = true)
+                                                viewModel.toggleSelectedGroup(row.key, row.ids, row.range)
+                                            }
+                                        },
                                     )
                                     // Big enough to aim a thumb at: a heading is the tick that
                                     // takes the whole group and the fold (Cip, 2026-09-16).
-                                    .padding(
-                                        start = 8.dp,
-                                        end = 10.dp,
-                                        top = if (row.level > 0) 5.dp else 7.dp,
-                                        bottom = if (row.level > 0) 5.dp else 7.dp,
-                                    ),
+                                    // Every heading is a tap target for folding and for ticking a
+                                    // whole group, so none of them is allowed to get thin.
+                                    .padding(start = 8.dp, end = 10.dp, top = 9.dp, bottom = 9.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Icon(
                                     if (row.collapsed) Icons.Filled.KeyboardArrowRight else Icons.Filled.KeyboardArrowDown,
                                     contentDescription = if (row.collapsed) "Open this group" else "Fold this group away",
                                     tint = p.accent,
-                                    modifier = Modifier.size(if (row.level > 0) 18.dp else 22.dp),
+                                    modifier = Modifier.size(if (row.level > 0) 20.dp else 22.dp),
                                 )
                                 Spacer(Modifier.width(6.dp))
                                 Text(
@@ -762,16 +765,16 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                     color = onBand,
                                     modifier = Modifier.weight(1f),
                                 )
-                                if (state.selecting) {
-                                    Box(
-                                        Modifier
-                                            .size(22.dp)
-                                            .background(if (allPicked) p.accentFill else p.paper, Corner)
-                                            .border(1.dp, if (allPicked) p.accentFill else p.hairline, Corner),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        if (allPicked) Icon(Icons.Filled.Check, contentDescription = null, tint = p.onAccentFill, modifier = Modifier.size(16.dp))
-                                    }
+                                if (state.selecting && row.selectable) {
+                                    // Its own tap target, and kept clear of the right edge: the
+                                    // fast scroller's strip lives there and swallowed every tap
+                                    // that landed on the tick (Cip, 2026-09-18).
+                                    PickTick(
+                                        selected = allPicked,
+                                        onClick = { viewModel.toggleSelectedGroup(row.key, row.ids, row.range) },
+                                        modifier = Modifier.padding(end = FAST_SCROLL_WIDTH),
+                                        dense = true,
+                                    )
                                 }
                             }
                         }
@@ -863,17 +866,11 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                     )
                                 }
                                 if (state.selecting) {
-                                    Box(
-                                        Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(6.dp)
-                                            .size(22.dp)
-                                            .background(if (selected) p.accentFill else p.paper, Corner)
-                                            .border(1.dp, if (selected) p.accentFill else p.hairline, Corner),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = p.onAccentFill, modifier = Modifier.size(16.dp))
-                                    }
+                                    PickTick(
+                                        selected = selected,
+                                        onClick = { viewModel.toggleSelected(hit.id) },
+                                        modifier = Modifier.align(Alignment.TopEnd),
+                                    )
                                 }
                             }
                         }
@@ -892,13 +889,13 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         SelectionDock(
             count = state.selectedIds.size,
             modifier = Modifier.align(Alignment.BottomCenter),
-            onShare = { Actions.sharePhotos(context, state.hits.filter { it.id in state.selectedIds }) },
+            onShare = { Actions.sharePhotos(context, viewModel.photosToTag()) },
             // The app always asks first (Cip, 2026-09-16); from Android 11 the system's own
             // confirmation follows.
             onDelete = { confirmDelete = true },
             onResync = { viewModel.resyncSelected() },
-            // Always available: with photos ticked it tags those, with none it tags everything
-            // the view is showing (Cip, 2026-09-16).
+            // Only what is ticked, always: nothing else can be tagged by accident
+            // (Cip, 2026-09-18).
             onTag = { bulkTagging = true },
         )
     }
@@ -924,6 +921,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             facets = state.facets,
             current = state.filters,
             count = state.numFound,
+            open = state.openFilterSections,
+            onToggleSection = { viewModel.toggleFilterSection(it) },
             onChange = { viewModel.setFilters(it) },
             onDismiss = { showFilters = false },
         )
@@ -1081,9 +1080,9 @@ private fun SelectionDock(
         DockAction(R.drawable.ic_share, "Share", enabled = count > 0, onClick = onShare)
         DockAction(R.drawable.ic_delete, "Delete", enabled = count > 0, onClick = onDelete)
         DockAction(R.drawable.ic_sync, if (count > 0) "Re-sync $count" else "Re-sync", enabled = count > 0, accent = true, onClick = onResync)
-        // Last, and never greyed out: with photos ticked it tags those, with none it tags every
-        // photo the view is showing (Cip, 2026-09-16).
-        DockAction(R.drawable.ic_tag, if (count > 0) "Tag $count" else "Tag all", enabled = true, onClick = onTag)
+        // Last: the photos that are ticked, and only those. Selection now leaves by itself when
+        // the last tick goes, so "tag everything on screen" has nowhere to live (Cip, 2026-09-18).
+        DockAction(R.drawable.ic_tag, "Tag ${Actions.formatCompact(count.toLong())}", enabled = count > 0, onClick = onTag)
     }
 }
 
@@ -1138,13 +1137,76 @@ private sealed interface GridRow {
          * change with it; everything else (folding, the tick that takes the group) is the same.
          */
         val level: Int = 0,
+        /**
+         * When the group is a stretch of time (a month, a day), the first and last instant of it.
+         * The tick then takes every photo of the view in that stretch, not only the pages the grid
+         * happens to hold. Groups that are not a stretch of time - "Best matches" and "Also
+         * similar", whose boundary moves as more results arrive - have none, and no tick
+         * (Cip, 2026-09-18).
+         */
+        val range: Pair<Long, Long>? = null,
+        /** How many photos the group holds in all, which is not always how many are loaded. */
+        val count: Int = ids.size,
     ) : GridRow {
         override val key: String get() = "h:$name"
+
+        /** True when ticking this heading means something exact. */
+        val selectable: Boolean get() = range != null || (ids.isNotEmpty() && name.contains(" of the same"))
     }
 
     data class Photo(val hit: PhotoHit) : GridRow {
         override val key: String get() = hit.id
     }
+}
+
+/**
+ * The grid of plain browsing: every year, month and day of the library - as the phone knows them
+ * from its own copy of the index - with the photos that have been loaded sitting inside them.
+ *
+ * Browsing used to show only the groups the loaded pages happened to reach, so with everything
+ * folded the first sixty photos hid every year below them (Cip, 2026-09-18). The shape comes from
+ * the phone, the photos from the index, and a group opened before its photos have arrived asks
+ * for exactly that stretch of time.
+ */
+private fun buildSkeletonRows(
+    skeleton: List<com.opensolr.photos.ui.DateGroup>,
+    hits: List<PhotoHit>,
+    collapsed: Set<String>,
+): List<GridRow> {
+    val rows = ArrayList<GridRow>(hits.size + skeleton.size)
+    // The photos of each stretch of time, found once for all the groups.
+    val dated = hits.mapNotNull { hit -> Actions.solrDateMillis(hit.takenAt)?.let { it to hit } }
+    val undated = hits.filter { Actions.solrDateMillis(it.takenAt) == null }
+    undated.forEach { rows += GridRow.Photo(it) }
+    // A month is only drawn under its year, and a day under its month, so folding a year folds
+    // everything inside it.
+    var yearFolded = false
+    var monthFolded = false
+    skeleton.forEach { group ->
+        if (group.level >= 1 && yearFolded) return@forEach
+        if (group.level == 2 && monthFolded) return@forEach
+        val folded = "h:${group.name}" in collapsed
+        if (group.level == 0) { yearFolded = folded; monthFolded = false }
+        if (group.level == 1) monthFolded = folded
+        val mine = dated.filter { it.first in group.from..group.to }.map { it.second }
+        rows += GridRow.Heading(
+            text = if (folded) "${group.text} (${Actions.formatCount(group.count.toLong())})" else group.text,
+            ids = mine.map { it.id },
+            collapsed = folded,
+            name = group.name,
+            level = group.level,
+            range = group.from to group.to,
+            count = group.count,
+        )
+        if (folded) return@forEach
+        // The photos belong to the deepest open group that holds them: a year with months under
+        // it, or a month with days under it, shows none of its own. Today and the last few days
+        // have nothing under them, so they show theirs.
+        val hasChildren = skeleton.any { it.level == group.level + 1 && it.from >= group.from && it.to <= group.to }
+        if (hasChildren) return@forEach
+        mine.forEach { rows += GridRow.Photo(it) }
+    }
+    return rows
 }
 
 /**
@@ -1165,7 +1227,13 @@ private fun buildRows(
 
     // One group: its heading, then its photos - unless it is folded away, in which case the
     // heading stands alone and says how many are under it (Cip, 2026-09-16).
-    fun MutableList<GridRow>.addGroup(name: String, photos: List<PhotoHit>, text: String = name, level: Int = 0): Boolean {
+    fun MutableList<GridRow>.addGroup(
+        name: String,
+        photos: List<PhotoHit>,
+        text: String = name,
+        level: Int = 0,
+        range: Pair<Long, Long>? = null,
+    ): Boolean {
         val folded = "h:$name" in collapsed
         // The name is what the group is, and never changes; the text is only what it says now.
         this += GridRow.Heading(
@@ -1174,6 +1242,7 @@ private fun buildRows(
             collapsed = folded,
             name = name,
             level = level,
+            range = range,
         )
         if (!folded) photos.forEach { this += GridRow.Photo(it) }
         return folded
@@ -1204,43 +1273,72 @@ private fun buildRows(
         rows.addGroup("Also similar", hits.drop(cut))
         return rows
     }
-    // Two levels: the month, and the days inside it. A month of holiday photos used to be one
-    // unbroken run of hundreds of thumbnails with nothing to aim a tap at (Cip, 2026-09-16).
-    // Today / Yesterday / a weekday in the last six days are already days, so they stay flat.
-    val byHeading = LinkedHashMap<String, MutableList<PhotoHit>>()
+    // Three levels: the year, the months in it, and the days in each month. A month of holiday
+    // photos used to be one unbroken run of hundreds of thumbnails with nothing to aim a tap at
+    // (Cip, 2026-09-16), and a library of ten years was one long ladder of months
+    // (Cip, 2026-09-18). Today / Yesterday / a weekday in the last six days are already days, so
+    // they stay flat at the top, outside the years.
+    val recent = LinkedHashMap<String, MutableList<PhotoHit>>()
+    val years = LinkedHashMap<String, LinkedHashMap<String, MutableList<PhotoHit>>>()
     val loose = ArrayList<PhotoHit>()
+    // A photo with no date of its own sits where the one before it sits.
+    var lastYear: String? = null
+    var lastMonth: String? = null
+    var lastRecent: String? = null
     hits.forEach { hit ->
-        val heading = Actions.solrDateMillis(hit.takenAt)?.let { Actions.dateHeading(it) }
-        if (heading == null && byHeading.isEmpty()) loose += hit
-        else if (heading == null) byHeading.values.last() += hit
-        else byHeading.getOrPut(heading) { ArrayList() } += hit
-    }
-    val rows = ArrayList<GridRow>(hits.size + byHeading.size)
-    loose.forEach { rows += GridRow.Photo(it) }
-    byHeading.forEach { (heading, photos) ->
-        val days = LinkedHashMap<String, MutableList<PhotoHit>>()
-        photos.forEach { hit ->
-            // A photo with no date sits under the day of the one before it, as it did under the
-            // month before there were days.
-            val key = Actions.solrDateMillis(hit.takenAt)
-                ?.takeIf { !Actions.isRecentDay(it) }
-                ?.let { Actions.dayKey(it) }
-                ?: days.keys.lastOrNull()
-            if (key == null) days.getOrPut("") { ArrayList() } += hit
-            else days.getOrPut(key) { ArrayList() } += hit
+        val millis = Actions.solrDateMillis(hit.takenAt)
+        when {
+            millis != null && Actions.isRecentDay(millis) -> {
+                val heading = Actions.dateHeading(millis)
+                recent.getOrPut(heading) { ArrayList() } += hit
+                lastRecent = heading
+                lastYear = null
+                lastMonth = null
+            }
+            millis != null -> {
+                val year = Actions.yearHeading(millis)
+                val month = Actions.monthKey(millis)
+                years.getOrPut(year) { LinkedHashMap() }.getOrPut(month) { ArrayList() } += hit
+                lastYear = year
+                lastMonth = month
+                lastRecent = null
+            }
+            lastYear != null && lastMonth != null -> years[lastYear]?.get(lastMonth)?.add(hit)
+            lastRecent != null -> recent[lastRecent]?.add(hit)
+            else -> loose += hit
         }
-        // One day in the month is the month: a second heading saying the same thing helps nobody.
-        val split = days.size > 1 && days.keys.none { it.isEmpty() }
-        val folded = rows.addGroup(heading, photos, level = 0)
-        if (folded) return@forEach
-        if (!split) return@forEach
-        // The month's own photos were written by addGroup; days replace them.
-        repeat(photos.size) { rows.removeAt(rows.size - 1) }
-        days.forEach { (key, dayPhotos) ->
-            val millis = dayPhotos.firstNotNullOfOrNull { Actions.solrDateMillis(it.takenAt) }
-            val text = millis?.let { Actions.dayHeading(it) } ?: key
-            // The key carries the month too: the same day number in two months is two groups.
-            rows.addGroup("$heading / $key", dayPhotos, text = text, level = 1)
+    }
+
+    val rows = ArrayList<GridRow>(hits.size + years.size * 2)
+    loose.forEach { rows += GridRow.Photo(it) }
+    // The last few days, by themselves, as they have always been.
+    recent.forEach { (heading, photos) ->
+        val millis = photos.firstNotNullOfOrNull { Actions.solrDateMillis(it.takenAt) }
+        rows.addGroup(heading, photos, level = 0, range = millis?.let { Actions.daySpan(it) })
+    }
+    years.forEach { (year, months) ->
+        val yearPhotos = months.values.flatten()
+        val yearMillis = yearPhotos.firstNotNullOfOrNull { Actions.solrDateMillis(it.takenAt) }
+        if (rows.addGroup(year, yearPhotos, level = 0, range = yearMillis?.let { Actions.yearSpan(it) })) return@forEach
+        // The year's own photos were written by addGroup; its months replace them.
+        repeat(yearPhotos.size) { rows.removeAt(rows.size - 1) }
+        months.forEach { (monthKey, monthPhotos) ->
+            val monthMillis = monthPhotos.firstNotNullOfOrNull { Actions.solrDateMillis(it.takenAt) }
+            val monthText = monthMillis?.let { Actions.monthHeading(it) } ?: monthKey
+            if (rows.addGroup(monthKey, monthPhotos, text = monthText, level = 1, range = monthMillis?.let { Actions.monthSpan(it) })) return@forEach
+            val days = LinkedHashMap<String, MutableList<PhotoHit>>()
+            monthPhotos.forEach { hit ->
+                val key = Actions.solrDateMillis(hit.takenAt)?.let { Actions.dayKey(it) } ?: days.keys.lastOrNull()
+                if (key == null) days.getOrPut("") { ArrayList() } += hit else days.getOrPut(key) { ArrayList() } += hit
+            }
+            // Every month is spelled out by its days; only photos with no date at all stay
+            // directly under the month (Cip, 2026-09-18).
+            if (days.keys.any { it.isEmpty() }) return@forEach
+            repeat(monthPhotos.size) { rows.removeAt(rows.size - 1) }
+            days.forEach { (dayKey, dayPhotos) ->
+                val millis = dayPhotos.firstNotNullOfOrNull { Actions.solrDateMillis(it.takenAt) }
+                rows.addGroup(dayKey, dayPhotos, text = millis?.let { Actions.dayHeading(it) } ?: dayKey, level = 2, range = millis?.let { Actions.daySpan(it) })
+            }
         }
     }
     return rows
@@ -1672,6 +1770,8 @@ private fun FilterSheet(
     facets: Map<String, List<FacetValue>>,
     current: SearchFilters,
     count: Long,
+    open: Set<String>,
+    onToggleSection: (String) -> Unit,
     onChange: (SearchFilters) -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -1694,29 +1794,60 @@ private fun FilterSheet(
             FilterActions(count, onClear = { onChange(SearchFilters()) }, onDone = onDismiss)
             Spacer(Modifier.height(12.dp))
 
-            // The order people reach for (Cip, 2026-09-17): when; then the switches one under
-            // the other, with Meaning right under OCR so "OCR on, then receipt" narrows to the
-            // paperwork; then the lists of tags, people and places; everything else after.
+            // The order people reach for (Cip, 2026-09-17): when; then what the photo has; then
+            // the lists of people, tags and places; everything else after. Every one of them is a
+            // heading exactly like a month on the grid, folded away until it is wanted, and each
+            // says how many of its own filters are on (Cip, 2026-09-18).
             val facetTitles = SearchFilters.FACETS.toMap()
             val facet: @Composable (String) -> Unit = { field ->
                 facetTitles[field]?.let { title ->
-                    FacetSection(title, facets[field], draft.values(field), label = { facetLabel(field, it) }) { onChange(draft.toggled(field, it)) }
+                    val values = facets[field]
+                    val chosen = draft.values(field)
+                    if (!values.isNullOrEmpty() || chosen.isNotEmpty()) {
+                        FilterGroup(title, chosen.size, title in open, { onToggleSection(title) }) {
+                            FacetValues(values, chosen, label = { facetLabel(field, it) }) { onChange(draft.toggled(field, it)) }
+                        }
+                    }
                 }
             }
-            facet("year")
+            // The two ways of filtering by time do not argue with each other: years narrow the
+            // calendar, and a chosen stretch of days puts the years aside (Cip, 2026-09-18).
+            val years = draft.values("year").mapNotNull { it.toIntOrNull() }
+            if (draft.taken == null) {
+                facet("year")
+            } else {
+                FilterGroup("Year", 0, "Year" in open, { onToggleSection("Year") }) {
+                    Text(
+                        "Set by the days chosen below. Clear those to filter by year again.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = p.muted,
+                        modifier = Modifier.padding(bottom = 18.dp),
+                    )
+                }
+            }
             // Under the years, which say which years you actually have photos in, a picker
-            // for anything narrower than a whole year (Cip, 2026-09-16).
-            DateRangeSection(draft.taken) { onChange(draft.copy(taken = it)) }
+            // for anything narrower than a whole year (Cip, 2026-09-16). The years chosen above
+            // bound what the calendar offers.
+            FilterGroup("Taken between", if (draft.taken != null) 1 else 0, "Taken between" in open, { onToggleSection("Taken between") }) {
+                DateRangeValues(draft.taken, years) { onChange(draft.copy(taken = it, fields = if (it != null) draft.fields - "year" else draft.fields)) }
+            }
 
-            FilterSwitch("OCR", "Only photos with text read out of them", draft.hasOcr == true) { onChange(draft.copy(hasOcr = if (it) true else null)) }
+            // Only the switches of this group count here; the words of "Meaning" carry their own
+            // badge, under their own heading (Cip, 2026-09-18).
+            val switchesOn = listOf(draft.hasOcr == true, draft.tagged == true, draft.hasPeople == true, draft.withLocation).count { it }
+            FilterGroup("Photo has", switchesOn, "Photo has" in open, { onToggleSection("Photo has") }) {
+                FilterSwitch("OCR", "Only photos with text read out of them", draft.hasOcr == true) { onChange(draft.copy(hasOcr = if (it) true else null)) }
+                FilterSwitch("Tagged", "Only photos you gave tags", draft.tagged == true) { onChange(draft.copy(tagged = if (it) true else null)) }
+                FilterSwitch("Has people", "Only photos with people named on them", draft.hasPeople == true) { onChange(draft.copy(hasPeople = if (it) true else null)) }
+                FilterSwitch("Has location", "Only photos with a GPS position", draft.withLocation) { onChange(draft.copy(withLocation = it)) }
+                Spacer(Modifier.height(12.dp))
+            }
+            // "Meaning": the words Opensolr read the photos into, right under the switches, as
+            // before (Cip, 2026-09-17).
             facet("labels")
-            FilterSwitch("Tagged", "Only photos you gave tags", draft.tagged == true) { onChange(draft.copy(tagged = if (it) true else null)) }
-            FilterSwitch("Has people", "Only photos with people named on them", draft.hasPeople == true) { onChange(draft.copy(hasPeople = if (it) true else null)) }
-            FilterSwitch("Has location", "Only photos with a GPS position", draft.withLocation) { onChange(draft.copy(withLocation = it)) }
-            Spacer(Modifier.height(12.dp))
 
-            facet("custom_tags")
             facet("persons_ss")
+            facet("custom_tags")
             facet("city")
             facet("country")
             SearchFilters.FACETS.map { it.first }
@@ -1725,26 +1856,78 @@ private fun FilterSheet(
 
             draft.near?.let { near ->
                 // Radius of the "near a point" filter set from the map or a photo's details.
-                SectionLabel("Distance from " + String.format(java.util.Locale.US, "%.4f, %.4f", near.lat, near.lon))
-                Spacer(Modifier.height(10.dp))
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    val choices = (NearFilter.RADII + near.radiusKm).distinct().sorted()
-                    choices.forEach { km ->
-                        Chip(
-                            label = near.copy(radiusKm = km).label.removePrefix("Within "),
-                            selected = km == near.radiusKm,
-                            onClick = { onChange(draft.copy(near = near.copy(radiusKm = km))) },
-                        )
+                val title = "Distance from " + String.format(java.util.Locale.US, "%.4f, %.4f", near.lat, near.lon)
+                FilterGroup(title, 1, title in open, { onToggleSection(title) }) {
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        val choices = (NearFilter.RADII + near.radiusKm).distinct().sorted()
+                        choices.forEach { km ->
+                            Chip(
+                                label = near.copy(radiusKm = km).label.removePrefix("Within "),
+                                selected = km == near.radiusKm,
+                                onClick = { onChange(draft.copy(near = near.copy(radiusKm = km))) },
+                            )
+                        }
+                        Chip(label = "Anywhere", selected = false, onClick = { onChange(draft.copy(near = null)) })
                     }
-                    Chip(label = "Anywhere", selected = false, onClick = { onChange(draft.copy(near = null)) })
+                    Spacer(Modifier.height(18.dp))
                 }
-                Spacer(Modifier.height(18.dp))
             }
 
             HorizontalDivider(color = p.hairline)
             Spacer(Modifier.height(12.dp))
             FilterActions(count, onClear = { onChange(SearchFilters()) }, onDone = onDismiss)
             Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+/**
+ * One group of filters under a heading drawn exactly like a month on the grid: the same band, the
+ * same type, the same arrow, and the same tap to fold it away (Cip, 2026-09-18).
+ *
+ * Folded is how they all start, and how each one is found again on the next visit, because the
+ * phone remembers which were opened. A folded heading carries a badge with how many of its own
+ * filters are on, so nothing applied can hide under it.
+ */
+@Composable
+private fun FilterGroup(title: String, active: Int, open: Boolean, onToggle: () -> Unit, content: @Composable () -> Unit) {
+    val p = LocalPalette.current
+    val view = LocalView.current
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = 10.dp, bottom = 4.dp)
+                .clip(Corner)
+                .background(headingBand(0))
+                .combinedClickableCompat { Haptics.tick(view, strong = false); onToggle() }
+                .padding(start = 8.dp, end = 10.dp, top = 7.dp, bottom = 7.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                if (open) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowRight,
+                contentDescription = if (open) "Fold this group away" else "Open this group",
+                tint = p.accent,
+                modifier = Modifier.size(22.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(title, style = headingStyle(0), fontWeight = FontWeight.Bold, color = p.ink, modifier = Modifier.weight(1f))
+            if (active > 0) {
+                Text(
+                    active.toString(),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = p.onAccentFill,
+                    modifier = Modifier
+                        .clip(Corner)
+                        .background(p.accentFill)
+                        .padding(horizontal = 7.dp, vertical = 2.dp),
+                )
+            }
+        }
+        if (open) {
+            Spacer(Modifier.height(10.dp))
+            content()
         }
     }
 }
@@ -1801,11 +1984,13 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
             val at = if (travelPx <= 0f) 0f else ((y - halfThumbPx) / travelPx).coerceIn(0f, 1f)
             val target = ((total - 1) * at).roundToInt().coerceIn(0, total - 1)
             if (target == aimed) return
-            // Every heading between where the finger was and where it is now; the month wins,
-            // so crossing a month boundary is never felt as just another day.
+            // Every heading between where the finger was and where it is now. Only a year and a
+            // month are felt - a year firmly, a month faintly; days go by in silence, or a long
+            // library would buzz without stopping (Cip, 2026-09-18).
             val from = if (aimed < 0) target else aimed
             val crossed = rows.subList(minOf(from, target), maxOf(from, target) + 1)
                 .filterIsInstance<GridRow.Heading>()
+                .filter { it.level <= 1 }
             if (crossed.isNotEmpty()) Haptics.tick(view, crossed.any { it.level == 0 })
             aimed = target
             scope.launch { gridState.scrollToItem(target) }
@@ -1879,12 +2064,10 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
  */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
-private fun DateRangeSection(current: DateRange?, onChange: (DateRange?) -> Unit) {
+private fun DateRangeValues(current: DateRange?, years: List<Int> = emptyList(), onChange: (DateRange?) -> Unit) {
     val p = LocalPalette.current
     var picking by remember { mutableStateOf(false) }
 
-    SectionLabel("Taken between")
-    Spacer(Modifier.height(10.dp))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Chip(label = current?.label ?: "Choose dates", selected = current != null, onClick = { picking = true })
         if (current != null) {
@@ -1894,9 +2077,34 @@ private fun DateRangeSection(current: DateRange?, onChange: (DateRange?) -> Unit
     Spacer(Modifier.height(18.dp))
 
     if (picking) {
+        // With years chosen above, the calendar offers those years and nothing else.
+        val allowed = remember(years) {
+            object : androidx.compose.material3.SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    if (years.isEmpty()) return true
+                    val c = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC"))
+                    c.timeInMillis = utcTimeMillis
+                    return c.get(java.util.Calendar.YEAR) in years
+                }
+
+                override fun isSelectableYear(year: Int): Boolean = years.isEmpty() || year in years
+            }
+        }
+        // Opened on the years that are filtered for, not on this month: filtering for 2025 and
+        // then having to scroll a calendar back a year is work for nothing (Cip, 2026-09-18).
+        val openAt = remember(years, current) {
+            current?.fromUtcMillis ?: years.maxOrNull()?.let { year ->
+                java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
+                    clear()
+                    set(year, java.util.Calendar.JANUARY, 1)
+                }.timeInMillis
+            }
+        }
         val state = rememberDateRangePickerState(
             initialSelectedStartDateMillis = current?.fromUtcMillis,
             initialSelectedEndDateMillis = current?.toUtcMillis,
+            initialDisplayedMonthMillis = openAt,
+            selectableDates = allowed,
         )
         DatePickerDialog(
             onDismissRequest = { picking = false },
@@ -1953,31 +2161,6 @@ private fun FilterSwitch(title: String, hint: String, checked: Boolean, onChange
             colors = SwitchDefaults.colors(checkedTrackColor = p.accentFill, checkedThumbColor = p.onAccentFill, uncheckedTrackColor = p.chip, uncheckedBorderColor = p.hairline, uncheckedThumbColor = p.muted),
         )
     }
-}
-
-/**
- * A filter with three states: every photo, only those that have the thing, only those that do
- * not. Two chips rather than a switch, because a switch has no way to say "I do not care".
- */
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun TriStateSection(title: String, yes: String, no: String, state: Boolean?, onChange: (Boolean?) -> Unit) {
-    val view = LocalView.current
-    SectionLabel(title)
-    Spacer(Modifier.height(10.dp))
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        // Switching a filter ON is the firmer tap, switching it off the lighter one: the hand can
-        // tell which way it went without looking (Cip, 2026-09-16).
-        Chip(label = yes, selected = state == true, onClick = {
-            Haptics.tick(view, strong = state != true)
-            onChange(if (state == true) null else true)
-        })
-        Chip(label = no, selected = state == false, onClick = {
-            Haptics.tick(view, strong = state != false)
-            onChange(if (state == false) null else false)
-        })
-    }
-    Spacer(Modifier.height(18.dp))
 }
 
 /**
@@ -2358,26 +2541,23 @@ private fun RowScope.ViewerActionFrame(onClick: () -> Unit, content: @Composable
 }
 
 /**
- * One filter group: tap a value to select it, tap again to clear it.
+ * The values of one filter group: tap a value to select it, tap again to clear it. The heading
+ * above it is drawn by FilterGroup, so every group of the sheet looks the same.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun FacetSection(
-    title: String,
+private fun FacetValues(
     values: List<FacetValue>?,
     selected: Set<String>,
     label: (String) -> String = { it },
     onToggle: (String) -> Unit,
 ) {
     if (values.isNullOrEmpty() && selected.isEmpty()) return
-    val p = LocalPalette.current
     val view = LocalView.current
     // Long lists (the CLIP words) start with the most frequent values; "Show all" opens the rest.
-    var expanded by remember(title) { mutableStateOf(false) }
+    var expanded by remember(values) { mutableStateOf(false) }
     val all = values.orEmpty().ifEmpty { selected.map { FacetValue(it, 0) } }
     val shown = if (expanded || all.size <= FACET_PREVIEW) all else all.take(FACET_PREVIEW) + all.drop(FACET_PREVIEW).filter { it.value in selected }
-    SectionLabel(title)
-    Spacer(Modifier.height(10.dp))
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         shown.forEach { facet ->
             Chip(
@@ -2478,19 +2658,28 @@ internal fun DetailsSheet(
                 }
             }
             Spacer(Modifier.height(16.dp))
+            // People first: the names are what most owners look for, and each name reads as its
+            // own thing rather than as one run-on line (Cip, 2026-09-18). Tapping any of them
+            // opens the editor, as a tag does.
+            val people = hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+            if (people.isNotEmpty()) {
+                SectionLabel("People")
+                Spacer(Modifier.height(10.dp))
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    people.forEach { Chip(label = it, selected = true, onClick = { onEdit(hit) }) }
+                }
+                Spacer(Modifier.height(16.dp))
+            }
             if (hit.customTags.isNotEmpty()) {
-                SectionLabel("My tags")
+                SectionLabel("My tags (Albums)")
                 Spacer(Modifier.height(10.dp))
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     hit.customTags.forEach { Chip(label = it, selected = true, onClick = { onEdit(hit) }) }
                 }
                 Spacer(Modifier.height(16.dp))
             }
-            // The people already named on the file, when something wrote them there.
-            if (hit.persons.isNotBlank()) {
-                SectionLabel("People")
-                Text(hit.persons, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = p.ink, modifier = Modifier.padding(vertical = 12.dp))
-            }
+            // Plain text, not chips: there are a lot of these words, they are edited as one piece
+            // of writing anyway, and as chips they filled the sheet (Cip, 2026-09-18).
             SectionLabel("What the photo shows")
             Text(hit.meaning.ifBlank { "No words yet" }, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = p.ink, modifier = Modifier.padding(vertical = 12.dp))
             // What was read printed IN the photo - a receipt, a label, a screenshot. Shown apart
@@ -2500,6 +2689,35 @@ internal fun DetailsSheet(
                 Text(hit.ocrText, style = MaterialTheme.typography.bodyMedium, color = p.muted, modifier = Modifier.padding(vertical = 12.dp))
             }
             Spacer(Modifier.height(24.dp))
+        }
+    }
+}
+
+/**
+ * The square tick of a heading, a photo or an album: high contrast on both themes (outlined in the
+ * theme's own ink, filled with the accent when it is on) and a tap target of its own, wider than
+ * the square, so the tick itself answers a finger (Cip, 2026-09-18).
+ */
+@Composable
+internal fun PickTick(selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, dense: Boolean = false) {
+    val p = LocalPalette.current
+    val view = LocalView.current
+    Box(
+        modifier
+            .combinedClickableCompat { Haptics.tick(view, strong = !selected); onClick() }
+            // On a heading the tap area grows sideways only: taller and every title would jump
+            // the moment picking started (Cip, 2026-09-18).
+            .padding(horizontal = if (dense) 10.dp else 6.dp, vertical = if (dense) 0.dp else 6.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(
+            Modifier
+                .size(22.dp)
+                .background(if (selected) p.accentFill else p.paper.copy(alpha = 0.55f), Corner)
+                .border(2.dp, if (selected) p.accentFill else p.ink, Corner),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = p.onAccentFill, modifier = Modifier.size(16.dp))
         }
     }
 }
@@ -2526,7 +2744,11 @@ private val SkippedRed = Color(0xFFE53E3E)
  */
 @Composable
 internal fun headingBand(level: Int): Color =
-    LocalPalette.current.accent.copy(alpha = if (level > 0) 0.08f else 0.15f)
+    LocalPalette.current.accent.copy(alpha = when (level) {
+        0 -> 0.18f
+        1 -> 0.11f
+        else -> 0.06f
+    })
 
 /**
  * The type of a group heading: a month (level 0) or a day under it. A touch under the title
@@ -2534,5 +2756,10 @@ internal fun headingBand(level: Int): Color =
  */
 @Composable
 internal fun headingStyle(level: Int): androidx.compose.ui.text.TextStyle =
-    if (level > 0) MaterialTheme.typography.titleMedium.copy(fontSize = 14.sp)
-    else MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp)
+    when (level) {
+        0 -> MaterialTheme.typography.titleMedium.copy(fontSize = 19.sp)
+        1 -> MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp)
+        // A day is the one a thumb aims at most often, so it stays big enough to hit and to read
+        // (Cip, 2026-09-18).
+        else -> MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp)
+    }

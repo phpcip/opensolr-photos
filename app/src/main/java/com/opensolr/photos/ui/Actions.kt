@@ -20,6 +20,21 @@ import java.util.TimeZone
 /**
  * Things the UI hands off to other apps, and the formats it shows numbers and dates in.
  */
+/**
+ * One group of the grid as the phone knows it from its own copy of the index: a year, a month in
+ * it, or a day in that month, with how many photos it holds and the stretch of time it covers.
+ */
+data class DateGroup(
+    val level: Int,
+    /** What the group is, unchanging, and what its folded state is kept by. */
+    val name: String,
+    /** What the heading says. */
+    val text: String,
+    val count: Int,
+    val from: Long,
+    val to: Long,
+)
+
 object Actions {
 
     const val PRICING_URL = "https://opensolr.com/pricing"
@@ -207,6 +222,70 @@ object Actions {
      */
     fun dayHeading(millis: Long): String =
         SimpleDateFormat("EEEE d", Locale.US).format(millis)
+
+    /**
+     * The year a photo belongs to, as the heading says it and as its key: "2016".
+     */
+    fun yearHeading(millis: Long): String = SimpleDateFormat("yyyy", Locale.US).format(millis)
+
+    /**
+     * The month inside its year: "January". The year stands above it, so it is not repeated.
+     */
+    fun monthHeading(millis: Long): String = SimpleDateFormat("MMMM", Locale.US).format(millis)
+
+    /**
+     * The month a photo belongs to, as a key that never changes wording: 2016-01.
+     */
+    fun monthKey(millis: Long): String = SimpleDateFormat("yyyy-MM", Locale.US).format(millis)
+
+    /**
+     * The whole year [millis] falls in, by the same reckoning as [daySpan].
+     */
+    fun yearSpan(millis: Long): Pair<Long, Long> {
+        val start = java.util.Calendar.getInstance().apply {
+            timeInMillis = millis
+            set(java.util.Calendar.DAY_OF_YEAR, 1)
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        val end = (start.clone() as java.util.Calendar).apply { add(java.util.Calendar.YEAR, 1) }
+        return start.timeInMillis to end.timeInMillis - 1000
+    }
+
+    /**
+     * The whole day [millis] falls in, from its first instant to its last, in the phone's own time
+     * zone - the same one the headings are written in, so a tick on "Tuesday 16" takes exactly the
+     * photos written under it.
+     */
+    fun daySpan(millis: Long): Pair<Long, Long> {
+        val start = java.util.Calendar.getInstance().apply {
+            timeInMillis = millis
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        val end = (start.clone() as java.util.Calendar).apply { add(java.util.Calendar.DAY_OF_MONTH, 1) }
+        return start.timeInMillis to end.timeInMillis - 1000
+    }
+
+    /**
+     * The whole month [millis] falls in, by the same reckoning as [daySpan].
+     */
+    fun monthSpan(millis: Long): Pair<Long, Long> {
+        val start = java.util.Calendar.getInstance().apply {
+            timeInMillis = millis
+            set(java.util.Calendar.DAY_OF_MONTH, 1)
+            set(java.util.Calendar.HOUR_OF_DAY, 0)
+            set(java.util.Calendar.MINUTE, 0)
+            set(java.util.Calendar.SECOND, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        val end = (start.clone() as java.util.Calendar).apply { add(java.util.Calendar.MONTH, 1) }
+        return start.timeInMillis to end.timeInMillis - 1000
+    }
 
     /**
      * A count short enough to always fit a line of buttons: 842, 1.2K, 23K, 1.4M (Cip, 2026-09-17).

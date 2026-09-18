@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
@@ -119,18 +120,17 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
             minZoomLevel = 2.0
             maxZoomLevel = 19.0
             setHorizontalMapRepetitionEnabled(false)
-            if (dark) overlayManager.tilesOverlay.setColorFilter(TilesOverlay.INVERT_COLORS)
+            if (dark) overlayManager.tilesOverlay.setColorFilter(darkMapFilter())
             controller.setZoom(3.0)
             controller.setCenter(GeoPoint(30.0, 10.0))
         }
     }
     val onTap by rememberUpdatedState<(PhotoCluster) -> Unit> { cluster ->
-        // A small group, or one at street level, opens its photos; a large one zooms in.
-        if (cluster.pins.size <= 12 || mapView.zoomLevelDouble >= 17.0) {
-            group = cluster
-        } else {
-            mapView.controller.animateTo(cluster.geoCenter, minOf(mapView.zoomLevelDouble + 2.5, 19.0), 400L)
-        }
+        // A tap on a group opens its photos, whatever its size. It used to zoom in instead, which
+        // meant tapping five or six times on a place where a whole afternoon was photographed -
+        // and the photos never came apart, because they were taken in the same spot
+        // (Cip, 2026-09-18). Zooming is the owner's business: pinch, double tap, the +/- buttons.
+        group = cluster
     }
     val overlay = remember {
         PhotoClusterOverlay(
@@ -259,6 +259,28 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
 }
 
 /**
+ * How the map is darkened at night: not turned inside out, but dimmed and drained of some of its
+ * colour, the way the night mode of any map app does it (Cip, 2026-09-18). Turning the colours over
+ * made the sea orange and the mountains purple; here the sea stays blue and the land stays land.
+ */
+private fun darkMapFilter(): android.graphics.ColorMatrixColorFilter {
+    val matrix = android.graphics.ColorMatrix().apply { setSaturation(0.85f) }
+    // Down to a little over a third of its brightness, with the blues kept a touch stronger than
+    // the rest so water still reads as water.
+    matrix.postConcat(
+        android.graphics.ColorMatrix(
+            floatArrayOf(
+                0.62f, 0f, 0f, 0f, 2f,
+                0f, 0.64f, 0f, 0f, 2f,
+                0f, 0f, 0.72f, 0f, 6f,
+                0f, 0f, 0f, 1f, 0f,
+            )
+        )
+    )
+    return android.graphics.ColorMatrixColorFilter(matrix)
+}
+
+/**
  * The photos of a tapped group, as a grid of thumbnails. A tap opens the photo in the gallery.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -266,13 +288,32 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
 private fun GroupSheet(cluster: PhotoCluster, onDismiss: () -> Unit, onShowPhoto: (com.opensolr.photos.search.PhotoHit) -> Unit) {
     val p = LocalPalette.current
     val context = LocalContext.current
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = p.paper, shape = RoundedCornerShape(2.dp)) {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp).navigationBarsPadding()) {
+    // Dragged up, the sheet grows to the whole screen: a place where a hundred photos were taken
+    // is a grid worth reading, not a peep-hole (Cip, 2026-09-18).
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = false),
+        containerColor = p.paper,
+        shape = RoundedCornerShape(2.dp),
+    ) {
+        Column(Modifier.fillMaxWidth().fillMaxHeight().padding(horizontal = 20.dp).navigationBarsPadding()) {
             SectionLabel("${Actions.formatCount(cluster.pins.size.toLong())} photo${if (cluster.pins.size == 1) "" else "s"} here")
+            // Where "here" is, in the words the photos themselves carry: the most common city and
+            // country of the group (Cip, 2026-09-18). Silent when none of them knows.
+            val place = remember(cluster) {
+                fun commonest(of: (com.opensolr.photos.search.PhotoHit) -> String?): String? =
+                    cluster.pins.mapNotNull { of(it.hit)?.trim()?.takeIf { v -> v.isNotEmpty() } }
+                        .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
+                listOfNotNull(commonest { it.city }, commonest { it.country }).joinToString(" · ").ifBlank { null }
+            }
+            place?.let {
+                Spacer(Modifier.height(4.dp))
+                Text(it, style = MaterialTheme.typography.bodyMedium, color = p.ink)
+            }
             Spacer(Modifier.height(12.dp))
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(96.dp),
-                modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp),
+                modifier = Modifier.fillMaxWidth().weight(1f),
                 contentPadding = PaddingValues(bottom = 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),

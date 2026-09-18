@@ -213,6 +213,45 @@ class AppPrefs(context: Context) {
             ).apply()
         }
 
+    /**
+     * Which groups of the filter sheet are open. They all start folded, and this is how the ones
+     * the owner opened are still open the next time the sheet is pulled up (Cip, 2026-09-18).
+     */
+    var openFilterSections: Set<String>
+        get() = prefs.getStringSet(KEY_OPEN_FILTERS, emptySet()).orEmpty()
+        set(value) = prefs.edit().putStringSet(KEY_OPEN_FILTERS, value).apply()
+
+    /**
+     * Which sections of the albums screen are folded away, kept between visits and between runs,
+     * exactly as the groups of the filter sheet are (Cip, 2026-09-18).
+     */
+    var foldedAlbumSections: Set<String>
+        get() = prefs.getStringSet(KEY_FOLDED_ALBUMS, emptySet()).orEmpty()
+        set(value) = prefs.edit().putStringSet(KEY_FOLDED_ALBUMS, value).apply()
+
+    /**
+     * True once the phone has read the whole index into its own copy of it. An interrupted read
+     * leaves that copy short, and photos missing from it would be sent up again as if they were
+     * new - so it is read again until it finishes (Cip, 2026-09-18). Cleared by a reset.
+     */
+    var cloneComplete: Boolean
+        get() = prefs.getBoolean(KEY_CLONE_COMPLETE, false) && cloneFormat == CLONE_FORMAT
+        set(value) {
+            prefs.edit().putBoolean(KEY_CLONE_COMPLETE, value).putInt(KEY_CLONE_FORMAT, CLONE_FORMAT).commit()
+        }
+
+    /** Which shape the stored copy has. A version that keeps more of each document reads it again. */
+    private val cloneFormat: Int get() = prefs.getInt(KEY_CLONE_FORMAT, 0)
+
+    /**
+     * The filter lists as the index last gave them, kept until a sync writes something: browsing
+     * asks the index for nothing, so without this the filter sheet would come up empty
+     * (Cip, 2026-09-18). Null means they have to be asked for again.
+     */
+    var facetsJson: String?
+        get() = prefs.getString(KEY_FACETS, null)
+        set(value) = prefs.edit().putString(KEY_FACETS, value).apply()
+
     /** Whether the app answers gestures with a tap you can feel. On unless the owner says not. */
     var hapticsEnabled: Boolean
         get() = prefs.getBoolean(KEY_HAPTICS, true)
@@ -310,6 +349,14 @@ class AppPrefs(context: Context) {
         private const val KEY_UPDATE_DISMISSED = "update_dismissed"
         private const val KEY_CACHE_SECONDS = "cache_seconds"
         private const val KEY_COLLAPSED = "collapsed_headings"
+        private const val KEY_OPEN_FILTERS = "open_filter_sections"
+        private const val KEY_CLONE_COMPLETE = "clone_complete"
+        private const val KEY_CLONE_FORMAT = "clone_format"
+        private const val KEY_FACETS = "browse_facets"
+
+        /** What the phone's copy of a document holds; raised whenever that changes. */
+        private const val CLONE_FORMAT = 2
+        private const val KEY_FOLDED_ALBUMS = "folded_album_sections"
         private const val KEY_HAPTICS = "haptics_enabled"
         private const val KEY_LEXICAL_WEIGHT = "lexical_weight"
         const val DEFAULT_LEXICAL_WEIGHT = 0.2f

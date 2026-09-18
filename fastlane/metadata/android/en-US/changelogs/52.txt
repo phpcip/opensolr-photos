@@ -1,0 +1,10 @@
+Your phone now keeps its own copy of your index, so browsing and syncing ask Opensolr for nothing.
+
+- Tagging is instant: saved on the phone, carried up on its own, 50 photos per call, no pictures sent.
+- People first in the tagging form, with an Add or Replace switch for names and for tags.
+- Long press starts selecting; it ends when the last tick goes. A tick on a heading takes the whole group.
+- Photos grouped by year, then month, then day, with every group and its count there from the start.
+- Filters fold away, are remembered, and show how many of their own filters are on. Camera make removed.
+- Map: a tap opens the photos of a place, the sheet drags to full screen and names the place. Night map dimmed, not inverted.
+- Pull down to reload and sync.
+- Fixed: a photo with no date of its own no longer jumps to today when tagged; text already read out of photos is kept when a later pass cannot read it.

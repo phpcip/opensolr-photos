@@ -34,8 +34,25 @@ data class ClipResult(val text: String, val labels: List<String>, val model: Str
  */
 data class IngestItem(val photo: com.opensolr.photos.media.LocalPhoto, val jpeg: ByteArray, val tags: List<String>?, val meaning: String?, val fileHash: String? = null, val persons: List<String> = emptyList())
 
-/** What the server did with one photo: whether it got words (and a vector), and a place. */
-data class IngestResult(val words: Boolean, val place: Boolean)
+/**
+ * One photo whose words changed: what it is to carry from now on. A null field is one the owner
+ * did not touch, and it is left exactly as the index has it.
+ */
+data class WordsItem(
+    val id: String,
+    val tags: List<String>?,
+    val persons: List<String>?,
+    val meaning: String?,
+    /** The md5 of the file as it now stands: writing the words into it made it a different file. */
+    val fileHash: String? = null,
+)
+
+/**
+ * What the server did with one photo: whether it got words (and a vector), a place, and the
+ * document it wrote, so the phone can keep its own copy of it and never ask the index again
+ * (Cip, 2026-09-18). [doc] is absent only when the photo was refused.
+ */
+data class IngestResult(val words: Boolean, val place: Boolean, val doc: JSONObject? = null)
 
 /**
  * One photo read by image_index: what it shows, and the vector of those words.
@@ -372,8 +389,51 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
             (0 until results.length()).map { i ->
                 val item = results.optJSONObject(i) ?: return@map null
                 if (!item.optBoolean("status")) return@map null
-                IngestResult(item.optBoolean("words"), item.optBoolean("place"))
+                IngestResult(item.optBoolean("words"), item.optBoolean("place"), item)
             }
+        }
+    }
+
+    /**
+     * The owner's own words for up to 50 photos already in the index, with no picture attached
+     * (photos_words): tags, the people in them, their own wording. The server reads each document,
+     * puts the words in, makes the vector again and writes it back.
+     *
+     * A photo the index does not have yet answers with no result, and the caller sends it the
+     * ordinary way, picture and all. Returns the written document per photo, in order, for the
+     * phone's own copy.
+     */
+    suspend fun photosWords(session: Session, name: String, items: List<WordsItem>): List<JSONObject?> = withContext(Dispatchers.IO) {
+        val photos = JSONArray()
+        items.forEach { item ->
+            photos.put(JSONObject().apply {
+                put("id", item.id)
+                item.tags?.let { put("tags", JSONArray(it)) }
+                item.persons?.let { put("persons", JSONArray(it)) }
+                item.meaning?.let { put("meaning", it) }
+                item.fileHash?.let { put("file_hash", it) }
+            })
+        }
+        val body = JSONObject()
+            .put("email", session.email)
+            .put("api_key", session.apiKey)
+            .put("index_name", name)
+            .put("photos", photos)
+        val request = Request.Builder().url(AI + "photos_words").post(body.toString().toRequestBody(JSON)).build()
+        http.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            classify(response.code, text, response.header("Retry-After"))
+            if (response.code in 400..499) throw PhotoRejectedException("The words were refused: " + platformMessage(text))
+            if (response.code >= 500) throw ServiceException("The Opensolr AI service answered HTTP ${response.code}")
+            val json = parseObject(text)
+            if (!json.optBoolean("status")) throw ServiceException(platformMessage(text))
+            val results = json.optJSONArray("results") ?: throw ServiceException("The Opensolr AI service answered without results")
+            val byId = HashMap<String, JSONObject>()
+            (0 until results.length()).forEach { i ->
+                val r = results.optJSONObject(i) ?: return@forEach
+                if (r.optBoolean("status")) byId[r.optString("id")] = r
+            }
+            items.map { byId[it.id] }
         }
     }
 

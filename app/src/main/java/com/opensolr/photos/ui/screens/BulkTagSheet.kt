@@ -34,6 +34,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -47,8 +49,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import com.opensolr.photos.search.FacetValue
 import com.opensolr.photos.search.TagSuggestions
 import com.opensolr.photos.ui.AccentButton
 import com.opensolr.photos.ui.Actions
@@ -63,33 +67,42 @@ import kotlinx.coroutines.delay
 private val Corner = RoundedCornerShape(2.dp)
 
 /**
- * Tags for every photo on the grid at once (Cip, 2026-09-16).
+ * Tagging every ticked photo at once.
  *
- * The same tag field and the same suggestions as editing one photo, but what is typed here is
- * added to all the photos of the view that is open - the photos like one photo, or a group of
- * duplicates - and to nothing else. Never the whole index: the list is exactly what is on screen.
+ * People come first: a name is what most people come here to put right (Cip, 2026-09-18). Each of
+ * the two fields has its own switch - **Add** puts what is typed on top of what each photo already
+ * carries, **Replace** makes it the whole of that field on every ticked photo, so a person renamed
+ * overnight is renamed everywhere in one save.
  *
- * Only tags are offered. What a photo shows belongs to that photo alone, so it is not touched,
- * and the tags each photo already has are kept.
+ * Under the form, what the ticked photos already carry is listed, counted by the index over the
+ * whole selection - for the owner to read, not to edit.
+ *
+ * Nothing here waits for the index: the save is written on the phone and the sync that follows
+ * carries it up. Only the writing into the photo files themselves happens on the spot, because
+ * Android asks the owner to allow it.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit) {
     val p = LocalPalette.current
-    // The ticked photos, or every photo of the view when nothing is ticked.
-    val targets = remember(state.hits, state.selectedIds) { viewModel.photosToTag() }
+    val targets = remember(state.hits, state.selectedIds, state.selectedOffscreen) { viewModel.photosToTag() }
     val count = targets.size
-    val onlySelected = state.selectedIds.isNotEmpty()
     var tags by remember { mutableStateOf(emptyList<String>()) }
     var newTag by remember { mutableStateOf("") }
     var tagFieldFocused by remember { mutableStateOf(false) }
+    var tagsReplace by remember { mutableStateOf(false) }
     var suggestions by remember { mutableStateOf(TagSuggestions(emptyList(), emptyList())) }
     var suggestionsLoading by remember { mutableStateOf(false) }
-    // Names of people to add, with the names already in the index offered as you type.
+    // Names of people, with the names already in the index offered as you type.
     var persons by remember { mutableStateOf(emptyList<String>()) }
     var newPerson by remember { mutableStateOf("") }
     var personFieldFocused by remember { mutableStateOf(false) }
+    var personsReplace by remember { mutableStateOf(false) }
     var personSuggestions by remember { mutableStateOf(emptyList<String>()) }
+
+    // What the ticked photos carry today, read once for the whole selection.
+    LaunchedEffect(state.selectedIds) { viewModel.loadSelectionWords() }
+
     LaunchedEffect(newPerson, personFieldFocused, persons) {
         if (!personFieldFocused) return@LaunchedEffect
         if (newPerson.isNotEmpty()) delay(250)
@@ -127,16 +140,24 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
         newTag = ""
     }
 
-    // One request from Android for every photo of the batch; on yes the tags go into each file
+    // Everything the two fields say, once what is still typed in them is counted in. A field left
+    // untouched stays null, so it is not changed on any photo.
+    fun typedTags(): List<String>? {
+        val all = (tags + newTag.split(',').map { it.trim() }.filter { it.isNotEmpty() }).distinctWords()
+        return if (all.isEmpty() && !tagsReplace) null else all
+    }
+    fun typedPersons(): List<String>? {
+        val all = (persons + newPerson.split(',').map { it.trim() }.filter { it.isNotEmpty() }).distinctWords()
+        return if (all.isEmpty() && !personsReplace) null else all
+    }
+
+    // One request from Android for every photo of the batch; on yes the words go into each file
     // too. The sheet stays until Android answers, so the answer has somewhere to land.
     val context = androidx.compose.ui.platform.LocalContext.current
-    var pendingTags by remember { mutableStateOf(emptyList<String>()) }
-    var pendingPersons by remember { mutableStateOf(emptyList<String>()) }
     val writeLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
         androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
-        viewModel.tagPhotos(pendingTags, pendingPersons, writeFiles = result.resultCode == android.app.Activity.RESULT_OK)
-        onDismiss()
+        viewModel.tagPhotos(typedTags(), tagsReplace, typedPersons(), personsReplace, writeFiles = result.resultCode == android.app.Activity.RESULT_OK)
     }
 
     // Any tap outside a field and its suggestions closes the suggestions (Cip, 2026-09-17).
@@ -149,6 +170,13 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
         },
         onOutside = { tagsDismissed = true; peopleDismissed = true },
     )
+
+    // The files are written while the owner waits, so the sheet closes itself when that is done.
+    var started by remember { mutableStateOf(false) }
+    LaunchedEffect(state.bulkTagging) {
+        if (state.bulkTagging) started = true
+        else if (started && state.bulkTagError == null) onDismiss()
+    }
 
     ModalBottomSheet(
         onDismissRequest = { if (!state.bulkTagging) onDismiss() },
@@ -171,34 +199,83 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                (if (onlySelected) "These tags go on the photos you ticked, and on nothing else in your index. "
-                else "Nothing is ticked, so these tags go on every photo this view is showing, and on nothing else in your index. ") +
-                    "The tags each photo already has are kept, and what a photo shows is not touched. " +
-                    "Saving closes this and the writing carries on in the background.",
+                "These go on the photos you ticked, and on nothing else in your index. Saving " +
+                    "writes them on this phone at once; your index is updated by the sync that follows.",
                 style = MaterialTheme.typography.bodyMedium, color = p.muted,
             )
             Spacer(Modifier.height(20.dp))
 
-            SectionLabel("Tags to add")
+            // ---- People, first: the field most people come here for.
+            ModeHeader(
+                title = "People",
+                replace = personsReplace,
+                enabled = !state.bulkTagging,
+                onChange = { personsReplace = it },
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                if (personsReplace) "Replace: these names become the only names on every ticked photo. Names they have now are removed, in your index and in the files."
+                else "Add: these names go on top of the names each photo already has.",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (personsReplace) p.accent else p.muted,
+            )
             Spacer(Modifier.height(10.dp))
-            if (tags.isNotEmpty()) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    tags.forEach { tag ->
-                        Row(
-                            Modifier
-                                .clip(Corner)
-                                .background(p.paper)
-                                .border(1.dp, p.accent, Corner)
-                                .clickable(enabled = !state.bulkTagging) { tags = tags - tag }
-                                .padding(horizontal = 10.dp, vertical = 7.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(tag, style = MaterialTheme.typography.labelSmall, color = p.accent)
-                            Spacer(Modifier.size(4.dp))
-                            Icon(Icons.Filled.Close, contentDescription = "Remove", tint = p.accent, modifier = Modifier.size(14.dp))
-                        }
+            if (persons.isNotEmpty()) {
+                WordChips(persons, enabled = !state.bulkTagging) { persons = persons - it }
+                Spacer(Modifier.height(10.dp))
+            }
+            Row(with(outside) { Modifier.keep("people") }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = newPerson,
+                    onValueChange = { newPerson = it; peopleDismissed = false },
+                    modifier = Modifier.weight(1f).onFocusChanged { personFieldFocused = it.isFocused },
+                    placeholder = { Text("Add a name", color = p.muted) },
+                    singleLine = true,
+                    enabled = !state.bulkTagging,
+                    shape = Corner,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { addPerson() }),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = p.accent, unfocusedBorderColor = p.hairline, cursorColor = p.accent, focusedTextColor = p.ink, unfocusedTextColor = p.ink),
+                )
+                TextButton(onClick = { addPerson() }, enabled = newPerson.isNotBlank() && !state.bulkTagging) { Text("Add", color = p.accent) }
+            }
+            if (personFieldFocused && !peopleDismissed && personSuggestions.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Column(
+                    with(outside) { Modifier.keep("peopleList") }
+                        .fillMaxWidth()
+                        .background(p.paper, Corner)
+                        .border(1.dp, p.hairline, Corner)
+                ) {
+                    BulkSuggestionHeading("People in your photos")
+                    personSuggestions.forEach { name ->
+                        BulkSuggestionRow(name, onPick = {
+                            persons = (persons + name).distinctWords()
+                            newPerson = ""
+                        })
                     }
                 }
+            }
+
+            Spacer(Modifier.height(24.dp))
+
+            // ---- The owner's tags, which become albums of their own.
+            ModeHeader(
+                title = "My tags (Albums)",
+                replace = tagsReplace,
+                enabled = !state.bulkTagging,
+                onChange = { tagsReplace = it },
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                if (tagsReplace) "Replace: these tags become the only tags on every ticked photo. Tags they have now are removed, in your index and in the files."
+                else "Add: these tags go on top of the tags each photo already has.",
+                style = MaterialTheme.typography.bodySmall,
+                color = if (tagsReplace) p.accent else p.muted,
+            )
+            Spacer(Modifier.height(10.dp))
+            if (tags.isNotEmpty()) {
+                WordChips(tags, enabled = !state.bulkTagging) { tags = tags - it }
                 Spacer(Modifier.height(10.dp))
             }
             Row(with(outside) { Modifier.keep("tags") }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -245,96 +322,163 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
                 }
             }
 
-            Spacer(Modifier.height(20.dp))
-            SectionLabel("People to add")
-            Spacer(Modifier.height(10.dp))
-            if (persons.isNotEmpty()) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    persons.forEach { person ->
-                        Row(
-                            Modifier
-                                .clip(Corner)
-                                .background(p.paper)
-                                .border(1.dp, p.accent, Corner)
-                                .clickable(enabled = !state.bulkTagging) { persons = persons - person }
-                                .padding(horizontal = 10.dp, vertical = 7.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(person, style = MaterialTheme.typography.labelSmall, color = p.accent)
-                            Spacer(Modifier.size(4.dp))
-                            Icon(Icons.Filled.Close, contentDescription = "Remove", tint = p.accent, modifier = Modifier.size(14.dp))
-                        }
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-            }
-            Row(with(outside) { Modifier.keep("people") }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = newPerson,
-                    onValueChange = { newPerson = it; peopleDismissed = false },
-                    modifier = Modifier.weight(1f).onFocusChanged { personFieldFocused = it.isFocused },
-                    placeholder = { Text("Add a name", color = p.muted) },
-                    singleLine = true,
-                    enabled = !state.bulkTagging,
-                    shape = Corner,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { addPerson() }),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = p.accent, unfocusedBorderColor = p.hairline, cursorColor = p.accent, focusedTextColor = p.ink, unfocusedTextColor = p.ink),
-                )
-                TextButton(onClick = { addPerson() }, enabled = newPerson.isNotBlank() && !state.bulkTagging) { Text("Add", color = p.accent) }
-            }
-            if (personFieldFocused && !peopleDismissed && personSuggestions.isNotEmpty()) {
-                Spacer(Modifier.height(6.dp))
-                Column(
-                    with(outside) { Modifier.keep("peopleList") }
-                        .fillMaxWidth()
-                        .background(p.paper, Corner)
-                        .border(1.dp, p.hairline, Corner)
-                ) {
-                    BulkSuggestionHeading("People in your photos")
-                    personSuggestions.forEach { name ->
-                        BulkSuggestionRow(name, onPick = {
-                            persons = (persons + name).distinctWords()
-                            newPerson = ""
-                        })
-                    }
-                }
-            }
-            Text("The names each photo already has are kept. They are saved into the photos themselves too.", style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.padding(top = 6.dp))
-
             state.bulkTagError?.let {
                 Spacer(Modifier.height(12.dp))
                 Notice(it, title = "Not saved")
             }
 
+            // While the files are being written there is nothing to do but wait, so the bar says
+            // how far it has got. Only the files: the index is updated afterwards, by the sync.
+            if (state.bulkTagging && state.bulkTagTotal > 0) {
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    "Writing your words into ${Actions.formatCount(state.bulkTagDone.toLong())} of ${Actions.formatCount(state.bulkTagTotal.toLong())} photos…",
+                    style = MaterialTheme.typography.bodySmall, color = p.muted,
+                )
+                Spacer(Modifier.height(6.dp))
+                LinearProgressIndicator(
+                    progress = { if (state.bulkTagTotal == 0) 0f else state.bulkTagDone.toFloat() / state.bulkTagTotal },
+                    modifier = Modifier.fillMaxWidth().height(3.dp),
+                    color = p.accent,
+                    trackColor = p.chip,
+                )
+            }
+
             Spacer(Modifier.height(20.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                GhostButton("Cancel", onClick = onDismiss, modifier = Modifier.weight(1f))
+                GhostButton("Cancel", onClick = onDismiss, modifier = Modifier.weight(1f), enabled = !state.bulkTagging)
                 AccentButton(
                     "Save",
                     onClick = {
-                        // To the index in the background, and into the files once Android allows it.
-                        val all = (tags + newTag.split(',').map { it.trim() }.filter { it.isNotEmpty() }).distinctWords()
-                        val names = (persons + newPerson.split(',').map { it.trim() }.filter { it.isNotEmpty() }).distinctWords()
                         val uris = Actions.contentUris(context, targets)
                         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && uris.isNotEmpty()) {
-                            pendingTags = all
-                            pendingPersons = names
                             val request = android.provider.MediaStore.createWriteRequest(context.contentResolver, uris)
                             writeLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(request.intentSender).build())
                         } else {
-                            viewModel.tagPhotos(all, names, writeFiles = true)
-                            onDismiss()
+                            viewModel.tagPhotos(typedTags(), tagsReplace, typedPersons(), personsReplace, writeFiles = true)
                         }
                     },
                     modifier = Modifier.weight(1f),
-                    enabled = tags.isNotEmpty() || newTag.isNotBlank() || persons.isNotEmpty() || newPerson.isNotBlank(),
+                    enabled = !state.bulkTagging && (typedTags() != null || typedPersons() != null),
                 )
             }
-            Spacer(Modifier.height(24.dp))
+
+            // ---- What the ticked photos carry today, for the owner to see. Not editable: the
+            // two fields above are where changes are made (Cip, 2026-09-18).
+            Spacer(Modifier.height(28.dp))
+            HorizontalDivider(color = p.hairline)
+            Spacer(Modifier.height(16.dp))
+            SectionLabel("Already on these photos")
+            Spacer(Modifier.height(4.dp))
+            if (state.selectionWordsLoading) {
+                Text("Reading your index…", style = MaterialTheme.typography.bodySmall, color = p.muted)
+            } else if (state.selectionPersons.isEmpty() && state.selectionTags.isEmpty()) {
+                Text("No names and no tags yet.", style = MaterialTheme.typography.bodySmall, color = p.muted)
+            }
+            if (state.selectionPersons.isNotEmpty()) {
+                Spacer(Modifier.height(10.dp))
+                Text("PEOPLE", style = MaterialTheme.typography.labelSmall, color = p.muted)
+                Spacer(Modifier.height(6.dp))
+                CountedWords(state.selectionPersons)
+            }
+            if (state.selectionTags.isNotEmpty()) {
+                Spacer(Modifier.height(12.dp))
+                Text("TAGS", style = MaterialTheme.typography.labelSmall, color = p.muted)
+                Spacer(Modifier.height(6.dp))
+                CountedWords(state.selectionTags)
+            }
+            Spacer(Modifier.height(32.dp))
         }
     }
 }
+
+/**
+ * A field's title with its Add / Replace switch on the same line.
+ */
+@Composable
+private fun ModeHeader(title: String, replace: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
+    val p = LocalPalette.current
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        SectionLabel(title, modifier = Modifier.weight(1f))
+        Text(
+            if (replace) "Replace" else "Add",
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = if (replace) p.accent else p.muted,
+        )
+        Spacer(Modifier.size(8.dp))
+        Switch(
+            checked = replace,
+            onCheckedChange = { if (enabled) onChange(it) },
+            enabled = enabled,
+            colors = SwitchDefaults.colors(
+                checkedThumbColor = p.onAccentFill,
+                checkedTrackColor = p.accentFill,
+                uncheckedThumbColor = p.paper,
+                uncheckedTrackColor = p.hairline,
+            ),
+        )
+    }
+}
+
+/**
+ * The words typed into a field so far, each removable with a tap.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun WordChips(words: List<String>, enabled: Boolean, onRemove: (String) -> Unit) {
+    val p = LocalPalette.current
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        words.forEach { word ->
+            Row(
+                Modifier
+                    .clip(Corner)
+                    .background(p.paper)
+                    .border(1.dp, p.accent, Corner)
+                    .clickable(enabled = enabled) { onRemove(word) }
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(word, style = MaterialTheme.typography.labelSmall, color = p.accent)
+                Spacer(Modifier.size(4.dp))
+                Icon(Icons.Filled.Close, contentDescription = "Remove", tint = p.accent, modifier = Modifier.size(14.dp))
+            }
+        }
+    }
+}
+
+/**
+ * What the ticked photos already carry, with how many of them carry each word.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun CountedWords(values: List<FacetValue>) {
+    val p = LocalPalette.current
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        values.take(SHOWN_EXISTING).forEach { value ->
+            Text(
+                "${value.value} (${Actions.formatCount(value.count.toLong())})",
+                style = MaterialTheme.typography.labelSmall,
+                color = p.ink,
+                modifier = Modifier
+                    .clip(Corner)
+                    .background(p.chip)
+                    .padding(horizontal = 10.dp, vertical = 7.dp),
+            )
+        }
+        if (values.size > SHOWN_EXISTING) {
+            Text(
+                "+${Actions.formatCount((values.size - SHOWN_EXISTING).toLong())} more",
+                style = MaterialTheme.typography.labelSmall,
+                color = p.muted,
+                modifier = Modifier.padding(horizontal = 4.dp, vertical = 7.dp),
+            )
+        }
+    }
+}
+
+/** How many of the words already on the photos are listed before the rest are summed up. */
+private const val SHOWN_EXISTING = 40
 
 /**
  * The small heading of a group in the tag suggestions.

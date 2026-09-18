@@ -237,7 +237,65 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
             Text("Edit ${hit.fileName}", style = MaterialTheme.typography.headlineSmall, color = p.ink)
             Spacer(Modifier.height(16.dp))
 
-            SectionLabel("My tags")
+            SectionLabel("People")
+            Spacer(Modifier.height(10.dp))
+            if (persons.isNotEmpty()) {
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    persons.forEach { person ->
+                        Row(
+                            Modifier
+                                .clip(Corner)
+                                .background(p.paper)
+                                .border(1.dp, p.accent, Corner)
+                                .clickable { persons = persons - person }
+                                .padding(horizontal = 10.dp, vertical = 7.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Text(person, style = MaterialTheme.typography.labelSmall, color = p.accent)
+                            Spacer(Modifier.size(4.dp))
+                            Icon(Icons.Filled.Close, contentDescription = "Remove", tint = p.accent, modifier = Modifier.size(14.dp))
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+            }
+            Column(Modifier.onGloballyPositioned { personAreaCoords = it }) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = newPerson,
+                    onValueChange = { newPerson = it; peopleDismissed = false },
+                    modifier = Modifier.weight(1f).onFocusChanged { personFieldFocused = it.isFocused },
+                    placeholder = { Text("Add a name", color = p.muted) },
+                    singleLine = true,
+                    shape = Corner,
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                    keyboardActions = KeyboardActions(onDone = { addPerson() }),
+                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = p.accent, unfocusedBorderColor = p.hairline, cursorColor = p.accent, focusedTextColor = p.ink, unfocusedTextColor = p.ink),
+                )
+                TextButton(onClick = { addPerson() }, enabled = newPerson.isNotBlank()) { Text("Add", color = p.accent) }
+            }
+            if (personFieldFocused && !peopleDismissed && personSuggestions.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(p.paper, Corner)
+                        .border(1.dp, p.hairline, Corner)
+                ) {
+                    SuggestionHeading("People in your photos")
+                    personSuggestions.forEach { name ->
+                        SuggestionRow(name, onPick = {
+                            persons = (persons + name).distinctWords()
+                            newPerson = ""
+                        })
+                    }
+                }
+            }
+            }
+            Text("Saved into the photo itself, so other apps see the names too.", style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.padding(top = 6.dp))
+            Spacer(Modifier.height(20.dp))
+
+            SectionLabel("My tags (Albums)")
             Spacer(Modifier.height(10.dp))
             if (tags.isNotEmpty()) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -310,65 +368,7 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                     }
                 }
             }
-            Text("Anything you would search for.", style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.padding(top = 6.dp))
-            Spacer(Modifier.height(20.dp))
-
-            SectionLabel("People")
-            Spacer(Modifier.height(10.dp))
-            if (persons.isNotEmpty()) {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    persons.forEach { person ->
-                        Row(
-                            Modifier
-                                .clip(Corner)
-                                .background(p.paper)
-                                .border(1.dp, p.accent, Corner)
-                                .clickable { persons = persons - person }
-                                .padding(horizontal = 10.dp, vertical = 7.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(person, style = MaterialTheme.typography.labelSmall, color = p.accent)
-                            Spacer(Modifier.size(4.dp))
-                            Icon(Icons.Filled.Close, contentDescription = "Remove", tint = p.accent, modifier = Modifier.size(14.dp))
-                        }
-                    }
-                }
-                Spacer(Modifier.height(10.dp))
-            }
-            Column(Modifier.onGloballyPositioned { personAreaCoords = it }) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(
-                    value = newPerson,
-                    onValueChange = { newPerson = it; peopleDismissed = false },
-                    modifier = Modifier.weight(1f).onFocusChanged { personFieldFocused = it.isFocused },
-                    placeholder = { Text("Add a name", color = p.muted) },
-                    singleLine = true,
-                    shape = Corner,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    keyboardActions = KeyboardActions(onDone = { addPerson() }),
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = p.accent, unfocusedBorderColor = p.hairline, cursorColor = p.accent, focusedTextColor = p.ink, unfocusedTextColor = p.ink),
-                )
-                TextButton(onClick = { addPerson() }, enabled = newPerson.isNotBlank()) { Text("Add", color = p.accent) }
-            }
-            if (personFieldFocused && !peopleDismissed && personSuggestions.isNotEmpty()) {
-                Spacer(Modifier.height(6.dp))
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(p.paper, Corner)
-                        .border(1.dp, p.hairline, Corner)
-                ) {
-                    SuggestionHeading("People in your photos")
-                    personSuggestions.forEach { name ->
-                        SuggestionRow(name, onPick = {
-                            persons = (persons + name).distinctWords()
-                            newPerson = ""
-                        })
-                    }
-                }
-            }
-            }
-            Text("Saved into the photo itself, so other apps see the names too.", style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.padding(top = 6.dp))
+            Text("Anything you would search for. Each tag becomes an album of its own.", style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.padding(top = 6.dp))
             Spacer(Modifier.height(20.dp))
 
             SectionLabel("What the photo shows")

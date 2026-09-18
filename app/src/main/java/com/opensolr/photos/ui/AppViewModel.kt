@@ -35,6 +35,7 @@ import com.opensolr.photos.sync.SyncScheduler
 import com.opensolr.photos.sync.SyncStatus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -97,6 +98,20 @@ data class UiState(
     val mapFocus: MapFocus? = null,
     val selecting: Boolean = false,
     val selectedIds: Set<String> = emptySet(),
+    /**
+     * Photos that are ticked but not on the grid, because a whole group was ticked and the grid
+     * only ever holds the pages that were scrolled to. Enough of each to open the file it came
+     * from, so tagging, sharing and deleting reach them all the same.
+     */
+    val selectedOffscreen: Map<String, PhotoHit> = emptyMap(),
+    /** True while a whole group's photos are being looked up after its tick was pressed. */
+    val selectingGroup: Boolean = false,
+    /**
+     * The groups ticked whole, by heading key, with the ids each took in. A group can hold photos
+     * the grid never loaded, so "is this group ticked?" cannot be answered by looking at what is on
+     * screen (Cip, 2026-09-18).
+     */
+    val selectedGroups: Map<String, Set<String>> = emptyMap(),
     /** "Fresh": recency multiplies the score, so recent photos rise without anything being lost. */
     val freshBias: Boolean = false,
     /**
@@ -138,15 +153,34 @@ data class UiState(
     val gridOffset: Int = 0,
     /** The group headings folded away in the view on screen. */
     val collapsedHeadings: Set<String> = emptySet(),
+    /**
+     * The whole library laid out in groups - every year, month and day with how many photos it
+     * holds - worked out from the phone's own copy of the index, so browsing shows the shape of
+     * the library at once instead of only the groups the first page happened to reach
+     * (Cip, 2026-09-18). Empty for a search, a filter or the duplicates: there the groups can only
+     * come from the results.
+     */
+    val skeleton: List<com.opensolr.photos.ui.DateGroup> = emptyList(),
+    /** True while the photos of a group the owner has just opened are being fetched. */
+    val loadingGroup: Boolean = false,
+    /** Which groups of the filter sheet are open; all of them start folded (Cip, 2026-09-18). */
+    val openFilterSections: Set<String> = emptySet(),
+    /** Which sections of the albums screen are folded away, kept between visits. */
+    val foldedAlbumSections: Set<String> = emptySet(),
     /** Bumped whenever the grid has somewhere to be taken to, so the screen scrolls exactly once. */
     val restoreGeneration: Int = 0,
     val editSaving: Boolean = false,
     val editError: String? = null,
-    /** True while tags are being put on every photo of the view at once. */
+    /** True while the owner's tags are being written into the photo files themselves. */
     val bulkTagging: Boolean = false,
-    /** How far that has got: photos written, and how many there are. */
+    /** How far that has got: files written, and how many there are. */
     val bulkTagDone: Int = 0,
     val bulkTagTotal: Int = 0,
+    /** What is in the selected photos already: the names and tags, most used first. */
+    val selectionPersons: List<FacetValue> = emptyList(),
+    val selectionTags: List<FacetValue> = emptyList(),
+    /** True while those two are being read for the photos that are ticked. */
+    val selectionWordsLoading: Boolean = false,
     /** Why it did not finish, for the bulk tagging screen. */
     val bulkTagError: String? = null,
     /** What the plan's limits mean right now, for the account screen. */
@@ -177,6 +211,11 @@ data class UiState(
     val selectedSections: Set<String> = emptySet(),
     /** True while the photos of the picked albums are being looked up. */
     val albumsWorking: Boolean = false,
+    /**
+     * A line that says what just happened and then goes by itself ("Saved. Your index is being
+     * updated in the background."). Never a warning: those live in Me (Cip, 2026-09-17).
+     */
+    val flash: String? = null,
 )
 
 /**
@@ -240,6 +279,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         checkForUpdate()
         refreshSkippedCount()
+        ensureClone()
+    }
+
+    /**
+     * At start, the phone makes sure it has its own copy of the index: without one the tag and
+     * name suggestions have nothing to offer and the first sync would have to fetch it anyway.
+     * Read once, in the background; after that it is kept in step by every write.
+     */
+    private fun ensureClone() {
+        if (prefs.session == null || prefs.connection == null) return
+        viewModelScope.launch {
+            try {
+                if (!withContext(Dispatchers.IO) { edits.cloneMissing() }) return@launch
+                edits.readIndexIntoCache()
+                // The grid was drawn before the copy existed, so it is drawn again now that it does.
+                if (_state.value.screen == Screen.Search) search(reset = true, keepPosition = true)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // The next sync reads it instead; nothing on screen depends on it being there.
+            }
+        }
     }
 
     /**
@@ -387,6 +448,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     private data class ScrollAt(val key: String?, val index: Int, val offset: Int)
 
+    /** Which view the photos on screen belong to, to tell coming back from going somewhere new. */
+    private var shownContext: String? = null
+
+    /** Groups whose photos are being fetched right now, and the queue that keeps them in order. */
+    private val groupsLoading = java.util.Collections.synchronizedSet(HashSet<String>())
+    private val groupLoads = kotlinx.coroutines.sync.Mutex()
+
+    /** The word counts of the whole library, and when they were worked out. */
+    private var wordCounts: Triple<Map<String, Int>, Map<String, Int>, Map<String, Int>>? = null
+    private var wordCountsAt = 0L
+
 
     /**
      * What the photos on screen answer to: the words searched for, the filters, and whether the
@@ -420,6 +492,34 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Opens or folds away one group of the filter sheet, and remembers it: the sheet comes back
+     * exactly as it was left, every time (Cip, 2026-09-18).
+     */
+    fun toggleFilterSection(title: String) {
+        val next = _state.value.openFilterSections.let { if (title in it) it - title else it + title }
+        prefs.openFilterSections = next
+        _state.update { it.copy(openFilterSections = next) }
+    }
+
+    /**
+     * Folds one section of the albums screen away, or opens it, and remembers it: the screen comes
+     * back exactly as it was left (Cip, 2026-09-18).
+     */
+    fun toggleAlbumSection(title: String) {
+        val next = _state.value.foldedAlbumSections.let { if (title in it) it - title else it + title }
+        prefs.foldedAlbumSections = next
+        _state.update { it.copy(foldedAlbumSections = next) }
+    }
+
+    /**
+     * Every section of the albums screen folded away at once, or all of them opened.
+     */
+    fun setAlbumSections(folded: Set<String>) {
+        prefs.foldedAlbumSections = folded
+        _state.update { it.copy(foldedAlbumSections = folded) }
+    }
+
+    /**
      * What a view folds away before the owner has touched it: after a typed search "Also
      * similar" starts closed and "Best matches" open (Cip, 2026-09-17); nothing otherwise.
      */
@@ -444,7 +544,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun targetScroll() {
         val context = contextKey(_state.value)
-        val at = scrollPositions[context] ?: ScrollAt(null, 0, 0)
+        // A view the owner has just switched INTO - another album, a filter put on or taken off,
+        // a new search, another stop of the duplicates slider - opens at the top, because that is
+        // what asking for something new means. The remembered place is for coming BACK to the
+        // same view: from Me, from Sync, from the picture, or after a sync reloaded it
+        // (Cip, 2026-09-18).
+        val changed = context != shownContext
+        shownContext = context
+        val at = if (changed) ScrollAt(null, 0, 0) else scrollPositions[context] ?: ScrollAt(null, 0, 0)
         _state.update {
             it.copy(
                 gridKey = at.key,
@@ -515,20 +622,35 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(editSaving = true, editError = null) }
         viewModelScope.launch {
             try {
-                val doc = edits.save(hit.id, tags, meaning, persons)
-                // The index just changed: no cached answer may outlive the owner's own edit.
+                withContext(Dispatchers.IO) {
+                    edits.saveLocal(hit.id, tags, meaning, persons)
+                    prefs.facetsJson = null
+                    // The words were just written into the file too, so it is a few bytes longer.
+                    // The picture is unchanged, and the sync must not read it again over that.
+                    Actions.contentUris(context, listOf(hit)).firstOrNull()?.let {
+                        val (size, modified) = fileStampOf(it)
+                        photoCache.updateDocSize(hit.id, size, modified, fileHashOf(hit))
+                    }
+                }
+                // Held answers would still carry the old words, and the photo on screen shows the
+                // new ones at once: the index catches up on the next sync, which starts now.
                 searches.clearCache()
                 val updated = hit.copy(
-                    meaning = doc.optString("meaning"),
-                    persons = doc.optString("persons_t"),
-                    customTags = doc.optJSONArray("custom_tags")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList(),
+                    meaning = meaning?.trim()?.takeIf { it.isNotEmpty() } ?: hit.meaning,
+                    persons = persons?.joinToString(", ") ?: hit.persons,
+                    customTags = tags.distinctWords(),
                 )
-                _state.update { s -> s.copy(editSaving = false, hits = s.hits.map { if (it.id == hit.id) updated else it }) }
+                _state.update { s ->
+                    s.copy(
+                        editSaving = false,
+                        hits = s.hits.map { if (it.id == hit.id) updated else it },
+                    )
+                }
+                flash("Saved. Your index is being updated in the background.")
+                SyncScheduler.runNow(context)
                 onDone()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
-            } catch (e: SignInRequiredException) {
-                signedOut("Your Opensolr sign-in stopped working. Sign in again.")
             } catch (e: Exception) {
                 _state.update { it.copy(editSaving = false, editError = friendlyMessage(e, "The edit could not be saved.")) }
             }
@@ -536,78 +658,369 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * The photos the tagging button works on: the ticked ones, or every photo the view shows
-     * when nothing is ticked (Cip, 2026-09-16).
+     * The photos the tagging button works on: the ticked ones, wherever they are. A group's tick
+     * can reach photos the grid never loaded, so those come from what was read when the group was
+     * ticked, not from the screen.
      */
     fun photosToTag(): List<PhotoHit> {
         val state = _state.value
-        return if (state.selectedIds.isEmpty()) state.hits else state.hits.filter { it.id in state.selectedIds }
+        val onScreen = state.hits.filter { it.id in state.selectedIds }
+        val known = onScreen.map { it.id }.toSet()
+        return onScreen + state.selectedOffscreen.filterKeys { it in state.selectedIds && it !in known }.values
     }
 
     /**
-     * Puts [tags] on those photos, keeping the tags each already has and leaving what each photo
-     * shows untouched.
+     * Saves the owner's tags and names on every ticked photo, on the phone.
      *
-     * Never the whole index: only the photos named above. The work carries on in the background
-     * after the sheet is closed - hundreds of photos take a while, and nothing is gained by
-     * making the owner watch (Cip, 2026-09-16). Written in batches, so it costs one AI request
-     * per batch rather than one per photo.
+     * Nothing is sent to the index here: each photo's edit is stored on the phone, as either "these
+     * and nothing else" ([tagsReplace] / [personsReplace]) or "these as well", and the sync that
+     * starts right after carries them all up in batches. A null list is a field the form did not
+     * touch at all.
+     *
+     * The photo files themselves are a different matter: Android only lets an app write them while
+     * the owner is there to allow it, so that part is done now, with a progress bar, and the sheet
+     * waits for it.
      */
-    fun tagPhotos(tags: List<String>, persons: List<String> = emptyList(), writeFiles: Boolean = false) {
-        // One at a time: a second run started over the first would write the same photos twice
-        // and the count on screen would mean nothing.
+    fun tagPhotos(
+        tags: List<String>?,
+        tagsReplace: Boolean,
+        persons: List<String>?,
+        personsReplace: Boolean,
+        writeFiles: Boolean = false,
+    ) {
         if (_state.value.bulkTagging) return
         val targets = photosToTag()
         val ids = targets.map { it.id }
-        val clean = tags.distinctWords()
-        val names = persons.distinctWords()
-        if (ids.isEmpty() || (clean.isEmpty() && names.isEmpty())) return
-        _state.update { it.copy(bulkTagging = true, bulkTagError = null, bulkTagDone = 0, bulkTagTotal = ids.size) }
+        val clean = tags?.distinctWords()
+        val names = persons?.distinctWords()
+        if (ids.isEmpty() || (clean == null && names == null)) return
+        _state.update { it.copy(bulkTagging = true, bulkTagError = null, bulkTagDone = 0, bulkTagTotal = if (writeFiles) ids.size else 0) }
         viewModelScope.launch {
             try {
-                edits.addTagsToAll(ids, clean, names) { done, total ->
-                    _state.update { it.copy(bulkTagDone = done, bulkTagTotal = total) }
-                }
-                // The index just changed: no cached answer may outlive the owner's own tags.
+                withContext(Dispatchers.IO) { edits.queueForAll(ids, clean, tagsReplace, names, personsReplace) }
+                prefs.facetsJson = null
+                // Held answers would still carry the old words.
                 searches.clearCache()
-                // The tags go into each photo file too, on the phone, added to the keywords it
-                // already carries (Cip, 2026-09-17). Only when Android allowed the change.
+                // Into the files, while the permission Android just gave is good for this batch.
                 if (writeFiles) {
                     withContext(Dispatchers.IO) {
-                        targets.forEach { hit ->
+                        targets.forEachIndexed { index, hit ->
                             Actions.contentUris(context, listOf(hit)).firstOrNull()?.let { uri ->
-                                val keepTags = if (clean.isEmpty()) null else (PhotoReader.tagsIn(context, uri) + hit.customTags + clean).distinctWords()
-                                val keepNames = if (names.isEmpty()) null else (hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() } + names).distinctWords()
+                                val keepTags = when {
+                                    clean == null -> null
+                                    tagsReplace -> clean
+                                    else -> (PhotoReader.tagsIn(context, uri) + hit.customTags + clean).distinctWords()
+                                }
+                                val had = hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+                                val keepNames = when {
+                                    names == null -> null
+                                    personsReplace -> names
+                                    else -> (had + names).distinctWords()
+                                }
                                 // No wording field on this form: the owner's own wording, when this
                                 // phone keeps one, goes into the file with the tags; none, nothing
                                 // is touched (Cip, 2026-09-17).
                                 PhotoReader.writeXmp(context, uri, hit.mime, keepNames, keepTags, photoCache.getEdits(hit.id)?.meaning)
+                                // The file is a few bytes longer now; the picture is the same one.
+                                // Without this the next sync would see a changed file and send the
+                                // photo up whole, five per call, instead of the words alone.
+                                val (newSize, newModified) = fileStampOf(uri)
+                                photoCache.updateDocSize(hit.id, newSize, newModified, fileHashOf(hit))
                             }
+                            _state.update { it.copy(bulkTagDone = index + 1) }
                         }
                     }
                 }
-                // The photos on screen carry the new tags without asking the index again.
+                // The photos on screen carry the new words at once; the index follows.
                 val tagged = ids.toSet()
                 _state.update { s ->
                     s.copy(
                         bulkTagging = false,
                         selecting = false,
                         selectedIds = emptySet(),
+                        selectedOffscreen = emptyMap(),
+                        selectedGroups = emptyMap(),
                         hits = s.hits.map { hit ->
                             if (hit.id !in tagged) hit else hit.copy(
-                                customTags = (hit.customTags + clean).distinctWords(),
-                                persons = if (names.isEmpty()) hit.persons else (hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() } + names).distinctWords().joinToString(", "),
+                                customTags = when {
+                                    clean == null -> hit.customTags
+                                    tagsReplace -> clean
+                                    else -> (hit.customTags + clean).distinctWords()
+                                },
+                                persons = when {
+                                    names == null -> hit.persons
+                                    personsReplace -> names.joinToString(", ")
+                                    else -> (hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() } + names).distinctWords().joinToString(", ")
+                                },
                             )
                         },
                     )
                 }
+                flash("Saved on ${Actions.formatCount(ids.size.toLong())} photo${if (ids.size == 1) "" else "s"}. Your index is being updated in the background.")
+                SyncScheduler.runNow(context)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
-            } catch (e: SignInRequiredException) {
-                signedOut("Your Opensolr sign-in stopped working. Sign in again.")
             } catch (e: Exception) {
                 _state.update { it.copy(bulkTagging = false, bulkTagError = friendlyMessage(e, "The tags could not be saved.")) }
             }
+        }
+    }
+
+    /**
+     * Reads what the ticked photos already carry - the names of people and the owner's tags, most
+     * used first - so the tagging sheet can show them. One request, counted over the ticked ids
+     * themselves, so it says the truth for the whole selection and not only for the screen.
+     */
+    fun loadSelectionWords() {
+        val ids = _state.value.selectedIds.toList()
+        if (ids.isEmpty()) {
+            _state.update { it.copy(selectionPersons = emptyList(), selectionTags = emptyList(), selectionWordsLoading = false) }
+            return
+        }
+        _state.update { it.copy(selectionWordsLoading = true) }
+        viewModelScope.launch {
+            try {
+                val (tagCounts, personCounts) = withContext(Dispatchers.IO) { photoCache.wordCountsOf(ids) }
+                fun sorted(counts: Map<String, Int>) = counts.entries.sortedByDescending { it.value }
+                    .map { com.opensolr.photos.search.FacetValue(it.key, it.value) }
+                _state.update { it.copy(selectionPersons = sorted(personCounts), selectionTags = sorted(tagCounts), selectionWordsLoading = false) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(selectionWordsLoading = false) }
+            }
+        }
+    }
+
+    /**
+     * True when what is on screen can be answered without the index: nothing typed, no filters, no
+     * duplicates, and the phone's copy of the index is complete.
+     */
+    private fun browsingLocally(): Boolean {
+        val s = _state.value
+        return s.query.isBlank() && s.filters.count == 0 && !s.duplicatesMode && !s.skippedMode &&
+            prefs.cloneComplete && prefs.connection != null
+    }
+
+    /**
+     * Fills the grid from the phone's own copy of the index: the shape of the whole library, and
+     * the photos of whichever groups are open. Not one request.
+     */
+    private fun browseLocally(keepPosition: Boolean) {
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
+            val groups = withContext(Dispatchers.IO) { buildSkeleton(photoCache.takenTimes()) }
+            val count = withContext(Dispatchers.IO) { photoCache.docCount() }
+            _state.update {
+                it.copy(
+                    searching = false,
+                    searchError = null,
+                    suggestions = emptyList(),
+                    duplicateGroups = emptyList(),
+                    duplicatesMode = false,
+                    skippedMode = false,
+                    similarToId = null,
+                    similarToHit = null,
+                    hits = emptyList(),
+                    numFound = count.toLong(),
+                    endReached = true,
+                    searchedQuery = "",
+                    skeleton = groups,
+                    facets = keptFacets() ?: it.facets,
+                    searchGeneration = if (keepPosition) it.searchGeneration else it.searchGeneration + 1,
+                    resultsGeneration = if (keepPosition) it.resultsGeneration else it.resultsGeneration + 1,
+                )
+            }
+            targetScroll()
+            refreshFacetsIfNeeded()
+        }
+    }
+
+    /**
+     * The filter lists as they were last read from the index, or null when they have to be asked
+     * for again.
+     */
+    private fun keptFacets(): Map<String, List<FacetValue>>? {
+        val json = prefs.facetsJson ?: return null
+        return try {
+            val obj = org.json.JSONObject(json)
+            obj.keys().asSequence().associateWith { field ->
+                val arr = obj.getJSONArray(field)
+                (0 until arr.length()).map { i ->
+                    val pair = arr.getJSONArray(i)
+                    FacetValue(pair.getString(0), pair.getInt(1))
+                }
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Asks the index for the filter lists when the phone has none: one request, and then not again
+     * until a sync writes something (Cip, 2026-09-18).
+     */
+    private fun refreshFacetsIfNeeded() {
+        if (prefs.facetsJson != null || prefs.connection == null) return
+        viewModelScope.launch {
+            try {
+                val facets = searches.browseFacets()
+                val obj = org.json.JSONObject()
+                facets.forEach { (field, values) ->
+                    val arr = org.json.JSONArray()
+                    values.forEach { arr.put(org.json.JSONArray().put(it.value).put(it.count)) }
+                    obj.put(field, arr)
+                }
+                prefs.facetsJson = obj.toString()
+                _state.update { it.copy(facets = facets) }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // The filter sheet keeps whatever it had; the next visit asks again.
+            }
+        }
+    }
+
+    /**
+     * Lays out the whole library in years, months and days from the phone's own copy of the index.
+     * Only for plain browsing: with a query or a filter the groups have to come from the results,
+     * because the phone cannot tell which photos match.
+     */
+    private fun loadSkeleton() {
+        val s = _state.value
+        val plain = s.searchedQuery.isBlank() && s.filters.count == 0 && !s.duplicatesMode && !s.skippedMode
+        if (!plain) {
+            if (s.skeleton.isNotEmpty()) _state.update { it.copy(skeleton = emptyList()) }
+            return
+        }
+        viewModelScope.launch {
+            val groups = withContext(Dispatchers.IO) { buildSkeleton(photoCache.takenTimes()) }
+            _state.update { it.copy(skeleton = groups) }
+        }
+    }
+
+    /**
+     * The years, months and days of [times] (newest first) with their counts, in the order the
+     * grid shows them. The last few days keep the headings they have always had - Today,
+     * Yesterday, a weekday - and stay outside the years.
+     */
+    private fun buildSkeleton(times: List<Long>): List<com.opensolr.photos.ui.DateGroup> {
+        if (times.isEmpty()) return emptyList()
+        val recent = LinkedHashMap<String, MutableList<Long>>()
+        val years = LinkedHashMap<String, LinkedHashMap<String, MutableList<Long>>>()
+        times.forEach { at ->
+            if (Actions.isRecentDay(at)) {
+                recent.getOrPut(Actions.dateHeading(at)) { ArrayList() } += at
+            } else {
+                years.getOrPut(Actions.yearHeading(at)) { LinkedHashMap() }
+                    .getOrPut(Actions.monthKey(at)) { ArrayList() } += at
+            }
+        }
+        // Today and the last few days are groups of their own, above the years. A year, a month or
+        // a day older than that must therefore stop short of them, or ticking a year would take in
+        // today's photos as well - they are inside that year too (Cip, 2026-09-18).
+        val recentStart = times.filter { Actions.isRecentDay(it) }.minOrNull()?.let { Actions.daySpan(it).first }
+        fun clamp(span: Pair<Long, Long>): Pair<Long, Long> =
+            if (recentStart == null) span else span.first to minOf(span.second, recentStart - 1)
+
+        val out = ArrayList<com.opensolr.photos.ui.DateGroup>()
+        recent.forEach { (heading, list) ->
+            val span = Actions.daySpan(list.first())
+            out += com.opensolr.photos.ui.DateGroup(0, heading, heading, list.size, span.first, span.second)
+        }
+        years.forEach { (year, months) ->
+            val all = months.values.sumOf { it.size }
+            val span = clamp(Actions.yearSpan(months.values.first().first()))
+            out += com.opensolr.photos.ui.DateGroup(0, year, year, all, span.first, span.second)
+            months.forEach { (monthKey, list) ->
+                val monthSpan = clamp(Actions.monthSpan(list.first()))
+                out += com.opensolr.photos.ui.DateGroup(1, monthKey, Actions.monthHeading(list.first()), list.size, monthSpan.first, monthSpan.second)
+                val days = LinkedHashMap<String, MutableList<Long>>()
+                list.forEach { at -> days.getOrPut(Actions.dayKey(at)) { ArrayList() } += at }
+                // Every month is spelled out by its days, even a month with a single one: the day
+                // heading says something the month's does not, and a month that sometimes has days
+                // and sometimes does not reads as broken (Cip, 2026-09-18).
+                days.forEach { (dayKey, dayList) ->
+                    val daySpan = clamp(Actions.daySpan(dayList.first()))
+                    out += com.opensolr.photos.ui.DateGroup(2, dayKey, Actions.dayHeading(dayList.first()), dayList.size, daySpan.first, daySpan.second)
+                }
+            }
+        }
+        return out
+    }
+
+    /**
+     * Fetches the photos of one group the owner has just opened, when the results on screen do not
+     * hold them yet: browsing loads page by page from the newest, so opening a year from years ago
+     * would otherwise mean loading everything in between. One request, that stretch of time only.
+     */
+    fun loadGroupPhotos(key: String, from: Long, to: Long, have: Int, count: Int) {
+        if (have >= count || !groupsLoading.add(key)) return
+        _state.update { it.copy(loadingGroup = true) }
+        viewModelScope.launch {
+            try {
+                // One group at a time, but every group that asked gets its turn: opening them all
+                // at once used to load the first and drop the rest, leaving empty months behind
+                // (Cip, 2026-09-18).
+                groupLoads.withLock {
+                    val s = _state.value
+                    val photos = if (browsingLocally()) {
+                        withContext(Dispatchers.IO) {
+                            photoCache.docsBetween(from, to).map { searches.hitOf(org.json.JSONObject(it)) }
+                        }
+                    } else {
+                        searches.photosBetween(s.searchedQuery, s.filters, from, to, s.freshBias, s.wordsOnly, full = true)
+                    }
+                    _state.update { state ->
+                        val seen = state.hits.mapTo(HashSet()) { it.id }
+                        val added = photos.filter { seen.add(it.id) }
+                        if (added.isEmpty()) state
+                        else state.copy(
+                            // Browsing is in date order, so photos that arrived late take their own
+                            // place in the list rather than the end of it.
+                            hits = (state.hits + added).sortedByDescending { Actions.solrDateMillis(it.takenAt) ?: 0L },
+                        )
+                    }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // That group stays empty; opening it again asks once more.
+            } finally {
+                groupsLoading.remove(key)
+                if (groupsLoading.isEmpty()) _state.update { it.copy(loadingGroup = false) }
+            }
+        }
+    }
+
+    /**
+     * The md5 of [hit]'s file as it now stands, or null when it cannot be read.
+     */
+    private fun fileHashOf(hit: PhotoHit): String? =
+        com.opensolr.photos.media.MediaScanner.findByPath(context, hit.path)?.let { PhotoReader.fileMd5(context, it) }
+
+    /**
+     * How large the file behind [uri] is right now and when it was last written, or zeroes when it
+     * cannot be read.
+     */
+    private fun fileStampOf(uri: android.net.Uri): Pair<Long, Long> = try {
+        context.contentResolver.query(
+            uri,
+            arrayOf(android.provider.MediaStore.Images.Media.SIZE, android.provider.MediaStore.Images.Media.DATE_MODIFIED),
+            null, null, null,
+        )?.use { if (it.moveToFirst()) it.getLong(0) to it.getLong(1) else 0L to 0L } ?: (0L to 0L)
+    } catch (e: Exception) {
+        0L to 0L
+    }
+
+    /**
+     * Shows [message] for a moment and then clears it by itself.
+     */
+    private fun flash(message: String) {
+        _state.update { it.copy(flash = message) }
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(FLASH_MS)
+            _state.update { if (it.flash == message) it.copy(flash = null) else it }
         }
     }
 
@@ -635,6 +1048,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             lastReport = prefs.lastReport,
             indexName = prefs.connection?.indexName,
             environment = prefs.connection?.environment,
+            openFilterSections = prefs.openFilterSections,
+            foldedAlbumSections = prefs.foldedAlbumSections,
         )
     }
 
@@ -822,13 +1237,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     /** Names already in the index for the People field; empty when the index cannot be asked. */
     suspend fun personSuggestions(typed: String, onPhoto: Collection<String>): List<String> =
-        try {
-            searches.personSuggestions(typed, onPhoto)
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            emptyList()
-        }
+        withContext(Dispatchers.IO) { localWords(typed, onPhoto).second }
 
     /**
      * Suggestions for the tag field of the edit sheet: the owner's tags, then words from the
@@ -836,13 +1245,45 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * suggestion list must never get in the way of tagging.
      */
     suspend fun tagSuggestions(typed: String, onPhoto: Collection<String>): com.opensolr.photos.search.TagSuggestions =
-        try {
-            searches.tagSuggestions(typed, onPhoto)
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            com.opensolr.photos.search.TagSuggestions(emptyList(), emptyList())
+        withContext(Dispatchers.IO) {
+            val (tags, _, meanings) = localWords(typed, onPhoto)
+            val skip = (onPhoto + tags).map { com.opensolr.photos.data.Words.fold(it) }.toSet()
+            com.opensolr.photos.search.TagSuggestions(tags, meanings.filter { com.opensolr.photos.data.Words.fold(it) !in skip }.take(SUGGEST_WORDS))
         }
+
+    /**
+     * The counts of every word in the phone's copy of the index, worked out at most once every
+     * few seconds: a suggestion list is asked for on every keystroke and the whole library is
+     * counted for it.
+     */
+    private fun cachedWordCounts(): Triple<Map<String, Int>, Map<String, Int>, Map<String, Int>> {
+        val now = System.currentTimeMillis()
+        val held = wordCounts
+        if (held != null && now - wordCountsAt < WORD_COUNTS_MS) return held
+        val fresh = photoCache.wordCounts()
+        wordCounts = fresh
+        wordCountsAt = now
+        return fresh
+    }
+
+    /**
+     * The words to offer for [typed], out of the phone's own copy of the index: the owner's tags,
+     * the names of the people in their photos, and the words the photos were read into, each
+     * ordered by how many photos carry it. Nothing is asked of the index - the phone holds all
+     * three (Cip, 2026-09-18).
+     */
+    private fun localWords(typed: String, exclude: Collection<String>): Triple<List<String>, List<String>, List<String>> {
+        val text = com.opensolr.photos.data.Words.fold(typed.trim())
+        val skip = exclude.map { com.opensolr.photos.data.Words.fold(it) }.toSet()
+        val (tags, persons, meanings) = cachedWordCounts()
+        fun pick(counts: Map<String, Int>, limit: Int) = counts.entries
+            .filter { com.opensolr.photos.data.Words.fold(it.key).let { key -> key !in skip && (text.isEmpty() || key.contains(text)) } }
+            .sortedByDescending { it.value }
+            .take(limit)
+            .map { it.key }
+        val limit = if (text.isEmpty()) SUGGEST_FEW else SUGGEST_MANY
+        return Triple(pick(tags, limit), pick(persons, limit), pick(meanings, SUGGEST_WORDS))
+    }
 
     fun onQueryChange(query: String) {
         _state.update { it.copy(query = query) }
@@ -877,7 +1318,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * the bug (Cip, 2026-09-16). A search the owner starts - Enter, a suggestion, a filter, an
      * album - is a new one and does begin at the top.
      */
-    fun search(reset: Boolean, keepPosition: Boolean = false) {
+    fun search(reset: Boolean, keepPosition: Boolean = false, keepLoaded: Boolean = false) {
         val current = _state.value
         // Scrolling to the end of the duplicates asks for the next groups, not for another page
         // of a search: the grid is the same, what fills it is not.
@@ -889,12 +1330,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         suggestJob?.cancel()
         // Leaving the duplicates view drops the photo it was anchored to as well: the line above
         // the grid and the way back read the anchor, not the mode (Cip, 2026-09-16).
+        // Plain browsing - no words typed, no filters - is answered by the phone itself: it holds
+        // a copy of every document, so the years, the months, the days and the photos in them all
+        // come from here and the index is not asked anything at all (Cip, 2026-09-18).
+        if (reset && browsingLocally()) { browseLocally(keepPosition); return }
         _state.update { it.copy(searching = true, searchError = null, suggestions = emptyList(), duplicateGroups = emptyList(), duplicatesMode = false, skippedMode = false, similarToId = null, similarToHit = null, searchGeneration = if (reset && !keepPosition) it.searchGeneration + 1 else it.searchGeneration) }
         // The suggestions come from their own words-only request, next to this one.
         if (reset) loadQueryFacets(current.query, current.filters)
         searchJob = viewModelScope.launch {
             try {
-                val page = searches.search(current.query, current.filters, start, freshBias = current.freshBias, wordsOnly = current.wordsOnly)
+                // Reloading a view the owner has already scrolled through asks for as much as was
+                // on it, in one request, instead of the first page alone: otherwise a sync that
+                // finishes while they are three pages down leaves them at the top of a list of
+                // sixty (Cip, 2026-09-18). One request, ids and fields only, so it costs a page.
+                // As many photos as were loaded, in one request. It cannot be worked out from how
+                // far down the owner is: with groups folded away, a screen near the top can stand
+                // over hundreds of photos that are still in the list but not drawn (Cip, 2026-09-18).
+                val rows = if (keepLoaded) current.hits.size.coerceIn(SearchRepository.PAGE, RELOAD_MAX) else SearchRepository.PAGE
+                val page = searches.search(current.query, current.filters, start, rows = rows, freshBias = current.freshBias, wordsOnly = current.wordsOnly)
                 _state.update {
                     // A photo already on the grid is never added twice. Consecutive pages can
                     // overlap when several photos share the value being sorted on, and the grid
@@ -920,7 +1373,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
                 // Only a first page lands somewhere; the next pages must not move the grid.
-                if (reset) targetScroll()
+                if (reset) { targetScroll(); loadSkeleton() }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: SignInRequiredException) {
@@ -962,17 +1415,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Picks or unpicks a whole album section on the albums screen. */
     fun toggleSectionSelected(title: String) {
         _state.update { it.copy(selectedSections = if (title in it.selectedSections) it.selectedSections - title else it.selectedSections + title) }
-    }
-
-    /**
-     * Ticks every photo the view has loaded (a search, an album, the duplicates), or none when
-     * [all] is false, so a whole result set can be tagged at once (Cip, 2026-09-17).
-     */
-    fun selectAllPhotos(all: Boolean) {
-        _state.update {
-            if (all) it.copy(selecting = true, selectedIds = it.hits.map { h -> h.id }.toSet())
-            else it.copy(selecting = false, selectedIds = emptySet())
-        }
     }
 
     /** Picks every album section at once, or none when [all] is false. */
@@ -1109,6 +1551,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Pulling the grid down also asks for a sync (Cip, 2026-09-18): new photos on the phone, and
+     * any tagging still waiting, go up right away instead of at the next scheduled run. A sync
+     * that is already running is left to finish - nothing is queued on top of it, and nothing is
+     * said about it.
+     */
+    fun syncNow() {
+        if (_state.value.sync.running || com.opensolr.photos.sync.SyncWorker.running.get()) return
+        SyncScheduler.runNow(context)
+    }
+
+    /**
      * "Re-read all photos" (Cip, 2026-09-17): every photo goes through Opensolr again, as if
      * picked for Re-sync, without emptying the index and without touching a file. The words,
      * places, people and vectors are made again with whatever Opensolr does now; the owner's
@@ -1144,8 +1597,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             try {
                 val connection = prefs.connection ?: return@launch
                 com.opensolr.photos.net.SolrClient(connection).deleteAll()
-                // Nothing cached describes the index any more: it is empty.
+                // Nothing cached describes the index any more: it is empty, and so is the phone's
+                // own copy of it - every photo is written again by the sync that follows.
                 searches.clearCache()
+                withContext(Dispatchers.IO) { photoCache.clearDocs() }
+                prefs.cloneComplete = true
             } catch (e: Exception) {
                 _state.update { it.copy(notice = "The index could not be emptied: ${friendlyMessage(e, "try again")}") }
                 return@launch
@@ -1173,23 +1629,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         viewModelScope.launch {
-            val gone = try {
-                val connection = prefs.connection ?: return@launch
-                val count = com.opensolr.photos.net.SolrClient(connection).deleteWithOcr()
-                searches.clearCache()
-                count
-            } catch (e: Exception) {
-                _state.update { it.copy(notice = "The documents could not be dropped: ${friendlyMessage(e, "try again")}") }
+            // Which photos are documents is a question the phone can answer by itself, by the
+            // server's own rule: the ones whose words say receipt, label, screenshot, and the ones
+            // text was already read out of. They go through Opensolr again, picture and all, and
+            // nothing is deleted first - the new document takes the old one's place
+            // (Cip, 2026-09-18).
+            val ids = withContext(Dispatchers.IO) {
+                photoCache.docsLikeDocuments(com.opensolr.photos.search.SearchFilters.DOCUMENT_WORDS)
+            }
+            if (ids.isEmpty()) {
+                _state.update { it.copy(notice = "No photos that look like documents to read again.") }
                 return@launch
             }
+            withContext(Dispatchers.IO) { photoCache.queueActions(ids, com.opensolr.photos.data.PhotoCache.ACTION_INDEX) }
+            searches.clearCache()
             _state.update {
-                it.copy(notice = if (gone == 0) "No photos with printed text to read again."
-                else "$gone photo${if (gone == 1) "" else "s"} with printed text will be read again.")
+                it.copy(notice = "${ids.size} photo${if (ids.size == 1) "" else "s"} that look like documents will be read again.")
             }
-            if (gone > 0) {
-                refresh()
-                SyncScheduler.runNow(context)
-            }
+            SyncScheduler.runNow(context)
         }
     }
 
@@ -1242,29 +1699,82 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * Enters or leaves photo selection on the grid.
      */
     fun setSelecting(on: Boolean) {
-        _state.update { it.copy(selecting = on, selectedIds = if (on) it.selectedIds else emptySet()) }
+        _state.update { it.copy(selecting = on, selectedIds = if (on) it.selectedIds else emptySet(), selectedOffscreen = if (on) it.selectedOffscreen else emptyMap(), selectedGroups = if (on) it.selectedGroups else emptyMap()) }
     }
 
     /**
-     * Ticks or unticks a photo while selecting.
+     * Ticks or unticks a photo while selecting. Unticking the last one leaves selection
+     * altogether, so the mode is never on with nothing in it (Cip, 2026-09-18).
      */
     fun toggleSelected(id: String) {
         _state.update {
             val next = if (id in it.selectedIds) it.selectedIds - id else it.selectedIds + id
-            it.copy(selectedIds = next)
+            if (next.isEmpty()) it.copy(selecting = false, selectedIds = emptySet(), selectedOffscreen = emptyMap(), selectedGroups = emptyMap())
+            else it.copy(selecting = true, selectedIds = next)
         }
     }
 
     /**
-     * The tick on a heading: selects every photo of that group, or drops them all when they
-     * are already selected. Selection switches on by itself, as tapping a photo does.
+     * The tick on a heading: every photo of that group, or none of them when they are all ticked
+     * already. Selection switches on by itself, as tapping a photo does.
+     *
+     * A group can be longer than what the grid has loaded - a month holds pages of photos - so the
+     * whole group is read in one request, ids and what is needed to reach each file. The results on
+     * screen are not touched: the grid keeps its pages and its place, and the ticked photos it has
+     * not loaded are simply counted (Cip, 2026-09-18).
      */
-    fun toggleSelectedGroup(ids: List<String>) {
-        if (ids.isEmpty()) return
-        _state.update {
-            val all = it.selectedIds.containsAll(ids)
-            val next = if (all) it.selectedIds - ids.toSet() else it.selectedIds + ids
-            it.copy(selecting = true, selectedIds = next)
+    fun toggleSelectedGroup(key: String, ids: List<String>, range: Pair<Long, Long>? = null) {
+        val current = _state.value
+        val already = current.selectedGroups[key]
+        if (already != null) {
+            // Ticked whole before: everything it took in goes back out.
+            _state.update {
+                val next = it.selectedIds - already
+                if (next.isEmpty()) it.copy(selecting = false, selectedIds = emptySet(), selectedOffscreen = emptyMap(), selectedGroups = emptyMap())
+                else it.copy(selectedIds = next, selectedOffscreen = it.selectedOffscreen - already, selectedGroups = it.selectedGroups - key)
+            }
+            return
+        }
+        if (range == null) {
+            // A group whose photos are all on screen anyway (a search, the duplicates).
+            if (ids.isEmpty()) return
+            val all = current.selectedIds.containsAll(ids)
+            _state.update {
+                val next = if (all) it.selectedIds - ids.toSet() else it.selectedIds + ids
+                if (next.isEmpty()) it.copy(selecting = false, selectedIds = emptySet(), selectedOffscreen = emptyMap(), selectedGroups = emptyMap())
+                else it.copy(selecting = true, selectedIds = next)
+            }
+            return
+        }
+        // Ticked at once with what is on screen, so the bar answers the finger; the rest of the
+        // group joins them as soon as it has been looked up.
+        _state.update { it.copy(selecting = true, selectedIds = it.selectedIds + ids, selectingGroup = true) }
+        viewModelScope.launch {
+            try {
+                val s = _state.value
+                val whole = if (browsingLocally()) {
+                    withContext(Dispatchers.IO) {
+                        photoCache.docsBetween(range.first, range.second).map { searches.hitOf(org.json.JSONObject(it)) }
+                    }
+                } else {
+                    searches.photosBetween(s.searchedQuery, s.filters, range.first, range.second, s.freshBias, s.wordsOnly)
+                }
+                val onScreen = _state.value.hits.map { it.id }.toSet()
+                _state.update { st ->
+                    st.copy(
+                        selecting = true,
+                        selectedIds = st.selectedIds + whole.map { it.id },
+                        selectedOffscreen = st.selectedOffscreen + whole.filter { it.id !in onScreen }.associateBy { it.id },
+                        selectedGroups = st.selectedGroups + (key to (whole.map { it.id } + ids).toSet()),
+                        selectingGroup = false,
+                    )
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // The photos on screen stay ticked; the rest of the group simply was not listed.
+                _state.update { it.copy(selectingGroup = false) }
+            }
         }
     }
 
@@ -1390,7 +1900,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         when {
             _state.value.skippedMode -> loadSkipped()
             _state.value.duplicatesMode -> loadDuplicates(debounceMs = 0)
-            else -> search(reset = true, keepPosition = true)
+            else -> search(reset = true, keepPosition = true, keepLoaded = true)
         }
     }
 
@@ -1398,11 +1908,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * Swipe down on the grid: the owner is asking the index itself, not the phone, so every
      * held answer goes before the results are loaded again.
      */
-    fun forceRefresh() {
+    fun forceRefresh(toTop: Boolean = false) {
         viewModelScope.launch {
             withContext(Dispatchers.IO) { searches.clearCache() }
             _state.update { it.copy(cachedCount = 0) }
-            refresh()
+            // Pulling the list down is a gesture made at the top, by someone who wants to start
+            // again from the top: one ordinary page, and the grid goes up with it. The reload
+            // button is the opposite - it is pressed where the owner is standing (Cip, 2026-09-18).
+            if (toTop && !_state.value.duplicatesMode && !_state.value.skippedMode) search(reset = true)
+            else refresh()
         }
     }
 
@@ -1469,6 +1983,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 // Committed on the spot: with the usual ten-second commit the photo came
                 // straight back on the next refresh (Cip, 2026-09-15).
                 com.opensolr.photos.net.SolrClient(connection).delete(ids, now = true)
+                withContext(Dispatchers.IO) { photoCache.removeDocs(ids); photoCache.clearActions(ids) }
             } catch (e: Exception) {
                 // The next sync notices the photos are gone and deletes them anyway.
             }
@@ -1607,7 +2122,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (report?.status == "device_choice") askDeviceChoice()
         if (report?.status == "update_app") _state.update { it.copy(notice = report.message) }
         refreshSkippedCount()
-        if (_state.value.screen == Screen.Search) refresh()
+        // A sync that wrote nothing leaves the results exactly as they are, so nothing is reloaded
+        // and nobody loses their place (Cip, 2026-09-18).
+        val wrote = report == null || report.added > 0 || report.deleted > 0
+        // Only a sync that wrote something can have changed the filter lists.
+        if (wrote) prefs.facetsJson = null
+        if (wrote && _state.value.screen == Screen.Search) refresh()
     }
 
     /**
@@ -1624,5 +2144,22 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         /** How often the latest release is asked for. */
         private const val UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L
         private val CODE_PATTERN = Regex("^[A-Za-z0-9_-]{43}$")
+
+        /** How long a passing line ("Saved…") stays on the grid. */
+        private const val FLASH_MS = 4000L
+
+        /** How long the word counts of the whole library stand before they are worked out again. */
+        private const val WORD_COUNTS_MS = 3000L
+
+        /** How many suggestions are offered with nothing typed, and while typing. */
+        private const val SUGGEST_FEW = 5
+        private const val SUGGEST_MANY = 8
+
+        /** How many of the words the photos were read into are offered under the owner's tags. */
+        private const val SUGGEST_WORDS = 5
+
+        /** Most photos one reload may bring back at once, when the view had that many on it. */
+        private const val RELOAD_MAX = 1000
+
     }
 }

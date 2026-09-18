@@ -65,6 +65,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
     private val api = OpensolrApi()
     private val cache = PhotoCache(context)
     private val indexes = IndexManager(context, prefs, api)
+    private val edits = com.opensolr.photos.search.EditRepository(context)
 
     /** True once this run knows the plan has no AI for it (no vector search, or the month's allowance used up). */
     private var quotaHit = false
@@ -151,12 +152,6 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             forced.forEach { cache.clearWordRetry(it); cache.clearSkipped(it) }
             val skippedSizes = cache.skippedSizes()
             val rereadSince = prefs.rereadAllSince
-            // How many photos Re-read still has to send, so the progress says "40 of 9,808" from
-            // the first photo on, never "20 of 20" (Cip, 2026-09-17).
-            val rereadCount = if (rereadSince > 0 && !rebuild) {
-                try { solr.countWrittenBefore(rereadSince).toInt() } catch (e: Exception) { 0 }
-            } else 0
-            val needWords = if (rebuild || !aiAvailable) emptySet() else solr.idsWithoutWords() - cache.wordRetriesWaiting(System.currentTimeMillis())
             val phase = if (rebuild) "Rebuilding your index" else "Indexing photos"
 
             // Each photo goes to Opensolr once, five per call, with its EXIF and the owner's
@@ -206,7 +201,8 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                     val tags = edits?.tags ?: PhotoReader.opensolrTagsIn(context, photo)
                     // The same for the owner's wording of what the photo shows (opensolr:Meaning).
                     val meaning = edits?.meaning ?: PhotoReader.opensolrMeaningIn(context, photo)
-                    items += IngestItem(photo, jpeg, tags, meaning, PhotoReader.fileMd5(context, photo), edits?.persons ?: PhotoReader.personsIn(context, photo))
+                    val names = edits?.persons ?: PhotoReader.personsIn(context, photo)
+                    items += IngestItem(photo, jpeg, tags, meaning, PhotoReader.fileMd5(context, photo), names)
                 }
                 if (items.isNotEmpty()) {
                     val results = try {
@@ -227,6 +223,10 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                             } else {
                                 added++
                                 cache.clearSkipped(item.photo.id)
+                                // The document as the server wrote it goes straight into the
+                                // phone's own copy of the index, so nothing has to be asked back.
+                                result.doc?.let { edits.storeDoc(item.photo.id, it) }
+                                cache.clearActions(listOf(item.photo.id))
                                 if (result.words) {
                                     cache.clearWordRetry(item.photo.id)
                                 } else {
@@ -251,78 +251,82 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                 }
             }
 
-            // The diff, page by page: each page of (id, size) the index holds is compared with the
-            // phone's files as it arrives, and its deletions and changed photos are handled while
-            // the next page downloads. What the phone has and the index does not is known only
-            // once every page has been seen: the ids left unticked.
-            val unseen = HashSet(local.keys)
+            // The diff, entirely on the phone. The index is never walked: this app is the only
+            // thing that ever writes to that index, so a copy of what it holds - id, size, the
+            // words, the owner's tags and names - is kept here and brought in step by every write
+            // (Cip, 2026-09-18). After a reinstall that copy is empty and is read back once.
             val toDelete = ArrayList<String>(500)
-            var pages = 0
             if (!rebuild) {
-                onProgress(Progress("Comparing with your index", 0, 0))
-                // The pages download in their own coroutine, two ahead at most, while this one
-                // compares and acts on the page in hand: the download and the work overlap.
-                withFreshPassword(session, { connection = it; solr = SolrClient(it) }) {
-                    coroutineScope {
-                    val pageChannel = Channel<Pair<Long, List<Triple<String, Long, Long>>>>(capacity = 2)
-                    launch {
-                        try {
-                            solr.forEachSizePage { numFound, page -> pageChannel.send(numFound to page) }
-                            pageChannel.close()
-                        } catch (e: Throwable) {
-                            pageChannel.close(e)
-                        }
-                    }
-                    for ((numFound, page) in pageChannel) {
-                        if (pages == 0) {
-                            indexCount = numFound.toInt()
-                            // Photos the index cannot hold yet, plus those to be read again: the
-                            // least this run reads. When the month's allowance covers fewer, say
-                            // so once. However many there are, the run starts: it stops only if
-                            // the battery gets low with no charger (Cip, 2026-09-16).
-                            val atLeast = (local.size - skippedSizes.size - indexCount).coerceAtLeast(0) + forced.size + needWords.size
-                            expected = atLeast + rereadCount
-                            if (aiAvailable && limits != null) {
-                                val left = limits.photosLeftThisMonth
-                                if (left != null && left < atLeast) shortAllowance = warnShortAllowance(left, atLeast)
-                            }
-                        }
-                        pages++
-                        for ((id, size, written) in page) {
-                            val photo = local[id]
-                            if (photo == null) {
-                                toDelete += id
-                                if (toDelete.size >= 500) {
-                                    solr.delete(toDelete)
-                                    deleted += toDelete.size
-                                    toDelete.clear()
-                                }
-                            } else {
-                                unseen.remove(id)
-                                // A different size is a changed photo: everything again, as if new.
-                                // "Re-read all photos": anything written before it was asked for.
-                                val reread = rereadSince > 0 && written < rereadSince
-                                if (size != photo.sizeBytes || id in forced || id in needWords || reread) queue(photo)
-                            }
-                        }
-                        progress(if (total > 0) phase else "Comparing with your index")
-                    }
-                    }
+                if (edits.cloneMissing()) {
+                    onProgress(Progress("Reading your index once", 0, 0))
+                    withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { edits.readIndexIntoCache() }
                 }
-                if (toDelete.isNotEmpty()) {
-                    solr.delete(toDelete)
-                    deleted += toDelete.size
-                    toDelete.clear()
+                val known = cache.docSizes()
+                indexCount = known.size
+                onProgress(Progress("Comparing with your photos", 0, 0))
+                // Gone from the phone, so gone from the index.
+                known.keys.filter { it !in local }.forEach { toDelete += it }
+                // Photos with no words although the plan has AI, unless they are still pausing
+                // after a miss; and, for "Re-read all", everything written before it was asked for.
+                val waiting = cache.wordRetriesWaiting(System.currentTimeMillis())
+                val needWords = if (!aiAvailable) emptySet() else cache.docsWithoutWords().toSet() - waiting
+                val reread = if (rereadSince > 0) cache.docsIndexedBefore(rereadSince).toSet() else emptySet()
+                // Everything this run has to read, known before it starts: no estimate needed.
+                local.values.forEach { photo ->
+                    val stamp = known[photo.id]
+                    // Touched at all - a different size, or written at a different time - means the
+                    // picture goes through Opensolr again. An unknown time (0) is not a change:
+                    // photos indexed before the phone kept one must not all be read again.
+                    val changed = stamp == null || stamp.first != photo.sizeBytes ||
+                        (stamp.second > 0 && stamp.second != photo.modifiedSec)
+                    val waitingWords = cache.actionOf(photo.id) == PhotoCache.ACTION_WORDS
+                    if (changed && waitingWords && stamp != null) {
+                        // The app itself wrote this file moments ago, putting the owner's words in
+                        // its header. Only the words go up; the phone's copy takes the file as it
+                        // now stands, md5 included (Cip, 2026-09-18).
+                        cache.updateDocSize(photo.id, photo.sizeBytes, photo.modifiedSec, PhotoReader.fileMd5(context, photo))
+                        return@forEach
+                    }
+                    if (changed && stamp != null) {
+                        // A photo that looks touched is weighed exactly, and only then: the md5 of
+                        // the file, which the index already holds for it. Same md5 - the picture is
+                        // the same one and only its header was written (the owner's words, by this
+                        // app), so nothing is read again and the phone's copy takes the file as it
+                        // now stands. Neither the size nor the time it was written can be trusted
+                        // on their own (Cip, 2026-09-18).
+                        val was = cache.docFileHash(photo.id)
+                        if (was != null && was == PhotoReader.fileMd5(context, photo)) {
+                            cache.updateDocSize(photo.id, photo.sizeBytes, photo.modifiedSec)
+                            if (photo.id !in forced && photo.id !in needWords && photo.id !in reread) return@forEach
+                        }
+                    }
+                    if (changed || photo.id in forced || photo.id in needWords || photo.id in reread) {
+                        cache.queueAction(photo.id, PhotoCache.ACTION_INDEX)
+                    }
                 }
             } else {
                 indexCount = 0
+                // A rebuild empties the index, so the phone's copy of it goes with it and every
+                // photo is written again.
+                cache.clearDocs()
+                prefs.cloneComplete = true
+                local.values.forEach { cache.queueAction(it.id, PhotoCache.ACTION_INDEX) }
             }
 
-            // New on the phone (or everything, on a rebuild).
-            val newOnes = local.values.filter { it.id in unseen }
-            // The diff is over: what is left to read is exactly known, so the estimate goes.
-            expected = total + newOnes.size
-            for (photo in newOnes) queue(photo)
+            if (toDelete.isNotEmpty()) {
+                toDelete.chunked(500).forEach { batch ->
+                    solr.delete(batch)
+                    cache.removeDocs(batch)
+                    cache.clearActions(batch)
+                    deleted += batch.size
+                }
+                toDelete.clear()
+            }
+
+            // The photos waiting to be read, picture and all.
+            val queued = cache.actions(PhotoCache.ACTION_INDEX).mapNotNull { local[it] }
+            expected = queued.size
+            for (photo in queued) queue(photo)
             if (pending.isNotEmpty()) {
                 val batch = pending.toList()
                 pending.clear()
@@ -330,6 +334,17 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             }
 
             solr.commit()
+            // Every photo is in the index by now, so the words the owner changed - on one photo or
+            // on a thousand at once - are carried up here, fifty per call and no pictures.
+            try {
+                edits.sendWords { done, all ->
+                    onProgress(Progress("Saving your words on $done of $all photos", done, all))
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // The photos are indexed; the words stay queued and go up at the next sync.
+            }
             if (rebuild) prefs.rebuildApproved = false
             if (forced.isNotEmpty()) prefs.resyncIds = emptySet()
             if (rereadSince > 0) prefs.rereadAllSince = 0L
@@ -347,7 +362,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                 else
                     "$n indexed without being read into words: the monthly AI requests of your plan are used up. They are read at the first sync after the allowance resets, or now after an upgrade."
             }
-            val indexAfter = try { solr.count().toInt() } catch (e: Exception) { indexCount - deleted + added }
+            val indexAfter = cache.docCount()
             return report("ok", added, deleted, failed, localCount, indexCount, message, recreated, indexAfter)
         } catch (e: CancellationException) {
             throw e

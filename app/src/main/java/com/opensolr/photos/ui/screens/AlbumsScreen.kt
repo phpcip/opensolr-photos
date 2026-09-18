@@ -89,7 +89,9 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
     // Long press on a section title or an album picks it; while anything is picked, a tap picks
     // or unpicks, and the bar at the bottom deletes or shares their photos (Cip, 2026-09-17).
     val selecting = state.selectedAlbums.isNotEmpty() || state.selectedSections.isNotEmpty()
-    var folded by remember { mutableStateOf(emptySet<String>()) }
+    // Which sections are folded lives in the app's own settings, so the screen comes back the
+    // way it was left (Cip, 2026-09-18).
+    val folded = state.foldedAlbumSections
     var pendingDelete by remember { mutableStateOf(emptySet<String>()) }
     var confirmDelete by remember { mutableStateOf(false) }
     val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
@@ -134,7 +136,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
                     label = if (anyFolded) "Expand all" else "Collapse all",
                     onClick = {
                         Haptics.tick(view, strong = false)
-                        folded = if (anyFolded) emptySet() else state.albums.map { it.title }.toSet()
+                        viewModel.setAlbumSections(if (anyFolded) emptySet() else state.albums.map { it.title }.toSet())
                     },
                 )
             }
@@ -176,12 +178,13 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
                             selected = section.title in state.selectedSections,
                             onClick = {
                                 if (selecting) viewModel.toggleSectionSelected(section.title)
-                                else folded = if (sectionFolded) folded - section.title else folded + section.title
+                                else viewModel.toggleAlbumSection(section.title)
                             },
                             onLongClick = {
                                 if (!selecting) Haptics.tick(view, strong = true)
                                 viewModel.toggleSectionSelected(section.title)
                             },
+                            onTick = { viewModel.toggleSectionSelected(section.title) },
                         )
                     }
                     if (!sectionFolded) {
@@ -192,6 +195,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
                                 selecting = selecting,
                                 selected = key in state.selectedAlbums || section.title in state.selectedSections,
                                 onClick = { if (selecting) viewModel.toggleAlbumSelected(album) else viewModel.openAlbum(album) },
+                                onTick = { viewModel.toggleAlbumSelected(album) },
                                 onLongClick = {
                                     if (!selecting) Haptics.tick(view, strong = true)
                                     viewModel.toggleAlbumSelected(album)
@@ -301,6 +305,8 @@ private fun AlbumSectionHeading(
     selected: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
+    /** The tick itself, which picks the section whether or not the row is in picking mode. */
+    onTick: () -> Unit,
 ) {
     val p = LocalPalette.current
     val band = headingBand(0)
@@ -329,22 +335,7 @@ private fun AlbumSectionHeading(
             color = onBand,
             modifier = Modifier.weight(1f),
         )
-        if (selecting) SelectTick(selected)
-    }
-}
-
-/** The square tick of a picked section or album, as on the photos grid. */
-@Composable
-private fun SelectTick(selected: Boolean, modifier: Modifier = Modifier) {
-    val p = LocalPalette.current
-    Box(
-        modifier
-            .size(22.dp)
-            .background(if (selected) p.accentFill else p.paper, Corner)
-            .border(1.dp, if (selected) p.accentFill else p.hairline, Corner),
-        contentAlignment = Alignment.Center,
-    ) {
-        if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = p.onAccentFill, modifier = Modifier.size(16.dp))
+        if (selecting) PickTick(selected, onTick)
     }
 }
 
@@ -354,7 +345,7 @@ private fun SelectTick(selected: Boolean, modifier: Modifier = Modifier) {
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun AlbumCard(album: Album, selecting: Boolean, selected: Boolean, onClick: () -> Unit, onLongClick: () -> Unit) {
+private fun AlbumCard(album: Album, selecting: Boolean, selected: Boolean, onClick: () -> Unit, onLongClick: () -> Unit, onTick: () -> Unit) {
     val p = LocalPalette.current
     val context = LocalContext.current
     Column(Modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick)) {
@@ -378,7 +369,7 @@ private fun AlbumCard(album: Album, selecting: Boolean, selected: Boolean, onCli
                         .border(2.dp, p.paper, Corner),
                 )
             }
-            if (selecting) SelectTick(selected, Modifier.align(Alignment.TopEnd))
+            if (selecting) PickTick(selected, onTick, Modifier.align(Alignment.TopEnd))
         }
         Text(albumTitle(album.title), style = MaterialTheme.typography.bodyMedium, color = p.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 4.dp))
         Spacer(Modifier.height(2.dp))

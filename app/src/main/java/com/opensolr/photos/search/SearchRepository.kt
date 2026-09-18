@@ -73,8 +73,10 @@ data class SearchFilters(
             // so a library kept in nested folders filled the list with "Documents/photos/..."
             // lines that all looked alike. The field is still indexed and still searched by
             // words, and a photo's details still say which folder it is in.
+            // No "camera_make" either (Cip, 2026-09-18): the model already reads as "Nikon Z6",
+            // so the make was the same list said twice.
             "year" to "Year", "city" to "City", "country" to "Country",
-            "camera_make" to "Camera make", "camera_model" to "Camera model", "custom_tags" to "My tags",
+            "camera_model" to "Camera model", "custom_tags" to "My tags (Albums)",
             "labels" to "Meaning", "orientation" to "Orientation",
             // The names of the people, each whole (persons_ss), instead of only "has people"
             // (Cip, 2026-09-17).
@@ -310,6 +312,25 @@ class SearchRepository(private val context: Context) {
         }
 
     /**
+     * The facet lists of the whole library - the years, places, cameras, tags and names the filter
+     * sheet offers - in one request that asks for no documents at all.
+     *
+     * Asked once and then kept on the phone until a sync actually writes something, because that
+     * is the only thing that can change them (Cip, 2026-09-18).
+     */
+    suspend fun browseFacets(): Map<String, List<FacetValue>> {
+        val params = ArrayList<Pair<String, String>>()
+        params += "q" to "*:*"
+        params += "rows" to "0"
+        params += "facet" to "true"
+        params += "facet.mincount" to "1"
+        params += "facet.limit" to "200"
+        FACET_FIELDS.forEach { params += "facet.field" to it }
+        params += "f.year.facet.sort" to "index"
+        return parse(select(params), smart = false, notice = null).facets
+    }
+
+    /**
      * One words-only request that asks for no documents, just the facets.
      */
     private suspend fun facetsOnly(query: String, filters: SearchFilters, legacy: Boolean): Map<String, List<FacetValue>> {
@@ -329,6 +350,41 @@ class SearchRepository(private val context: Context) {
     }
 
     /**
+     * One photo, read out of the document the index (or the phone's own copy of it) holds. The
+     * same reading for both, so a photo drawn from the phone is the same photo in every way
+     * (Cip, 2026-09-18).
+     */
+    fun hitOf(d: JSONObject): PhotoHit = PhotoHit(
+        id = d.optString("id"),
+        mediaId = d.optLong("media_id", -1),
+        path = d.optString("path"),
+        fileName = d.optString("file_name"),
+        folder = d.optString("folder"),
+        mime = d.optString("mime", "image/*").ifBlank { "image/*" },
+        takenAt = d.optString("taken_at").ifBlank { null },
+        cameraMake = d.optString("camera_make").ifBlank { null },
+        cameraModel = d.optString("camera_model").ifBlank { null },
+        lens = d.optString("lens").ifBlank { null },
+        iso = if (d.has("iso")) d.optInt("iso") else null,
+        exposure = d.optString("exposure").ifBlank { null },
+        fNumber = if (d.has("f_number")) d.optDouble("f_number") else null,
+        focalLength = if (d.has("focal_length")) d.optDouble("focal_length") else null,
+        width = if (d.has("width")) d.optInt("width") else null,
+        height = if (d.has("height")) d.optInt("height") else null,
+        sizeBytes = d.optLong("size_bytes"),
+        meaning = d.optString("meaning"),
+        ocrText = d.optString("ocr_t"),
+        persons = d.optString("persons_t"),
+        location = d.optString("location").ifBlank { null },
+        city = d.optString("city").ifBlank { null },
+        region = d.optString("region").ifBlank { null },
+        country = d.optString("country").ifBlank { null },
+        labels = d.optJSONArray("labels")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList(),
+        customTags = d.optJSONArray("custom_tags")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList(),
+        score = d.optDouble("score", 0.0),
+    )
+
+    /**
      * One search request; [legacy] leaves out the fields an older configuration lacks.
      */
     private suspend fun search(query: String, filters: SearchFilters, start: Int, rows: Int, legacy: Boolean, freshBias: Boolean, wordsOnly: Boolean): SearchPage {
@@ -341,7 +397,9 @@ class SearchRepository(private val context: Context) {
         }
         params += "fl" to (if (legacy) LEGACY_FIELDS else FIELDS)
         params += "start" to start.coerceAtLeast(0).toString()
-        params += "rows" to rows.coerceIn(1, 100).toString()
+        // Up to a few hundred: a reload of a view the owner has scrolled through asks for
+        // everything that was on it in one request (Cip, 2026-09-18).
+        params += "rows" to rows.coerceIn(1, 1000).toString()
         params += "facet" to "true"
         params += "facet.mincount" to "1"
         params += "facet.limit" to "80"
@@ -350,6 +408,93 @@ class SearchRepository(private val context: Context) {
         params += "f.year.facet.sort" to "index"
         val page = parse(select(params), smart, notice)
         return page.copy(didYouMean = collation(page, text))
+    }
+
+    /**
+     * Every photo of the current view taken between [from] and [to] (both in milliseconds), which
+     * is exactly one heading on the grid: a month, or a day inside it.
+     *
+     * The same query and the same filters as the results on screen, narrowed by the dates, asked
+     * for ids only - the grid is not touched and its pages are not disturbed. Enough of each photo
+     * comes back to reach the file it reads from, so tagging, sharing and deleting work on photos
+     * the owner never scrolled to.
+     */
+    suspend fun photosBetween(
+        query: String,
+        filters: SearchFilters,
+        from: Long,
+        to: Long,
+        freshBias: Boolean = false,
+        wordsOnly: Boolean = false,
+        /** Whole documents, for photos that go on the grid; ids only, for ticking a group. */
+        full: Boolean = false,
+    ): List<PhotoHit> {
+        val (params, _, _) = queryParams(query, filters, legacy = false, wordsOnly = wordsOnly, freshBias = freshBias)
+        val stamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+        // A range is bound whole, as one parameter: {!field} and {!term} do not read ranges.
+        params += "fq" to "{!lucene v=\$group_q}"
+        params += "group_q" to "taken_at:[${stamp.format(Date(from))} TO ${stamp.format(Date(to))}]"
+        params += "fl" to (if (full) FIELDS else "id,media_id,path,file_name,folder,mime,custom_tags,persons_t")
+        params += "start" to "0"
+        params += "rows" to GROUP_TICK_MAX.toString()
+        params += "sort" to "taken_at desc, id asc"
+        val json = select(params)
+        if (full) return parse(json, smart = false, notice = null).hits
+        val docs = json.getJSONObject("response").getJSONArray("docs")
+        return (0 until docs.length()).map { i ->
+            val d = docs.getJSONObject(i)
+            PhotoHit(
+                id = d.optString("id"),
+                mediaId = d.optLong("media_id", -1),
+                path = d.optString("path"),
+                fileName = d.optString("file_name"),
+                folder = d.optString("folder"),
+                mime = d.optString("mime", "image/*").ifBlank { "image/*" },
+                takenAt = null, cameraMake = null, cameraModel = null, lens = null, iso = null,
+                exposure = null, fNumber = null, focalLength = null, width = null, height = null,
+                meaning = "", location = null,
+                persons = d.optString("persons_t"),
+                customTags = d.optJSONArray("custom_tags")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList(),
+            )
+        }
+    }
+
+    /**
+     * What a set of photos already carries: the names of the people in them and the owner's own
+     * tags, each with how many of those photos have it, most used first.
+     *
+     * Counted by the index over exactly those ids, so the tagging sheet tells the truth about the
+     * whole selection and not only about the photos that happen to be on screen.
+     */
+    suspend fun wordsOf(ids: List<String>): Pair<List<FacetValue>, List<FacetValue>> {
+        if (ids.isEmpty()) return emptyList<FacetValue>() to emptyList()
+        val people = HashMap<String, Int>()
+        val tags = HashMap<String, Int>()
+        ids.chunked(WORDS_OF_CHUNK).forEach { batch ->
+            val params = ArrayList<Pair<String, String>>()
+            params += "q" to "*:*"
+            params += "fq" to "{!terms f=id separator=| v=\$wordIds}"
+            params += "wordIds" to batch.joinToString("|")
+            params += "rows" to "0"
+            params += "facet" to "true"
+            params += "facet.mincount" to "1"
+            params += "facet.sort" to "count"
+            params += "facet.limit" to "200"
+            params += "facet.field" to "persons_ss"
+            params += "facet.field" to "custom_tags"
+            val fields = select(params).optJSONObject("facet_counts")?.optJSONObject("facet_fields")
+            fun into(field: String, out: HashMap<String, Int>) {
+                val pairs = fields?.optJSONArray(field) ?: return
+                for (i in 0 until pairs.length() / 2) {
+                    val value = pairs.optString(i * 2)
+                    if (value.isNotBlank()) out[value] = (out[value] ?: 0) + pairs.optInt(i * 2 + 1)
+                }
+            }
+            into("persons_ss", people)
+            into("custom_tags", tags)
+        }
+        fun sorted(counts: Map<String, Int>) = counts.entries.sortedByDescending { it.value }.map { FacetValue(it.key, it.value) }
+        return sorted(people) to sorted(tags)
     }
 
     /**
@@ -448,13 +593,14 @@ class SearchRepository(private val context: Context) {
             val make = b.optJSONObject("make")?.optJSONArray("buckets")?.optJSONObject(0)?.optString("val").orEmpty().trim()
             if (make.isEmpty() || model.lowercase().startsWith(make.lowercase())) model else "$make $model"
         }
-        // People, My tags, then Years, then Places, then the rest (Cip, 2026-09-17).
+        // People, the owner's own tags, then Things, then Years, Places and the rest
+        // (Cip, 2026-09-18).
         return listOf(
             AlbumSection("People", albumsOf("people", "persons_ss")),
-            AlbumSection("My tags", albumsOf("tags", "custom_tags")),
+            AlbumSection("My tags (Albums)", albumsOf("tags", "custom_tags")),
+            AlbumSection("Things", albumsOf("things", "labels")),
             AlbumSection("Years", albumsOf("years", "year")),
             AlbumSection("Places", albumsOf("cities", "city") + albumsOf("countries", "country")),
-            AlbumSection("Things", albumsOf("things", "labels")),
             AlbumSection("Cameras", albumsOf("cameras", "camera_model", cameraTitle)),
         ).filter { it.albums.isNotEmpty() }
     }
@@ -827,38 +973,7 @@ class SearchRepository(private val context: Context) {
     private fun parse(json: JSONObject, smart: Boolean, notice: String?): SearchPage {
         val response = json.getJSONObject("response")
         val docs = response.getJSONArray("docs")
-        val hits = (0 until docs.length()).map { i ->
-            val d = docs.getJSONObject(i)
-            PhotoHit(
-                id = d.optString("id"),
-                mediaId = d.optLong("media_id", -1),
-                path = d.optString("path"),
-                fileName = d.optString("file_name"),
-                folder = d.optString("folder"),
-                mime = d.optString("mime", "image/*").ifBlank { "image/*" },
-                takenAt = d.optString("taken_at").ifBlank { null },
-                cameraMake = d.optString("camera_make").ifBlank { null },
-                cameraModel = d.optString("camera_model").ifBlank { null },
-                lens = d.optString("lens").ifBlank { null },
-                iso = if (d.has("iso")) d.optInt("iso") else null,
-                exposure = d.optString("exposure").ifBlank { null },
-                fNumber = if (d.has("f_number")) d.optDouble("f_number") else null,
-                focalLength = if (d.has("focal_length")) d.optDouble("focal_length") else null,
-                width = if (d.has("width")) d.optInt("width") else null,
-                height = if (d.has("height")) d.optInt("height") else null,
-                sizeBytes = d.optLong("size_bytes"),
-                meaning = d.optString("meaning"),
-                ocrText = d.optString("ocr_t"),
-                persons = d.optString("persons_t"),
-                location = d.optString("location").ifBlank { null },
-                city = d.optString("city").ifBlank { null },
-                region = d.optString("region").ifBlank { null },
-                country = d.optString("country").ifBlank { null },
-                labels = d.optJSONArray("labels")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList(),
-                customTags = d.optJSONArray("custom_tags")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList(),
-                score = d.optDouble("score", 0.0),
-            )
-        }
+        val hits = (0 until docs.length()).map { i -> hitOf(docs.getJSONObject(i)) }
 
         val facets = HashMap<String, List<FacetValue>>()
         json.optJSONObject("facet_counts")?.optJSONObject("facet_fields")?.let { fields ->
@@ -892,6 +1007,16 @@ class SearchRepository(private val context: Context) {
         private val FACET_FIELDS = SearchFilters.FACETS.map { it.first }.toSet()
         /** Most pins the map asks for at once. */
         const val MAP_ROWS = 1000
+
+        /**
+         * Most photos one heading's tick can take in. A month of a big library is thousands of
+         * photos and they are asked for as ids only, so this is generous; it is here so that a
+         * single tap can never ask the index for an unbounded list.
+         */
+        const val GROUP_TICK_MAX = 20000
+
+        /** Ids per request when counting what a selection already carries. */
+        private const val WORDS_OF_CHUNK = 1000
         /** Candidates of the vector leg and of the fusion, as on search.opensolr.com. */
         private const val KNN_TOP_K = 500
         /**
