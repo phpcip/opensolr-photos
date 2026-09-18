@@ -1,0 +1,1 @@
+Fixes an update from 2.4 or earlier that stopped the app from starting ("duplicate column name: modified"). Same as 2.5.0 otherwise.

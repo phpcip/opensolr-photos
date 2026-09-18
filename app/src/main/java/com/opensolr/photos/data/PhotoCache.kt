@@ -76,25 +76,57 @@ class PhotoCache(context: Context) : SQLiteOpenHelper(context.applicationContext
             db.execSQL(SKIPPED_TABLE)
         }
         if (oldVersion < 6) {
-            db.execSQL("ALTER TABLE edits ADD COLUMN persons_json TEXT")
+            addColumnIfMissing(db, "edits", "persons_json", "TEXT")
         }
         if (oldVersion < 7) {
-            db.execSQL("ALTER TABLE edits ADD COLUMN pending INTEGER NOT NULL DEFAULT 0")
-            db.execSQL("ALTER TABLE edits ADD COLUMN tags_mode TEXT")
-            db.execSQL("ALTER TABLE edits ADD COLUMN persons_mode TEXT")
+            addColumnIfMissing(db, "edits", "pending", "INTEGER NOT NULL DEFAULT 0")
+            addColumnIfMissing(db, "edits", "tags_mode", "TEXT")
+            addColumnIfMissing(db, "edits", "persons_mode", "TEXT")
         }
         if (oldVersion < 8) {
+            // The phone's copy of the index. Created from the CURRENT definition, so a database
+            // coming from far back already has every column a later step would add - which is why
+            // each of those steps asks whether the column is there rather than adding it blind
+            // (Cip, 2026-09-18: an upgrade from 2.4 died on "duplicate column name: modified").
             db.execSQL(DOCS_TABLE)
             db.execSQL(ACTIONS_TABLE)
         }
-        if (oldVersion < 10) {
-            db.execSQL("ALTER TABLE docs ADD COLUMN modified INTEGER NOT NULL DEFAULT 0")
-        }
-        if (oldVersion < 9) {
-            // The copy now holds the whole document, so browsing needs nothing from the index at
-            // all. What was stored before is dropped and read again (Cip, 2026-09-18).
+        if (oldVersion in 8..8) {
+            // Version 8 held only part of a document; the copy now holds the whole of it, so what
+            // was stored then is dropped and read from the index again.
             db.execSQL("DROP TABLE IF EXISTS docs")
             db.execSQL(DOCS_TABLE)
+        }
+        if (oldVersion < 10) {
+            addColumnIfMissing(db, "docs", "modified", "INTEGER NOT NULL DEFAULT 0")
+            addColumnIfMissing(db, "docs", "json", "TEXT")
+        }
+    }
+
+    /**
+     * Adds a column only when the table does not already have it. A table created from the newest
+     * definition during an upgrade from an old database already carries the columns that later
+     * steps were written to add, and adding one twice takes the whole app down on start.
+     */
+    private fun addColumnIfMissing(db: SQLiteDatabase, table: String, column: String, type: String) {
+        val has = try {
+            db.rawQuery("PRAGMA table_info($table)", null).use { c ->
+                val nameColumn = c.getColumnIndex("name")
+                var found = false
+                while (c.moveToNext()) {
+                    if (nameColumn >= 0 && c.getString(nameColumn) == column) { found = true; break }
+                }
+                found
+            }
+        } catch (e: Exception) {
+            true
+        }
+        if (!has) {
+            try {
+                db.execSQL("ALTER TABLE $table ADD COLUMN $column $type")
+            } catch (e: Exception) {
+                // Already there after all: nothing to do, and never a reason to stop the app.
+            }
         }
     }
 
