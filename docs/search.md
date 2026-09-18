@@ -4,7 +4,25 @@
   <img src="images/search-flow.svg" alt="How a search is built" width="100%">
 </p>
 
-Search goes straight from the app to the phone's index, in one `POST /select`.
+There are two paths now. A typed search or a filter goes straight from the app to the phone's index, in
+one `POST /select`. Everything else — plain browsing, the suggestions, the lists on the tagging sheet — is
+answered on the phone, from its own copy of the index, and reaches nothing.
+
+## The phone's copy of the index
+
+The phone holds a copy of every document its index holds. Everything is in it except the search vector and
+the duplicate keys: the id, the path, the file name, the size, the dates, the camera, the EXIF, the place,
+the words the photo was read into, the printed text, the people, the owner's tags and the md5 of the file.
+It is read from the index **once**, at install or reinstall, and from then on every write keeps it in step.
+
+What that changes on this page:
+
+- **Plain browsing makes no request at all.** The years, the months, the days, their counts and the photos
+  inside them all come from the phone.
+- **Tag and name suggestions** are answered from the copy, and so is the *already on these photos* list under
+  the tagging sheet.
+- **The filter lists** are asked for once and then kept until a sync actually writes something.
+- Syncing no longer walks the index either; it compares the phone's folders with the copy ([sync](sync.md)).
 
 ## The header
 
@@ -17,7 +35,6 @@ The top of the photos screen is one row of small bordered buttons, each an icon 
 | **Sync** | The Sync screen ([sync](sync.md)) |
 | **Map** | The [map](map.md) of the current search |
 | **Albums** | The [albums](albums.md) |
-| **Select** | Turns selection on; it reads **Done** while selecting |
 | **Search** | Opens the search line |
 
 The search box is not on screen until it is asked for: the magnifier opens one compact line with the
@@ -27,26 +44,29 @@ albums, duplicates or similar photos shows the words the results answer to inste
 
 ## Empty search box
 
-Every photo, newest first: `q=*:*`, `sort=taken_at desc, id asc`. The grid is grouped under date headings,
-on two levels. *Today*, *Yesterday* and the weekdays of the last six days stand on their own: each of them is
-already a day. Anything older is a month — *September*, or *September 2025* once the year has turned — with
-the days inside it under headings of their own, *Saturday 5*, *Friday 4*. A month whose photos all fall on
-one day is not split.
+Every photo, newest first, by `taken_at` and then by id — read from the phone's copy, so nothing is asked
+of the index. The grid is grouped under date headings, on three levels: **Year > Month > Day**. *Today*,
+*Yesterday* and the weekdays of the last six days still stand above the years: each of them is already a
+day. Anything older sits under its year — *2025* — then its month — *September* — and inside the month
+its days, *Saturday 5*, *Friday 4*. Every month is spelled out by its days, even a month with a single day
+in it.
 
-A bar down the right edge (`FastScroller`) drags the grid: one movement crosses months, with the month and,
-under it, the day shown in a badge lifted clear of the thumb. Crossing a heading gives haptic feedback — the heavier constant for a month, the lighter
-one for a day — played through the view (`Haptics.tick`), which needs no VIBRATE permission and obeys the
-phone's own haptics setting. Its visuals fade when the grid stops, but the strip stays touchable: gated on
-the same animation there would be nothing to grab from a standing start.
+A bar down the right edge (`FastScroller`) drags the grid: one movement crosses years, with the year and,
+under it, the month shown in a badge lifted clear of the thumb. Crossing a heading gives haptic feedback —
+the heavier constant for a year, the lighter one for a month — played through the view (`Haptics.tick`),
+which needs no VIBRATE permission and obeys the phone's own haptics setting. Days go by in silence: a long
+library would buzz without stopping. Its visuals fade when the grid stops, but the strip stays touchable:
+gated on the same animation there would be nothing to grab from a standing start.
 
 The grouping is done on the phone in `buildRows`, from `taken_at`, which every hit already carries; it costs
-no request. Headings sit on a faint band of the app's accent (`headingBand`: 15% for a month, 8% for a day) with
-the theme's ink on it, so they read as something to tap on light and dark alike without competing with
-the photos. A heading folds away with a tap and then says how many it hides, *September (1,480)*; the
+no request. Headings sit on a faint band of the app's accent (`headingBand`: 18% for a year, 11% for a
+month, 6% for a day) with the theme's ink on it, so they read as something to tap on light and dark alike
+without competing with the photos. A heading folds away with a tap and then says how many it hides, *September (1,480)*; the
 expand all / collapse all button on the count line folds or opens every group of the view on screen at once.
-While selecting, a tap on a heading ticks its whole group — a month, or one day of it — meaning the photos
-loaded so far. The next page of results is asked for halfway through the last page loaded, so it is usually
-there before the grid reaches it.
+What is folded is remembered, across all three levels, so a view comes back the way it was left.
+While selecting, a tap on a heading ticks its whole group — a year, a month or a day — and it takes the
+whole group, not only the photos loaded so far. The next page is filled in halfway through the last page
+shown, so it is usually there before the grid reaches it.
 
 ## Typed search
 
@@ -84,6 +104,10 @@ answer, the same request runs with `q={!bool should=$lexicalRaw}` and the app sa
 An index still on an older configuration (reset postponed) answers 400 to the newest fields; the app
 then retries once without them.
 
+Without vector search on the plan, nothing is sent to be read at all: no photo goes up to be looked at, so
+there are no CLIP words and no printed text. The photo is indexed by its date, its camera, its place, its
+file name and the owner's own words, and search is lexical over those.
+
 `meaning` holds the labels CLIP gave the photo. `text` also collects the file name, the folder, the camera,
 the place and your tags, so *pixel* or *screenshots* find what you would expect.
 
@@ -100,14 +124,14 @@ Accent folding applies as everywhere else, so a name written with diacritics is 
 other way round.
 
 You can add, change or remove the names yourself in **Edit**, under *People*, or add them to many photos at
-once from **Tag** in the selection bar; the names already in the index are suggested from a facet on
-`persons_ss` (`SearchRepository.personSuggestions`), where every name is kept whole. Two spellings of one
+once from **Tag** in the selection bar; the names you already use are suggested from the phone's own copy of
+the index, so the list is there at once and costs no request. Two spellings of one
 name (case, diacritics, spaces: `Words.fold` on the phone, `Api_lib::photos_word_key` on the server) are
 kept once. They are written into the
 file's XMP (`PhotoReader.writeXmp`, after Android asks once for permission to change the photo), so
 any other app sees them too, and into `persons_t` in the index at once. Names outside ASCII are written
-as XML character references, which every XMP reader turns back into letters. The names are kept on the
-phone as well (`PhotoCache` edits), so a later read of the photo sends them again.
+as XML character references, which every XMP reader turns back into letters. They are in the phone's copy
+of the index as well, so a later read of the photo sends them again.
 
 The names are read on the phone rather than carried on the 640 px copy: `ExifInterface` converts the XMP
 packet to a `String` as ASCII, which turns a name with diacritics into question marks. `PhotoReader
@@ -121,8 +145,20 @@ write request, twice: as `dc:subject`, the keywords every photo manager shows, a
 the app's own namespace (`https://opensolr.com/ns/photos/1.0/`), which other apps neither show nor change.
 At indexing only `opensolr:Tags` is read (`PhotoReader.opensolrTagsIn`), so the owner's tags come back after
 a reinstall and keywords written by other apps never reach the index. The editor does show the `dc:subject`
-keywords of the file, to keep or remove; they go in only when saved. Edit writes exactly the saved list,
-Tag on a selection adds to what each file carries.
+keywords of the file, to keep or remove; they go in only when saved. Edit writes exactly the saved list.
+
+### Tag on a selection
+
+The sheet for many photos at once carries *People* first, then *My tags (Albums)*. Each of the two has its
+own **Add / Replace** switch:
+
+- **Add** puts the words on top of what each photo already carries.
+- **Replace** makes them the whole of that field on every ticked photo, and the sheet says so before you
+  save.
+
+Under the form is what the ticked photos already carry — the names and the tags, each with the number of
+ticked photos it is on — so you can see what you are about to add to or replace. That list is read from the
+phone's copy of the index and costs no request.
 
 The owner's own wording of what a photo shows goes into the file too, as `opensolr:Meaning`, capped at
 `PhotoReader.MEANING_MAX_CHARS` (2,000, the same ceiling `photos_ingest` applies). Only a wording the owner
@@ -134,8 +170,8 @@ then `opensolr:Meaning` from the file (`PhotoReader.opensolrMeaningIn`), then CL
 ## The AI switch
 
 Next to the count above the grid, once something is typed. Greyed out and off where search by meaning
-cannot run (no vector search on the plan, or no AI requests left this month). On, the search blends meaning with words
-(the hybrid query below). Off, the vector leg is left out entirely and the search is purely lexical —
+cannot run (no vector search on the plan, or no AI requests left this month). On, the search blends meaning
+with words (the hybrid query above). Off, the vector leg is left out entirely and the search is purely lexical —
 which is what you want for an exact code, a receipt number or a product reference, where the vector
 only drags the answer away from the thing you asked for. The same switch search.opensolr.com carries.
 
@@ -148,15 +184,18 @@ screenshot by what it says, a business card by the person's name. Nothing new to
 on: the words go into the same field the search already reads, so *petrom*, *invoice 4417* or *usa lemn*
 answer straight away.
 
-Only photos that carry text are read at all. CLIP sees the photo first, and unless one of its top 50 labels
-belongs to the text family (label, document, receipt, invoice, card, ticket, menu, poster, screenshot,
-number…) the photo is never sent for reading. A holiday album costs nothing and the wedding photos are not
-shipped anywhere.
+On a plan with vector search, only photos that carry text are read at all. CLIP sees the photo first, and
+unless one of its top 50 labels belongs to the text family (label, document, receipt, invoice, card, ticket,
+menu, poster, screenshot, number…) the photo is never sent for reading. A holiday album costs nothing and
+the wedding photos are not shipped anywhere. On a plan without vector search nothing is sent to be read in
+the first place: no CLIP, no OCR, and `ocr_t` stays empty.
 
 The reading itself happens on Opensolr's OCR servers — Solr machines that do nothing else, never on your
 phone — and it does not cost extra: a photo is a tenth of an AI request whether the work was the words, the
 vector, the printed text or all three ([plan limits](plan-limits.md)). A photo already read is never read
-again.
+again, and what was read out of it is never lost: if a later pass cannot read the photo — a plan without
+vector search, or the month's AI allowance used up — the printed text and the words already held are kept,
+as long as the md5 says it is still the same file.
 
 ### When the grid regroups
 
@@ -165,7 +204,9 @@ regroups the grid. A search runs on Enter, on a picked suggestion, on clearing t
 
 After a typed search the results are split into **Best matches** and **Also similar**, at the biggest fall
 in score among the results below 60% of the top score. The split is only made with at least 8 results, and
-*Best matches* always holds at least 3. The count line shows only *N photos*.
+*Best matches* always holds at least 3. The count line shows only *N photos*. Neither of these two headings
+carries a group tick while selecting: the line between them moves as more results arrive, so there is no
+fixed group to tick.
 
 Suggestion pills above the grid appear only after a typed search; they come from a separate facet request
 that returns words only.
@@ -178,9 +219,11 @@ parameters, so no value can change the query. Each field's facet excludes that f
 (`facet.field={!ex=year key=year}year`), so a section keeps offering all its values.
 
 On the filter sheet every tap applies at once; long lists show the twelve most frequent values with *Show
-all*. Small **Clear all** and **Done (N)** buttons, where N is the number of photos shown with the current
-filters, sit both at the top and at the bottom of the sheet. Active filters show as removable pills on one
-horizontally scrolling row.
+all*. Every group on the sheet carries the same heading the grid gives it, folds away with a tap, and shows
+a badge with how many of its own filters are on. All groups are folded when the sheet is first opened, and
+what you unfold is remembered between visits. Small **Clear all** and **Done (N)** buttons, where N is the
+number of photos shown with the current filters, sit both at the top and at the bottom of the sheet. Active
+filters show as removable pills on one horizontally scrolling row.
 
 | Filter | Parameters |
 |---|---|
@@ -191,7 +234,6 @@ horizontally scrolling row.
 | People | `fq={!terms f=persons_ss tag=persons_ss separator=\| v=$f_persons_ss}`: the names, each whole, from the `persons_ss` string field (`persons_t` is analysed text and stays for search) |
 | Taken between | `fq={!lucene v=$taken_q}` and `taken_q=taken_at:[2025-07-01T00:00:00Z TO 2025-07-08T23:59:59Z]`. Both days included; the clause travels as one bound parameter, and its two ends are formatted from a Long, so they can only ever be timestamps |
 | Folder | `fq={!term f=folder v=$f_folder}` and `f_folder=DCIM/Camera/` |
-| Camera make | `fq={!term f=camera_make v=$f_make}` and `f_make=Google` |
 | Camera model | `fq={!term f=camera_model v=$f_camera}` and `f_camera=Pixel 8` |
 | City / Region / Country | `fq={!term f=city v=$f_city}` (likewise `region`, `country`) |
 | My tags | `fq={!term f=custom_tags v=$f_tag}` |
@@ -200,10 +242,16 @@ horizontally scrolling row.
 | Has location (switch) | `fq=has_location:true` |
 | Within N km | `fq={!geofilt sfield=location pt=$near_pt d=$near_d}` with `near_pt=lat,lon`, `near_d=km` |
 
+*Year* and *Taken between* work together. Choosing years narrows the calendar to those years and opens it
+there, instead of on the current month; and once days are chosen, the years are put aside, since the days
+already say which years are meant.
+
 The filter sheet is built from facets of the current results (`facet.field` on `year`, `folder`,
-`camera_make`, `camera_model`, `city`, `region`, `country`, `labels`, `custom_tags` and `orientation`), so
-every choice offered has photos behind it. The radius filter is set from the [map](map.md) (*Search this area*) or from a photo's
-*Nearby* (5 km), and adjusted on the sheet (0.5 to 100 km).
+`camera_model`, `city`, `region`, `country`, `labels`, `custom_tags` and `orientation`), so
+every choice offered has photos behind it. The lists are asked for once and then held until a sync actually
+writes something, so opening and closing the sheet costs nothing. The radius filter is set from the
+[map](map.md) (*Search this area*) or from a photo's *Nearby* (5 km), and adjusted on the sheet (0.5 to
+100 km).
 
 ## Autocomplete
 
@@ -226,8 +274,7 @@ Pages of 60, loaded as you scroll. Thumbnails are decoded from the photos on the
 downloaded to draw the grid.
 
 - **The buttons above the grid**, left to right: the AI switch (with a query), Filters, Duplicates, the red
-  *!* for photos the phone could not read (when there are some), Reload, Expand / Collapse all, and Check
-  all / none, which ticks every photo of the view so a whole result set can be tagged at once. The count
+  *!* for photos the phone could not read (when there are some), Reload, and Expand / Collapse all. The count
   beside them is compact (`Actions.formatCompact`: 842, 1.2K), and while selecting it reads ✓ and the number.
 - **Tap** opens the photo full screen inside the app (`PhotoViewer`), at its own size rather than from the
   thumbnail. It is a `HorizontalPager` over the hits themselves, so a swipe left or right walks the result
@@ -235,35 +282,37 @@ downloaded to draw the grid.
   swiping there walks the camera roll. Nearing the end of what is loaded asks for the next page, so the
   swipe runs as far as the results do. Inside it: a tap shows every action of the photo as a row of icons
   (*Tag*, *Gallery*, *Similar*, *Share*, *Map* and *Nearby* with a GPS position, *Delete*), a swipe up opens
-  the details, which carry no buttons, a swipe down returns to the
+  the details, which carry no buttons — the people first, as chips, then *My tags (Albums)*, then what the
+  photo shows as plain text, then the rest of what is known about the file — a swipe down returns to the
   grid — drawn over it, so its scroll position is never disturbed. *Gallery* is `ACTION_VIEW` on the photo's
   MediaStore URI with read permission granted; if the stored id went stale the app finds the photo again by
   its path, and if it is gone from the phone it says so and the next Re-Sync removes it from the index.
-  - **Zoom**: pinch with no ceiling, magnifying about the point between the fingers, double tap to magnify on the point touched and again to come back, one
-    finger to move a magnified photo about (held inside its own edges). Zooming out stops at the whole
+  - **Zoom**: pinch with no ceiling, magnifying about the point between the fingers, double tap to magnify
+    on the point touched and again to come back, one finger to move a magnified photo about (held inside
+    its own edges). Zooming out stops at the whole
     picture — it is not a way to leave. The pager only scrolls while the photo is whole, so a finger on a
     magnified photo belongs to the photo. The pinch loop is written out rather than taken from
     `transformable` or `detectTransformGestures`: both answer a *one*-finger drag as a pan and consume it,
     and the swipe to the next photo dies with them.
   - **Tag** opens the tags over the photo; leaving them puts the photo's details back.
-- **Long press** starts picking photos, as every gallery does.
-- **A tap you can feel** answers picking photos, crossing a month or a day on the scroll bar, a filter going
+- **Selecting photos**: there is no *Select* button and no *Check all*. A long press on a photo starts
+  selection, as every gallery does, and it ends by itself when the last tick goes. The bar at the bottom
+  works on the ticked photos: **Tag**, **Share**, **Delete**, and **Re-sync N** to have them read again by
+  CLIP (each counts as new AI requests).
+- **A tap you can feel** answers picking photos, crossing a year or a month on the scroll bar, a filter going
   on (firmer) or off (lighter), *Done*, and the next page arriving. `Haptics.tick` plays it through the view
   (`performHapticFeedback`), so it needs no VIBRATE permission and obeys the phone's own setting; one switch
   in Me gates every call site.
 - **Reload**: swipe down on the grid, tap the reload icon next to the count, or come back from another
-  screen; the results are read again from the index. The swipe and the icon are asked for by hand
+  screen; the results are read again. The swipe and the icon are asked for by hand
   (`AppViewModel.forceRefresh`), so they empty the [search cache](#search-cache) first and always reach
-  the index.
+  the index. The swipe down also starts a sync; if a sync is already running it only reloads.
 - **Duplicates**: the duplicates icon on the count line switches the grid to groups of alike photos
   ([duplicates](duplicates.md)). Every step of its slider answers with a light tap.
 - **Could not be read**: a red icon next to it, only when there are such photos, lists the photos the phone
   itself cannot open or decode (they never reach Opensolr). Each has a red frame, a red *!* and its file name
   with the reason; it opens and selects like any other photo. They are kept in `PhotoCache.skipped` with
   their file size and tried again only when the file changes, or when picked for *Re-sync*.
-- **Select**: the *Select* button turns selection on. The bar at the bottom then works on the ticked
-  photos: **Share**, **Delete**, and **Re-sync N** to have them read again by CLIP (each counts as new AI
-  requests).
 
 ## Deleting photos
 
@@ -281,24 +330,33 @@ them back. If that delete fails, the next sync removes them anyway.
   is its tokenised copy, first in `qf` with boost 5.
 - **Tag suggestions**: focusing the tag field lists suggestions under it. With nothing typed, the 5 most
   used of your tags and the 5 most used CLIP words; while typing (after a 250 ms pause), up to 8 tags and 5
-  words that contain the text anywhere, in any case. It is one `/select` with `rows=0`, faceting on
-  `custom_tags` and `labels` with `facet.contains` and `facet.contains.ignoreCase`. Tags already on the
-  photo are not offered, and a word already offered as a tag is not repeated. A thin accent line shows while
-  suggestions load. Tapping a suggestion adds it; tapping outside the field and its list closes the list,
-  and tapping the field again reopens it.
+  words that contain the text anywhere, in any case. They are counted on the phone, from its copy of the
+  index, so no request leaves and the list is there as fast as you type. Tags already on the
+  photo are not offered, and a word already offered as a tag is not repeated. Tapping a suggestion adds it;
+  tapping outside the field and its list closes the list, and tapping the field again reopens it.
 - **What the photo shows**: `meaning` as free text; *Reset* restores CLIP's labels.
-- **Save**: the edit goes into the cache's `edits` table (id → tags, wording), the current document is read
-  back from the index, the edits go in, the vector is computed again from `meaning + tags` on vector plans
-  (`SyncEngine.embeddingText`), and the document is replaced with a commit.
+- **Save**: the save is local first and finishes on the phone. The edit goes into the cache's `edits` table
+  (id → tags, wording) and into the phone's copy of the index, the grid shows it at once, and the sync that
+  starts straight afterwards carries it up — 50 photos per call, with no pictures attached, since only the
+  words changed, to the `photos_words` endpoint. The vector is computed again from `meaning + tags` on
+  vector plans (`SyncEngine.embeddingText`). Nothing on screen waits for the network.
+
+Writing the words into the photo files themselves is the one part that still happens on the spot: Android
+asks for permission to change the files and a progress bar counts them through.
 
 `SyncEngine.applyEdits` puts the edits over CLIP's words every time a photo is written again, so the owner's
-words always win. With no local edits (a reinstall) the document copied back from the index keeps the tags
-it carried.
+words always win. After a reinstall the whole copy is pulled down once from the index, so the tags and names
+the photos carried are back before anything is edited.
+
+A photo with no date of its own no longer jumps to today when its tags are written into it: the index keeps
+the date the photo already had.
 
 ## Search cache
 
-Answers from the index are kept on the phone (`data/SearchCache.kt`, its own SQLite file) and reused, so
-the same question does not spend the plan's search bandwidth twice. The owner sets the seconds on the
+What still reaches the index — typed searches, filters and the facets behind them — is kept on the phone
+(`data/SearchCache.kt`, its own SQLite file) and reused, so the same question does not spend the plan's
+search bandwidth twice. Browsing is not in it at all: browsing never leaves the phone, so there is nothing
+to cache. The owner sets the seconds on the
 account screen: at least 60, at most a day, 60 by default (`AppPrefs.cacheSeconds`), with a **Clear cache**
 button that says how many answers are held. The cache is this phone's own; there is nothing to clear
 anywhere else.
@@ -309,13 +367,12 @@ are kept, the oldest dropped first, and an answer over 2 MB is served but not st
 
 | Cached | Never cached |
 |---|---|
-| `/select` through `SearchRepository.select`: searches and their pages, the facets behind the filters, albums, the documents of duplicate groups, tag suggestions, map photos | Writing and deleting (`/update`), the document read back in `EditRepository.save` before it is written over, `IndexManager.configVersion`/`hasPhotoSchema`, and the sync's walk over the index (`forEachSizePage`, `forEachDoc`, `idsWithout*`, `count`) |
+| `/select` through `SearchRepository.select`: typed searches and their pages, the facets behind the filters, albums, the documents of duplicate groups, map photos | Writing and deleting (`/update`), the words a sync carries up (`photos_words`), the one-time pull of the phone's copy after an install, and `IndexManager.configVersion`/`hasPhotoSchema` |
 | `/suggest`: autocomplete, keyed on the lowercased prefix | |
 | The duplicate-group facet, per slider stop (`cachedDuplicateGroups`) | |
 
-The uncached paths are uncached on purpose: a stale document in `EditRepository.save` would write old
-fields back over the owner's own words, and stale ids in the sync's comparison would delete the wrong
-photos.
+The uncached paths are uncached on purpose: a write must reach the index as it is, and the one-time pull of
+the phone's copy has to be the index's own truth, not an answer held from before.
 
 Everything the app writes clears the cache at once, whatever the seconds say: saving tags
 (`saveEdits`), deleting photos, `resetIndex`, and every finished sync (`onSyncFinished`). The deliberate

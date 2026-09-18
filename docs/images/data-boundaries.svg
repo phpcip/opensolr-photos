@@ -1,20 +1,23 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 520" role="img" aria-label="Where each piece of data lives: the phone, opensolr.com, api.opensolr.com and your Opensolr Index">
-  <rect x="0.5" y="0.5" width="1199" height="519" fill="#ffffff" stroke="#d9d4cc"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 560" role="img" aria-label="Where each piece of data lives: the phone and its copy of the index, opensolr.com, api.opensolr.com and your Opensolr Index">
+  <rect x="0.5" y="0.5" width="1199" height="559" fill="#ffffff" stroke="#d9d4cc"/>
   <g font-family="'Space Grotesk', 'Segoe UI', Helvetica, Arial, sans-serif">
-    <rect x="30" y="40" width="320" height="420" rx="2" fill="#ffffff" stroke="#111111" stroke-width="1.5"/>
+    <rect x="30" y="40" width="320" height="460" rx="2" fill="#ffffff" stroke="#111111" stroke-width="1.5"/>
     <text x="54" y="78" font-size="16" font-weight="700" letter-spacing="1.3" fill="#4a4540">YOUR PHONE</text>
     <line x1="54" y1="94" x2="326" y2="94" stroke="#d9d4cc" stroke-width="1.5"/>
     <rect x="54" y="124" width="8" height="8" fill="#111111"/>
     <text x="74" y="134" font-size="17" fill="#111111">Original photos, full size</text>
-    <rect x="54" y="172" width="8" height="8" fill="#111111"/>
-    <text x="74" y="182" font-size="17" fill="#111111">EXIF and GPS read here</text>
-    <rect x="54" y="220" width="8" height="8" fill="#111111"/>
-    <text x="74" y="230" font-size="17" fill="#111111">API key, Keystore-encrypted</text>
-    <rect x="54" y="268" width="8" height="8" fill="#111111"/>
-    <text x="74" y="278" font-size="17" fill="#111111">Label and vector cache</text>
-    <rect x="54" y="316" width="8" height="8" fill="#111111"/>
-    <text x="74" y="326" font-size="17" fill="#111111">Thumbnails, from the phone</text>
-    <text x="54" y="432" font-size="16" fill="#4a4540">excluded from phone backups</text>
+    <rect x="54" y="168" width="8" height="8" fill="#111111"/>
+    <text x="74" y="178" font-size="17" fill="#111111">EXIF, GPS and md5 read here</text>
+    <rect x="54" y="212" width="8" height="8" fill="#111111"/>
+    <text x="74" y="222" font-size="17" fill="#111111">API key, Keystore-encrypted</text>
+    <rect x="54" y="256" width="8" height="8" fill="#111111"/>
+    <text x="74" y="266" font-size="17" fill="#111111">A copy of every document</text>
+    <text x="74" y="290" font-size="16" fill="#4a4540">no vector, no duplicate keys</text>
+    <rect x="54" y="330" width="8" height="8" fill="#111111"/>
+    <text x="74" y="340" font-size="17" fill="#111111">Edits not yet sent, and the queue</text>
+    <rect x="54" y="374" width="8" height="8" fill="#111111"/>
+    <text x="74" y="384" font-size="17" fill="#111111">Thumbnails, from the phone</text>
+    <text x="54" y="472" font-size="16" fill="#4a4540">excluded from phone backups</text>
 
     <rect x="440" y="40" width="320" height="190" rx="2" fill="#ffffff" stroke="#111111" stroke-width="1.5"/>
     <text x="464" y="78" font-size="16" font-weight="700" letter-spacing="1.3" fill="#4a4540">OPENSOLR.COM</text>
@@ -23,36 +26,46 @@
     <text x="464" y="164" font-size="17" fill="#111111">Create index, upload config</text>
     <text x="464" y="196" font-size="17" fill="#111111">Plan limits and usage</text>
 
-    <rect x="440" y="300" width="320" height="160" rx="2" fill="#ffffff" stroke="#c05520" stroke-width="2"/>
-    <text x="464" y="338" font-size="16" font-weight="700" letter-spacing="1.3" fill="#c05520">API.OPENSOLR.COM</text>
-    <line x1="464" y1="354" x2="736" y2="354" stroke="#d9d4cc" stroke-width="1.5"/>
-    <text x="464" y="390" font-size="17" fill="#111111">CLIP on a 640 px copy</text>
-    <text x="464" y="420" font-size="17" fill="#111111">Vectors of the labels</text>
-    <text x="464" y="448" font-size="17" font-weight="700" fill="#c05520">Nothing stored</text>
+    <rect x="440" y="310" width="320" height="190" rx="2" fill="#ffffff" stroke="#c05520" stroke-width="2"/>
+    <text x="464" y="348" font-size="16" font-weight="700" letter-spacing="1.3" fill="#c05520">API.OPENSOLR.COM</text>
+    <line x1="464" y1="364" x2="736" y2="364" stroke="#d9d4cc" stroke-width="1.5"/>
+    <text x="464" y="400" font-size="17" fill="#111111">Reads a 640 px copy</text>
+    <text x="464" y="430" font-size="17" fill="#111111">Words you edit, no picture</text>
+    <text x="464" y="460" font-size="17" fill="#111111">Writes into your index</text>
+    <text x="464" y="488" font-size="17" font-weight="700" fill="#c05520">Nothing stored</text>
 
-    <rect x="850" y="40" width="320" height="420" rx="2" fill="#ffffff" stroke="#c05520" stroke-width="2"/>
+    <rect x="850" y="40" width="320" height="460" rx="2" fill="#ffffff" stroke="#c05520" stroke-width="2"/>
     <text x="874" y="78" font-size="16" font-weight="700" letter-spacing="1.3" fill="#c05520">YOUR OPENSOLR INDEX</text>
     <line x1="874" y1="94" x2="1146" y2="94" stroke="#d9d4cc" stroke-width="1.5"/>
     <rect x="874" y="124" width="8" height="8" fill="#c05520"/>
-    <text x="894" y="134" font-size="17" fill="#111111">Labels (the meaning)</text>
-    <rect x="874" y="172" width="8" height="8" fill="#c05520"/>
-    <text x="894" y="182" font-size="17" fill="#111111">Search vector</text>
-    <rect x="874" y="220" width="8" height="8" fill="#c05520"/>
-    <text x="894" y="230" font-size="17" fill="#111111">Date, camera, place</text>
-    <rect x="874" y="268" width="8" height="8" fill="#c05520"/>
-    <text x="894" y="278" font-size="17" fill="#111111">Path, folder, size</text>
-    <rect x="874" y="316" width="8" height="8" fill="#c05520"/>
-    <text x="894" y="326" font-size="17" fill="#111111">Removed with the photo</text>
-    <text x="874" y="432" font-size="16" fill="#4a4540">one per phone, in your account</text>
+    <text x="894" y="134" font-size="17" fill="#111111">The words and printed text</text>
+    <rect x="874" y="168" width="8" height="8" fill="#c05520"/>
+    <text x="894" y="178" font-size="17" fill="#111111">Search vector</text>
+    <rect x="874" y="212" width="8" height="8" fill="#c05520"/>
+    <text x="894" y="222" font-size="17" fill="#111111">Duplicate keys</text>
+    <rect x="874" y="256" width="8" height="8" fill="#c05520"/>
+    <text x="894" y="266" font-size="17" fill="#111111">Date, camera, place</text>
+    <rect x="874" y="300" width="8" height="8" fill="#c05520"/>
+    <text x="894" y="310" font-size="17" fill="#111111">Path, folder, size, md5</text>
+    <rect x="874" y="344" width="8" height="8" fill="#c05520"/>
+    <text x="894" y="354" font-size="17" fill="#111111">Removed with the photo</text>
+    <text x="874" y="472" font-size="16" fill="#4a4540">one per phone, in your account</text>
 
     <line x1="354" y1="135" x2="428" y2="135" stroke="#111111" stroke-width="1.5"/>
     <path d="M436 135 L424 128 L424 142 Z" fill="#111111"/>
-    <line x1="354" y1="380" x2="428" y2="380" stroke="#c05520" stroke-width="2"/>
-    <path d="M436 380 L424 373 L424 387 Z" fill="#c05520"/>
-    <line x1="354" y1="265" x2="838" y2="265" stroke="#111111" stroke-width="1.5"/>
-    <path d="M846 265 L834 258 L834 272 Z" fill="#111111"/>
-    <text x="600" y="256" font-size="16" fill="#4a4540" text-anchor="middle">direct to Solr: HTTPS + index password</text>
+    <line x1="354" y1="400" x2="428" y2="400" stroke="#c05520" stroke-width="2"/>
+    <path d="M436 400 L424 393 L424 407 Z" fill="#c05520"/>
+    <line x1="764" y1="400" x2="838" y2="400" stroke="#c05520" stroke-width="2"/>
+    <path d="M846 400 L834 393 L834 407 Z" fill="#c05520"/>
 
-    <text x="30" y="500" font-size="16" fill="#4a4540">Every arrow is HTTPS. The app sends nothing to any other host: no analytics, no ads, no crash reporting.</text>
+    <line x1="354" y1="250" x2="838" y2="250" stroke="#111111" stroke-width="1.5"/>
+    <path d="M846 250 L834 243 L834 257 Z" fill="#111111"/>
+    <text x="600" y="244" font-size="16" fill="#4a4540" text-anchor="middle">a typed search, the filter lists, writes</text>
+
+    <line x1="838" y1="285" x2="362" y2="285" stroke="#4a4540" stroke-width="1.5" stroke-dasharray="5 5"/>
+    <path d="M354 285 L366 278 L366 292 Z" fill="#4a4540"/>
+    <text x="600" y="276" font-size="16" fill="#4a4540" text-anchor="middle">read down once, at install or reinstall</text>
+
+    <text x="30" y="538" font-size="16" fill="#4a4540">Browsing, the counts and the suggestions cross nothing: they are answered from the phone's own copy.</text>
   </g>
 </svg>
