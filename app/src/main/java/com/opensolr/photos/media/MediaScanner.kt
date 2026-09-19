@@ -32,6 +32,8 @@ data class LocalPhoto(
     val height: Int,
     val dateTakenMs: Long,
     val modifiedSec: Long,
+    /** When the file appeared on the phone, in seconds; 0 when MediaStore does not say. */
+    val addedSec: Long = 0,
 ) {
 
     /**
@@ -194,6 +196,7 @@ object MediaScanner {
             MediaStore.Images.Media.HEIGHT,
             MediaStore.Images.Media.DATE_TAKEN,
             MediaStore.Images.Media.DATE_MODIFIED,
+            MediaStore.Images.Media.DATE_ADDED,
         )
         if (hasRelativePath) projection += MediaStore.Images.Media.RELATIVE_PATH
 
@@ -219,6 +222,7 @@ object MediaScanner {
             val heightCol = it.getColumnIndexOrThrow(MediaStore.Images.Media.HEIGHT)
             val takenCol = it.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_TAKEN)
             val modifiedCol = it.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_MODIFIED)
+            val addedCol = it.getColumnIndexOrThrow(MediaStore.Images.Media.DATE_ADDED)
             val relCol = if (hasRelativePath) it.getColumnIndex(MediaStore.Images.Media.RELATIVE_PATH) else -1
 
             while (it.moveToNext()) {
@@ -246,6 +250,7 @@ object MediaScanner {
                         height = it.getInt(heightCol),
                         dateTakenMs = it.getLong(takenCol),
                         modifiedSec = it.getLong(modifiedCol),
+                        addedSec = it.getLong(addedCol),
                     )
                 )
             }

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="channel_sync_name">Progresul sincronizării</string>
+    <string name="channel_sync_description">Arată progresul cât se indexează pozele.</string>
+    <string name="channel_alerts_name">Alerte de cont</string>
+    <string name="channel_alerts_description">Limite de plan atinse, autentificare necesară, index recreat.</string>
+</resources>

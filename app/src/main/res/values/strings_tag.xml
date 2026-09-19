@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tg_lead">These go on the photos you ticked, and on nothing else in your index. Saving writes them on this phone at once; your index is updated by the sync that follows.</string>
+    <string name="tg_people">People</string>
+    <string name="tg_people_replace">Replace: these names become the only names on every ticked photo. Names they have now are removed, in your index and in the files.</string>
+    <string name="tg_people_add">Add: these names go on top of the names each photo already has.</string>
+    <string name="tg_add_name">Add a name</string>
+    <string name="tg_add">Add</string>
+    <string name="tg_people_in_photos">People in your photos</string>
+    <string name="tg_my_tags">My tags (Albums)</string>
+    <string name="tg_tags_replace">Replace: these tags become the only tags on every ticked photo. Tags they have now are removed, in your index and in the files.</string>
+    <string name="tg_tags_add">Add: these tags go on top of the tags each photo already has.</string>
+    <string name="tg_add_tag">Add a tag, e.g. Maria, holiday 2021</string>
+    <string name="tg_your_tags">Your tags</string>
+    <string name="tg_from_photos">From your photos</string>
+    <string name="tg_place">Place</string>
+    <string name="tg_place_all_text">Every ticked photo gets the place you choose, in your index and in the files.</string>
+    <string name="tg_place_all">All ticked photos</string>
+    <string name="tg_place_missing">Only those without a place (%1$s)</string>
+    <string name="tg_choose_map">Choose the place on the map</string>
+    <string name="tg_not_saved">Not saved</string>
+    <string name="tg_writing">Writing your words into %1$s of %2$s photos…</string>
+    <string name="tg_cancel">Cancel</string>
+    <string name="tg_save">Save</string>
+    <string name="tg_saving">Saving…</string>
+    <string name="tg_already">Already on these photos</string>
+    <string name="tg_reading">Reading your index…</string>
+    <string name="tg_none_yet">No names and no tags yet.</string>
+    <string name="tg_people_caps">PEOPLE</string>
+    <string name="tg_tags_caps">TAGS</string>
+    <string name="tg_replace">Replace</string>
+    <string name="tg_mode_add">Add</string>
+    <string name="tg_remove">Remove</string>
+    <string name="tg_n_more">+%1$s more</string>
+    <string name="tg_edit">Edit %1$s</string>
+    <string name="tg_saved_in_file">Saved into the photo itself, so other apps see the names too.</string>
+    <string name="tg_tags_hint">Anything you would search for. Each tag becomes an album of its own.</string>
+    <string name="tg_shows">What the photo shows</string>
+    <string name="tg_words_hint">Words separated by commas. Your wording is kept even when the photo is read again.</string>
+    <string name="tg_reset">Reset</string>
+    <plurals name="tg_title">
+        <item quantity="one">Tag %1$s photo</item>
+        <item quantity="other">Tag %1$s photos</item>
+    </plurals>
+    <plurals name="tg_place_missing_text">
+        <item quantity="one">Only the %1$s ticked photo with no place gets the one you choose; the others keep theirs.</item>
+        <item quantity="other">Only the %1$s ticked photos with no place get the one you choose; the others keep theirs.</item>
+    </plurals>
+</resources>

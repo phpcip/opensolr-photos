@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="channel_sync_name">Sync-Fortschritt</string>
+    <string name="channel_sync_description">Zeigt den Fortschritt, während Ihre Fotos indexiert werden.</string>
+    <string name="channel_alerts_name">Kontohinweise</string>
+    <string name="channel_alerts_description">Tariflimits erreicht, Anmeldung nötig, Index neu erstellt.</string>
+</resources>

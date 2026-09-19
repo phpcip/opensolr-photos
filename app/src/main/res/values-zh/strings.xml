@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="channel_sync_name">同步进度</string>
+    <string name="channel_sync_description">在为照片建立索引时显示进度。</string>
+    <string name="channel_alerts_name">账户提醒</string>
+    <string name="channel_alerts_description">达到套餐限额、需要登录、索引已重建。</string>
+</resources>

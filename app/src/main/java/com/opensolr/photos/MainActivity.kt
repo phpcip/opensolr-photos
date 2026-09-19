@@ -21,6 +21,11 @@ class MainActivity : ComponentActivity() {
 
     private val viewModel: AppViewModel by viewModels()
 
+    /** The language picked on Me, on Android before 13 (later, Android applies it itself). */
+    override fun attachBaseContext(newBase: android.content.Context) {
+        super.attachBaseContext(com.opensolr.photos.ui.AppLanguage.wrap(newBase))
+    }
+
     /**
      * Sets up edge-to-edge drawing and the UI, then handles the launching intent.
      */

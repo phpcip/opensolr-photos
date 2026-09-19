@@ -1,5 +1,8 @@
 package com.opensolr.photos.ui.screens
 
+import com.opensolr.photos.R
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Build
@@ -66,10 +69,10 @@ fun SignInScreen(state: UiState, viewModel: AppViewModel) {
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 40.dp)
     ) {
-        Text("Find any photo by what is in it.", style = MaterialTheme.typography.displaySmall, color = p.ink)
+        Text(stringResource(R.string.ob_tagline), style = MaterialTheme.typography.displaySmall, color = p.ink)
         Spacer(Modifier.height(16.dp))
         Text(
-            "Your photos, read into words and searchable. Tap a result to open it in your gallery.",
+            stringResource(R.string.ob_lead),
             style = MaterialTheme.typography.bodyLarge, color = p.muted,
         )
         Spacer(Modifier.height(32.dp))
@@ -79,35 +82,35 @@ fun SignInScreen(state: UiState, viewModel: AppViewModel) {
             Spacer(Modifier.height(20.dp))
         }
         state.signInError?.let {
-            Notice(it, title = "Sign-in did not finish")
+            Notice(it, title = stringResource(R.string.ob_signin_failed))
             Spacer(Modifier.height(20.dp))
         }
 
         if (state.busy) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(color = p.accent, strokeWidth = 2.dp, modifier = Modifier.padding(end = 14.dp))
-                Text("Signing in…", style = MaterialTheme.typography.bodyLarge, color = p.ink)
+                Text(stringResource(R.string.ob_signing_in), style = MaterialTheme.typography.bodyLarge, color = p.ink)
             }
         } else {
-            AccentButton("Sign in with Opensolr", onClick = { viewModel.beginSignIn(context) }, modifier = Modifier.fillMaxWidth())
+            AccentButton(stringResource(R.string.ob_signin), onClick = { viewModel.beginSignIn(context) }, modifier = Modifier.fillMaxWidth())
         }
         Spacer(Modifier.height(12.dp))
-        GhostButton("Create a free Opensolr account", onClick = { Actions.openUrl(context, "https://opensolr.com/register") }, modifier = Modifier.fillMaxWidth())
+        GhostButton(stringResource(R.string.ob_create), onClick = { Actions.openUrl(context, "https://opensolr.com/register") }, modifier = Modifier.fillMaxWidth())
 
         Spacer(Modifier.height(36.dp))
-        SectionLabel("How it works")
+        SectionLabel(stringResource(R.string.ob_how))
         Spacer(Modifier.height(6.dp))
         listOf(
-            "You sign in on opensolr.com in your browser. The app never sees your password.",
-            "The app creates one Opensolr Index for this phone and keeps it in step with your photo folders.",
-            "Search matches the words each photo was read into, and with vector search also what your words mean.",
+            stringResource(R.string.ob_how_1),
+            stringResource(R.string.ob_how_2),
+            stringResource(R.string.ob_how_3),
         ).forEach { line ->
             Text(line, style = MaterialTheme.typography.bodyMedium, color = p.muted, modifier = Modifier.padding(vertical = 10.dp))
             HorizontalDivider(color = p.hairline)
         }
         Spacer(Modifier.height(20.dp))
         Text(
-            "Open source. Learn more at opensolr.com/opensolr-photos",
+            stringResource(R.string.ob_open_source),
             style = MaterialTheme.typography.bodySmall, color = p.accent,
             modifier = Modifier.clickable { Actions.openUrl(context, Actions.PROJECT_URL) },
         )
@@ -128,7 +131,7 @@ fun WelcomeScreen(state: UiState, viewModel: AppViewModel) {
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 32.dp)
     ) {
-        Text("You're signed in.", style = MaterialTheme.typography.displaySmall, color = p.ink)
+        Text(stringResource(R.string.ob_signed_in), style = MaterialTheme.typography.displaySmall, color = p.ink)
         Spacer(Modifier.height(12.dp))
         Text(state.email ?: "", style = MaterialTheme.typography.bodyLarge, color = p.muted)
         Spacer(Modifier.height(28.dp))
@@ -136,39 +139,39 @@ fun WelcomeScreen(state: UiState, viewModel: AppViewModel) {
         if (account != null) {
             if (!account.vectorAllowed) {
                 Notice(
-                    "Date, camera, place, file name and your tags only. A plan with AI reads the pictures themselves.",
-                    title = "Photos are not recognised on this plan",
+                    stringResource(R.string.ob_no_ai_text),
+                    title = stringResource(R.string.ob_no_ai_title),
                 )
                 Spacer(Modifier.height(20.dp))
             }
 
-            SectionLabel("What your plan covers")
-            InfoRow("Plan", account.planLabel, onOpen = { Actions.openUrl(context, Actions.DASHBOARD_URL) })
-            InfoRow("Search by meaning", if (account.vectorAllowed) "Included" else "Not included")
+            SectionLabel(stringResource(R.string.ob_covers))
+            InfoRow(stringResource(R.string.ob_plan), account.planLabel, onOpen = { Actions.openUrl(context, Actions.DASHBOARD_URL) })
+            InfoRow(stringResource(R.string.ob_meaning), if (account.vectorAllowed) stringResource(R.string.ob_included) else stringResource(R.string.ob_not_included))
             InfoRow(
-                "Photos you can add per month",
-                account.photosPerMonth?.let { "about " + Actions.formatCount(it.toLong()) } ?: "No monthly cap",
+                stringResource(R.string.ob_per_month),
+                account.photosPerMonth?.let { stringResource(R.string.ob_about, Actions.formatCount(it.toLong())) } ?: stringResource(R.string.ob_no_cap),
             )
-            account.photosLeftThisMonth?.let { InfoRow("Left this month", "about " + Actions.formatCount(it.toLong())) }
-            InfoRow("Disk space of the index", Actions.formatMb(account.diskLimitMb))
-            InfoRow("Search bandwidth per month", Actions.formatMb(account.bandwidthLimitMb))
-            InfoRow("Indexes on the account", "${account.indexesUsed} of ${account.indexLimit}")
+            account.photosLeftThisMonth?.let { InfoRow(stringResource(R.string.ob_left), stringResource(R.string.ob_about, Actions.formatCount(it.toLong()))) }
+            InfoRow(stringResource(R.string.ob_disk), Actions.formatMb(account.diskLimitMb))
+            InfoRow(stringResource(R.string.ob_bandwidth), Actions.formatMb(account.bandwidthLimitMb))
+            InfoRow(stringResource(R.string.ob_indexes), stringResource(R.string.ob_x_of_y, account.indexesUsed.toString(), account.indexLimit.toString()))
             Spacer(Modifier.height(16.dp))
             Text(
-                "Ten new photos, one AI request. Indexed ones cost nothing again.",
+                stringResource(R.string.ob_cost),
                 style = MaterialTheme.typography.bodyMedium, color = p.muted,
             )
             Spacer(Modifier.height(20.dp))
             Notice(
-                "More photos, disk or bandwidth: upgrade your plan.",
-                title = "Need more?",
+                stringResource(R.string.ob_more_text),
+                title = stringResource(R.string.ob_more_title),
             )
             Spacer(Modifier.height(12.dp))
-            GhostButton("See plans at opensolr.com/pricing", onClick = { Actions.openUrl(context, Actions.PRICING_URL) }, modifier = Modifier.fillMaxWidth())
+            GhostButton(stringResource(R.string.ob_see_plans), onClick = { Actions.openUrl(context, Actions.PRICING_URL) }, modifier = Modifier.fillMaxWidth())
         }
 
         Spacer(Modifier.height(28.dp))
-        AccentButton("Continue", onClick = { viewModel.continueFromWelcome() }, modifier = Modifier.fillMaxWidth())
+        AccentButton(stringResource(R.string.ob_continue), onClick = { viewModel.continueFromWelcome() }, modifier = Modifier.fillMaxWidth())
     }
 }
 
@@ -208,21 +211,21 @@ fun PermissionsScreen(state: UiState, viewModel: AppViewModel) {
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp, vertical = 32.dp)
     ) {
-        Text("Allow access to your photos", style = MaterialTheme.typography.displaySmall, color = p.ink)
+        Text(stringResource(R.string.ob_allow_title), style = MaterialTheme.typography.displaySmall, color = p.ink)
         Spacer(Modifier.height(16.dp))
-        Text("Four permissions, and only the first one is required.", style = MaterialTheme.typography.bodyLarge, color = p.muted)
+        Text(stringResource(R.string.ob_allow_lead), style = MaterialTheme.typography.bodyLarge, color = p.muted)
         Spacer(Modifier.height(24.dp))
-        SectionLabel("What they are for")
-        InfoRow("Photos", "To find and read the photos in the folders you pick")
-        InfoRow("Photo locations", "To let you filter by where a photo was taken")
-        InfoRow("Notifications", "To show sync progress and plan alerts")
-        InfoRow("Your location", "To create your index on the Opensolr server nearest to you")
+        SectionLabel(stringResource(R.string.ob_for))
+        InfoRow(stringResource(R.string.ob_p_photos), stringResource(R.string.ob_p_photos_why))
+        InfoRow(stringResource(R.string.ob_p_locations), stringResource(R.string.ob_p_locations_why))
+        InfoRow(stringResource(R.string.ob_p_notifications), stringResource(R.string.ob_p_notifications_why))
+        InfoRow(stringResource(R.string.ob_p_location), stringResource(R.string.ob_p_location_why))
         state.permissionError?.let {
             Spacer(Modifier.height(20.dp))
             Notice(it)
         }
         Spacer(Modifier.height(28.dp))
-        AccentButton("Allow", onClick = { launcher.launch(requested.toTypedArray()) }, modifier = Modifier.fillMaxWidth())
+        AccentButton(stringResource(R.string.ob_allow), onClick = { launcher.launch(requested.toTypedArray()) }, modifier = Modifier.fillMaxWidth())
     }
 }
 
@@ -275,9 +278,9 @@ fun FoldersScreen(state: UiState, viewModel: AppViewModel) {
     val children = remember(state.folders, path) { childFolders(state.folders, path) }
 
     Column(Modifier.fillMaxSize().padding(horizontal = 20.dp)) {
-        ScreenHeader("Photo folders", onBack = if (state.foldersReturnTo == Screen.Sync) ({ viewModel.back() }) else null)
+        ScreenHeader(stringResource(R.string.ob_folders), onBack = if (state.foldersReturnTo == Screen.Sync) ({ viewModel.back() }) else null)
         Text(
-            "Open a folder to see what is inside it. Ticking one takes every photo in it, including the folders below it.",
+            stringResource(R.string.ob_folders_lead),
             style = MaterialTheme.typography.bodyMedium, color = p.muted, modifier = Modifier.padding(horizontal = 4.dp),
         )
         Spacer(Modifier.height(12.dp))
@@ -289,7 +292,7 @@ fun FoldersScreen(state: UiState, viewModel: AppViewModel) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Text(
-                "All folders",
+                stringResource(R.string.ob_all_folders),
                 style = MaterialTheme.typography.labelLarge,
                 color = if (steps.isEmpty()) p.ink else p.accent,
                 modifier = Modifier.clickable { path = "" }.padding(end = 6.dp),
@@ -310,9 +313,9 @@ fun FoldersScreen(state: UiState, viewModel: AppViewModel) {
         if (state.foldersLoading) {
             CircularProgressIndicator(color = p.accent, strokeWidth = 2.dp, modifier = Modifier.padding(16.dp))
         } else if (state.folders.isEmpty()) {
-            Notice("No photos were found on this phone yet.")
+            Notice(stringResource(R.string.ob_no_photos))
         } else if (children.isEmpty()) {
-            Notice("Nothing else inside this folder.")
+            Notice(stringResource(R.string.ob_nothing_inside))
         }
 
         LazyColumn(Modifier.weight(1f), contentPadding = PaddingValues(bottom = 16.dp)) {
@@ -337,13 +340,15 @@ fun FoldersScreen(state: UiState, viewModel: AppViewModel) {
                     Column(Modifier.weight(1f)) {
                         Text(folder.name, style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold), color = p.ink)
                         Text(
-                            if (covered != null) "Already included by $covered"
-                            else "${Actions.formatCount(folder.count.toLong())} photos" + if (folder.hasChildren) ", with folders inside" else "",
+                            if (covered != null) stringResource(R.string.ob_included_by, covered)
+                            else pluralStringResource(R.plurals.ob_n_photos, folder.count, Actions.formatCount(folder.count.toLong())).let {
+                                if (folder.hasChildren) stringResource(R.string.ob_with_folders, it) else it
+                            },
                             style = MaterialTheme.typography.bodySmall, color = p.muted,
                         )
                     }
                     if (folder.hasChildren) {
-                        Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "Open ${folder.name}", tint = p.muted)
+                        Icon(Icons.Filled.KeyboardArrowRight, contentDescription = stringResource(R.string.ob_open_folder, folder.name), tint = p.muted)
                     }
                 }
                 HorizontalDivider(color = p.hairline)
@@ -351,13 +356,13 @@ fun FoldersScreen(state: UiState, viewModel: AppViewModel) {
         }
 
         Text(
-            if (state.selectedFolders.isEmpty()) "Nothing chosen yet"
+            if (state.selectedFolders.isEmpty()) stringResource(R.string.ob_nothing_chosen)
             else state.selectedFolders.sorted().joinToString(", ") { it.trimEnd('/') },
             style = MaterialTheme.typography.bodySmall, color = p.muted,
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         )
         AccentButton(
-            if (state.foldersReturnTo == Screen.Sync) "Save and sync" else "Continue",
+            if (state.foldersReturnTo == Screen.Sync) stringResource(R.string.ob_save_sync) else stringResource(R.string.ob_continue),
             onClick = { viewModel.saveFolders() },
             enabled = state.selectedFolders.isNotEmpty(),
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
@@ -378,25 +383,25 @@ fun SetupScreen(state: UiState, viewModel: AppViewModel) {
             .padding(horizontal = 24.dp, vertical = 40.dp),
         verticalArrangement = Arrangement.Top,
     ) {
-        Text("Setting up your photo index", style = MaterialTheme.typography.displaySmall, color = p.ink)
+        Text(stringResource(R.string.ob_setting_up), style = MaterialTheme.typography.displaySmall, color = p.ink)
         Spacer(Modifier.height(16.dp))
         Text(
-            "This phone gets its own index; an existing one is reused.",
+            stringResource(R.string.ob_setup_lead),
             style = MaterialTheme.typography.bodyLarge, color = p.muted,
         )
         Spacer(Modifier.height(32.dp))
         if (state.setupError == null) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 CircularProgressIndicator(color = p.accent, strokeWidth = 2.dp, modifier = Modifier.padding(end = 14.dp))
-                Text(state.setupStep.ifBlank { "Connecting to Opensolr" }, style = MaterialTheme.typography.bodyLarge, color = p.ink)
+                Text(state.setupStep.ifBlank { stringResource(R.string.ob_connecting) }, style = MaterialTheme.typography.bodyLarge, color = p.ink)
             }
         } else {
-            Notice(state.setupError, title = "Setup did not finish")
+            Notice(state.setupError, title = stringResource(R.string.ob_setup_failed))
             Spacer(Modifier.height(20.dp))
-            AccentButton("Try again", onClick = { viewModel.runSetup() }, modifier = Modifier.fillMaxWidth())
+            AccentButton(stringResource(R.string.ob_try_again), onClick = { viewModel.runSetup() }, modifier = Modifier.fillMaxWidth())
             if (state.setupNeedsUpgrade) {
                 Spacer(Modifier.height(12.dp))
-                GhostButton("See plans at opensolr.com/pricing", onClick = { Actions.openUrl(context, Actions.PRICING_URL) }, modifier = Modifier.fillMaxWidth())
+                GhostButton(stringResource(R.string.ob_see_plans), onClick = { Actions.openUrl(context, Actions.PRICING_URL) }, modifier = Modifier.fillMaxWidth())
             }
         }
     }

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tg_lead">Elles vont sur les photos cochées, et sur rien d\'autre dans votre index. L\'enregistrement les écrit tout de suite sur ce téléphone ; votre index est mis à jour par la synchro suivante.</string>
+    <string name="tg_people">Personnes</string>
+    <string name="tg_people_replace">Remplacer : ces noms deviennent les seuls noms de chaque photo cochée. Les noms actuels sont retirés, dans votre index et dans les fichiers.</string>
+    <string name="tg_people_add">Ajouter : ces noms s\'ajoutent à ceux de chaque photo.</string>
+    <string name="tg_add_name">Ajouter un nom</string>
+    <string name="tg_add">Ajouter</string>
+    <string name="tg_people_in_photos">Personnes dans vos photos</string>
+    <string name="tg_my_tags">Mes étiquettes (Albums)</string>
+    <string name="tg_tags_replace">Remplacer : ces étiquettes deviennent les seules de chaque photo cochée. Les étiquettes actuelles sont retirées, dans votre index et dans les fichiers.</string>
+    <string name="tg_tags_add">Ajouter : ces étiquettes s\'ajoutent à celles de chaque photo.</string>
+    <string name="tg_add_tag">Ajouter une étiquette, ex. Maria, vacances 2021</string>
+    <string name="tg_your_tags">Vos étiquettes</string>
+    <string name="tg_from_photos">De vos photos</string>
+    <string name="tg_place">Lieu</string>
+    <string name="tg_place_all_text">Chaque photo cochée reçoit le lieu choisi, dans votre index et dans les fichiers.</string>
+    <string name="tg_place_all">Toutes les photos cochées</string>
+    <string name="tg_place_missing">Seulement celles sans lieu (%1$s)</string>
+    <string name="tg_choose_map">Choisir le lieu sur la carte</string>
+    <string name="tg_not_saved">Non enregistré</string>
+    <string name="tg_writing">Écriture de vos mots dans %1$s sur %2$s photos…</string>
+    <string name="tg_cancel">Annuler</string>
+    <string name="tg_save">Enregistrer</string>
+    <string name="tg_saving">Enregistrement…</string>
+    <string name="tg_already">Déjà sur ces photos</string>
+    <string name="tg_reading">Lecture de votre index…</string>
+    <string name="tg_none_yet">Pas encore de noms ni d\'étiquettes.</string>
+    <string name="tg_people_caps">PERSONNES</string>
+    <string name="tg_tags_caps">ÉTIQUETTES</string>
+    <string name="tg_replace">Remplacer</string>
+    <string name="tg_mode_add">Ajouter</string>
+    <string name="tg_remove">Retirer</string>
+    <string name="tg_n_more">+%1$s de plus</string>
+    <string name="tg_edit">Modifier %1$s</string>
+    <string name="tg_saved_in_file">Enregistré dans la photo elle-même, pour que les autres apps voient aussi les noms.</string>
+    <string name="tg_tags_hint">Tout ce que vous chercheriez. Chaque étiquette devient un album.</string>
+    <string name="tg_shows">Ce que montre la photo</string>
+    <string name="tg_words_hint">Mots séparés par des virgules. Votre formulation est gardée même si la photo est relue.</string>
+    <string name="tg_reset">Réinitialiser</string>
+    <plurals name="tg_title">
+        <item quantity="one">Étiqueter %1$s photo</item>
+        <item quantity="many">Étiqueter %1$s photos</item>
+        <item quantity="other">Étiqueter %1$s photos</item>
+    </plurals>
+    <plurals name="tg_place_missing_text">
+        <item quantity="one">Seule la %1$s photo cochée sans lieu reçoit celui choisi ; les autres gardent le leur.</item>
+        <item quantity="many">Seules les %1$s photos cochées sans lieu reçoivent celui choisi ; les autres gardent le leur.</item>
+        <item quantity="other">Seules les %1$s photos cochées sans lieu reçoivent celui choisi ; les autres gardent le leur.</item>
+    </plurals>
+</resources>

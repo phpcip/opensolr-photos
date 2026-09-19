@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="al_title">Albums</string>
+    <string name="al_empty">Pas encore d\'albums : ils viennent de vos étiquettes, des mots lus dans les photos, des lieux, des appareils et des années.</string>
+    <string name="al_check_none">Tout décocher</string>
+    <string name="al_check_all">Tout cocher</string>
+    <string name="al_expand_all">Tout déplier</string>
+    <string name="al_collapse_all">Tout replier</string>
+    <string name="al_share">Partager</string>
+    <string name="al_delete">Supprimer</string>
+    <string name="al_cancel">Annuler</string>
+    <string name="al_delete_q">Supprimer les photos ?</string>
+    <string name="al_del_sections">Cela supprime toutes les photos de tous les albums de : %1$s.</string>
+    <string name="al_del_album">Cela supprime toutes les photos de l\'album %1$s.</string>
+    <string name="al_del_albums">Cela supprime toutes les photos des albums : %1$s.</string>
+    <string name="al_del_note">Les photos sont supprimées de ce téléphone et retirées de votre index. Une photo présente dans plusieurs albums disparaît de tous.</string>
+    <string name="al_open_section">Ouvrir cette section</string>
+    <string name="al_fold_section">Replier cette section</string>
+    <string name="al_sec_people">Personnes</string>
+    <string name="al_sec_tags">Mes étiquettes (Albums)</string>
+    <string name="al_sec_things">Objets</string>
+    <string name="al_sec_years">Années</string>
+    <string name="al_sec_places">Lieux</string>
+    <string name="al_sec_cameras">Appareils</string>
+    <string name="mp_title">Carte</string>
+    <string name="mp_with_place">%1$s avec un lieu</string>
+    <string name="mp_search_area">Chercher dans cette zone</string>
+    <string name="mp_reload">Recharger</string>
+    <string name="mp_failed">La carte n\'a pas pu être chargée</string>
+    <string name="mp_none">Aucune de vos photos indexées n\'a encore de position GPS.</string>
+    <string name="mp_no_match">Aucune photo avec position GPS ne correspond à cette recherche.</string>
+    <string name="pp_title">Où a-t-elle été prise ?</string>
+    <string name="pp_lead">Déplacez la carte jusqu\'à ce que l\'épingle soit sur le lieu, ou touchez le lieu.</string>
+    <string name="pp_move">Déplacez la carte pour choisir un lieu</string>
+    <string name="pp_cancel">Annuler</string>
+    <string name="pp_use">Utiliser ce lieu</string>
+    <string name="rt_reset_confirm">Réinitialiser et resynchroniser</string>
+    <string name="rt_later">Plus tard</string>
+    <string name="rt_reset_title">Votre index va être réinitialisé</string>
+    <string name="rt_reset_text">Cette version d\'Opensolr Photos apporte une nouvelle configuration d\'index. Votre index va être réinitialisé et chaque photo resynchronisée. Cela prend un moment ; la recherche continue de fonctionner et retrouve les photos à mesure qu\'elles reviennent, et la relecture compte dans les requêtes IA de votre forfait. Vos étiquettes et modifications sont conservées.</string>
+    <string name="rt_ok">OK</string>
+    <string name="rt_busy_title">Une synchro est déjà en cours</string>
+    <string name="rt_busy_text">Une synchro est déjà en cours.</string>
+    <string name="rt_new_device">Aucun de ceux-là, c\'est un nouvel appareil</string>
+    <string name="rt_which_device">Lequel de ces appareils est le vôtre ?</string>
+    <string name="rt_unknown_phone">Téléphone inconnu</string>
+    <string name="rt_last_synced">dernière synchro %1$s</string>
+    <string name="rt_since">depuis %1$s</string>
+    <string name="rt_device_note">Cela garde vos photos et les ressources de votre compte Opensolr liées à ce téléphone.</string>
+    <string name="cp_open_site">Ouvrir sur opensolr.com</string>
+    <string name="cp_x_of_y">%1$s sur %2$s</string>
+    <string name="cp_back">Retour</string>
+    <plurals name="al_n_photos">
+        <item quantity="one">%1$s photo</item>
+        <item quantity="many">%1$s photos</item>
+        <item quantity="other">%1$s photos</item>
+    </plurals>
+    <plurals name="mp_n_here">
+        <item quantity="one">%1$s photo ici</item>
+        <item quantity="many">%1$s photos ici</item>
+        <item quantity="other">%1$s photos ici</item>
+    </plurals>
+    <plurals name="rt_n_photos">
+        <item quantity="one">%1$s photo</item>
+        <item quantity="many">%1$s photos</item>
+        <item quantity="other">%1$s photos</item>
+    </plurals>
+</resources>

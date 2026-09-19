@@ -64,6 +64,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         db.execSQL(ACTIONS_KIND_INDEX)
         db.execSQL(WORD_RETRIES_TABLE)
         db.execSQL(SKIPPED_TABLE)
+        db.execSQL(SET_PLACES_TABLE)
     }
 
     /**
@@ -135,6 +136,18 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
             // photos that really have no words.
             db.execSQL(DOCS_WORDLESS_INDEX)
         }
+        if (oldVersion < 14) {
+            db.execSQL(SET_PLACES_TABLE)
+        }
+        if (oldVersion < 15) {
+            addColumnIfMissing(db, "set_places", "synced", "INTEGER NOT NULL DEFAULT 1")
+        }
+        if (oldVersion < 16) {
+            // The region (a county, a state) as a column, for browsing grouped by place without
+            // taking every stored document apart (Cip, 2026-09-19).
+            addColumnIfMissing(db, "docs", "region", "TEXT")
+            backfillRegion(db)
+        }
     }
 
     /**
@@ -145,6 +158,51 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
      * one the server still owes words, so leaving the column unfilled would send the whole library
      * back through the paid reader on the next sync (Cip, 2026-09-18).
      */
+    /** Fills the region column from the stored documents, once, a page at a time. */
+    private fun backfillRegion(db: SQLiteDatabase) {
+        db.compileStatement("UPDATE docs SET region = ? WHERE id = ?").use { update ->
+            forEachPage(db, "docs", arrayOf("id", "json"), "json IS NOT NULL") { id, row ->
+                val region = try {
+                    org.json.JSONObject(row[1] ?: return@forEachPage).optString("region").trim().ifBlank { null }
+                } catch (e: Exception) {
+                    null
+                } ?: return@forEachPage
+                update.clearBindings()
+                update.bindString(1, region)
+                update.bindString(2, id)
+                update.executeUpdateDelete()
+            }
+        }
+    }
+
+    /**
+     * Every photo on the phone's copy of the index with what browsing can group it by - when,
+     * where, who, which tags - newest first (Cip, 2026-09-19). One query on columns, no document
+     * taken apart; only the two short lists of names and tags are read out of their text.
+     */
+    fun groupingRows(): List<com.opensolr.photos.search.SearchRepository.GroupedHit> {
+        val out = ArrayList<com.opensolr.photos.search.SearchRepository.GroupedHit>()
+        fun list(text: String?): List<String> = if (text.isNullOrEmpty() || text == "[]") emptyList() else try {
+            org.json.JSONArray(text).let { a -> (0 until a.length()).map { a.optString(it).trim() }.filter { it.isNotEmpty() } }
+        } catch (e: Exception) {
+            emptyList()
+        }
+        readableDatabase.query("docs", arrayOf("id", "taken_ms", "city", "region", "country", "persons_json", "tags_json"), null, null, null, null, "taken_ms DESC").use { c ->
+            while (c.moveToNext()) {
+                out += com.opensolr.photos.search.SearchRepository.GroupedHit(
+                    id = c.getString(0),
+                    takenMs = c.getLong(1).takeIf { it > 0 },
+                    city = c.getString(2)?.trim()?.ifBlank { null },
+                    region = c.getString(3)?.trim()?.ifBlank { null },
+                    country = c.getString(4)?.trim()?.ifBlank { null },
+                    persons = list(c.getString(5)),
+                    tags = list(c.getString(6)),
+                )
+            }
+        }
+        return out
+    }
+
     private fun backfillFileHash(db: SQLiteDatabase) {
         db.compileStatement("UPDATE docs SET file_hash = ?, embed_model = coalesce(?, embed_model) WHERE id = ?").use { update ->
             forEachPage(db, "docs", arrayOf("id", "json"), "json IS NOT NULL") { id, row ->
@@ -458,6 +516,8 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
          * can ask for it without fetching and taking apart the whole document (Cip, 2026-09-18).
          */
         val fileHash: String? = null,
+        /** The first division under the country (a county, a state), for grouping by place. */
+        val region: String? = null,
     )
 
     /**
@@ -475,6 +535,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
             if (doc.ocr == null) putNull("ocr") else put("ocr", doc.ocr)
             if (doc.city == null) putNull("city") else put("city", doc.city)
             if (doc.country == null) putNull("country") else put("country", doc.country)
+            if (doc.region == null) putNull("region") else put("region", doc.region)
             if (doc.json == null) putNull("json") else put("json", doc.json)
             put("modified", doc.modified)
             put("taken_ms", com.opensolr.photos.ui.Actions.solrDateMillis(doc.takenAt) ?: 0L)
@@ -666,6 +727,123 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
     fun removeDocs(ids: Collection<String>) {
         deleteByIds("docs", ids)
         deleteByIds("doc_words", ids)
+        deleteByIds("set_places", ids)
+    }
+
+    /**
+     * A place this app gave a photo: one the owner picked on the map, or the phone's own position
+     * given to a new photo that came without one (Cip, 2026-09-19).
+     *
+     * @property owner    true when the owner picked it: it then stands over whatever the file says
+     * @property written  true once it is in the file's own EXIF as well
+     * @property synced   true once the index has it; false while it waits to go up with the words
+     */
+    data class SetPlace(val id: String, val lat: Double, val lon: Double, val owner: Boolean, val written: Boolean, val synced: Boolean = true)
+
+    /** Keeps the place of photo [id], replacing any it had. */
+    fun putSetPlace(place: SetPlace) {
+        val values = ContentValues().apply {
+            put("id", place.id)
+            put("lat", place.lat)
+            put("lon", place.lon)
+            put("owner", if (place.owner) 1 else 0)
+            put("written", if (place.written) 1 else 0)
+            put("synced", if (place.synced) 1 else 0)
+            put("at", System.currentTimeMillis())
+        }
+        writableDatabase.insertWithOnConflict("set_places", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    /** The places this app gave [ids], a few hundred ids per query. */
+    fun setPlaces(ids: Collection<String>): Map<String, SetPlace> {
+        if (ids.isEmpty()) return emptyMap()
+        val out = HashMap<String, SetPlace>()
+        ids.chunked(DELETE_BATCH).forEach { batch ->
+            val marks = batch.joinToString(",") { "?" }
+            readableDatabase.query("set_places", SET_PLACE_COLUMNS, "id IN ($marks)", batch.toTypedArray(), null, null, null).use { c ->
+                while (c.moveToNext()) setPlaceOf(c).let { out[it.id] = it }
+            }
+        }
+        return out
+    }
+
+    /** The places given to photos whose files do not carry them yet. */
+    fun unwrittenPlaces(): List<SetPlace> =
+        readableDatabase.query("set_places", SET_PLACE_COLUMNS, "written = 0", null, null, null, "at").use { c ->
+            val out = ArrayList<SetPlace>(c.count)
+            while (c.moveToNext()) out += setPlaceOf(c)
+            out
+        }
+
+    /** Notes that the files of [ids] now carry their places. */
+    fun markPlacesWritten(ids: Collection<String>) = markPlaces("written", ids)
+
+    /** Notes that the index now has the places of [ids]. */
+    fun markPlacesSynced(ids: Collection<String>) = markPlaces("synced", ids)
+
+    /** Sets flag [column] (written or synced) on the places of [ids], a few hundred per statement. */
+    private fun markPlaces(column: String, ids: Collection<String>) {
+        if (ids.isEmpty()) return
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            ids.chunked(DELETE_BATCH).forEach { batch ->
+                val marks = batch.joinToString(",") { "?" }
+                db.execSQL("UPDATE set_places SET $column = 1 WHERE id IN ($marks)", batch.toTypedArray())
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    private fun setPlaceOf(c: android.database.Cursor) =
+        SetPlace(c.getString(0), c.getDouble(1), c.getDouble(2), c.getInt(3) == 1, c.getInt(4) == 1, c.getInt(5) == 1)
+
+    /**
+     * The positions of photos taken between [from] and [to] (epoch millis), as (taken, lat, lon):
+     * where a camera without GPS was can be read off the phone's own photos taken at the same
+     * time (Cip, 2026-09-19). Positions this app guessed for other photos are left out, so a guess
+     * never spreads. One indexed query on the time; only the rows in that stretch are read.
+     */
+    fun positionsBetween(from: Long, to: Long): List<Triple<Long, Double, Double>> {
+        val out = ArrayList<Triple<Long, Double, Double>>()
+        readableDatabase.rawQuery(
+            "SELECT d.taken_ms, d.json FROM docs d LEFT JOIN set_places p ON p.id = d.id " +
+                "WHERE d.taken_ms BETWEEN ? AND ? AND d.json LIKE '%\"location\"%' AND (p.id IS NULL OR p.owner = 1)",
+            arrayOf(from.toString(), to.toString()),
+        ).use { c ->
+            while (c.moveToNext()) {
+                val position = try {
+                    com.opensolr.photos.search.parseLatLon(org.json.JSONObject(c.getString(1)).optString("location"))
+                } catch (e: Exception) {
+                    null
+                } ?: continue
+                out += Triple(c.getLong(0), position.first, position.second)
+            }
+        }
+        return out
+    }
+
+    /**
+     * The phone's copy of photo [id] moved to a new position: the place names it had belong to
+     * the old one, so they go until the index answers with the new ones.
+     */
+    fun moveDocPlace(id: String, lat: Double, lon: Double) {
+        val json = readableDatabase.query("docs", arrayOf("json"), "id = ?", arrayOf(id), null, null, null, "1").use { c ->
+            if (c.moveToFirst() && !c.isNull(0)) c.getString(0) else null
+        } ?: return
+        val updated = try {
+            org.json.JSONObject(json).apply {
+                put("location", String.format(java.util.Locale.US, "%.6f,%.6f", lat, lon))
+                put("has_location", true)
+                PLACE_NAME_FIELDS.forEach { remove(it) }
+                remove("altitude")
+            }.toString()
+        } catch (e: Exception) {
+            return
+        }
+        writableDatabase.execSQL("UPDATE docs SET json = ?, city = NULL, region = NULL, country = NULL WHERE id = ?", arrayOf<Any>(updated, id))
     }
 
     /**
@@ -1076,7 +1254,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
     companion object {
         private const val NAME = "photo_cache.db"
-        private const val VERSION = 13
+        private const val VERSION = 16
 
         /**
          * The one handle on this database for the whole app.
@@ -1092,7 +1270,14 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
             shared ?: PhotoCache(context.applicationContext).also { shared = it }
         }
 
-        private const val DOCS_TABLE = "CREATE TABLE IF NOT EXISTS docs (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, indexed_at INTEGER NOT NULL, taken_at TEXT, tags_json TEXT, persons_json TEXT, meaning TEXT, ocr TEXT, city TEXT, country TEXT, json TEXT, modified INTEGER NOT NULL DEFAULT 0, taken_ms INTEGER NOT NULL DEFAULT 0, embed_model TEXT, file_hash TEXT)"
+        /** The places this app gave photos; see [SetPlace]. */
+        private const val SET_PLACES_TABLE = "CREATE TABLE IF NOT EXISTS set_places (id TEXT PRIMARY KEY NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL, owner INTEGER NOT NULL, written INTEGER NOT NULL, at INTEGER NOT NULL, synced INTEGER NOT NULL DEFAULT 1)"
+        private val SET_PLACE_COLUMNS = arrayOf("id", "lat", "lon", "owner", "written", "synced")
+
+        /** The names the server gives a position; they belong to that position only. */
+        private val PLACE_NAME_FIELDS = listOf("city", "region", "province", "community", "country", "country_code")
+
+        private const val DOCS_TABLE = "CREATE TABLE IF NOT EXISTS docs (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, indexed_at INTEGER NOT NULL, taken_at TEXT, tags_json TEXT, persons_json TEXT, meaning TEXT, ocr TEXT, city TEXT, country TEXT, json TEXT, modified INTEGER NOT NULL DEFAULT 0, taken_ms INTEGER NOT NULL DEFAULT 0, embed_model TEXT, file_hash TEXT, region TEXT)"
         /** When each photo was taken, as a number: the grid asks for a stretch of time constantly. */
         private const val DOCS_TAKEN_INDEX = "CREATE INDEX IF NOT EXISTS docs_taken_ms ON docs (taken_ms)"
 

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tg_lead">Diese kommen auf die ausgewählten Fotos und auf nichts sonst im Index. Speichern schreibt sie sofort auf diesem Telefon; Ihr Index wird beim folgenden Sync aktualisiert.</string>
+    <string name="tg_people">Personen</string>
+    <string name="tg_people_replace">Ersetzen: Diese Namen werden die einzigen Namen auf jedem ausgewählten Foto. Bisherige Namen werden entfernt, im Index und in den Dateien.</string>
+    <string name="tg_people_add">Hinzufügen: Diese Namen kommen zu den Namen jedes Fotos hinzu.</string>
+    <string name="tg_add_name">Namen hinzufügen</string>
+    <string name="tg_add">Hinzuf.</string>
+    <string name="tg_people_in_photos">Personen in Ihren Fotos</string>
+    <string name="tg_my_tags">Meine Tags (Alben)</string>
+    <string name="tg_tags_replace">Ersetzen: Diese Tags werden die einzigen Tags auf jedem ausgewählten Foto. Bisherige Tags werden entfernt, im Index und in den Dateien.</string>
+    <string name="tg_tags_add">Hinzufügen: Diese Tags kommen zu den Tags jedes Fotos hinzu.</string>
+    <string name="tg_add_tag">Tag hinzufügen, z. B. Maria, Urlaub 2021</string>
+    <string name="tg_your_tags">Ihre Tags</string>
+    <string name="tg_from_photos">Aus Ihren Fotos</string>
+    <string name="tg_place">Ort</string>
+    <string name="tg_place_all_text">Jedes ausgewählte Foto bekommt den gewählten Ort, im Index und in den Dateien.</string>
+    <string name="tg_place_all">Alle ausgewählten Fotos</string>
+    <string name="tg_place_missing">Nur die ohne Ort (%1$s)</string>
+    <string name="tg_choose_map">Ort auf der Karte wählen</string>
+    <string name="tg_not_saved">Nicht gespeichert</string>
+    <string name="tg_writing">Ihre Wörter werden in %1$s von %2$s Fotos geschrieben…</string>
+    <string name="tg_cancel">Abbrechen</string>
+    <string name="tg_save">Speichern</string>
+    <string name="tg_saving">Speichert…</string>
+    <string name="tg_already">Schon auf diesen Fotos</string>
+    <string name="tg_reading">Index wird gelesen…</string>
+    <string name="tg_none_yet">Noch keine Namen und keine Tags.</string>
+    <string name="tg_people_caps">PERSONEN</string>
+    <string name="tg_tags_caps">TAGS</string>
+    <string name="tg_replace">Ersetzen</string>
+    <string name="tg_mode_add">Hinzuf.</string>
+    <string name="tg_remove">Entfernen</string>
+    <string name="tg_n_more">+%1$s weitere</string>
+    <string name="tg_edit">%1$s bearbeiten</string>
+    <string name="tg_saved_in_file">Im Foto selbst gespeichert, damit andere Apps die Namen auch sehen.</string>
+    <string name="tg_tags_hint">Alles, wonach Sie suchen würden. Jeder Tag wird ein eigenes Album.</string>
+    <string name="tg_shows">Was das Foto zeigt</string>
+    <string name="tg_words_hint">Wörter durch Kommas getrennt. Ihre Formulierung bleibt, auch wenn das Foto neu gelesen wird.</string>
+    <string name="tg_reset">Zurücksetzen</string>
+    <plurals name="tg_title">
+        <item quantity="one">%1$s Foto taggen</item>
+        <item quantity="other">%1$s Fotos taggen</item>
+    </plurals>
+    <plurals name="tg_place_missing_text">
+        <item quantity="one">Nur das %1$s ausgewählte Foto ohne Ort bekommt den gewählten; die anderen behalten ihren.</item>
+        <item quantity="other">Nur die %1$s ausgewählten Fotos ohne Ort bekommen den gewählten; die anderen behalten ihren.</item>
+    </plurals>
+</resources>

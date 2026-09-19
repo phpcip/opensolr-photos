@@ -1,5 +1,7 @@
 package com.opensolr.photos.media
 
+import com.opensolr.photos.R
+import com.opensolr.photos.AppText
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -137,16 +139,27 @@ object PhotoReader {
      * and the phone does nothing else with it. Orientation is set upright because the pixels
      * already are. Null when the file cannot be decoded.
      */
-    fun copyForIngest(context: Context, photo: LocalPhoto): ByteArray? {
+    fun copyForIngest(context: Context, photo: LocalPhoto, place: com.opensolr.photos.data.PhotoCache.SetPlace? = null): ByteArray? {
         val exif = openExif(context, photo.uri)
         val jpeg = shrinkForClip(context, photo.uri, exif?.rotationDegrees ?: 0) ?: return null
-        if (exif == null) return jpeg
+        // The place this app gave the photo goes on the copy, which is where the server reads the
+        // position from: the owner's choice always, the phone's own position only where the file
+        // has none of its own (Cip, 2026-09-19).
+        val placed = place?.takeIf { it.owner || exif == null || usableLatLong(exif) == null }
+        if (exif == null && placed == null) return jpeg
         val file = java.io.File.createTempFile("ingest", ".jpg", context.cacheDir)
         try {
             file.writeBytes(jpeg)
             val out = ExifInterface(file.absolutePath)
-            for (tag in CARRIED_EXIF) {
-                exif.getAttribute(tag)?.let { out.setAttribute(tag, it) }
+            if (exif != null) {
+                for (tag in CARRIED_EXIF) {
+                    exif.getAttribute(tag)?.let { out.setAttribute(tag, it) }
+                }
+            }
+            placed?.let {
+                out.setLatLong(it.lat, it.lon)
+                out.setAttribute(ExifInterface.TAG_GPS_ALTITUDE, null)
+                out.setAttribute(ExifInterface.TAG_GPS_ALTITUDE_REF, null)
             }
             out.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
             out.saveAttributes()
@@ -159,16 +172,101 @@ object PhotoReader {
     }
 
     /**
+     * When [uri] was taken, read the way the server reads it into taken_at: with the EXIF's own
+     * offset when the camera wrote one, and as UTC when it did not (Api_lib::_photos_exif_taken).
+     * A camera with no offset therefore lands in the index at its wall-clock time, not the real
+     * one, and matching it against other photos by time has to try this reading too. Null without
+     * a date in the EXIF.
+     */
+    fun takenAsIndexed(context: Context, uri: Uri): Long? {
+        val exif = openExif(context, uri) ?: return null
+        val raw = (exif.getAttribute(ExifInterface.TAG_DATETIME_ORIGINAL) ?: exif.getAttribute(ExifInterface.TAG_DATETIME))?.trim() ?: return null
+        val offset = (exif.getAttribute(ExifInterface.TAG_OFFSET_TIME_ORIGINAL) ?: exif.getAttribute(ExifInterface.TAG_OFFSET_TIME))
+            ?.takeIf { Regex("^[+-]\\d{2}:\\d{2}$").matches(it) } ?: "+00:00"
+        return try {
+            SimpleDateFormat("yyyy:MM:dd HH:mm:ssXXX", Locale.US).parse(raw + offset)?.time?.takeIf { it > 0 }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** True for the formats whose EXIF this app can write (not HEIC, which ExifInterface only reads). */
+    fun canWriteExif(mime: String): Boolean = mime in setOf("image/jpeg", "image/png", "image/webp")
+
+    /** What a photo's own EXIF says about where it was taken. */
+    enum class GpsState {
+        /** A position that can be used. */
+        USABLE,
+        /** No position, or an evidently wrong one (0,0, out of range). */
+        MISSING,
+        /** The original could not be read, so the position is not known either way. */
+        UNKNOWN,
+    }
+
+    /**
+     * Whether the file at [uri] carries a usable position. Only an original read counts: Android
+     * strips the position from the bytes an app gets without "access media location", and a
+     * stripped file must never be taken for one that has no position.
+     */
+    fun gpsState(context: Context, uri: Uri): GpsState {
+        val exif = when {
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.Q -> try {
+                context.contentResolver.openInputStream(uri)?.use { ExifInterface(it) }
+            } catch (e: Exception) {
+                null
+            }
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_MEDIA_LOCATION) != PackageManager.PERMISSION_GRANTED -> null
+            else -> try {
+                context.contentResolver.openInputStream(MediaStore.setRequireOriginal(uri))?.use { ExifInterface(it) }
+            } catch (e: Exception) {
+                null
+            }
+        } ?: return GpsState.UNKNOWN
+        return if (usableLatLong(exif) != null) GpsState.USABLE else GpsState.MISSING
+    }
+
+    /** The position in [exif], or null when there is none or it is evidently wrong. */
+    private fun usableLatLong(exif: ExifInterface): Pair<Double, Double>? {
+        val latLong = exif.latLong ?: return null
+        val lat = latLong.getOrNull(0) ?: return null
+        val lon = latLong.getOrNull(1) ?: return null
+        if (!valid(lat, 90.0) || !valid(lon, 180.0) || (lat == 0.0 && lon == 0.0)) return null
+        return lat to lon
+    }
+
+    /**
+     * Writes [lat], [lon] into the EXIF of the photo at [uri], on the phone, dropping the
+     * altitude that belonged to the old position. The caller holds Android's permission to
+     * write the file. Returns false for a format ExifInterface cannot save (HEIC) or no access.
+     */
+    fun writeGps(context: Context, uri: Uri, mime: String, lat: Double, lon: Double): Boolean {
+        if (!canWriteExif(mime)) return false
+        if (!valid(lat, 90.0) || !valid(lon, 180.0)) return false
+        return try {
+            context.contentResolver.openFileDescriptor(uri, "rw")?.use { pfd ->
+                val exif = ExifInterface(pfd.fileDescriptor)
+                exif.setLatLong(lat, lon)
+                exif.setAttribute(ExifInterface.TAG_GPS_ALTITUDE, null)
+                exif.setAttribute(ExifInterface.TAG_GPS_ALTITUDE_REF, null)
+                exif.saveAttributes()
+                true
+            } ?: false
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
      * Why [photo] could not be turned into a copy for Opensolr, in words for the owner.
      */
     fun unreadableReason(context: Context, photo: LocalPhoto): String {
-        if (photo.sizeBytes <= 0L) return "The file is empty"
+        if (photo.sizeBytes <= 0L) return AppText.s(R.string.md_empty)
         val opened = try {
             context.contentResolver.openInputStream(photo.uri)?.use { it.read() >= 0 } ?: false
         } catch (e: Exception) {
             false
         }
-        return if (opened) "The picture cannot be decoded" else "The file cannot be opened"
+        return if (opened) AppText.s(R.string.md_undecodable) else AppText.s(R.string.md_unopenable)
     }
 
     /**

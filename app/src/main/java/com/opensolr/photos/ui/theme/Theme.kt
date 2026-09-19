@@ -45,6 +45,12 @@ data class Palette(
      */
     val accentFill: Color,
     val onAccentFill: Color,
+    /**
+     * The quiet fill behind the buttons over the grid and in the header (Cip, 2026-09-20): on
+     * paper a bordered cell alone barely read as a button. On the dark theme it is the paper
+     * itself, which already read well.
+     */
+    val buttonFill: Color,
 )
 
 private val LightPalette = Palette(
@@ -59,6 +65,7 @@ private val LightPalette = Palette(
     // White on #A8481B is 5.8:1; the brighter accent would have been 4.6:1, right on the line.
     accentFill = Color(0xFFA8481B),
     onAccentFill = Color(0xFFFFFFFF),
+    buttonFill = Color(0xFFF3EFE9),
 )
 
 private val DarkPalette = Palette(
@@ -74,6 +81,7 @@ private val DarkPalette = Palette(
     onAccent = Color(0xFFFFFFFF),
     accentFill = Color(0xFFB4551F),
     onAccentFill = Color(0xFFFFFFFF),
+    buttonFill = Color(0xFF111111),
 )
 
 val LocalPalette = staticCompositionLocalOf { LightPalette }
@@ -105,12 +113,13 @@ private val AppTypography = Typography(
     titleLarge = style(20, FontWeight.Bold, 1.25),
     titleMedium = style(17, FontWeight.Bold, 1.3),
     titleSmall = style(15, FontWeight.SemiBold, 1.3),
-    bodyLarge = style(17, FontWeight.Normal, 1.5),
-    bodyMedium = style(15, FontWeight.Normal, 1.5),
-    bodySmall = style(14, FontWeight.Normal, 1.45),
+    // One step heavier than regular (Cip, 2026-09-20): at 400 the text read hairline-thin.
+    bodyLarge = style(17, FontWeight.Medium, 1.5),
+    bodyMedium = style(15, FontWeight.Medium, 1.5),
+    bodySmall = style(14, FontWeight.Medium, 1.45),
     labelLarge = style(15, FontWeight.Bold, 1.2),
     labelMedium = style(14, FontWeight.Bold, 1.2, 0.08),
-    labelSmall = style(14, FontWeight.Medium, 1.2),
+    labelSmall = style(14, FontWeight.SemiBold, 1.2),
 )
 
 private val AppShapes = Shapes(

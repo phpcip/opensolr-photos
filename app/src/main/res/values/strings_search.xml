@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_me">Me</string>
+    <string name="nav_sync">Sync</string>
+    <string name="nav_map">Map</string>
+    <string name="nav_albums">Albums</string>
+    <string name="nav_search">Search</string>
+    <string name="cd_account">Opensolr account</string>
+    <string name="cd_close_search">Close search</string>
+    <string name="search_hint">Search your photos</string>
+    <string name="cd_clear">Clear</string>
+    <string name="count_searching">Searching…</string>
+    <string name="similar_count">%1$s similar</string>
+    <string name="cd_end_selection">End selection</string>
+    <string name="ai">AI</string>
+    <string name="filters">Filters</string>
+    <string name="dup_open">Photos of the same thing</string>
+    <string name="back_all">Back to all photos</string>
+    <string name="skipped_open">Photos that could not be read</string>
+    <string name="reload">Reload</string>
+    <string name="expand_all">Expand all</string>
+    <string name="collapse_all">Collapse all</string>
+    <string name="back_to_search">Back to search</string>
+    <string name="tagging_progress">Tagging %1$s of %2$s photos…</string>
+    <string name="tagging">Tagging your photos…</string>
+    <string name="did_you_mean">Did you mean </string>
+    <string name="ticking_group">Ticking the whole group…</string>
+    <string name="search_failed_title">Search did not work</string>
+    <string name="open_group">Open this group</string>
+    <string name="fold_group">Fold this group away</string>
+    <string name="cd_has_tags">Has your tags</string>
+    <string name="this_one">This one</string>
+    <string name="delete_text">They are removed from this phone and from your index. This cannot be undone.</string>
+    <string name="delete">Delete</string>
+    <string name="cancel">Cancel</string>
+    <string name="cd_remove">Remove</string>
+    <string name="of_the_same">%1$s of the same</string>
+    <string name="best_matches">Best matches</string>
+    <string name="also_similar">Also similar</string>
+    <string name="cd_sync_running">Sync in progress</string>
+    <string name="select_one_each">Select 1 of each duplicate</string>
+    <string name="chip_with_location">With location</string>
+    <string name="chip_tagged">Tagged</string>
+    <string name="chip_not_tagged">Not tagged</string>
+    <string name="chip_ocr">OCR</string>
+    <string name="chip_no_ocr">No OCR</string>
+    <string name="chip_has_people">Has people</string>
+    <string name="chip_no_people">No people</string>
+    <string name="cd_group_results">Group results: %1$s</string>
+    <string name="group_by_title">GROUP RESULTS BY</string>
+    <string name="group_relevance">Best match</string>
+    <string name="group_date">Date</string>
+    <string name="group_place">Place</string>
+    <string name="group_people">People</string>
+    <string name="group_tags">My tags</string>
+    <string name="cd_change_place">Change the place</string>
+    <string name="empty_indexing">Your photos are being indexed. They appear here as they are added.</string>
+    <string name="empty_nothing">Nothing is indexed yet. Open Sync to start.</string>
+    <string name="empty_nomatch">No photos match. Try other words or fewer filters.</string>
+    <string name="clear_all">Clear all</string>
+    <string name="done_count">Done (%1$s)</string>
+    <string name="facet_year">Year</string>
+    <string name="facet_city">City</string>
+    <string name="facet_country">Country</string>
+    <string name="facet_camera_model">Camera model</string>
+    <string name="facet_custom_tags">My tags (Albums)</string>
+    <string name="facet_labels">Meaning</string>
+    <string name="facet_orientation">Orientation</string>
+    <string name="facet_persons">People</string>
+    <string name="year_set_by_days">Set by the days chosen below. Clear those to filter by year again.</string>
+    <string name="taken_between">Taken between</string>
+    <string name="photo_has">Photo has</string>
+    <string name="sw_ocr">OCR</string>
+    <string name="sw_ocr_hint">Only photos with text read out of them</string>
+    <string name="sw_tagged">Tagged</string>
+    <string name="sw_tagged_hint">Only photos you gave tags</string>
+    <string name="sw_people">Has people</string>
+    <string name="sw_people_hint">Only photos with people named on them</string>
+    <string name="sw_location">Has location</string>
+    <string name="sw_location_hint">Only photos with a GPS position</string>
+    <string name="folder">Folder</string>
+    <string name="distance_from">Distance from %1$s</string>
+    <string name="anywhere">Anywhere</string>
+    <string name="within">Within %1$s</string>
+    <string name="choose_dates">Choose dates</string>
+    <string name="any_date">Any date</string>
+    <string name="apply">Apply</string>
+    <string name="viewer_position">%1$s of %2$s</string>
+    <string name="details">Details</string>
+    <string name="act_tag">Tags, people and words</string>
+    <string name="act_gallery">Open in gallery</string>
+    <string name="act_similar">Similar photos</string>
+    <string name="act_share">Share</string>
+    <string name="act_map">Show on map</string>
+    <string name="act_nearby">Photos nearby</string>
+    <string name="act_delete">Delete</string>
+    <string name="show_fewer">Show fewer</string>
+    <string name="show_all">Show all (%1$s)</string>
+    <string name="search_values">Search %1$s values</string>
+    <string name="done">Done</string>
+    <string name="no_value">No value matches.</string>
+    <string name="cd_selected">Selected</string>
+    <string name="more_values">%1$s more, type to narrow</string>
+    <string name="sec_place">Place</string>
+    <string name="add_place">Add a place</string>
+    <string name="sec_people">People</string>
+    <string name="sec_my_tags">My tags (Albums)</string>
+    <string name="sec_shows">What the photo shows</string>
+    <string name="no_words_yet">No words yet</string>
+    <string name="sec_printed">Text printed in the photo</string>
+    <string name="dock_resync">Re-sync</string>
+    <string name="dock_resync_n">Re-sync %1$s</string>
+    <string name="dock_tag_n">Tag %1$s</string>
+    <string name="orientation_landscape">Landscape</string>
+    <string name="orientation_portrait">Portrait</string>
+    <string name="orientation_square">Square</string>
+    <plurals name="unreadable_count">
+        <item quantity="one">%1$s photo your phone could not read</item>
+        <item quantity="other">%1$s photos your phone could not read</item>
+    </plurals>
+    <plurals name="photos_count">
+        <item quantity="one">%1$s photo</item>
+        <item quantity="other">%1$s photos</item>
+    </plurals>
+    <plurals name="delete_title">
+        <item quantity="one">Delete %1$s photo?</item>
+        <item quantity="other">Delete %1$s photos?</item>
+    </plurals>
+    <string-array name="dup_kinds">
+        <item>Any 2 words the same</item>
+        <item>Any 3 words the same</item>
+        <item>Any 4 words the same</item>
+        <item>All 5 words the same</item>
+        <item>Same photo (EXIF)</item>
+        <item>Same file name</item>
+        <item>Same file size</item>
+        <item>Same file (exact copy)</item>
+    </string-array>
+</resources>

@@ -1,5 +1,7 @@
 package com.opensolr.photos.ui
 
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -141,7 +143,7 @@ fun InfoRow(label: String, value: String, onOpen: (() -> Unit)? = null) {
                 // A small "open" arrow: the row leads somewhere (the account on opensolr.com).
                 if (onOpen != null) {
                     IconButton(onClick = onOpen, modifier = Modifier.size(28.dp).padding(start = 6.dp)) {
-                        Icon(painterResource(R.drawable.ic_open), contentDescription = "Open on opensolr.com", tint = p.accent, modifier = Modifier.size(18.dp))
+                        Icon(painterResource(R.drawable.ic_open), contentDescription = stringResource(R.string.cp_open_site), tint = p.accent, modifier = Modifier.size(18.dp))
                     }
                 }
             }
@@ -159,7 +161,7 @@ fun UsageRow(label: String, used: String, limit: String, fraction: Float?) {
     Column(Modifier.fillMaxWidth().padding(vertical = 12.dp)) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(label, style = MaterialTheme.typography.titleSmall, color = p.ink)
-            Text("$used of $limit", style = MaterialTheme.typography.bodyMedium, color = p.muted)
+            Text(stringResource(R.string.cp_x_of_y, used, limit), style = MaterialTheme.typography.bodyMedium, color = p.muted)
         }
         if (fraction != null) {
             Spacer(Modifier.height(8.dp))
@@ -187,7 +189,7 @@ fun ScreenHeader(title: String, onBack: (() -> Unit)?) {
     Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         if (onBack != null) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = p.ink)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cp_back), tint = p.ink)
             }
         }
         Text(title, style = MaterialTheme.typography.headlineSmall, color = p.ink, modifier = Modifier.padding(start = if (onBack == null) 4.dp else 0.dp))

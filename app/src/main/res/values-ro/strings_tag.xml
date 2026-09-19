@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tg_lead">Se pun pe pozele bifate și pe nimic altceva din index. Salvarea le scrie imediat pe telefon; indexul se actualizează la sync-ul care urmează.</string>
+    <string name="tg_people">Persoane</string>
+    <string name="tg_people_replace">Înlocuiește: aceste nume devin singurele nume de pe fiecare poză bifată. Numele de acum sunt scoase, din index și din fișiere.</string>
+    <string name="tg_people_add">Adaugă: aceste nume se pun peste numele pe care le are deja fiecare poză.</string>
+    <string name="tg_add_name">Adaugă un nume</string>
+    <string name="tg_add">Adaugă</string>
+    <string name="tg_people_in_photos">Persoane din pozele tale</string>
+    <string name="tg_my_tags">Etichetele mele (Albume)</string>
+    <string name="tg_tags_replace">Înlocuiește: aceste etichete devin singurele de pe fiecare poză bifată. Etichetele de acum sunt scoase, din index și din fișiere.</string>
+    <string name="tg_tags_add">Adaugă: aceste etichete se pun peste cele pe care le are deja fiecare poză.</string>
+    <string name="tg_add_tag">Adaugă o etichetă, ex. Maria, concediu 2021</string>
+    <string name="tg_your_tags">Etichetele tale</string>
+    <string name="tg_from_photos">Din pozele tale</string>
+    <string name="tg_place">Loc</string>
+    <string name="tg_place_all_text">Fiecare poză bifată primește locul ales, în index și în fișiere.</string>
+    <string name="tg_place_all">Toate pozele bifate</string>
+    <string name="tg_place_missing">Doar cele fără loc (%1$s)</string>
+    <string name="tg_choose_map">Alege locul pe hartă</string>
+    <string name="tg_not_saved">Nu s-a salvat</string>
+    <string name="tg_writing">Se scriu cuvintele tale în %1$s din %2$s poze…</string>
+    <string name="tg_cancel">Anulează</string>
+    <string name="tg_save">Salvează</string>
+    <string name="tg_saving">Se salvează…</string>
+    <string name="tg_already">Deja pe aceste poze</string>
+    <string name="tg_reading">Se citește indexul…</string>
+    <string name="tg_none_yet">Încă nu sunt nume și etichete.</string>
+    <string name="tg_people_caps">PERSOANE</string>
+    <string name="tg_tags_caps">ETICHETE</string>
+    <string name="tg_replace">Înlocuiește</string>
+    <string name="tg_mode_add">Adaugă</string>
+    <string name="tg_remove">Scoate</string>
+    <string name="tg_n_more">+încă %1$s</string>
+    <string name="tg_edit">Editează %1$s</string>
+    <string name="tg_saved_in_file">Salvat în poza însăși, ca și alte aplicații să vadă numele.</string>
+    <string name="tg_tags_hint">Orice ai căuta. Fiecare etichetă devine un album.</string>
+    <string name="tg_shows">Ce arată poza</string>
+    <string name="tg_words_hint">Cuvinte separate prin virgulă. Formularea ta rămâne chiar și când poza e recitită.</string>
+    <string name="tg_reset">Resetează</string>
+    <plurals name="tg_title">
+        <item quantity="one">Etichetează %1$s poză</item>
+        <item quantity="few">Etichetează %1$s poze</item>
+        <item quantity="other">Etichetează %1$s de poze</item>
+    </plurals>
+    <plurals name="tg_place_missing_text">
+        <item quantity="one">Doar %1$s poză bifată fără loc primește locul ales; celelalte îl păstrează pe al lor.</item>
+        <item quantity="few">Doar cele %1$s poze bifate fără loc primesc locul ales; celelalte îl păstrează pe al lor.</item>
+        <item quantity="other">Doar cele %1$s de poze bifate fără loc primesc locul ales; celelalte îl păstrează pe al lor.</item>
+    </plurals>
+</resources>

@@ -11,11 +11,17 @@ import java.io.File
  */
 class PhotosApp : Application() {
 
+    /** The language picked on Me, for everything the app says outside a screen (notifications, sync). */
+    override fun attachBaseContext(base: android.content.Context) {
+        super.attachBaseContext(com.opensolr.photos.ui.AppLanguage.wrap(base))
+    }
+
     /**
      * Registers the sync-progress and account-alert channels.
      */
     override fun onCreate() {
         super.onCreate()
+        AppText.init(this)
         Notifier.createChannels(this)
         // Map tiles (OpenStreetMap) are cached in this app's private storage; the user agent
         // identifies the app to the tile servers, as their usage policy asks.

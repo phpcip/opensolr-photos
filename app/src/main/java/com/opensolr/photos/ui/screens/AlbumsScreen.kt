@@ -1,5 +1,7 @@
 package com.opensolr.photos.ui.screens
 
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import android.content.ContentUris
 import android.provider.MediaStore
 import androidx.compose.foundation.background
@@ -103,7 +105,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
     }
     Box(Modifier.fillMaxSize()) {
     Column(Modifier.fillMaxSize()) {
-        Box(Modifier.padding(start = 8.dp)) { ScreenHeader("Albums", onBack = { viewModel.back() }) }
+        Box(Modifier.padding(start = 8.dp)) { ScreenHeader(stringResource(R.string.al_title), onBack = { viewModel.back() }) }
         if (state.albumsLoading || state.albumsWorking) {
             LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp), color = p.accent, trackColor = p.chip)
         }
@@ -112,7 +114,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
         }
         if (!state.albumsLoading && state.albumsError == null && state.albums.isEmpty()) {
             Text(
-                "No albums yet: albums come from your tags, the words photos were read into, places, cameras and years.",
+                stringResource(R.string.al_empty),
                 style = MaterialTheme.typography.bodyLarge,
                 color = p.muted,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
@@ -127,7 +129,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
                 val allPicked = state.albums.all { it.title in state.selectedSections }
                 IconAction(
                     icon = if (allPicked) R.drawable.ic_check_none else R.drawable.ic_check_all,
-                    label = if (allPicked) "Check none" else "Check all",
+                    label = if (allPicked) stringResource(R.string.al_check_none) else stringResource(R.string.al_check_all),
                     active = allPicked,
                     onClick = {
                         Haptics.tick(view, strong = false)
@@ -136,7 +138,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
                 )
                 IconAction(
                     icon = if (anyFolded) R.drawable.ic_expand_all else R.drawable.ic_collapse_all,
-                    label = if (anyFolded) "Expand all" else "Collapse all",
+                    label = if (anyFolded) stringResource(R.string.al_expand_all) else stringResource(R.string.al_collapse_all),
                     onClick = {
                         Haptics.tick(view, strong = false)
                         viewModel.setAlbumSections(if (anyFolded) emptySet() else state.albums.map { it.title }.toSet())
@@ -225,7 +227,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
                 .padding(horizontal = 6.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            DockAction(R.drawable.ic_share, "Share", enabled = shareEnabled) {
+            DockAction(R.drawable.ic_share, stringResource(R.string.al_share), enabled = shareEnabled) {
                 // Whole albums can be thousands of photos, and finding their files asks the phone's
                 // media store about each one: off the screen's thread (Cip, 2026-09-18).
                 viewModel.withSelectedAlbumPhotos { photos ->
@@ -234,7 +236,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
                     }
                 }
             }
-            DockAction(R.drawable.ic_delete, "Delete", enabled = !state.albumsWorking) { confirmDelete = true }
+            DockAction(R.drawable.ic_delete, stringResource(R.string.al_delete), enabled = !state.albumsWorking) { confirmDelete = true }
             Column(
                 Modifier
                     .clip(Corner)
@@ -242,9 +244,9 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
                     .padding(horizontal = 16.dp, vertical = 4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                Icon(Icons.Filled.Close, contentDescription = "Cancel", tint = p.ink, modifier = Modifier.size(22.dp))
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.al_cancel), tint = p.ink, modifier = Modifier.size(22.dp))
                 Spacer(Modifier.height(4.dp))
-                Text("Cancel", style = MaterialTheme.typography.labelSmall, color = p.ink, maxLines = 1)
+                Text(stringResource(R.string.al_cancel), style = MaterialTheme.typography.labelSmall, color = p.ink, maxLines = 1)
             }
         }
     }
@@ -254,8 +256,8 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             containerColor = p.paper,
-            title = { Text("Delete photos?", color = p.ink) },
-            text = { Text(deleteWarning(state), color = p.ink, style = MaterialTheme.typography.bodyMedium) },
+            title = { Text(stringResource(R.string.al_delete_q), color = p.ink) },
+            text = { Text(deleteWarning(LocalContext.current, state), color = p.ink, style = MaterialTheme.typography.bodyMedium) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false
@@ -273,9 +275,9 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
                             }
                         }
                     }
-                }) { Text("Delete", color = Color(0xFFE53E3E)) }
+                }) { Text(stringResource(R.string.al_delete), color = Color(0xFFE53E3E)) }
             },
-            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("Cancel", color = p.ink) } },
+            dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.al_cancel), color = p.ink) } },
         )
     }
     }
@@ -285,21 +287,21 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
  * What a delete of the picked sections and albums does, in words: every album of each picked
  * section, and every photo of each picked album, gone from the phone and from the index.
  */
-private fun deleteWarning(state: UiState): String {
-    val sections = state.albums.filter { it.title in state.selectedSections }.map { it.title }
+private fun deleteWarning(context: android.content.Context, state: UiState): String {
+    val sections = state.albums.filter { it.title in state.selectedSections }.map { sectionTitle(context, it.title) }
     val albums = state.albums.filter { it.title !in state.selectedSections }
         .flatMap { it.albums }
         .filter { "${it.field}:${it.value}" in state.selectedAlbums }
         .map { albumTitle(it.title) }
     val parts = ArrayList<String>()
     if (sections.isNotEmpty()) {
-        parts += "This deletes every photo in every album of: ${sections.joinToString(", ")}."
+        parts += context.getString(R.string.al_del_sections, sections.joinToString(", "))
     }
     if (albums.isNotEmpty()) {
-        parts += if (albums.size == 1) "This deletes every photo in the album ${albums[0]}."
-        else "This deletes every photo in the albums: ${albums.joinToString(", ")}."
+        parts += if (albums.size == 1) context.getString(R.string.al_del_album, albums[0])
+        else context.getString(R.string.al_del_albums, albums.joinToString(", "))
     }
-    parts += "The photos are deleted from this phone and removed from your index. A photo that is in several albums goes from all of them."
+    parts += context.getString(R.string.al_del_note)
     return parts.joinToString("\n\n")
 }
 
@@ -336,13 +338,13 @@ private fun AlbumSectionHeading(
     ) {
         Icon(
             if (folded) Icons.Filled.KeyboardArrowRight else Icons.Filled.KeyboardArrowDown,
-            contentDescription = if (folded) "Open this section" else "Fold this section away",
+            contentDescription = if (folded) stringResource(R.string.al_open_section) else stringResource(R.string.al_fold_section),
             tint = p.accent,
             modifier = Modifier.size(22.dp),
         )
         Spacer(Modifier.width(6.dp))
         Text(
-            if (folded) "$title (${Actions.formatCount(count.toLong())})" else title,
+            sectionTitle(LocalContext.current, title).let { shown -> if (folded) "$shown (${Actions.formatCount(count.toLong())})" else shown },
             style = headingStyle(0),
             fontWeight = FontWeight.Bold,
             color = onBand,
@@ -387,12 +389,23 @@ private fun AlbumCard(album: Album, selecting: Boolean, selected: Boolean, onCli
         Text(albumTitle(album.title), style = MaterialTheme.typography.bodyMedium, color = p.ink, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(horizontal = 4.dp))
         Spacer(Modifier.height(2.dp))
         Text(
-            "${Actions.formatCount(album.count.toLong())} photos",
+            pluralStringResource(R.plurals.al_n_photos, album.count, Actions.formatCount(album.count.toLong())),
             style = MaterialTheme.typography.bodySmall,
             color = p.muted,
             modifier = Modifier.padding(horizontal = 4.dp),
         )
     }
+}
+
+/** A section's title in the app's language; the English title stays its key. */
+private fun sectionTitle(context: android.content.Context, title: String): String = when (title) {
+    "People" -> context.getString(R.string.al_sec_people)
+    "My tags (Albums)" -> context.getString(R.string.al_sec_tags)
+    "Things" -> context.getString(R.string.al_sec_things)
+    "Years" -> context.getString(R.string.al_sec_years)
+    "Places" -> context.getString(R.string.al_sec_places)
+    "Cameras" -> context.getString(R.string.al_sec_cameras)
+    else -> title
 }
 
 /**

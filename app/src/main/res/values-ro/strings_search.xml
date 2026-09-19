@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_me">Eu</string>
+    <string name="nav_sync">Sync</string>
+    <string name="nav_map">Hartă</string>
+    <string name="nav_albums">Albume</string>
+    <string name="nav_search">Caută</string>
+    <string name="cd_account">Contul Opensolr</string>
+    <string name="cd_close_search">Închide căutarea</string>
+    <string name="search_hint">Caută în pozele tale</string>
+    <string name="cd_clear">Golește</string>
+    <string name="count_searching">Se caută…</string>
+    <string name="similar_count">%1$s asemănătoare</string>
+    <string name="cd_end_selection">Încheie selecția</string>
+    <string name="ai">AI</string>
+    <string name="filters">Filtre</string>
+    <string name="dup_open">Poze cu același lucru</string>
+    <string name="back_all">Înapoi la toate pozele</string>
+    <string name="skipped_open">Poze care n-au putut fi citite</string>
+    <string name="reload">Reîncarcă</string>
+    <string name="expand_all">Deschide tot</string>
+    <string name="collapse_all">Pliază tot</string>
+    <string name="back_to_search">Înapoi la căutare</string>
+    <string name="tagging_progress">Se etichetează %1$s din %2$s poze…</string>
+    <string name="tagging">Se etichetează pozele…</string>
+    <string name="did_you_mean">Ai vrut să scrii </string>
+    <string name="ticking_group">Se bifează tot grupul…</string>
+    <string name="search_failed_title">Căutarea n-a mers</string>
+    <string name="open_group">Deschide grupul</string>
+    <string name="fold_group">Pliază grupul</string>
+    <string name="cd_has_tags">Are etichetele tale</string>
+    <string name="this_one">Aceasta</string>
+    <string name="delete_text">Sunt șterse de pe telefon și din index. Nu se poate anula.</string>
+    <string name="delete">Șterge</string>
+    <string name="cancel">Anulează</string>
+    <string name="cd_remove">Scoate</string>
+    <string name="of_the_same">%1$s la fel</string>
+    <string name="best_matches">Cele mai potrivite</string>
+    <string name="also_similar">Și asemănătoare</string>
+    <string name="cd_sync_running">Sync în curs</string>
+    <string name="select_one_each">Alege câte 1 din fiecare duplicat</string>
+    <string name="chip_with_location">Cu loc</string>
+    <string name="chip_tagged">Etichetate</string>
+    <string name="chip_not_tagged">Fără etichete</string>
+    <string name="chip_ocr">OCR</string>
+    <string name="chip_no_ocr">Fără OCR</string>
+    <string name="chip_has_people">Cu persoane</string>
+    <string name="chip_no_people">Fără persoane</string>
+    <string name="cd_group_results">Grupează rezultatele: %1$s</string>
+    <string name="group_by_title">GRUPEAZĂ REZULTATELE DUPĂ</string>
+    <string name="group_relevance">Relevanță</string>
+    <string name="group_date">Dată</string>
+    <string name="group_place">Loc</string>
+    <string name="group_people">Persoane</string>
+    <string name="group_tags">Etichetele mele</string>
+    <string name="cd_change_place">Schimbă locul</string>
+    <string name="empty_indexing">Pozele tale se indexează. Apar aici pe măsură ce sunt adăugate.</string>
+    <string name="empty_nothing">Încă nu e nimic indexat. Deschide Sync ca să începi.</string>
+    <string name="empty_nomatch">Nicio poză nu se potrivește. Încearcă alte cuvinte sau mai puține filtre.</string>
+    <string name="clear_all">Șterge tot</string>
+    <string name="done_count">Gata (%1$s)</string>
+    <string name="facet_year">An</string>
+    <string name="facet_city">Localitate</string>
+    <string name="facet_country">Țară</string>
+    <string name="facet_camera_model">Model cameră</string>
+    <string name="facet_custom_tags">Etichetele mele (Albume)</string>
+    <string name="facet_labels">Înțeles</string>
+    <string name="facet_orientation">Orientare</string>
+    <string name="facet_persons">Persoane</string>
+    <string name="year_set_by_days">Stabilit de zilele alese mai jos. Șterge-le ca să filtrezi iar după an.</string>
+    <string name="taken_between">Făcută între</string>
+    <string name="photo_has">Poza are</string>
+    <string name="sw_ocr">OCR</string>
+    <string name="sw_ocr_hint">Doar pozele din care s-a citit text</string>
+    <string name="sw_tagged">Etichetate</string>
+    <string name="sw_tagged_hint">Doar pozele cărora le-ai pus etichete</string>
+    <string name="sw_people">Cu persoane</string>
+    <string name="sw_people_hint">Doar pozele cu persoane numite</string>
+    <string name="sw_location">Cu loc</string>
+    <string name="sw_location_hint">Doar pozele cu poziție GPS</string>
+    <string name="folder">Folder</string>
+    <string name="distance_from">Distanța de la %1$s</string>
+    <string name="anywhere">Oriunde</string>
+    <string name="within">Pe o rază de %1$s</string>
+    <string name="choose_dates">Alege datele</string>
+    <string name="any_date">Orice dată</string>
+    <string name="apply">Aplică</string>
+    <string name="viewer_position">%1$s din %2$s</string>
+    <string name="details">Detalii</string>
+    <string name="act_tag">Etichete, persoane și cuvinte</string>
+    <string name="act_gallery">Deschide în galerie</string>
+    <string name="act_similar">Poze asemănătoare</string>
+    <string name="act_share">Trimite</string>
+    <string name="act_map">Arată pe hartă</string>
+    <string name="act_nearby">Poze din apropiere</string>
+    <string name="act_delete">Șterge</string>
+    <string name="show_fewer">Arată mai puține</string>
+    <string name="show_all">Arată toate (%1$s)</string>
+    <string name="search_values">Caută între %1$s valori</string>
+    <string name="done">Gata</string>
+    <string name="no_value">Nicio valoare nu se potrivește.</string>
+    <string name="cd_selected">Selectat</string>
+    <string name="more_values">Încă %1$s, scrie ca să restrângi</string>
+    <string name="sec_place">Loc</string>
+    <string name="add_place">Adaugă un loc</string>
+    <string name="sec_people">Persoane</string>
+    <string name="sec_my_tags">Etichetele mele (Albume)</string>
+    <string name="sec_shows">Ce arată poza</string>
+    <string name="no_words_yet">Încă nu are cuvinte</string>
+    <string name="sec_printed">Text tipărit în poză</string>
+    <string name="dock_resync">Re-sync</string>
+    <string name="dock_resync_n">Re-sync %1$s</string>
+    <string name="dock_tag_n">Etichetă %1$s</string>
+    <string name="orientation_landscape">Orizontală</string>
+    <string name="orientation_portrait">Verticală</string>
+    <string name="orientation_square">Pătrată</string>
+    <plurals name="unreadable_count">
+        <item quantity="one">%1$s poză pe care telefonul n-a putut-o citi</item>
+        <item quantity="few">%1$s poze pe care telefonul nu le-a putut citi</item>
+        <item quantity="other">%1$s de poze pe care telefonul nu le-a putut citi</item>
+    </plurals>
+    <plurals name="photos_count">
+        <item quantity="one">%1$s poză</item>
+        <item quantity="few">%1$s poze</item>
+        <item quantity="other">%1$s de poze</item>
+    </plurals>
+    <plurals name="delete_title">
+        <item quantity="one">Ștergi %1$s poză?</item>
+        <item quantity="few">Ștergi %1$s poze?</item>
+        <item quantity="other">Ștergi %1$s de poze?</item>
+    </plurals>
+    <string-array name="dup_kinds">
+        <item>Oricare 2 cuvinte la fel</item>
+        <item>Oricare 3 cuvinte la fel</item>
+        <item>Oricare 4 cuvinte la fel</item>
+        <item>Toate cele 5 cuvinte la fel</item>
+        <item>Aceeași poză (EXIF)</item>
+        <item>Același nume de fișier</item>
+        <item>Aceeași mărime de fișier</item>
+        <item>Același fișier (copie exactă)</item>
+    </string-array>
+</resources>

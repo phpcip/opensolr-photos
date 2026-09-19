@@ -1,5 +1,9 @@
 package com.opensolr.photos.ui.screens
 
+import com.opensolr.photos.R
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.opensolr.photos.data.distinctWords
 
 import androidx.compose.foundation.background
@@ -163,6 +167,22 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
         viewModel.tagPhotos(typedTags(), tagsReplace, typedPersons(), personsReplace, writeFiles = result.resultCode == android.app.Activity.RESULT_OK)
     }
 
+    // The place for many photos: which of them, the map, and Android's answer about the files.
+    var placeOnlyMissing by remember { mutableStateOf(false) }
+    var pickingPlace by remember { mutableStateOf(false) }
+    var pendingPlace by remember { mutableStateOf<Triple<Double, Double, List<com.opensolr.photos.search.PhotoHit>>?>(null) }
+    val placeWriteLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        val (lat, lon, chosen) = pendingPlace ?: return@rememberLauncherForActivityResult
+        pendingPlace = null
+        // Declined, nothing changes anywhere: the file and the index always say the same.
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            viewModel.placePhotos(chosen, lat, lon, writeFiles = true)
+            onDismiss()
+        }
+    }
+
     // Any tap outside a field and its suggestions closes the suggestions (Cip, 2026-09-17).
     var tagsDismissed by remember { mutableStateOf(false) }
     var peopleDismissed by remember { mutableStateOf(false) }
@@ -181,44 +201,48 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
         else if (started && state.bulkTagError == null) onDismiss()
     }
 
+    // The whole screen, and no drag closes it: pulling down to see the top of the form closed it
+    // by accident (Cip, 2026-09-19). Back, Cancel and Save are the ways out.
     ModalBottomSheet(
         onDismissRequest = { if (!state.bulkTagging) onDismiss() },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
         containerColor = p.paper,
         shape = Corner,
+        dragHandle = null,
     ) {
         Column(
             with(outside) { Modifier.root() }
                 .fillMaxWidth()
                 .fillMaxHeight()
+                .nestedScroll(rememberNoSheetDrag())
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
                 .imePadding()
                 .navigationBarsPadding()
         ) {
+            Spacer(Modifier.height(20.dp))
             Text(
-                "Tag ${Actions.formatCount(count.toLong())} photo${if (count == 1) "" else "s"}",
+                pluralStringResource(R.plurals.tg_title, count, Actions.formatCount(count.toLong())),
                 style = MaterialTheme.typography.headlineSmall, color = p.ink,
             )
             Spacer(Modifier.height(6.dp))
             Text(
-                "These go on the photos you ticked, and on nothing else in your index. Saving " +
-                    "writes them on this phone at once; your index is updated by the sync that follows.",
+                stringResource(R.string.tg_lead),
                 style = MaterialTheme.typography.bodyMedium, color = p.muted,
             )
             Spacer(Modifier.height(20.dp))
 
             // ---- People, first: the field most people come here for.
             ModeHeader(
-                title = "People",
+                title = stringResource(R.string.tg_people),
                 replace = personsReplace,
                 enabled = !state.bulkTagging,
                 onChange = { personsReplace = it },
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                if (personsReplace) "Replace: these names become the only names on every ticked photo. Names they have now are removed, in your index and in the files."
-                else "Add: these names go on top of the names each photo already has.",
+                if (personsReplace) stringResource(R.string.tg_people_replace)
+                else stringResource(R.string.tg_people_add),
                 style = MaterialTheme.typography.bodySmall,
                 color = if (personsReplace) p.accent else p.muted,
             )
@@ -232,7 +256,7 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
                     value = newPerson,
                     onValueChange = { newPerson = it; peopleDismissed = false },
                     modifier = Modifier.weight(1f).onFocusChanged { personFieldFocused = it.isFocused },
-                    placeholder = { Text("Add a name", color = p.muted) },
+                    placeholder = { Text(stringResource(R.string.tg_add_name), color = p.muted) },
                     singleLine = true,
                     enabled = !state.bulkTagging,
                     shape = Corner,
@@ -240,7 +264,7 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
                     keyboardActions = KeyboardActions(onDone = { addPerson() }),
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = p.accent, unfocusedBorderColor = p.hairline, cursorColor = p.accent, focusedTextColor = p.ink, unfocusedTextColor = p.ink),
                 )
-                TextButton(onClick = { addPerson() }, enabled = newPerson.isNotBlank() && !state.bulkTagging) { Text("Add", color = p.accent) }
+                TextButton(onClick = { addPerson() }, enabled = newPerson.isNotBlank() && !state.bulkTagging) { Text(stringResource(R.string.tg_add), color = p.accent) }
             }
             if (personFieldFocused && !peopleDismissed && personSuggestions.isNotEmpty()) {
                 Spacer(Modifier.height(6.dp))
@@ -250,7 +274,7 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
                         .background(p.paper, Corner)
                         .border(1.dp, p.hairline, Corner)
                 ) {
-                    BulkSuggestionHeading("People in your photos")
+                    BulkSuggestionHeading(stringResource(R.string.tg_people_in_photos))
                     personSuggestions.forEach { name ->
                         BulkSuggestionRow(name, onPick = {
                             persons = (persons + name).distinctWords()
@@ -264,15 +288,15 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
 
             // ---- The owner's tags, which become albums of their own.
             ModeHeader(
-                title = "My tags (Albums)",
+                title = stringResource(R.string.tg_my_tags),
                 replace = tagsReplace,
                 enabled = !state.bulkTagging,
                 onChange = { tagsReplace = it },
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                if (tagsReplace) "Replace: these tags become the only tags on every ticked photo. Tags they have now are removed, in your index and in the files."
-                else "Add: these tags go on top of the tags each photo already has.",
+                if (tagsReplace) stringResource(R.string.tg_tags_replace)
+                else stringResource(R.string.tg_tags_add),
                 style = MaterialTheme.typography.bodySmall,
                 color = if (tagsReplace) p.accent else p.muted,
             )
@@ -286,7 +310,7 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
                     value = newTag,
                     onValueChange = { newTag = it; tagsDismissed = false },
                     modifier = Modifier.weight(1f).onFocusChanged { tagFieldFocused = it.isFocused },
-                    placeholder = { Text("Add a tag, e.g. Maria, holiday 2021", color = p.muted) },
+                    placeholder = { Text(stringResource(R.string.tg_add_tag), color = p.muted) },
                     singleLine = true,
                     enabled = !state.bulkTagging,
                     shape = Corner,
@@ -294,7 +318,7 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
                     keyboardActions = KeyboardActions(onDone = { addTag() }),
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = p.accent, unfocusedBorderColor = p.hairline, cursorColor = p.accent, focusedTextColor = p.ink, unfocusedTextColor = p.ink),
                 )
-                TextButton(onClick = { addTag() }, enabled = newTag.isNotBlank() && !state.bulkTagging) { Text("Add", color = p.accent) }
+                TextButton(onClick = { addTag() }, enabled = newTag.isNotBlank() && !state.bulkTagging) { Text(stringResource(R.string.tg_add), color = p.accent) }
             }
             // The same discreet line as the single photo editor: the height is kept when idle,
             // so nothing below moves.
@@ -312,22 +336,71 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
                         .border(1.dp, p.hairline, Corner)
                 ) {
                     if (suggestions.mine.isNotEmpty()) {
-                        BulkSuggestionHeading("Your tags")
+                        BulkSuggestionHeading(stringResource(R.string.tg_your_tags))
                         suggestions.mine.forEach { BulkSuggestionRow(it, onPick = { pick(it) }) }
                     }
                     if (suggestions.mine.isNotEmpty() && suggestions.fromMeanings.isNotEmpty()) {
                         HorizontalDivider(color = p.hairline)
                     }
                     if (suggestions.fromMeanings.isNotEmpty()) {
-                        BulkSuggestionHeading("From your photos")
+                        BulkSuggestionHeading(stringResource(R.string.tg_from_photos))
                         suggestions.fromMeanings.forEach { BulkSuggestionRow(it, onPick = { pick(it) }) }
                     }
                 }
             }
 
+            // ---- The place, for all the ticked photos at once (Cip, 2026-09-19): one point on the
+            // map, one question from Android for all the files. It goes on its own, not with Save.
+            Spacer(Modifier.height(24.dp))
+            SectionLabel(stringResource(R.string.tg_place))
+            Spacer(Modifier.height(4.dp))
+            val placeless = remember(targets) { targets.filter { it.latLon == null } }
+            Text(
+                if (placeOnlyMissing) pluralStringResource(R.plurals.tg_place_missing_text, placeless.size, Actions.formatCount(placeless.size.toLong()))
+                else stringResource(R.string.tg_place_all_text),
+                style = MaterialTheme.typography.bodySmall,
+                color = p.muted,
+            )
+            Spacer(Modifier.height(10.dp))
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                PlaceModeChip(stringResource(R.string.tg_place_all), selected = !placeOnlyMissing, enabled = !state.bulkTagging) { placeOnlyMissing = false }
+                PlaceModeChip(stringResource(R.string.tg_place_missing, Actions.formatCount(placeless.size.toLong())), selected = placeOnlyMissing, enabled = !state.bulkTagging) { placeOnlyMissing = true }
+            }
+            Spacer(Modifier.height(10.dp))
+            GhostButton(
+                stringResource(R.string.tg_choose_map),
+                onClick = { pickingPlace = true },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !state.bulkTagging && (if (placeOnlyMissing) placeless.isNotEmpty() else targets.isNotEmpty()),
+            )
+            if (pickingPlace) {
+                PlacePickerDialog(
+                    start = targets.firstNotNullOfOrNull { it.latLon },
+                    onDismiss = { pickingPlace = false },
+                    onPick = { lat, lon ->
+                        pickingPlace = false
+                        val chosen = if (placeOnlyMissing) placeless else targets
+                        pendingPlace = Triple(lat, lon, chosen)
+                        scope.launch {
+                            val uris = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                Actions.contentUris(context, chosen.filter { com.opensolr.photos.media.PhotoReader.canWriteExif(it.mime) })
+                            }
+                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && uris.isNotEmpty()) {
+                                val request = android.provider.MediaStore.createWriteRequest(context.contentResolver, uris)
+                                placeWriteLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(request.intentSender).build())
+                            } else {
+                                pendingPlace = null
+                                viewModel.placePhotos(chosen, lat, lon, writeFiles = uris.isNotEmpty())
+                                onDismiss()
+                            }
+                        }
+                    },
+                )
+            }
+
             state.bulkTagError?.let {
                 Spacer(Modifier.height(12.dp))
-                Notice(it, title = "Not saved")
+                Notice(it, title = stringResource(R.string.tg_not_saved))
             }
 
             // While the files are being written there is nothing to do but wait, so the bar says
@@ -335,7 +408,7 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
             if (state.bulkTagging && state.bulkTagTotal > 0) {
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    "Writing your words into ${Actions.formatCount(state.bulkTagDone.toLong())} of ${Actions.formatCount(state.bulkTagTotal.toLong())} photos…",
+                    stringResource(R.string.tg_writing, Actions.formatCount(state.bulkTagDone.toLong()), Actions.formatCount(state.bulkTagTotal.toLong())),
                     style = MaterialTheme.typography.bodySmall, color = p.muted,
                 )
                 Spacer(Modifier.height(6.dp))
@@ -349,9 +422,9 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
 
             Spacer(Modifier.height(20.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                GhostButton("Cancel", onClick = onDismiss, modifier = Modifier.weight(1f), enabled = !state.bulkTagging)
+                GhostButton(stringResource(R.string.tg_cancel), onClick = onDismiss, modifier = Modifier.weight(1f), enabled = !state.bulkTagging)
                 AccentButton(
-                    "Save",
+                    stringResource(R.string.tg_save),
                     onClick = {
                         // Looking the files up asks the phone's media store about every ticked
                         // photo, so it happens off the screen's own thread: on a selection of
@@ -379,28 +452,44 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
             Spacer(Modifier.height(28.dp))
             HorizontalDivider(color = p.hairline)
             Spacer(Modifier.height(16.dp))
-            SectionLabel("Already on these photos")
+            SectionLabel(stringResource(R.string.tg_already))
             Spacer(Modifier.height(4.dp))
             if (state.selectionWordsLoading) {
-                Text("Reading your index…", style = MaterialTheme.typography.bodySmall, color = p.muted)
+                Text(stringResource(R.string.tg_reading), style = MaterialTheme.typography.bodySmall, color = p.muted)
             } else if (state.selectionPersons.isEmpty() && state.selectionTags.isEmpty()) {
-                Text("No names and no tags yet.", style = MaterialTheme.typography.bodySmall, color = p.muted)
+                Text(stringResource(R.string.tg_none_yet), style = MaterialTheme.typography.bodySmall, color = p.muted)
             }
             if (state.selectionPersons.isNotEmpty()) {
                 Spacer(Modifier.height(10.dp))
-                Text("PEOPLE", style = MaterialTheme.typography.labelSmall, color = p.muted)
+                Text(stringResource(R.string.tg_people_caps), style = MaterialTheme.typography.labelSmall, color = p.muted)
                 Spacer(Modifier.height(6.dp))
                 CountedWords(state.selectionPersons)
             }
             if (state.selectionTags.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
-                Text("TAGS", style = MaterialTheme.typography.labelSmall, color = p.muted)
+                Text(stringResource(R.string.tg_tags_caps), style = MaterialTheme.typography.labelSmall, color = p.muted)
                 Spacer(Modifier.height(6.dp))
                 CountedWords(state.selectionTags)
             }
             Spacer(Modifier.height(32.dp))
         }
     }
+}
+
+/** One of the two choices of which ticked photos get the place. */
+@Composable
+private fun PlaceModeChip(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    val p = LocalPalette.current
+    Text(
+        label,
+        style = MaterialTheme.typography.labelMedium,
+        color = if (selected) p.accent else p.ink,
+        modifier = Modifier
+            .border(if (selected) 1.5.dp else 1.dp, if (selected) p.accent else p.hairline, Corner)
+            .background(if (selected) p.paper else p.chip, Corner)
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 10.dp, vertical = 7.dp),
+    )
 }
 
 /**
@@ -412,7 +501,7 @@ private fun ModeHeader(title: String, replace: Boolean, enabled: Boolean, onChan
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         SectionLabel(title, modifier = Modifier.weight(1f))
         Text(
-            if (replace) "Replace" else "Add",
+            if (replace) stringResource(R.string.tg_replace) else stringResource(R.string.tg_mode_add),
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
             color = if (replace) p.accent else p.muted,
@@ -452,7 +541,7 @@ private fun WordChips(words: List<String>, enabled: Boolean, onRemove: (String) 
             ) {
                 Text(word, style = MaterialTheme.typography.labelSmall, color = p.accent)
                 Spacer(Modifier.size(4.dp))
-                Icon(Icons.Filled.Close, contentDescription = "Remove", tint = p.accent, modifier = Modifier.size(14.dp))
+                Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.tg_remove), tint = p.accent, modifier = Modifier.size(14.dp))
             }
         }
     }
@@ -479,7 +568,7 @@ private fun CountedWords(values: List<FacetValue>) {
         }
         if (values.size > SHOWN_EXISTING) {
             Text(
-                "+${Actions.formatCount((values.size - SHOWN_EXISTING).toLong())} more",
+                stringResource(R.string.tg_n_more, Actions.formatCount((values.size - SHOWN_EXISTING).toLong())),
                 style = MaterialTheme.typography.labelSmall,
                 color = p.muted,
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 7.dp),

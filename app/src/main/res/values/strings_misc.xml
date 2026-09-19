@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="al_title">Albums</string>
+    <string name="al_empty">No albums yet: albums come from your tags, the words photos were read into, places, cameras and years.</string>
+    <string name="al_check_none">Check none</string>
+    <string name="al_check_all">Check all</string>
+    <string name="al_expand_all">Expand all</string>
+    <string name="al_collapse_all">Collapse all</string>
+    <string name="al_share">Share</string>
+    <string name="al_delete">Delete</string>
+    <string name="al_cancel">Cancel</string>
+    <string name="al_delete_q">Delete photos?</string>
+    <string name="al_del_sections">This deletes every photo in every album of: %1$s.</string>
+    <string name="al_del_album">This deletes every photo in the album %1$s.</string>
+    <string name="al_del_albums">This deletes every photo in the albums: %1$s.</string>
+    <string name="al_del_note">The photos are deleted from this phone and removed from your index. A photo that is in several albums goes from all of them.</string>
+    <string name="al_open_section">Open this section</string>
+    <string name="al_fold_section">Fold this section away</string>
+    <string name="al_sec_people">People</string>
+    <string name="al_sec_tags">My tags (Albums)</string>
+    <string name="al_sec_things">Things</string>
+    <string name="al_sec_years">Years</string>
+    <string name="al_sec_places">Places</string>
+    <string name="al_sec_cameras">Cameras</string>
+    <string name="mp_title">Map</string>
+    <string name="mp_with_place">%1$s with a place</string>
+    <string name="mp_search_area">Search this area</string>
+    <string name="mp_reload">Reload</string>
+    <string name="mp_failed">The map could not be loaded</string>
+    <string name="mp_none">None of your indexed photos carries a GPS position yet.</string>
+    <string name="mp_no_match">No photo with a GPS position matches this search.</string>
+    <string name="pp_title">Where was it taken?</string>
+    <string name="pp_lead">Move the map until the pin sits on the place, or tap the place.</string>
+    <string name="pp_move">Move the map to choose a place</string>
+    <string name="pp_cancel">Cancel</string>
+    <string name="pp_use">Use this place</string>
+    <string name="rt_reset_confirm">Reset and re-sync</string>
+    <string name="rt_later">Later</string>
+    <string name="rt_reset_title">Your index will be reset</string>
+    <string name="rt_reset_text">This version of Opensolr Photos comes with a new index configuration. Your index will now be reset and every photo synced again: a full re-sync. It takes a while; search keeps working and finds the photos as they come back, and reading the photos again counts toward your plan\'s AI requests. Your tags and edits are kept.</string>
+    <string name="rt_ok">OK</string>
+    <string name="rt_busy_title">A sync is already running</string>
+    <string name="rt_busy_text">A sync is already running.</string>
+    <string name="rt_new_device">None of these, this is a new device</string>
+    <string name="rt_which_device">Which one of these is your device?</string>
+    <string name="rt_unknown_phone">Unknown phone</string>
+    <string name="rt_last_synced">last synced %1$s</string>
+    <string name="rt_since">since %1$s</string>
+    <string name="rt_device_note">This keeps your photos and the resources of your Opensolr account tied to this phone.</string>
+    <string name="cp_open_site">Open on opensolr.com</string>
+    <string name="cp_x_of_y">%1$s of %2$s</string>
+    <string name="cp_back">Back</string>
+    <plurals name="al_n_photos">
+        <item quantity="one">%1$s photo</item>
+        <item quantity="other">%1$s photos</item>
+    </plurals>
+    <plurals name="mp_n_here">
+        <item quantity="one">%1$s photo here</item>
+        <item quantity="other">%1$s photos here</item>
+    </plurals>
+    <plurals name="rt_n_photos">
+        <item quantity="one">%1$s photo</item>
+        <item quantity="other">%1$s photos</item>
+    </plurals>
+</resources>

@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_me">マイ</string>
+    <string name="nav_sync">同期</string>
+    <string name="nav_map">地図</string>
+    <string name="nav_albums">アルバム</string>
+    <string name="nav_search">検索</string>
+    <string name="cd_account">Opensolrアカウント</string>
+    <string name="cd_close_search">検索を閉じる</string>
+    <string name="search_hint">写真を検索</string>
+    <string name="cd_clear">消去</string>
+    <string name="count_searching">検索中…</string>
+    <string name="similar_count">類似 %1$s 枚</string>
+    <string name="cd_end_selection">選択を終了</string>
+    <string name="ai">AI</string>
+    <string name="filters">フィルター</string>
+    <string name="dup_open">同じ内容の写真</string>
+    <string name="back_all">すべての写真に戻る</string>
+    <string name="skipped_open">読み込めなかった写真</string>
+    <string name="reload">再読み込み</string>
+    <string name="expand_all">すべて開く</string>
+    <string name="collapse_all">すべて閉じる</string>
+    <string name="back_to_search">検索に戻る</string>
+    <string name="tagging_progress">%2$s 枚中 %1$s 枚にタグ付け中…</string>
+    <string name="tagging">写真にタグ付け中…</string>
+    <string name="did_you_mean">もしかして </string>
+    <string name="ticking_group">グループ全体を選択中…</string>
+    <string name="search_failed_title">検索できませんでした</string>
+    <string name="open_group">グループを開く</string>
+    <string name="fold_group">グループを閉じる</string>
+    <string name="cd_has_tags">タグあり</string>
+    <string name="this_one">この写真</string>
+    <string name="delete_text">この端末とインデックスから削除されます。元に戻せません。</string>
+    <string name="delete">削除</string>
+    <string name="cancel">キャンセル</string>
+    <string name="cd_remove">外す</string>
+    <string name="of_the_same">同じもの %1$s 枚</string>
+    <string name="best_matches">最も一致</string>
+    <string name="also_similar">類似</string>
+    <string name="cd_sync_running">同期中</string>
+    <string name="select_one_each">各重複から1枚を選択</string>
+    <string name="chip_with_location">位置情報あり</string>
+    <string name="chip_tagged">タグあり</string>
+    <string name="chip_not_tagged">タグなし</string>
+    <string name="chip_ocr">OCR</string>
+    <string name="chip_no_ocr">OCRなし</string>
+    <string name="chip_has_people">人物あり</string>
+    <string name="chip_no_people">人物なし</string>
+    <string name="cd_group_results">結果のグループ化: %1$s</string>
+    <string name="group_by_title">結果のグループ化</string>
+    <string name="group_relevance">関連度</string>
+    <string name="group_date">日付</string>
+    <string name="group_place">場所</string>
+    <string name="group_people">人物</string>
+    <string name="group_tags">マイタグ</string>
+    <string name="cd_change_place">場所を変更</string>
+    <string name="empty_indexing">写真をインデックス中です。追加されるとここに表示されます。</string>
+    <string name="empty_nothing">まだ何もインデックスされていません。同期を開いて始めてください。</string>
+    <string name="empty_nomatch">一致する写真がありません。別の言葉を試すか、フィルターを減らしてください。</string>
+    <string name="clear_all">すべて消去</string>
+    <string name="done_count">完了 (%1$s)</string>
+    <string name="facet_year">年</string>
+    <string name="facet_city">市区町村</string>
+    <string name="facet_country">国</string>
+    <string name="facet_camera_model">カメラ機種</string>
+    <string name="facet_custom_tags">マイタグ（アルバム）</string>
+    <string name="facet_labels">意味</string>
+    <string name="facet_orientation">向き</string>
+    <string name="facet_persons">人物</string>
+    <string name="year_set_by_days">下で選んだ日付で決まります。年で絞り込むには日付を消去してください。</string>
+    <string name="taken_between">撮影期間</string>
+    <string name="photo_has">写真の内容</string>
+    <string name="sw_ocr">OCR</string>
+    <string name="sw_ocr_hint">文字が読み取られた写真のみ</string>
+    <string name="sw_tagged">タグあり</string>
+    <string name="sw_tagged_hint">タグを付けた写真のみ</string>
+    <string name="sw_people">人物あり</string>
+    <string name="sw_people_hint">人物名が付いた写真のみ</string>
+    <string name="sw_location">位置情報あり</string>
+    <string name="sw_location_hint">GPS位置がある写真のみ</string>
+    <string name="folder">フォルダー</string>
+    <string name="distance_from">%1$s からの距離</string>
+    <string name="anywhere">どこでも</string>
+    <string name="within">%1$s 以内</string>
+    <string name="choose_dates">日付を選択</string>
+    <string name="any_date">すべての日付</string>
+    <string name="apply">適用</string>
+    <string name="viewer_position">%1$s / %2$s</string>
+    <string name="details">詳細</string>
+    <string name="act_tag">タグ・人物・言葉</string>
+    <string name="act_gallery">ギャラリーで開く</string>
+    <string name="act_similar">類似の写真</string>
+    <string name="act_share">共有</string>
+    <string name="act_map">地図で表示</string>
+    <string name="act_nearby">近くの写真</string>
+    <string name="act_delete">削除</string>
+    <string name="show_fewer">少なく表示</string>
+    <string name="show_all">すべて表示 (%1$s)</string>
+    <string name="search_values">%1$s 件の値を検索</string>
+    <string name="done">完了</string>
+    <string name="no_value">一致する値がありません。</string>
+    <string name="cd_selected">選択済み</string>
+    <string name="more_values">ほか %1$s 件、入力して絞り込み</string>
+    <string name="sec_place">場所</string>
+    <string name="add_place">場所を追加</string>
+    <string name="sec_people">人物</string>
+    <string name="sec_my_tags">マイタグ（アルバム）</string>
+    <string name="sec_shows">写真の内容</string>
+    <string name="no_words_yet">まだ言葉がありません</string>
+    <string name="sec_printed">写真内の文字</string>
+    <string name="dock_resync">再同期</string>
+    <string name="dock_resync_n">再同期 %1$s</string>
+    <string name="dock_tag_n">タグ %1$s</string>
+    <string name="orientation_landscape">横向き</string>
+    <string name="orientation_portrait">縦向き</string>
+    <string name="orientation_square">正方形</string>
+    <plurals name="unreadable_count">
+        <item quantity="other">端末で読み込めなかった写真 %1$s 枚</item>
+    </plurals>
+    <plurals name="photos_count">
+        <item quantity="other">%1$s 枚</item>
+    </plurals>
+    <plurals name="delete_title">
+        <item quantity="other">%1$s 枚の写真を削除しますか？</item>
+    </plurals>
+    <string-array name="dup_kinds">
+        <item>任意の2語が一致</item>
+        <item>任意の3語が一致</item>
+        <item>任意の4語が一致</item>
+        <item>5語すべて一致</item>
+        <item>同じ写真（EXIF）</item>
+        <item>同じファイル名</item>
+        <item>同じファイルサイズ</item>
+        <item>同じファイル（完全なコピー）</item>
+    </string-array>
+</resources>

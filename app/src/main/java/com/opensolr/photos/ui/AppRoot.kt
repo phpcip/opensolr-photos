@@ -1,5 +1,8 @@
 package com.opensolr.photos.ui
 
+import com.opensolr.photos.R
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -79,10 +82,10 @@ fun AppRoot(viewModel: AppViewModel) {
     if (state.rebuildRequired) {
         AlertDialog(
             onDismissRequest = { viewModel.postponeRebuild() },
-            confirmButton = { TextButton(onClick = { viewModel.approveRebuild() }) { Text("Reset and re-sync") } },
-            dismissButton = { TextButton(onClick = { viewModel.postponeRebuild() }) { Text("Later") } },
-            title = { Text("Your index will be reset") },
-            text = { Text("This version of Opensolr Photos comes with a new index configuration. Your index will now be reset and every photo synced again: a full re-sync. It takes a while; search keeps working and finds the photos as they come back, and reading the photos again counts toward your plan's AI requests. Your tags and edits are kept.") },
+            confirmButton = { TextButton(onClick = { viewModel.approveRebuild() }) { Text(stringResource(R.string.rt_reset_confirm)) } },
+            dismissButton = { TextButton(onClick = { viewModel.postponeRebuild() }) { Text(stringResource(R.string.rt_later)) } },
+            title = { Text(stringResource(R.string.rt_reset_title)) },
+            text = { Text(stringResource(R.string.rt_reset_text)) },
             containerColor = p.paper,
             titleContentColor = p.ink,
             textContentColor = p.muted,
@@ -92,9 +95,9 @@ fun AppRoot(viewModel: AppViewModel) {
     if (state.showBusyDialog) {
         AlertDialog(
             onDismissRequest = { viewModel.dismissBusyDialog() },
-            confirmButton = { TextButton(onClick = { viewModel.dismissBusyDialog() }) { Text("OK") } },
-            title = { Text("A sync is already running") },
-            text = { Text("A sync is already running.") },
+            confirmButton = { TextButton(onClick = { viewModel.dismissBusyDialog() }) { Text(stringResource(R.string.rt_ok)) } },
+            title = { Text(stringResource(R.string.rt_busy_title)) },
+            text = { Text(stringResource(R.string.rt_busy_text)) },
             containerColor = p.paper,
             titleContentColor = p.ink,
             textContentColor = p.muted,
@@ -112,8 +115,8 @@ private fun DeviceChoiceDialog(state: UiState, viewModel: AppViewModel) {
     AlertDialog(
         onDismissRequest = {},
         confirmButton = {},
-        dismissButton = { TextButton(onClick = { viewModel.chooseNewDevice() }) { Text("None of these, this is a new device", color = p.muted) } },
-        title = { Text("Which one of these is your device?") },
+        dismissButton = { TextButton(onClick = { viewModel.chooseNewDevice() }) { Text(stringResource(R.string.rt_new_device), color = p.muted) } },
+        title = { Text(stringResource(R.string.rt_which_device)) },
         text = {
             Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
                 state.deviceChoices.forEach { choice ->
@@ -123,11 +126,14 @@ private fun DeviceChoiceDialog(state: UiState, viewModel: AppViewModel) {
                             .clickable { viewModel.chooseDevice(choice) }
                             .padding(vertical = 12.dp)
                     ) {
-                        Text(choice.deviceName ?: "Unknown phone", style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold), color = p.ink)
+                        Text(choice.deviceName ?: stringResource(R.string.rt_unknown_phone), style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold), color = p.ink)
+                        val photos = pluralStringResource(R.plurals.rt_n_photos, choice.numDocs, Actions.formatCount(choice.numDocs.toLong()))
+                        val synced = stringResource(R.string.rt_last_synced, Actions.formatDate(choice.lastIndex * 1000L).substringBefore(' '))
+                        val since = stringResource(R.string.rt_since, Actions.formatDate(choice.created * 1000L).substringBefore(' '))
                         val details = buildList {
-                            if (choice.numDocs > 0) add("${Actions.formatCount(choice.numDocs.toLong())} photos")
-                            if (choice.lastIndex > 0) add("last synced " + Actions.formatDate(choice.lastIndex * 1000L).substringBefore(' '))
-                            else if (choice.created > 0) add("since " + Actions.formatDate(choice.created * 1000L).substringBefore(' '))
+                            if (choice.numDocs > 0) add(photos)
+                            if (choice.lastIndex > 0) add(synced)
+                            else if (choice.created > 0) add(since)
                         }
                         if (details.isNotEmpty()) Text(details.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = p.muted)
                     }
@@ -135,7 +141,7 @@ private fun DeviceChoiceDialog(state: UiState, viewModel: AppViewModel) {
                 }
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    "This keeps your photos and the resources of your Opensolr account tied to this phone.",
+                    stringResource(R.string.rt_device_note),
                     style = MaterialTheme.typography.bodySmall, color = p.muted,
                 )
             }

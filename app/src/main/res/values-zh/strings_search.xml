@@ -1,0 +1,136 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_me">我</string>
+    <string name="nav_sync">同步</string>
+    <string name="nav_map">地图</string>
+    <string name="nav_albums">相册</string>
+    <string name="nav_search">搜索</string>
+    <string name="cd_account">Opensolr 账户</string>
+    <string name="cd_close_search">关闭搜索</string>
+    <string name="search_hint">搜索你的照片</string>
+    <string name="cd_clear">清除</string>
+    <string name="count_searching">正在搜索…</string>
+    <string name="similar_count">%1$s 张相似</string>
+    <string name="cd_end_selection">结束选择</string>
+    <string name="ai">AI</string>
+    <string name="filters">筛选</string>
+    <string name="dup_open">同一内容的照片</string>
+    <string name="back_all">返回全部照片</string>
+    <string name="skipped_open">无法读取的照片</string>
+    <string name="reload">重新加载</string>
+    <string name="expand_all">全部展开</string>
+    <string name="collapse_all">全部折叠</string>
+    <string name="back_to_search">返回搜索</string>
+    <string name="tagging_progress">正在为 %2$s 张中的 %1$s 张添加标签…</string>
+    <string name="tagging">正在为照片添加标签…</string>
+    <string name="did_you_mean">你是不是要找 </string>
+    <string name="ticking_group">正在勾选整个分组…</string>
+    <string name="search_failed_title">搜索失败</string>
+    <string name="open_group">展开此分组</string>
+    <string name="fold_group">折叠此分组</string>
+    <string name="cd_has_tags">有你的标签</string>
+    <string name="this_one">这张</string>
+    <string name="delete_text">将从本手机和你的索引中删除，且无法撤销。</string>
+    <string name="delete">删除</string>
+    <string name="cancel">取消</string>
+    <string name="cd_remove">移除</string>
+    <string name="of_the_same">%1$s 张相同</string>
+    <string name="best_matches">最佳匹配</string>
+    <string name="also_similar">相似照片</string>
+    <string name="cd_sync_running">正在同步</string>
+    <string name="select_one_each">每组重复选 1 张</string>
+    <string name="chip_with_location">有地点</string>
+    <string name="chip_tagged">有标签</string>
+    <string name="chip_not_tagged">无标签</string>
+    <string name="chip_ocr">OCR</string>
+    <string name="chip_no_ocr">无 OCR</string>
+    <string name="chip_has_people">有人物</string>
+    <string name="chip_no_people">无人物</string>
+    <string name="cd_group_results">结果分组：%1$s</string>
+    <string name="group_by_title">结果分组方式</string>
+    <string name="group_relevance">相关度</string>
+    <string name="group_date">日期</string>
+    <string name="group_place">地点</string>
+    <string name="group_people">人物</string>
+    <string name="group_tags">我的标签</string>
+    <string name="cd_change_place">更改地点</string>
+    <string name="empty_indexing">正在为你的照片建立索引，添加后会显示在这里。</string>
+    <string name="empty_nothing">尚未建立任何索引。打开“同步”开始。</string>
+    <string name="empty_nomatch">没有匹配的照片。请换个词或减少筛选条件。</string>
+    <string name="clear_all">全部清除</string>
+    <string name="done_count">完成（%1$s）</string>
+    <string name="facet_year">年份</string>
+    <string name="facet_city">城市</string>
+    <string name="facet_country">国家</string>
+    <string name="facet_camera_model">相机型号</string>
+    <string name="facet_custom_tags">我的标签（相册）</string>
+    <string name="facet_labels">含义</string>
+    <string name="facet_orientation">方向</string>
+    <string name="facet_persons">人物</string>
+    <string name="year_set_by_days">由下方所选日期决定。清除这些日期后可再次按年份筛选。</string>
+    <string name="taken_between">拍摄时间</string>
+    <string name="photo_has">照片包含</string>
+    <string name="sw_ocr">OCR</string>
+    <string name="sw_ocr_hint">仅显示识别出文字的照片</string>
+    <string name="sw_tagged">有标签</string>
+    <string name="sw_tagged_hint">仅显示你加了标签的照片</string>
+    <string name="sw_people">有人物</string>
+    <string name="sw_people_hint">仅显示标注了人物的照片</string>
+    <string name="sw_location">有地点</string>
+    <string name="sw_location_hint">仅显示有 GPS 位置的照片</string>
+    <string name="folder">文件夹</string>
+    <string name="distance_from">距 %1$s 的距离</string>
+    <string name="anywhere">任意位置</string>
+    <string name="within">%1$s 以内</string>
+    <string name="choose_dates">选择日期</string>
+    <string name="any_date">任意日期</string>
+    <string name="apply">应用</string>
+    <string name="viewer_position">%1$s / %2$s</string>
+    <string name="details">详情</string>
+    <string name="act_tag">标签、人物和文字</string>
+    <string name="act_gallery">在图库中打开</string>
+    <string name="act_similar">相似照片</string>
+    <string name="act_share">分享</string>
+    <string name="act_map">在地图上显示</string>
+    <string name="act_nearby">附近的照片</string>
+    <string name="act_delete">删除</string>
+    <string name="show_fewer">收起</string>
+    <string name="show_all">显示全部（%1$s）</string>
+    <string name="search_values">在 %1$s 个值中搜索</string>
+    <string name="done">完成</string>
+    <string name="no_value">没有匹配的值。</string>
+    <string name="cd_selected">已选</string>
+    <string name="more_values">还有 %1$s 个，输入以缩小范围</string>
+    <string name="sec_place">地点</string>
+    <string name="add_place">添加地点</string>
+    <string name="sec_people">人物</string>
+    <string name="sec_my_tags">我的标签（相册）</string>
+    <string name="sec_shows">照片内容</string>
+    <string name="no_words_yet">暂无文字</string>
+    <string name="sec_printed">照片中的印刷文字</string>
+    <string name="dock_resync">重新同步</string>
+    <string name="dock_resync_n">重新同步 %1$s</string>
+    <string name="dock_tag_n">标签 %1$s</string>
+    <string name="orientation_landscape">横向</string>
+    <string name="orientation_portrait">纵向</string>
+    <string name="orientation_square">方形</string>
+    <plurals name="unreadable_count">
+        <item quantity="other">手机无法读取的照片 %1$s 张</item>
+    </plurals>
+    <plurals name="photos_count">
+        <item quantity="other">%1$s 张照片</item>
+    </plurals>
+    <plurals name="delete_title">
+        <item quantity="other">删除 %1$s 张照片？</item>
+    </plurals>
+    <string-array name="dup_kinds">
+        <item>任意 2 个词相同</item>
+        <item>任意 3 个词相同</item>
+        <item>任意 4 个词相同</item>
+        <item>5 个词全部相同</item>
+        <item>同一张照片（EXIF）</item>
+        <item>文件名相同</item>
+        <item>文件大小相同</item>
+        <item>同一文件（完全相同的副本）</item>
+    </string-array>
+</resources>

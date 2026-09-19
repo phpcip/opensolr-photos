@@ -1,5 +1,6 @@
 package com.opensolr.photos.sync
 
+import com.opensolr.photos.AppText
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -66,8 +67,8 @@ object Notifier {
         context, ALERT_SIGN_IN,
         NotificationCompat.Builder(context, CHANNEL_ALERTS)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Sign in to Opensolr again")
-            .setContentText("Your Opensolr sign-in stopped working, so syncing is paused.")
+            .setContentTitle(AppText.s(R.string.nt_signin_title))
+            .setContentText(AppText.s(R.string.nt_signin_text))
             .setAutoCancel(true)
             .setContentIntent(openApp(context, null))
             .build()
@@ -98,9 +99,9 @@ object Notifier {
         context, ALERT_RECREATED,
         NotificationCompat.Builder(context, CHANNEL_ALERTS)
             .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle("Your photo index was emptied")
-            .setContentText("It was missing from your Opensolr account, so a new one was created and your photos are being synced again.")
-            .setStyle(NotificationCompat.BigTextStyle().bigText("It was missing from your Opensolr account, so a new one was created and your photos are being synced again."))
+            .setContentTitle(AppText.s(R.string.nt_recreated_title))
+            .setContentText(AppText.s(R.string.nt_recreated_text))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(AppText.s(R.string.nt_recreated_text)))
             .setAutoCancel(true)
             .setContentIntent(openApp(context, MainActivity.DESTINATION_SYNC))
             .build()

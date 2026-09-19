@@ -1,5 +1,7 @@
 package com.opensolr.photos.ui.screens
 
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.systemBars
@@ -185,9 +187,9 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
 
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.weight(1f).padding(start = 8.dp)) { ScreenHeader("Map", onBack = { viewModel.back() }) }
+            Box(Modifier.weight(1f).padding(start = 8.dp)) { ScreenHeader(stringResource(R.string.mp_title), onBack = { viewModel.back() }) }
             Text(
-                "${Actions.formatCount(state.pins.size.toLong())} with a place",
+                stringResource(R.string.mp_with_place, Actions.formatCount(state.pins.size.toLong())),
                 style = MaterialTheme.typography.bodySmall, color = p.muted,
             )
             // Search this area: the visible map becomes a radius filter on the photos.
@@ -199,20 +201,20 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
                 val km = max(0.5, ceil(center.distanceToAsDouble(corner) / 100.0) / 10.0)
                 viewModel.searchNear(center.latitude, center.longitude, km)
             }) {
-                Icon(Icons.Filled.Search, contentDescription = "Search this area", tint = p.accent, modifier = Modifier.size(22.dp))
+                Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.mp_search_area), tint = p.accent, modifier = Modifier.size(22.dp))
             }
             IconButton(onClick = { fitted = false; viewModel.loadPins() }, enabled = !state.pinsLoading) {
-                Icon(painterResource(R.drawable.ic_reload), contentDescription = "Reload", tint = p.accent, modifier = Modifier.size(20.dp))
+                Icon(painterResource(R.drawable.ic_reload), contentDescription = stringResource(R.string.mp_reload), tint = p.accent, modifier = Modifier.size(20.dp))
             }
         }
         if (state.pinsLoading) {
             LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp), color = p.accent, trackColor = p.chip)
         }
-        state.pinsError?.let { Notice(it, title = "The map could not be loaded", modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
+        state.pinsError?.let { Notice(it, title = stringResource(R.string.mp_failed), modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
         if (!state.pinsLoading && state.pins.isEmpty() && state.pinsError == null) {
             Notice(
-                if (state.query.isBlank() && state.filters.count == 0) "None of your indexed photos carries a GPS position yet."
-                else "No photo with a GPS position matches this search.",
+                if (state.query.isBlank() && state.filters.count == 0) stringResource(R.string.mp_none)
+                else stringResource(R.string.mp_no_match),
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
             )
         }
@@ -300,7 +302,7 @@ private fun GroupSheet(cluster: PhotoCluster, onDismiss: () -> Unit, onShowPhoto
         shape = RoundedCornerShape(2.dp),
     ) {
         Column(Modifier.fillMaxWidth().fillMaxHeight().padding(horizontal = 20.dp).navigationBarsPadding()) {
-            SectionLabel("${Actions.formatCount(cluster.pins.size.toLong())} photo${if (cluster.pins.size == 1) "" else "s"} here")
+            SectionLabel(pluralStringResource(R.plurals.mp_n_here, cluster.pins.size, Actions.formatCount(cluster.pins.size.toLong())))
             // Where "here" is, in the words the photos themselves carry: the most common city and
             // country of the group (Cip, 2026-09-18). Silent when none of them knows.
             val place = remember(cluster) {

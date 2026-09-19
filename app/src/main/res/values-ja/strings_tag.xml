@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tg_lead">チェックした写真だけに付き、インデックスの他の写真には付きません。保存するとこの端末にすぐ書き込まれ、インデックスは次の同期で更新されます。</string>
+    <string name="tg_people">人物</string>
+    <string name="tg_people_replace">置き換え: チェックした各写真の名前がこれだけになります。既存の名前はインデックスとファイルから削除されます。</string>
+    <string name="tg_people_add">追加: 各写真の既存の名前に加えられます。</string>
+    <string name="tg_add_name">名前を追加</string>
+    <string name="tg_add">追加</string>
+    <string name="tg_people_in_photos">写真に写っている人物</string>
+    <string name="tg_my_tags">マイタグ（アルバム）</string>
+    <string name="tg_tags_replace">置き換え: チェックした各写真のタグがこれだけになります。既存のタグはインデックスとファイルから削除されます。</string>
+    <string name="tg_tags_add">追加: 各写真の既存のタグに加えられます。</string>
+    <string name="tg_add_tag">タグを追加（例: Maria、休暇 2021）</string>
+    <string name="tg_your_tags">あなたのタグ</string>
+    <string name="tg_from_photos">写真から</string>
+    <string name="tg_place">場所</string>
+    <string name="tg_place_all_text">チェックしたすべての写真に、選んだ場所がインデックスとファイルに付きます。</string>
+    <string name="tg_place_all">チェックしたすべての写真</string>
+    <string name="tg_place_missing">場所のない写真のみ (%1$s)</string>
+    <string name="tg_choose_map">地図で場所を選ぶ</string>
+    <string name="tg_not_saved">保存されませんでした</string>
+    <string name="tg_writing">%2$s 枚中 %1$s 枚に言葉を書き込み中…</string>
+    <string name="tg_cancel">キャンセル</string>
+    <string name="tg_save">保存</string>
+    <string name="tg_saving">保存中…</string>
+    <string name="tg_already">これらの写真に付いているもの</string>
+    <string name="tg_reading">インデックスを読み込み中…</string>
+    <string name="tg_none_yet">まだ名前もタグもありません。</string>
+    <string name="tg_people_caps">人物</string>
+    <string name="tg_tags_caps">タグ</string>
+    <string name="tg_replace">置き換え</string>
+    <string name="tg_mode_add">追加</string>
+    <string name="tg_remove">外す</string>
+    <string name="tg_n_more">ほか %1$s 件</string>
+    <string name="tg_edit">%1$s を編集</string>
+    <string name="tg_saved_in_file">写真そのものに保存されるので、他のアプリでも名前が見られます。</string>
+    <string name="tg_tags_hint">検索したい言葉なら何でも。タグごとにアルバムになります。</string>
+    <string name="tg_shows">写真の内容</string>
+    <string name="tg_words_hint">言葉はカンマで区切ります。写真を読み直しても、あなたの説明は保持されます。</string>
+    <string name="tg_reset">リセット</string>
+    <plurals name="tg_title">
+        <item quantity="other">写真 %1$s 枚にタグ付け</item>
+    </plurals>
+    <plurals name="tg_place_missing_text">
+        <item quantity="other">場所のない %1$s 枚だけに選んだ場所が付き、他の写真はそのままです。</item>
+    </plurals>
+</resources>

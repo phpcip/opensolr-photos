@@ -1,5 +1,7 @@
 package com.opensolr.photos.index
 
+import com.opensolr.photos.R
+import com.opensolr.photos.AppText
 import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
@@ -101,7 +103,7 @@ class IndexManager(
      * create: they surface as exceptions, and the next sync simply tries again.
      */
     suspend fun ensure(session: Session, onStep: suspend (String) -> Unit = {}): Pair<IndexConnection, Outcome> {
-        onStep("Looking for this phone's index")
+        onStep(AppText.s(R.string.ix_looking))
         val name = indexName
         val account = api.indexes(session)
         if (account.any { it.name == name }) {
@@ -129,10 +131,10 @@ class IndexManager(
 
         val hadIndex = prefs.knownIndexName == name
         prefs.connection = null
-        onStep("Creating this phone's index")
+        onStep(AppText.s(R.string.ix_creating))
         api.createIndex(session, name, pickRegion(api.vectorRegions(session), lastKnownLocation()), deviceName, deviceId)
         prefs.chosenIndexName = name
-        onStep("Setting up the index")
+        onStep(AppText.s(R.string.ix_setting_up))
         val connection = connectionWithRetry(session, name)
         api.uploadConfig(session, name, configZip())
         waitForSchema(connection)
@@ -146,7 +148,7 @@ class IndexManager(
      * never meet the new one (Cip, 2026-09-15).
      */
     suspend fun applyConfig(session: Session, connection: IndexConnection, onStep: suspend (String) -> Unit = {}) {
-        onStep("Updating the index configuration")
+        onStep(AppText.s(R.string.ix_updating))
         api.uploadConfig(session, connection.indexName, configZip())
         waitForSchema(connection)
     }
@@ -182,7 +184,7 @@ class IndexManager(
             }
             delay(2000L * (attempt + 1))
         }
-        throw last ?: ServiceException("The index did not become reachable")
+        throw last ?: ServiceException(AppText.s(R.string.err_not_reachable))
     }
 
     /**
@@ -203,7 +205,7 @@ class IndexManager(
             }
             delay(3000)
         }
-        throw ServiceException("The index configuration did not take effect. Try Sync again in a minute.")
+        throw ServiceException(AppText.s(R.string.err_config_not_live))
     }
 
     /**
@@ -218,7 +220,7 @@ class IndexManager(
      * the newest one on the matching continent is used, and failing that any vector environment.
      */
     private fun pickRegion(regions: List<VectorRegion>, location: Location?): String {
-        if (regions.isEmpty()) throw ServiceException("No Opensolr environment with vector search is available right now")
+        if (regions.isEmpty()) throw ServiceException(AppText.s(R.string.err_no_region))
         val americas = location?.let { it.longitude in -170.0..-30.0 } ?: TimeZone.getDefault().id.startsWith("America/")
         val wanted = if (americas) REGION_AMERICAS else REGION_EUROPE
         regions.firstOrNull { it.environment.equals(wanted, ignoreCase = true) }?.let { return it.environment }

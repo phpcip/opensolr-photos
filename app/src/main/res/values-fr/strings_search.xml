@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_me">Moi</string>
+    <string name="nav_sync">Synchro</string>
+    <string name="nav_map">Carte</string>
+    <string name="nav_albums">Albums</string>
+    <string name="nav_search">Chercher</string>
+    <string name="cd_account">Compte Opensolr</string>
+    <string name="cd_close_search">Fermer la recherche</string>
+    <string name="search_hint">Rechercher vos photos</string>
+    <string name="cd_clear">Effacer</string>
+    <string name="count_searching">Recherche…</string>
+    <string name="similar_count">%1$s similaires</string>
+    <string name="cd_end_selection">Terminer la sélection</string>
+    <string name="ai">IA</string>
+    <string name="filters">Filtres</string>
+    <string name="dup_open">Photos de la même chose</string>
+    <string name="back_all">Retour à toutes les photos</string>
+    <string name="skipped_open">Photos illisibles</string>
+    <string name="reload">Recharger</string>
+    <string name="expand_all">Tout déplier</string>
+    <string name="collapse_all">Tout replier</string>
+    <string name="back_to_search">Retour à la recherche</string>
+    <string name="tagging_progress">Étiquetage de %1$s sur %2$s photos…</string>
+    <string name="tagging">Étiquetage de vos photos…</string>
+    <string name="did_you_mean">Vouliez-vous dire </string>
+    <string name="ticking_group">Sélection du groupe entier…</string>
+    <string name="search_failed_title">La recherche a échoué</string>
+    <string name="open_group">Ouvrir ce groupe</string>
+    <string name="fold_group">Replier ce groupe</string>
+    <string name="cd_has_tags">A vos étiquettes</string>
+    <string name="this_one">Celle-ci</string>
+    <string name="delete_text">Elles sont supprimées de ce téléphone et de votre index. Action irréversible.</string>
+    <string name="delete">Supprimer</string>
+    <string name="cancel">Annuler</string>
+    <string name="cd_remove">Retirer</string>
+    <string name="of_the_same">%1$s identiques</string>
+    <string name="best_matches">Meilleurs résultats</string>
+    <string name="also_similar">Aussi similaires</string>
+    <string name="cd_sync_running">Synchro en cours</string>
+    <string name="select_one_each">Choisir 1 de chaque doublon</string>
+    <string name="chip_with_location">Avec lieu</string>
+    <string name="chip_tagged">Étiquetées</string>
+    <string name="chip_not_tagged">Sans étiquette</string>
+    <string name="chip_ocr">OCR</string>
+    <string name="chip_no_ocr">Sans OCR</string>
+    <string name="chip_has_people">Avec personnes</string>
+    <string name="chip_no_people">Sans personnes</string>
+    <string name="cd_group_results">Grouper les résultats : %1$s</string>
+    <string name="group_by_title">GROUPER LES RÉSULTATS PAR</string>
+    <string name="group_relevance">Pertinence</string>
+    <string name="group_date">Date</string>
+    <string name="group_place">Lieu</string>
+    <string name="group_people">Personnes</string>
+    <string name="group_tags">Mes étiquettes</string>
+    <string name="cd_change_place">Changer le lieu</string>
+    <string name="empty_indexing">Vos photos sont en cours d\'indexation. Elles apparaissent ici au fur et à mesure.</string>
+    <string name="empty_nothing">Rien n\'est encore indexé. Ouvrez Synchro pour commencer.</string>
+    <string name="empty_nomatch">Aucune photo ne correspond. Essayez d\'autres mots ou moins de filtres.</string>
+    <string name="clear_all">Tout effacer</string>
+    <string name="done_count">OK (%1$s)</string>
+    <string name="facet_year">Année</string>
+    <string name="facet_city">Ville</string>
+    <string name="facet_country">Pays</string>
+    <string name="facet_camera_model">Modèle d\'appareil</string>
+    <string name="facet_custom_tags">Mes étiquettes (Albums)</string>
+    <string name="facet_labels">Sens</string>
+    <string name="facet_orientation">Orientation</string>
+    <string name="facet_persons">Personnes</string>
+    <string name="year_set_by_days">Défini par les jours choisis ci-dessous. Effacez-les pour filtrer à nouveau par année.</string>
+    <string name="taken_between">Prise entre</string>
+    <string name="photo_has">La photo a</string>
+    <string name="sw_ocr">OCR</string>
+    <string name="sw_ocr_hint">Seulement les photos dont un texte a été lu</string>
+    <string name="sw_tagged">Étiquetées</string>
+    <string name="sw_tagged_hint">Seulement les photos que vous avez étiquetées</string>
+    <string name="sw_people">Avec personnes</string>
+    <string name="sw_people_hint">Seulement les photos avec des personnes nommées</string>
+    <string name="sw_location">Avec lieu</string>
+    <string name="sw_location_hint">Seulement les photos avec une position GPS</string>
+    <string name="folder">Dossier</string>
+    <string name="distance_from">Distance de %1$s</string>
+    <string name="anywhere">Partout</string>
+    <string name="within">À moins de %1$s</string>
+    <string name="choose_dates">Choisir des dates</string>
+    <string name="any_date">Toute date</string>
+    <string name="apply">Appliquer</string>
+    <string name="viewer_position">%1$s sur %2$s</string>
+    <string name="details">Détails</string>
+    <string name="act_tag">Étiquettes, personnes et mots</string>
+    <string name="act_gallery">Ouvrir dans la galerie</string>
+    <string name="act_similar">Photos similaires</string>
+    <string name="act_share">Partager</string>
+    <string name="act_map">Voir sur la carte</string>
+    <string name="act_nearby">Photos à proximité</string>
+    <string name="act_delete">Supprimer</string>
+    <string name="show_fewer">Afficher moins</string>
+    <string name="show_all">Tout afficher (%1$s)</string>
+    <string name="search_values">Chercher parmi %1$s valeurs</string>
+    <string name="done">OK</string>
+    <string name="no_value">Aucune valeur ne correspond.</string>
+    <string name="cd_selected">Sélectionné</string>
+    <string name="more_values">%1$s de plus, tapez pour affiner</string>
+    <string name="sec_place">Lieu</string>
+    <string name="add_place">Ajouter un lieu</string>
+    <string name="sec_people">Personnes</string>
+    <string name="sec_my_tags">Mes étiquettes (Albums)</string>
+    <string name="sec_shows">Ce que montre la photo</string>
+    <string name="no_words_yet">Pas encore de mots</string>
+    <string name="sec_printed">Texte imprimé dans la photo</string>
+    <string name="dock_resync">Resync</string>
+    <string name="dock_resync_n">Resync %1$s</string>
+    <string name="dock_tag_n">Étiq. %1$s</string>
+    <string name="orientation_landscape">Paysage</string>
+    <string name="orientation_portrait">Portrait</string>
+    <string name="orientation_square">Carré</string>
+    <plurals name="unreadable_count">
+        <item quantity="one">%1$s photo que votre téléphone n\'a pas pu lire</item>
+        <item quantity="many">%1$s photos que votre téléphone n\'a pas pu lire</item>
+        <item quantity="other">%1$s photos que votre téléphone n\'a pas pu lire</item>
+    </plurals>
+    <plurals name="photos_count">
+        <item quantity="one">%1$s photo</item>
+        <item quantity="many">%1$s photos</item>
+        <item quantity="other">%1$s photos</item>
+    </plurals>
+    <plurals name="delete_title">
+        <item quantity="one">Supprimer %1$s photo ?</item>
+        <item quantity="many">Supprimer %1$s photos ?</item>
+        <item quantity="other">Supprimer %1$s photos ?</item>
+    </plurals>
+    <string-array name="dup_kinds">
+        <item>2 mots quelconques identiques</item>
+        <item>3 mots quelconques identiques</item>
+        <item>4 mots quelconques identiques</item>
+        <item>Les 5 mots identiques</item>
+        <item>Même photo (EXIF)</item>
+        <item>Même nom de fichier</item>
+        <item>Même taille de fichier</item>
+        <item>Même fichier (copie exacte)</item>
+    </string-array>
+</resources>

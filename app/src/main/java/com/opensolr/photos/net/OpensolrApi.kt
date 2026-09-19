@@ -1,5 +1,7 @@
 package com.opensolr.photos.net
 
+import com.opensolr.photos.R
+import com.opensolr.photos.AppText
 import android.util.Base64
 import com.opensolr.photos.auth.AuthFlow
 import com.opensolr.photos.data.AccountLimits
@@ -45,6 +47,8 @@ data class WordsItem(
     val meaning: String?,
     /** The md5 of the file as it now stands: writing the words into it made it a different file. */
     val fileHash: String? = null,
+    /** A place the owner chose on the map, still to reach the index; null leaves the place alone. */
+    val location: Pair<Double, Double>? = null,
 )
 
 /**
@@ -182,10 +186,10 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
             val msg = json.optString("msg")
             when {
                 msg.startsWith("ERROR_CANNOT_ADD_MORE_THAN_") -> throw IndexLimitException(
-                    "Your Opensolr plan cannot hold another index. Remove an index you no longer use, or upgrade at opensolr.com/pricing."
+                    AppText.s(R.string.err_no_room)
                 )
                 msg == "ERROR_CORE_NAME_TAKEN_CHOOSE_ANOTHER_CORE_NAME" -> throw ServiceException(
-                    "An index named $name already exists in another Opensolr account."
+                    AppText.s(R.string.err_name_taken, name)
                 )
                 else -> throw ServiceException(platformMessage(json.toString()))
             }
@@ -206,7 +210,7 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         val text = execute(Request.Builder().url(MANAGEMENT + "upload_zip_config_files").post(body).build())
         val start = text.indexOf('{')
         val json = if (start >= 0) parseObject(text.substring(start)) else JSONObject()
-        if (!json.optBoolean("status")) throw ServiceException("The index configuration could not be uploaded: " + platformMessage(text))
+        if (!json.optBoolean("status")) throw ServiceException(AppText.s(R.string.err_config_upload, platformMessage(text)))
     }
 
     /**
@@ -292,7 +296,7 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         http.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
             classify(response.code, text, response.header("Retry-After"))
-            if (response.code in 400..499) throw PhotoRejectedException("The photo was refused: " + platformMessage(text))
+            if (response.code in 400..499) throw PhotoRejectedException(AppText.s(R.string.err_photo_refused, platformMessage(text)))
             if (response.code >= 500) throw ServiceException("The Opensolr AI service answered HTTP ${response.code}")
             val json = parseObject(text)
             if (!json.optBoolean("status")) throw ServiceException(platformMessage(text))
@@ -319,7 +323,7 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         http.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
             classify(response.code, text, response.header("Retry-After"))
-            if (response.code in 400..499) throw PhotoRejectedException("The photos were refused: " + platformMessage(text))
+            if (response.code in 400..499) throw PhotoRejectedException(AppText.s(R.string.err_photos_refused, platformMessage(text)))
             if (response.code >= 500) throw ServiceException("The Opensolr AI service answered HTTP ${response.code}")
             val json = parseObject(text)
             if (!json.optBoolean("status")) throw ServiceException(platformMessage(text))
@@ -380,7 +384,7 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         http.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
             classify(response.code, text, response.header("Retry-After"))
-            if (response.code in 400..499) throw PhotoRejectedException("The photos were refused: " + platformMessage(text))
+            if (response.code in 400..499) throw PhotoRejectedException(AppText.s(R.string.err_photos_refused, platformMessage(text)))
             if (response.code >= 500) throw ServiceException("The Opensolr AI service answered HTTP ${response.code}")
             val json = parseObject(text)
             if (!json.optBoolean("status")) throw ServiceException(platformMessage(text))
@@ -412,6 +416,7 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
                 item.persons?.let { put("persons", JSONArray(it)) }
                 item.meaning?.let { put("meaning", it) }
                 item.fileHash?.let { put("file_hash", it) }
+                item.location?.let { (lat, lon) -> put("location", JSONObject().put("lat", lat).put("lon", lon)) }
             })
         }
         val body = JSONObject()
@@ -423,7 +428,7 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         http.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
             classify(response.code, text, response.header("Retry-After"))
-            if (response.code in 400..499) throw PhotoRejectedException("The words were refused: " + platformMessage(text))
+            if (response.code in 400..499) throw PhotoRejectedException(AppText.s(R.string.err_words_refused, platformMessage(text)))
             if (response.code >= 500) throw ServiceException("The Opensolr AI service answered HTTP ${response.code}")
             val json = parseObject(text)
             if (!json.optBoolean("status")) throw ServiceException(platformMessage(text))

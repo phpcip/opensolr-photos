@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="al_title">相册</string>
+    <string name="al_empty">还没有相册：相册来自你的标签、照片读出的文字、地点、相机和年份。</string>
+    <string name="al_check_none">全不选</string>
+    <string name="al_check_all">全选</string>
+    <string name="al_expand_all">全部展开</string>
+    <string name="al_collapse_all">全部折叠</string>
+    <string name="al_share">分享</string>
+    <string name="al_delete">删除</string>
+    <string name="al_cancel">取消</string>
+    <string name="al_delete_q">删除照片？</string>
+    <string name="al_del_sections">将删除以下分类中每个相册的每张照片：%1$s。</string>
+    <string name="al_del_album">将删除相册 %1$s 中的每张照片。</string>
+    <string name="al_del_albums">将删除以下相册中的每张照片：%1$s。</string>
+    <string name="al_del_note">照片会从本手机删除并从索引中移除。同时属于多个相册的照片会从所有相册中消失。</string>
+    <string name="al_open_section">展开此分类</string>
+    <string name="al_fold_section">折叠此分类</string>
+    <string name="al_sec_people">人物</string>
+    <string name="al_sec_tags">我的标签（相册）</string>
+    <string name="al_sec_things">物品</string>
+    <string name="al_sec_years">年份</string>
+    <string name="al_sec_places">地点</string>
+    <string name="al_sec_cameras">相机</string>
+    <string name="mp_title">地图</string>
+    <string name="mp_with_place">%1$s 张有地点</string>
+    <string name="mp_search_area">搜索此区域</string>
+    <string name="mp_reload">重新加载</string>
+    <string name="mp_failed">无法加载地图</string>
+    <string name="mp_none">你已索引的照片中还没有带 GPS 位置的。</string>
+    <string name="mp_no_match">没有带 GPS 位置的照片与此搜索匹配。</string>
+    <string name="pp_title">在哪里拍摄的？</string>
+    <string name="pp_lead">移动地图直到图钉落在该地点，或直接点按该地点。</string>
+    <string name="pp_move">移动地图以选择地点</string>
+    <string name="pp_cancel">取消</string>
+    <string name="pp_use">使用此地点</string>
+    <string name="rt_reset_confirm">重置并重新同步</string>
+    <string name="rt_later">稍后</string>
+    <string name="rt_reset_title">你的索引将被重置</string>
+    <string name="rt_reset_text">此版本的 Opensolr Photos 带来新的索引配置。你的索引现在将被重置，每张照片都会重新同步。这需要一些时间；搜索仍可使用，并会随着照片回来而找到它们；重新读取照片会计入套餐的 AI 请求。你的标签和编辑会保留。</string>
+    <string name="rt_ok">确定</string>
+    <string name="rt_busy_title">已有同步在运行</string>
+    <string name="rt_busy_text">已有同步在运行。</string>
+    <string name="rt_new_device">都不是，这是一台新设备</string>
+    <string name="rt_which_device">哪一台是你的设备？</string>
+    <string name="rt_unknown_phone">未知手机</string>
+    <string name="rt_last_synced">上次同步 %1$s</string>
+    <string name="rt_since">自 %1$s 起</string>
+    <string name="rt_device_note">这会让你的照片和 Opensolr 账户资源与这台手机绑定。</string>
+    <string name="cp_open_site">在 opensolr.com 打开</string>
+    <string name="cp_x_of_y">%1$s / %2$s</string>
+    <string name="cp_back">返回</string>
+    <plurals name="al_n_photos">
+        <item quantity="other">%1$s 张照片</item>
+    </plurals>
+    <plurals name="mp_n_here">
+        <item quantity="other">这里有 %1$s 张照片</item>
+    </plurals>
+    <plurals name="rt_n_photos">
+        <item quantity="other">%1$s 张照片</item>
+    </plurals>
+</resources>

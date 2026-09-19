@@ -1,5 +1,6 @@
 package com.opensolr.photos.ui.screens
 
+import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
@@ -63,14 +64,14 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
             .verticalScroll(rememberScrollState())
             .padding(horizontal = 20.dp)
     ) {
-        ScreenHeader("Sync", onBack = { viewModel.back() })
+        ScreenHeader(stringResource(R.string.sync_title), onBack = { viewModel.back() })
 
-        SectionLabel("Status")
+        SectionLabel(stringResource(R.string.sync_status))
         Spacer(Modifier.height(14.dp))
         val sync = state.sync
         when {
             sync.running -> {
-                Text(sync.phase.ifBlank { "Syncing" }, style = MaterialTheme.typography.titleMedium, color = p.ink)
+                Text(sync.phase.ifBlank { stringResource(R.string.sync_syncing) }, style = MaterialTheme.typography.titleMedium, color = p.ink)
                 Spacer(Modifier.height(10.dp))
                 if (sync.total > 0) {
                     LinearProgressIndicator(
@@ -79,14 +80,14 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
                         color = p.accent, trackColor = p.chip, strokeCap = StrokeCap.Butt, gapSize = 0.dp, drawStopIndicator = {},
                     )
                     Spacer(Modifier.height(8.dp))
-                    Text("${Actions.formatCount(sync.done.toLong())} of ${Actions.formatCount(sync.total.toLong())}", style = MaterialTheme.typography.bodyMedium, color = p.muted)
+                    Text(stringResource(R.string.sync_x_of_y, Actions.formatCount(sync.done.toLong()), Actions.formatCount(sync.total.toLong())), style = MaterialTheme.typography.bodyMedium, color = p.muted)
                 } else {
                     LinearProgressIndicator(Modifier.fillMaxWidth().height(6.dp), color = p.accent, trackColor = p.chip, strokeCap = StrokeCap.Butt)
                 }
             }
             // Queued means only that: waiting for its conditions. Saying which one would be a
             // guess, and it used to blame the network while the network was fine (Cip, 2026-09-16).
-            sync.queued -> Text("A sync is waiting to start. Force Re-Sync starts one now.", style = MaterialTheme.typography.titleMedium, color = p.ink)
+            sync.queued -> Text(stringResource(R.string.sync_queued), style = MaterialTheme.typography.titleMedium, color = p.ink)
             else -> Text(statusLine(state), style = MaterialTheme.typography.titleMedium, color = p.ink)
         }
         Spacer(Modifier.height(20.dp))
@@ -100,25 +101,25 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
             }
             if (showOutcome && report.status == "ok") {
                 val parts = buildList {
-                    if (report.added > 0) add("${Actions.formatCount(report.added.toLong())} synced")
-                    if (report.deleted > 0) add("${Actions.formatCount(report.deleted.toLong())} removed")
-                    if (report.failed > 0) add("${Actions.formatCount(report.failed.toLong())} skipped")
+                    if (report.added > 0) add(stringResource(R.string.sync_n_synced, Actions.formatCount(report.added.toLong())))
+                    if (report.deleted > 0) add(stringResource(R.string.sync_n_removed, Actions.formatCount(report.deleted.toLong())))
+                    if (report.failed > 0) add(stringResource(R.string.sync_n_skipped, Actions.formatCount(report.failed.toLong())))
                 }
-                Text(if (parts.isEmpty()) "Nothing to sync" else parts.joinToString(" · "), style = MaterialTheme.typography.bodyMedium, color = p.accent)
+                Text(if (parts.isEmpty()) stringResource(R.string.sync_nothing) else parts.joinToString(" · "), style = MaterialTheme.typography.bodyMedium, color = p.accent)
                 Spacer(Modifier.height(14.dp))
             }
-            SectionLabel("Last sync")
-            InfoRow("Finished", Actions.formatDate(report.finishedAt))
-            InfoRow("Result", resultLabel(report.status))
-            InfoRow("Photos in your folders", Actions.formatCount(report.localCount.toLong()))
-            InfoRow("Photos in your index", Actions.formatCount(report.indexAfter.toLong()))
+            SectionLabel(stringResource(R.string.sync_last))
+            InfoRow(stringResource(R.string.sync_finished), Actions.formatDate(report.finishedAt))
+            InfoRow(stringResource(R.string.sync_result), resultLabel(report.status))
+            InfoRow(stringResource(R.string.sync_photos_folders), Actions.formatCount(report.localCount.toLong()))
+            InfoRow(stringResource(R.string.sync_photos_index), Actions.formatCount(report.indexAfter.toLong()))
             if (report.message.isNotBlank()) {
                 Spacer(Modifier.height(14.dp))
                 Notice(report.message)
             }
             if (report.recreated) {
                 Spacer(Modifier.height(14.dp))
-                Notice("It was missing from your account; your photos went into a new one.", title = "Index recreated")
+                Notice(stringResource(R.string.sync_recreated_text), title = stringResource(R.string.sync_recreated_title))
             }
             Spacer(Modifier.height(20.dp))
         }
@@ -127,11 +128,11 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
         // way the top bar of the photos screen reads (Cip, 2026-09-16). Four stacked buttons
         // each with a line of explanation under it had taken over the screen.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            HeaderItem("Re-Sync", onClick = { viewModel.forceResync() }) {
+            HeaderItem(stringResource(R.string.sync_btn_resync), onClick = { viewModel.forceResync() }) {
                 Icon(painterResource(R.drawable.ic_sync), contentDescription = null, tint = p.accent, modifier = Modifier.size(20.dp))
             }
             // Only offered while something is actually going: nothing to stop otherwise.
-            HeaderItem("Stop", active = state.sync.busy, onClick = { viewModel.stopSync() }) {
+            HeaderItem(stringResource(R.string.sync_btn_stop), active = state.sync.busy, onClick = { viewModel.stopSync() }) {
                 Icon(
                     painterResource(R.drawable.ic_stop),
                     contentDescription = null,
@@ -139,50 +140,50 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
                     modifier = Modifier.size(20.dp),
                 )
             }
-            HeaderItem("Re-read", onClick = { confirmReread = true }) {
+            HeaderItem(stringResource(R.string.sync_btn_reread), onClick = { confirmReread = true }) {
                 Icon(painterResource(R.drawable.ic_reload), contentDescription = null, tint = p.ink, modifier = Modifier.size(20.dp))
             }
-            HeaderItem("Documents", onClick = { confirmRebuildOcr = true }) {
+            HeaderItem(stringResource(R.string.sync_btn_documents), onClick = { confirmRebuildOcr = true }) {
                 Icon(painterResource(R.drawable.ic_rebuild), contentDescription = null, tint = p.ink, modifier = Modifier.size(20.dp))
             }
-            HeaderItem("Reset", onClick = { confirmReset = true }) {
+            HeaderItem(stringResource(R.string.sync_btn_reset), onClick = { confirmReset = true }) {
                 Icon(painterResource(R.drawable.ic_reset), contentDescription = null, tint = p.ink, modifier = Modifier.size(20.dp))
             }
         }
         Spacer(Modifier.height(8.dp))
         Text(
-            "Re-Sync takes new and deleted photos only. Stop ends the run that is going; the next one starts on its own. Re-read sends every photo through Opensolr again without emptying anything, to pick up what Opensolr does better now. Documents reads the receipts, labels and screenshots again. Reset empties the index and reads every photo.",
+            stringResource(R.string.sync_buttons_text),
             style = MaterialTheme.typography.bodySmall,
             color = p.muted,
         )
         Spacer(Modifier.height(28.dp))
 
-        SectionLabel("Automatic Re-Sync")
+        SectionLabel(stringResource(R.string.sync_auto))
         Spacer(Modifier.height(4.dp))
-        ScheduleOption("Every day", state.schedule == SyncSchedule.DAILY) { viewModel.setSchedule(SyncSchedule.DAILY) }
+        ScheduleOption(stringResource(R.string.sync_daily), state.schedule == SyncSchedule.DAILY) { viewModel.setSchedule(SyncSchedule.DAILY) }
         HorizontalDivider(color = p.hairline)
-        ScheduleOption("Every week", state.schedule == SyncSchedule.WEEKLY) { viewModel.setSchedule(SyncSchedule.WEEKLY) }
+        ScheduleOption(stringResource(R.string.sync_weekly), state.schedule == SyncSchedule.WEEKLY) { viewModel.setSchedule(SyncSchedule.WEEKLY) }
         HorizontalDivider(color = p.hairline)
-        ScheduleOption("Every month", state.schedule == SyncSchedule.MONTHLY) { viewModel.setSchedule(SyncSchedule.MONTHLY) }
+        ScheduleOption(stringResource(R.string.sync_monthly), state.schedule == SyncSchedule.MONTHLY) { viewModel.setSchedule(SyncSchedule.MONTHLY) }
         HorizontalDivider(color = p.hairline)
         Spacer(Modifier.height(6.dp))
-        Text("Safety net; photo changes sync anyway.", style = MaterialTheme.typography.bodySmall, color = p.muted)
+        Text(stringResource(R.string.sync_safety), style = MaterialTheme.typography.bodySmall, color = p.muted)
         Spacer(Modifier.height(28.dp))
 
-        SectionLabel("Folders being indexed")
+        SectionLabel(stringResource(R.string.sync_folders))
         state.selectedFolders.sorted().forEach { InfoRow(it.trimEnd('/').ifBlank { "/" }, "") }
         Spacer(Modifier.height(14.dp))
-        GhostButton("Change folders", onClick = { viewModel.openFolders(Screen.Sync) }, modifier = Modifier.fillMaxWidth())
+        GhostButton(stringResource(R.string.sync_change_folders), onClick = { viewModel.openFolders(Screen.Sync) }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(40.dp))
     }
 
     if (confirmRebuildOcr) {
         AlertDialog(
             onDismissRequest = { confirmRebuildOcr = false },
-            title = { Text("Read your documents again?") },
-            text = { Text("Photos that carry printed text go out of the index and the next sync puts them back, with the reading cleaned up. It costs nothing on your plan: a photo read once is never read again. Your tags are kept. Your photos are not touched.") },
-            confirmButton = { TextButton(onClick = { confirmRebuildOcr = false; viewModel.rebuildOcr() }) { Text("Rebuild", color = p.accent) } },
-            dismissButton = { TextButton(onClick = { confirmRebuildOcr = false }) { Text("Cancel", color = p.ink) } },
+            title = { Text(stringResource(R.string.sync_ocr_q)) },
+            text = { Text(stringResource(R.string.sync_ocr_text)) },
+            confirmButton = { TextButton(onClick = { confirmRebuildOcr = false; viewModel.rebuildOcr() }) { Text(stringResource(R.string.sync_rebuild), color = p.accent) } },
+            dismissButton = { TextButton(onClick = { confirmRebuildOcr = false }) { Text(stringResource(R.string.sync_cancel), color = p.ink) } },
             containerColor = p.paper,
             titleContentColor = p.ink,
             textContentColor = p.muted,
@@ -192,18 +193,14 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
     if (confirmReread) {
         AlertDialog(
             onDismissRequest = { confirmReread = false },
-            title = { Text("Re-read all photos?") },
+            title = { Text(stringResource(R.string.sync_reread_q)) },
             text = {
                 Text(
-                    "Every photo goes through Opensolr again, as when it was first indexed, so it gets what Opensolr does now: " +
-                        "the words it is read into, the place, the people and its search vector. " +
-                        "Nothing is emptied: search keeps working the whole time, and each photo is simply written again. " +
-                        "Your tags, the people you named and your own wording are kept. Your photos are not touched. " +
-                        "If it stops, the next sync carries on where it was."
+                    stringResource(R.string.sync_reread_text)
                 )
             },
-            confirmButton = { TextButton(onClick = { confirmReread = false; viewModel.rereadAll() }) { Text("Re-read", color = p.accent) } },
-            dismissButton = { TextButton(onClick = { confirmReread = false }) { Text("Cancel", color = p.ink) } },
+            confirmButton = { TextButton(onClick = { confirmReread = false; viewModel.rereadAll() }) { Text(stringResource(R.string.sync_btn_reread), color = p.accent) } },
+            dismissButton = { TextButton(onClick = { confirmReread = false }) { Text(stringResource(R.string.sync_cancel), color = p.ink) } },
             containerColor = p.paper,
             titleContentColor = p.ink,
             textContentColor = p.muted,
@@ -213,10 +210,10 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
     if (confirmReset) {
         AlertDialog(
             onDismissRequest = { confirmReset = false },
-            title = { Text("Reset your index?") },
-            text = { Text("Every photo is emptied out of it and read again, which counts as new AI requests. Your tags are kept. Your photos are not touched.") },
-            confirmButton = { TextButton(onClick = { confirmReset = false; viewModel.resetIndex() }) { Text("Reset", color = p.accent) } },
-            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text("Cancel", color = p.ink) } },
+            title = { Text(stringResource(R.string.sync_reset_q)) },
+            text = { Text(stringResource(R.string.sync_reset_text)) },
+            confirmButton = { TextButton(onClick = { confirmReset = false; viewModel.resetIndex() }) { Text(stringResource(R.string.sync_btn_reset), color = p.accent) } },
+            dismissButton = { TextButton(onClick = { confirmReset = false }) { Text(stringResource(R.string.sync_cancel), color = p.ink) } },
             containerColor = p.paper,
             titleContentColor = p.ink,
             textContentColor = p.muted,
@@ -245,38 +242,40 @@ private fun ScheduleOption(label: String, selected: Boolean, onSelect: () -> Uni
 /** How long the outcome of a finished run stays on screen. */
 private const val OUTCOME_VISIBLE_MS = 8000L
 
+@Composable
 private fun statusLine(state: UiState): String {
-    val report = state.lastReport ?: return "No sync has run yet."
+    val report = state.lastReport ?: return stringResource(R.string.st_none)
     return when (report.status) {
         "ok" -> when {
-            report.localCount == 0 -> "No photos were found in the folders you chose."
-            report.added + report.deleted == 0 && report.failed > 0 -> "No photo could be read. Nothing was indexed."
-            else -> "Your index is in step with your photos."
+            report.localCount == 0 -> stringResource(R.string.st_no_photos)
+            report.added + report.deleted == 0 && report.failed > 0 -> stringResource(R.string.st_none_read)
+            else -> stringResource(R.string.st_in_step)
         }
-        "stopped_quota" -> "Paused: the monthly AI requests of your plan are used up."
-        "stopped_plan_limit" -> "Paused: the index reached its disk space or bandwidth."
-        "sign_in_required" -> "Paused: sign in to Opensolr again."
-        "rebuild_required" -> "Waiting: your index must be reset and fully re-synced for the new version. Open the app's photos screen to start it."
-        "update_app" -> "Paused: update Opensolr Photos to keep syncing."
-        "device_choice" -> "Waiting: open the app and say which one of your devices this phone is."
-        "waiting_charger" -> "Waiting for the charger: " + report.message
-        "retry_later" -> "Paused for a moment: Opensolr asked the app to slow down. It continues on its own."
-        else -> "The last sync did not finish. It is tried again at the next Re-Sync."
+        "stopped_quota" -> stringResource(R.string.st_quota)
+        "stopped_plan_limit" -> stringResource(R.string.st_plan)
+        "sign_in_required" -> stringResource(R.string.st_sign_in)
+        "rebuild_required" -> stringResource(R.string.st_rebuild)
+        "update_app" -> stringResource(R.string.st_update)
+        "device_choice" -> stringResource(R.string.st_device)
+        "waiting_charger" -> stringResource(R.string.st_charger, report.message)
+        "retry_later" -> stringResource(R.string.st_retry)
+        else -> stringResource(R.string.st_failed)
     }
 }
 
 /**
  * Human wording of a report status.
  */
+@Composable
 private fun resultLabel(status: String): String = when (status) {
-    "ok" -> "Completed"
-    "stopped_quota" -> "Paused, AI requests used up"
-    "stopped_plan_limit" -> "Paused, plan limit reached"
-    "sign_in_required" -> "Sign-in needed"
-    "rebuild_required" -> "Reset and full re-sync needed"
-    "update_app" -> "App update needed"
-    "device_choice" -> "Device not chosen yet"
-    "waiting_charger" -> "Waiting for the charger"
-    "retry_later" -> "Continues shortly"
-    else -> "Did not finish"
+    "ok" -> stringResource(R.string.rs_ok)
+    "stopped_quota" -> stringResource(R.string.rs_quota)
+    "stopped_plan_limit" -> stringResource(R.string.rs_plan)
+    "sign_in_required" -> stringResource(R.string.rs_sign_in)
+    "rebuild_required" -> stringResource(R.string.rs_rebuild)
+    "update_app" -> stringResource(R.string.rs_update)
+    "device_choice" -> stringResource(R.string.rs_device)
+    "waiting_charger" -> stringResource(R.string.rs_charger)
+    "retry_later" -> stringResource(R.string.rs_retry)
+    else -> stringResource(R.string.rs_failed)
 }

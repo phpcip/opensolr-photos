@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tg_lead">只会添加到你勾选的照片上，不会影响索引中的其他照片。保存后立即写入本手机；索引会在接下来的同步中更新。</string>
+    <string name="tg_people">人物</string>
+    <string name="tg_people_replace">替换：这些名字将成为每张勾选照片上的唯一名字。现有名字会从索引和文件中移除。</string>
+    <string name="tg_people_add">添加：这些名字会加到每张照片已有的名字上。</string>
+    <string name="tg_add_name">添加名字</string>
+    <string name="tg_add">添加</string>
+    <string name="tg_people_in_photos">照片中的人物</string>
+    <string name="tg_my_tags">我的标签（相册）</string>
+    <string name="tg_tags_replace">替换：这些标签将成为每张勾选照片上的唯一标签。现有标签会从索引和文件中移除。</string>
+    <string name="tg_tags_add">添加：这些标签会加到每张照片已有的标签上。</string>
+    <string name="tg_add_tag">添加标签，例如 Maria、2021 假期</string>
+    <string name="tg_your_tags">你的标签</string>
+    <string name="tg_from_photos">来自你的照片</string>
+    <string name="tg_place">地点</string>
+    <string name="tg_place_all_text">每张勾选的照片都会获得你选择的地点，写入索引和文件。</string>
+    <string name="tg_place_all">所有勾选的照片</string>
+    <string name="tg_place_missing">仅限没有地点的照片（%1$s）</string>
+    <string name="tg_choose_map">在地图上选择地点</string>
+    <string name="tg_not_saved">未保存</string>
+    <string name="tg_writing">正在将文字写入 %2$s 张中的 %1$s 张照片…</string>
+    <string name="tg_cancel">取消</string>
+    <string name="tg_save">保存</string>
+    <string name="tg_saving">正在保存…</string>
+    <string name="tg_already">这些照片已有的</string>
+    <string name="tg_reading">正在读取索引…</string>
+    <string name="tg_none_yet">暂无名字和标签。</string>
+    <string name="tg_people_caps">人物</string>
+    <string name="tg_tags_caps">标签</string>
+    <string name="tg_replace">替换</string>
+    <string name="tg_mode_add">添加</string>
+    <string name="tg_remove">移除</string>
+    <string name="tg_n_more">还有 %1$s 个</string>
+    <string name="tg_edit">编辑 %1$s</string>
+    <string name="tg_saved_in_file">保存在照片本身中，其他应用也能看到这些名字。</string>
+    <string name="tg_tags_hint">任何你会搜索的内容。每个标签都会成为一个相册。</string>
+    <string name="tg_shows">照片内容</string>
+    <string name="tg_words_hint">用逗号分隔词语。即使重新读取照片，你的描述也会保留。</string>
+    <string name="tg_reset">重置</string>
+    <plurals name="tg_title">
+        <item quantity="other">为 %1$s 张照片添加标签</item>
+    </plurals>
+    <plurals name="tg_place_missing_text">
+        <item quantity="other">只有 %1$s 张没有地点的勾选照片会获得所选地点，其他照片保持不变。</item>
+    </plurals>
+</resources>

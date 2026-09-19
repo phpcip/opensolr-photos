@@ -1,5 +1,9 @@
 package com.opensolr.photos.ui.screens
 
+import com.opensolr.photos.R
+import androidx.compose.ui.res.pluralStringResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import com.opensolr.photos.data.distinctWords
 
 import android.app.Activity
@@ -196,7 +200,15 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
         newTag = ""
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = p.paper, shape = Corner) {
+    // The whole screen, and no drag closes it: pulling down to see the top of the form closed it
+    // by accident (Cip, 2026-09-19). Back, Cancel and Save are the ways out.
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = p.paper,
+        shape = Corner,
+        dragHandle = null,
+    ) {
         // Full height from the start (Cip, 2026-09-15): the sheet never grows or shrinks with
         // the length of the tag suggestions.
         Column(
@@ -229,15 +241,17 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                         }
                     }
                 }
+                .nestedScroll(rememberNoSheetDrag())
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
                 .imePadding()
                 .navigationBarsPadding()
         ) {
-            Text("Edit ${hit.fileName}", style = MaterialTheme.typography.headlineSmall, color = p.ink)
+            Spacer(Modifier.height(20.dp))
+            Text(stringResource(R.string.tg_edit, hit.fileName), style = MaterialTheme.typography.headlineSmall, color = p.ink)
             Spacer(Modifier.height(16.dp))
 
-            SectionLabel("People")
+            SectionLabel(stringResource(R.string.tg_people))
             Spacer(Modifier.height(10.dp))
             if (persons.isNotEmpty()) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -253,7 +267,7 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                         ) {
                             Text(person, style = MaterialTheme.typography.labelSmall, color = p.accent)
                             Spacer(Modifier.size(4.dp))
-                            Icon(Icons.Filled.Close, contentDescription = "Remove", tint = p.accent, modifier = Modifier.size(14.dp))
+                            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.tg_remove), tint = p.accent, modifier = Modifier.size(14.dp))
                         }
                     }
                 }
@@ -265,14 +279,14 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                     value = newPerson,
                     onValueChange = { newPerson = it; peopleDismissed = false },
                     modifier = Modifier.weight(1f).onFocusChanged { personFieldFocused = it.isFocused },
-                    placeholder = { Text("Add a name", color = p.muted) },
+                    placeholder = { Text(stringResource(R.string.tg_add_name), color = p.muted) },
                     singleLine = true,
                     shape = Corner,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { addPerson() }),
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = p.accent, unfocusedBorderColor = p.hairline, cursorColor = p.accent, focusedTextColor = p.ink, unfocusedTextColor = p.ink),
                 )
-                TextButton(onClick = { addPerson() }, enabled = newPerson.isNotBlank()) { Text("Add", color = p.accent) }
+                TextButton(onClick = { addPerson() }, enabled = newPerson.isNotBlank()) { Text(stringResource(R.string.tg_add), color = p.accent) }
             }
             if (personFieldFocused && !peopleDismissed && personSuggestions.isNotEmpty()) {
                 Spacer(Modifier.height(6.dp))
@@ -282,7 +296,7 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                         .background(p.paper, Corner)
                         .border(1.dp, p.hairline, Corner)
                 ) {
-                    SuggestionHeading("People in your photos")
+                    SuggestionHeading(stringResource(R.string.tg_people_in_photos))
                     personSuggestions.forEach { name ->
                         SuggestionRow(name, onPick = {
                             persons = (persons + name).distinctWords()
@@ -292,10 +306,10 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                 }
             }
             }
-            Text("Saved into the photo itself, so other apps see the names too.", style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.padding(top = 6.dp))
+            Text(stringResource(R.string.tg_saved_in_file), style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.padding(top = 6.dp))
             Spacer(Modifier.height(20.dp))
 
-            SectionLabel("My tags (Albums)")
+            SectionLabel(stringResource(R.string.tg_my_tags))
             Spacer(Modifier.height(10.dp))
             if (tags.isNotEmpty()) {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -311,7 +325,7 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                         ) {
                             Text(tag, style = MaterialTheme.typography.labelSmall, color = p.accent)
                             Spacer(Modifier.size(4.dp))
-                            Icon(Icons.Filled.Close, contentDescription = "Remove", tint = p.accent, modifier = Modifier.size(14.dp))
+                            Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.tg_remove), tint = p.accent, modifier = Modifier.size(14.dp))
                         }
                     }
                 }
@@ -329,14 +343,14 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                         tagFieldFocused = it.isFocused
                         if (it.isFocused) suggestionsDismissed = false
                     },
-                    placeholder = { Text("Add a tag, e.g. Maria, holiday 2021", color = p.muted) },
+                    placeholder = { Text(stringResource(R.string.tg_add_tag), color = p.muted) },
                     singleLine = true,
                     shape = Corner,
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { addTag() }),
                     colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = p.accent, unfocusedBorderColor = p.hairline, cursorColor = p.accent, focusedTextColor = p.ink, unfocusedTextColor = p.ink),
                 )
-                TextButton(onClick = { addTag() }, enabled = newTag.isNotBlank()) { Text("Add", color = p.accent) }
+                TextButton(onClick = { addTag() }, enabled = newTag.isNotBlank()) { Text(stringResource(R.string.tg_add), color = p.accent) }
             }
             // Discreet loading: a 2dp accent line under the field while suggestions are asked for;
             // the same height is kept when idle, so nothing below moves.
@@ -356,22 +370,22 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                         .border(1.dp, p.hairline, Corner)
                 ) {
                     if (suggestions.mine.isNotEmpty()) {
-                        SuggestionHeading("Your tags")
+                        SuggestionHeading(stringResource(R.string.tg_your_tags))
                         suggestions.mine.forEach { SuggestionRow(it, onPick = { pick(it) }) }
                     }
                     if (suggestions.mine.isNotEmpty() && suggestions.fromMeanings.isNotEmpty()) {
                         HorizontalDivider(color = p.hairline)
                     }
                     if (suggestions.fromMeanings.isNotEmpty()) {
-                        SuggestionHeading("From your photos")
+                        SuggestionHeading(stringResource(R.string.tg_from_photos))
                         suggestions.fromMeanings.forEach { SuggestionRow(it, onPick = { pick(it) }) }
                     }
                 }
             }
-            Text("Anything you would search for. Each tag becomes an album of its own.", style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.padding(top = 6.dp))
+            Text(stringResource(R.string.tg_tags_hint), style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.padding(top = 6.dp))
             Spacer(Modifier.height(20.dp))
 
-            SectionLabel("What the photo shows")
+            SectionLabel(stringResource(R.string.tg_shows))
             Spacer(Modifier.height(10.dp))
             OutlinedTextField(
                 value = meaning,
@@ -382,18 +396,18 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                 colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = p.accent, unfocusedBorderColor = p.hairline, cursorColor = p.accent, focusedTextColor = p.ink, unfocusedTextColor = p.ink),
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Words separated by commas. Your wording is kept even when the photo is read again.", style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.weight(1f).padding(top = 6.dp, end = 8.dp))
-                TextButton(onClick = { meaning = clipWords }, enabled = clipWords.isNotBlank() && meaning != clipWords) { Text("Reset", color = p.accent) }
+                Text(stringResource(R.string.tg_words_hint), style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.weight(1f).padding(top = 6.dp, end = 8.dp))
+                TextButton(onClick = { meaning = clipWords }, enabled = clipWords.isNotBlank() && meaning != clipWords) { Text(stringResource(R.string.tg_reset), color = p.accent) }
             }
             state.editError?.let {
                 Spacer(Modifier.height(12.dp))
-                Notice(it, title = "Not saved")
+                Notice(it, title = stringResource(R.string.tg_not_saved))
             }
             Spacer(Modifier.height(20.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                GhostButton("Cancel", onClick = onDismiss, modifier = Modifier.weight(1f), enabled = !state.editSaving)
+                GhostButton(stringResource(R.string.tg_cancel), onClick = onDismiss, modifier = Modifier.weight(1f), enabled = !state.editSaving)
                 AccentButton(
-                    if (state.editSaving) "Saving…" else "Save",
+                    if (state.editSaving) stringResource(R.string.tg_saving) else stringResource(R.string.tg_save),
                     onClick = {
                         addTag()
                         addPerson()

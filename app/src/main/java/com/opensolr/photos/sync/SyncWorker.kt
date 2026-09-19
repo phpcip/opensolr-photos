@@ -1,5 +1,7 @@
 package com.opensolr.photos.sync
 
+import com.opensolr.photos.R
+import com.opensolr.photos.AppText
 import android.content.Context
 import android.content.pm.ServiceInfo
 import android.os.Build
@@ -81,7 +83,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
      * Shows or updates the foreground progress notification.
      */
     private suspend fun promote(text: String, done: Int, total: Int) {
-        val notification = Notifier.progress(applicationContext, "Syncing your photos", text, done, total)
+        val notification = Notifier.progress(applicationContext, AppText.s(R.string.sy_syncing_photos), text, done, total)
         val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ForegroundInfo(Notifier.PROGRESS_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {

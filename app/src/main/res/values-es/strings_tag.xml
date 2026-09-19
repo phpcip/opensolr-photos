@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tg_lead">Se ponen en las fotos marcadas, y en nada más de tu índice. Al guardar se escriben en este teléfono al momento; tu índice se actualiza en la siguiente sincronización.</string>
+    <string name="tg_people">Personas</string>
+    <string name="tg_people_replace">Reemplazar: estos nombres pasan a ser los únicos de cada foto marcada. Los actuales se quitan, en tu índice y en los archivos.</string>
+    <string name="tg_people_add">Añadir: estos nombres se suman a los que ya tiene cada foto.</string>
+    <string name="tg_add_name">Añadir un nombre</string>
+    <string name="tg_add">Añadir</string>
+    <string name="tg_people_in_photos">Personas en tus fotos</string>
+    <string name="tg_my_tags">Mis etiquetas (Álbumes)</string>
+    <string name="tg_tags_replace">Reemplazar: estas etiquetas pasan a ser las únicas de cada foto marcada. Las actuales se quitan, en tu índice y en los archivos.</string>
+    <string name="tg_tags_add">Añadir: estas etiquetas se suman a las que ya tiene cada foto.</string>
+    <string name="tg_add_tag">Añade una etiqueta, p. ej. Maria, vacaciones 2021</string>
+    <string name="tg_your_tags">Tus etiquetas</string>
+    <string name="tg_from_photos">De tus fotos</string>
+    <string name="tg_place">Lugar</string>
+    <string name="tg_place_all_text">Cada foto marcada recibe el lugar que elijas, en tu índice y en los archivos.</string>
+    <string name="tg_place_all">Todas las fotos marcadas</string>
+    <string name="tg_place_missing">Solo las que no tienen lugar (%1$s)</string>
+    <string name="tg_choose_map">Elegir el lugar en el mapa</string>
+    <string name="tg_not_saved">No guardado</string>
+    <string name="tg_writing">Escribiendo tus palabras en %1$s de %2$s fotos…</string>
+    <string name="tg_cancel">Cancelar</string>
+    <string name="tg_save">Guardar</string>
+    <string name="tg_saving">Guardando…</string>
+    <string name="tg_already">Ya en estas fotos</string>
+    <string name="tg_reading">Leyendo tu índice…</string>
+    <string name="tg_none_yet">Aún sin nombres ni etiquetas.</string>
+    <string name="tg_people_caps">PERSONAS</string>
+    <string name="tg_tags_caps">ETIQUETAS</string>
+    <string name="tg_replace">Reemplazar</string>
+    <string name="tg_mode_add">Añadir</string>
+    <string name="tg_remove">Quitar</string>
+    <string name="tg_n_more">+%1$s más</string>
+    <string name="tg_edit">Editar %1$s</string>
+    <string name="tg_saved_in_file">Se guarda en la propia foto, para que otras apps también vean los nombres.</string>
+    <string name="tg_tags_hint">Cualquier cosa que buscarías. Cada etiqueta se convierte en un álbum.</string>
+    <string name="tg_shows">Lo que muestra la foto</string>
+    <string name="tg_words_hint">Palabras separadas por comas. Tu redacción se conserva aunque la foto se vuelva a leer.</string>
+    <string name="tg_reset">Restablecer</string>
+    <plurals name="tg_title">
+        <item quantity="one">Etiquetar %1$s foto</item>
+        <item quantity="many">Etiquetar %1$s fotos</item>
+        <item quantity="other">Etiquetar %1$s fotos</item>
+    </plurals>
+    <plurals name="tg_place_missing_text">
+        <item quantity="one">Solo la %1$s foto marcada sin lugar recibe el elegido; las demás conservan el suyo.</item>
+        <item quantity="many">Solo las %1$s fotos marcadas sin lugar reciben el elegido; las demás conservan el suyo.</item>
+        <item quantity="other">Solo las %1$s fotos marcadas sin lugar reciben el elegido; las demás conservan el suyo.</item>
+    </plurals>
+</resources>

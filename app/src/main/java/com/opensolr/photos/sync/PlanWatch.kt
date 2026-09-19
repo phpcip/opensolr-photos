@@ -1,5 +1,7 @@
 package com.opensolr.photos.sync
 
+import com.opensolr.photos.R
+import com.opensolr.photos.AppText
 import android.content.Context
 import com.opensolr.photos.data.AccountLimits
 import com.opensolr.photos.data.AppPrefs
@@ -41,8 +43,8 @@ object PlanWatch {
         if (!limits.vectorAllowed) {
             out += Warning(
                 "no_recognition",
-                "Photos are not recognised on your plan",
-                "Opensolr does not look at what is in your photos on this plan. They are indexed by date, camera, place, file name and your tags, and that is all a search can match. Pick a plan with AI at opensolr.com/pricing to have every photo read and found by what is in it.",
+                AppText.s(R.string.pw_no_rec_title),
+                AppText.s(R.string.pw_no_rec_text),
                 urgent = false,
             )
         }
@@ -52,15 +54,15 @@ object PlanWatch {
             if (share >= 1.0) {
                 out += Warning(
                     "ai_full_$month",
-                    "Monthly AI requests used up",
-                    "New photos are indexed by date, camera, place, file name and your tags only, without being read into words, and search matches words only. They are read at the first sync after the allowance resets, or now after an upgrade.",
+                    AppText.s(R.string.pw_ai_full_title),
+                    AppText.s(R.string.pw_ai_full_text),
                     urgent = true,
                 )
             } else if (share >= WARN_AT) {
                 out += Warning(
                     "ai_90_$month",
-                    "AI requests almost used up",
-                    "${limits.aiRequestsUsed} of ${limits.maxAiRequests} monthly AI requests are used. When they run out, new photos are indexed without being read into words until the allowance resets.",
+                    AppText.s(R.string.pw_ai_90_title),
+                    AppText.s(R.string.pw_ai_90_text, com.opensolr.photos.ui.Actions.formatCount(limits.aiRequestsUsed.toLong()), com.opensolr.photos.ui.Actions.formatCount(limits.maxAiRequests.toLong())),
                     urgent = false,
                 )
             }
@@ -69,18 +71,18 @@ object PlanWatch {
         if (limits.diskLimitMb > 0) {
             val share = limits.diskUsedMb / limits.diskLimitMb
             if (share >= 1.0) {
-                out += Warning("disk_full", "Your photo index is out of disk space", "Opensolr closed the index: syncing and searching stop until you free space or upgrade your plan.", urgent = true)
+                out += Warning("disk_full", AppText.s(R.string.pw_disk_full_title), AppText.s(R.string.pw_disk_full_text), urgent = true)
             } else if (share >= WARN_AT) {
-                out += Warning("disk_90", "Disk space almost used up", "The index uses ${percent(share)} of its disk space. When it is full, syncing and searching stop until you upgrade.", urgent = false)
+                out += Warning("disk_90", AppText.s(R.string.pw_disk_90_title), AppText.s(R.string.pw_disk_90_text, percent(share)), urgent = false)
             }
         }
 
         if (limits.bandwidthLimitMb > 0) {
             val share = limits.bandwidthUsedMb / limits.bandwidthLimitMb
             if (share >= 1.0) {
-                out += Warning("bw_full_$month", "Your photo index is out of search bandwidth", "Opensolr closed the index for the rest of the month: syncing and searching stop until the month resets or you upgrade.", urgent = true)
+                out += Warning("bw_full_$month", AppText.s(R.string.pw_bw_full_title), AppText.s(R.string.pw_bw_full_text), urgent = true)
             } else if (share >= WARN_AT) {
-                out += Warning("bw_90_$month", "Search bandwidth almost used up", "The index used ${percent(share)} of this month's search bandwidth. When it runs out, syncing and searching stop until the month resets.", urgent = false)
+                out += Warning("bw_90_$month", AppText.s(R.string.pw_bw_90_title), AppText.s(R.string.pw_bw_90_text, percent(share)), urgent = false)
             }
         }
         return out

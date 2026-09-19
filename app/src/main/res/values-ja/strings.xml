@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="channel_sync_name">同期の進行状況</string>
+    <string name="channel_sync_description">写真のインデックス中に進行状況を表示します。</string>
+    <string name="channel_alerts_name">アカウントの通知</string>
+    <string name="channel_alerts_description">プランの上限、ログインが必要、インデックスの再作成。</string>
+</resources>

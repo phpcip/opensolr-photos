@@ -1,5 +1,7 @@
 package com.opensolr.photos.ui
 
+import com.opensolr.photos.R
+import com.opensolr.photos.AppText
 import com.opensolr.photos.data.distinctWords
 
 import android.app.Application
@@ -133,8 +135,18 @@ data class UiState(
     val skippedMode: Boolean = false,
     /** How many photos the phone could not read; the button over the grid shows only above 0. */
     val skippedCount: Int = 0,
-    /** The duplicates slider, 0..10 over SearchRepository.DUPLICATE_FIELDS; 4 = first five words. */
-    val duplicateLevel: Int = 4,
+    /** New photos given the phone's position whose files do not carry it yet. */
+    val placesToWrite: Int = 0,
+    /** True once Android's question about writing those positions was answered no, this session. */
+    val placesDeclined: Boolean = false,
+    /** Whether new photos that come without a position get the phone's own. */
+    val autoPlace: Boolean = false,
+    /** Whether the owner let the app know the phone's position at all. */
+    val autoPlaceLocation: Boolean = false,
+    /** Whether the owner let the app know the phone's position while it is in the background. */
+    val autoPlaceBackground: Boolean = false,
+    /** The duplicates slider, a stop of SearchRepository.DUPLICATE_FIELDS; 3 = all five words the same. */
+    val duplicateLevel: Int = com.opensolr.photos.search.SearchRepository.DEFAULT_DUPLICATE_LEVEL,
     /** With "Show similar photos", the id of the photo the slider is anchored to; null for plain duplicates. */
     val similarToId: String? = null,
     /**
@@ -161,6 +173,12 @@ data class UiState(
      * come from the results.
      */
     val skeleton: List<com.opensolr.photos.ui.DateGroup> = emptyList(),
+    /** The zones of Me that are open; all start folded and stay as left while the app runs. */
+    val meZonesOpen: Set<String> = emptySet(),
+    /** How a search's results are laid out, as the owner last chose (Cip, 2026-09-19). */
+    val groupBy: GroupBy = GroupBy.RELEVANCE,
+    /** A search laid out by [groupBy]: every group with all its photos' ids; empty otherwise. */
+    val resultGroups: List<ResultGroup> = emptyList(),
     /** True while the photos of a group the owner has just opened are being fetched. */
     val loadingGroup: Boolean = false,
     /** Which groups of the filter sheet are open; all of them start folded (Cip, 2026-09-18). */
@@ -304,6 +322,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         checkForUpdate()
         refreshSkippedCount()
+        refreshPlacesToWrite()
         ensureClone()
         context.contentResolver.registerContentObserver(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true, mediaObserver)
     }
@@ -380,6 +399,93 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * Reads how many photos the phone could not read, for the button over the grid. Leaves the
      * skipped view when there are none left.
      */
+    /** Counts the positions still to be written into their files, and what the owner allowed. */
+    fun refreshPlacesToWrite() {
+        viewModelScope.launch {
+            val count = withContext(Dispatchers.IO) { photoCache.unwrittenPlaces().size }
+            _state.update {
+                it.copy(
+                    placesToWrite = count,
+                    autoPlace = prefs.autoPlaceSince > 0,
+                    autoPlaceLocation = com.opensolr.photos.media.DevicePlace.permitted(context),
+                    autoPlaceBackground = com.opensolr.photos.media.DevicePlace.permittedInBackground(context),
+                )
+            }
+        }
+    }
+
+    /**
+     * New photos that come without a position get one from now on, or no longer (Cip, 2026-09-19).
+     * Only files that appear from this moment on are ever given one. Taking it from the phone's own
+     * photos needs no permission; the phone's position at the moment of import needs location
+     * access, which the screen asks for alongside.
+     */
+    fun setAutoPlace(on: Boolean) {
+        if (on != (prefs.autoPlaceSince > 0)) prefs.autoPlaceSince = if (on) System.currentTimeMillis() else 0L
+        refreshPlacesToWrite()
+    }
+
+    /** The photos and files of [pendingPlaceWrite], held while Android asks the owner. */
+    private var pendingPlaceWrite: List<Triple<String, android.net.Uri, PhotoCache.SetPlace>> = emptyList()
+
+    /**
+     * Gets the positions given to new photos ready to go into their files: the files are found,
+     * and Android's question for all of them at once is returned, for the screen to ask. Null when
+     * there is nothing to write, or when this Android lets the app write without asking (it then
+     * already has).
+     */
+    suspend fun preparePlaceWrite(): android.content.IntentSender? = withContext(Dispatchers.IO) {
+        val places = photoCache.unwrittenPlaces()
+        if (places.isEmpty()) return@withContext null
+        val hits = photoCache.docsByIds(places.map { it.id }).map { searches.hitOf(org.json.JSONObject(it)) }
+        val uris = Actions.contentUrisByPhoto(context, hits)
+        val byId = places.associateBy { it.id }
+        pendingPlaceWrite = hits.mapNotNull { hit ->
+            val uri = uris[hit.id] ?: return@mapNotNull null
+            byId[hit.id]?.let { Triple(hit.mime, uri, it) }
+        }
+        if (pendingPlaceWrite.isEmpty()) return@withContext null
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
+            writePendingPlaces()
+            return@withContext null
+        }
+        android.provider.MediaStore.createWriteRequest(context.contentResolver, pendingPlaceWrite.map { it.second }).intentSender
+    }
+
+    /** Android's answer to [preparePlaceWrite]: yes writes the positions, no is not asked again this session. */
+    fun finishPlaceWrite(allowed: Boolean) {
+        if (!allowed) {
+            pendingPlaceWrite = emptyList()
+            _state.update { it.copy(placesDeclined = true) }
+            return
+        }
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { writePendingPlaces() }
+            refreshPlacesToWrite()
+        }
+    }
+
+    /**
+     * Writes each held position into its file. The file is then a different file, so the phone's
+     * copy takes its new size, time and md5: the index already has the position, and the sync must
+     * not read the picture again over it.
+     */
+    private fun writePendingPlaces() {
+        val done = ArrayList<String>(pendingPlaceWrite.size)
+        pendingPlaceWrite.forEach { (mime, uri, place) ->
+            val writable = PhotoReader.canWriteExif(mime)
+            if (writable && PhotoReader.writeGps(context, uri, mime, place.lat, place.lon)) {
+                val (size, modified) = fileStampOf(uri)
+                photoCache.updateDocSize(place.id, size, modified, fileHashOf(uri))
+                done += place.id
+            } else if (!writable) {
+                done += place.id
+            }
+        }
+        photoCache.markPlacesWritten(done)
+        pendingPlaceWrite = emptyList()
+    }
+
     private fun refreshSkippedCount() {
         viewModelScope.launch {
             val count = withContext(Dispatchers.IO) { photoCache.skippedCount() }
@@ -457,9 +563,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             _state.update {
                 when {
                     // The check itself failed: say so, never claim the app is up to date.
-                    outcome.isFailure -> it.copy(updateChecking = false, updateResult = "The check could not reach GitHub. Try again in a moment.")
-                    update == null -> it.copy(updateChecking = false, updateResult = "You are on the latest version.")
-                    else -> it.copy(updateChecking = false, update = update, updateResult = "Version ${update.version} is available.")
+                    outcome.isFailure -> it.copy(updateChecking = false, updateResult = AppText.s(R.string.vm_update_failed))
+                    update == null -> it.copy(updateChecking = false, updateResult = AppText.s(R.string.vm_update_latest))
+                    else -> it.copy(updateChecking = false, update = update, updateResult = AppText.s(R.string.vm_update_found, update.version))
                 }
             }
             // Asked for on purpose, so a version hidden with "Not now" is offered again.
@@ -547,13 +653,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // frame of a scroll, and the filters print themselves into the key (Cip, 2026-09-18).
         val cached = contextKeyCache
         if (cached != null && cached.first === s.filters && cached.second == s.duplicatesMode &&
-            cached.third == "${s.similarToId}|${s.duplicateLevel}|${s.searchedQuery}|${s.freshBias}|${s.wordsOnly}"
+            cached.third == "${s.similarToId}|${s.duplicateLevel}|${s.searchedQuery}|${s.freshBias}|${s.wordsOnly}|${s.groupBy}"
         ) {
             return contextKeyValue!!
         }
-        val key = if (s.duplicatesMode) "duplicates|${s.similarToId}|${s.duplicateLevel}"
-        else "search|${s.searchedQuery}|${s.filters}|${s.freshBias}|${s.wordsOnly}"
-        contextKeyCache = Triple(s.filters, s.duplicatesMode, "${s.similarToId}|${s.duplicateLevel}|${s.searchedQuery}|${s.freshBias}|${s.wordsOnly}")
+        val key = if (s.duplicatesMode) "duplicates|${s.similarToId}|${s.duplicateLevel}|${if (s.similarToId != null) s.groupBy else ""}"
+        else "search|${s.searchedQuery}|${s.filters}|${s.freshBias}|${s.wordsOnly}|${s.groupBy}"
+        contextKeyCache = Triple(s.filters, s.duplicatesMode, "${s.similarToId}|${s.duplicateLevel}|${s.searchedQuery}|${s.freshBias}|${s.wordsOnly}|${s.groupBy}")
         contextKeyValue = key
         return key
     }
@@ -677,7 +783,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val version = indexes.configVersionOf(connection)
                 when {
                     version < IndexManager.CONFIG_VERSION -> _state.update { it.copy(rebuildRequired = !prefs.rebuildApproved) }
-                    version > IndexManager.CONFIG_VERSION -> _state.update { it.copy(notice = "Your index was set up by a newer version of Opensolr Photos. Update the app to keep syncing.") }
+                    version > IndexManager.CONFIG_VERSION -> _state.update { it.copy(notice = AppText.s(R.string.vm_newer_index)) }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -735,14 +841,79 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         hits = s.hits.map { if (it.id == hit.id) updated else it },
                     )
                 }
-                flash("Saved. Your index is being updated in the background.")
+                flash(AppText.s(R.string.vm_saved))
                 SyncScheduler.runNow(context)
                 onDone()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(editSaving = false, editError = friendlyMessage(e, "The edit could not be saved.")) }
+                _state.update { it.copy(editSaving = false, editError = friendlyMessage(e, AppText.s(R.string.vm_edit_failed))) }
             }
+        }
+    }
+
+    /**
+     * The owner put [hits] somewhere else on the map (Cip, 2026-09-19), one photo from its details or
+     * many from the tagging sheet. [inFile] are the photos whose own EXIF now carries the position
+     * too; the caller wrote it there, with Android's permission, before calling.
+     *
+     * From here it goes everywhere else, with no picture sent again: the phone keeps the place (so
+     * every later reading of a photo carries it, even from a file that could not take it), the
+     * phone's copy of each document moves to it, and the words queue takes it up to the index
+     * fifty photos a call, where the server names the place and remakes the vector - no CLIP, no
+     * OCR, no upload.
+     */
+    fun setPlace(hits: List<PhotoHit>, lat: Double, lon: Double, inFile: Set<String>) {
+        if (hits.isEmpty()) return
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val uris = if (inFile.isEmpty()) emptyMap() else Actions.contentUrisByPhoto(context, hits.filter { it.id in inFile })
+                    // The files read before the transaction, not inside it: an md5 is a read of the
+                    // whole file, and the database stays locked for as long as the transaction lasts.
+                    val stamps = uris.mapValues { (_, uri) -> fileStampOf(uri).let { (size, modified) -> Triple(size, modified, fileHashOf(uri)) } }
+                    photoCache.inTransaction {
+                        hits.forEach { hit ->
+                            val written = hit.id in inFile || !PhotoReader.canWriteExif(hit.mime)
+                            photoCache.putSetPlace(PhotoCache.SetPlace(hit.id, lat, lon, owner = true, written = written, synced = false))
+                            photoCache.moveDocPlace(hit.id, lat, lon)
+                            stamps[hit.id]?.let { (size, modified, hash) -> photoCache.updateDocSize(hit.id, size, modified, hash) }
+                        }
+                        photoCache.queueActions(hits.map { it.id }, PhotoCache.ACTION_WORDS)
+                    }
+                    prefs.facetsJson = null
+                }
+                searches.clearCache()
+                val ids = hits.mapTo(HashSet()) { it.id }
+                val location = String.format(java.util.Locale.US, "%.6f,%.6f", lat, lon)
+                _state.update { s ->
+                    s.copy(hits = s.hits.map { if (it.id in ids) it.copy(location = location, city = null, region = null, province = null, country = null) else it })
+                }
+                flash(if (hits.size == 1) AppText.s(R.string.vm_place_saved) else AppText.p(R.plurals.vm_place_saved_n, hits.size, Actions.formatCount(hits.size.toLong())))
+                SyncScheduler.runNow(context)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                flash(friendlyMessage(e, AppText.s(R.string.vm_place_failed)))
+            }
+        }
+    }
+
+    /**
+     * Puts many photos at one place from the tagging sheet (Cip, 2026-09-19). With [writeFiles],
+     * Android has just allowed the app to write them, so the position goes into each file first -
+     * off the screen's thread, a selection can be thousands - then everywhere else as [setPlace]
+     * does it.
+     */
+    fun placePhotos(hits: List<PhotoHit>, lat: Double, lon: Double, writeFiles: Boolean) {
+        if (hits.isEmpty()) return
+        viewModelScope.launch {
+            val written = if (!writeFiles) emptySet() else withContext(Dispatchers.IO) {
+                val uris = Actions.contentUrisByPhoto(context, hits.filter { PhotoReader.canWriteExif(it.mime) })
+                hits.filterTo(HashSet()) { hit -> uris[hit.id]?.let { PhotoReader.writeGps(context, it, hit.mime, lat, lon) } ?: false }
+                    .mapTo(HashSet()) { it.id }
+            }
+            setPlace(hits, lat, lon, written)
         }
     }
 
@@ -857,12 +1028,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         },
                     )
                 }
-                flash("Saved on ${Actions.formatCount(ids.size.toLong())} photo${if (ids.size == 1) "" else "s"}. Your index is being updated in the background.")
+                flash(AppText.p(R.plurals.vm_saved_n, ids.size, Actions.formatCount(ids.size.toLong())))
                 SyncScheduler.runNow(context)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(bulkTagging = false, bulkTagError = friendlyMessage(e, "The tags could not be saved.")) }
+                _state.update { it.copy(bulkTagging = false, bulkTagError = friendlyMessage(e, AppText.s(R.string.vm_tags_failed))) }
             }
         }
     }
@@ -914,7 +1085,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // nothing to tell it the work is over (Cip, 2026-09-18).
         _state.update { it.copy(searching = true, searchError = null) }
         searchJob = viewModelScope.launch {
-            val groups = withContext(Dispatchers.IO) { buildSkeleton(photoCache.takenTimes()) }
+            // Browsing by place, people or tags is laid out from the phone's copy as well, in one
+            // query on its columns (Cip, 2026-09-19); by date it is the skeleton, as always.
+            val how = _state.value.groupBy
+            val byValue = how == GroupBy.PLACE || how == GroupBy.PEOPLE || how == GroupBy.TAGS
+            val groups = if (byValue) emptyList() else withContext(Dispatchers.IO) { buildSkeleton(photoCache.takenTimes()) }
+            val valueGroups = if (!byValue) emptyList() else withContext(Dispatchers.IO) { buildResultGroups(photoCache.groupingRows(), how) }
             val count = withContext(Dispatchers.IO) { photoCache.docCount() }
             // Reloading the same view keeps the photos it shows, read again from the phone's copy
             // in one query: emptying the list left the grid with headings only, it lost the photo
@@ -946,6 +1122,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     endReached = true,
                     searchedQuery = "",
                     skeleton = groups,
+                    resultGroups = valueGroups,
                     facets = keptFacets() ?: it.facets,
                     searchGeneration = if (keepPosition) it.searchGeneration else it.searchGeneration + 1,
                     resultsGeneration = if (keepPosition) it.resultsGeneration else it.resultsGeneration + 1,
@@ -1172,6 +1349,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             environment = prefs.connection?.environment,
             openFilterSections = prefs.openFilterSections,
             foldedAlbumSections = prefs.foldedAlbumSections,
+            groupBy = GroupBy.of(prefs.groupBy),
         )
     }
 
@@ -1196,15 +1374,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (pending == null || state == null ||
             !MessageDigest.isEqual(state.toByteArray(Charsets.US_ASCII), pending.second.toByteArray(Charsets.US_ASCII))
         ) {
-            _state.update { it.copy(screen = Screen.SignIn, signInError = "This sign-in was not started here or it took too long. Tap Sign in again.") }
+            _state.update { it.copy(screen = Screen.SignIn, signInError = AppText.s(R.string.vm_signin_stale)) }
             return
         }
         if (error != null) {
-            _state.update { it.copy(screen = Screen.SignIn, signInError = "Sign-in was cancelled.") }
+            _state.update { it.copy(screen = Screen.SignIn, signInError = AppText.s(R.string.vm_signin_cancelled)) }
             return
         }
         if (code == null || !CODE_PATTERN.matches(code)) {
-            _state.update { it.copy(screen = Screen.SignIn, signInError = "The sign-in answer was not valid. Tap Sign in again.") }
+            _state.update { it.copy(screen = Screen.SignIn, signInError = AppText.s(R.string.vm_signin_invalid)) }
             return
         }
 
@@ -1216,7 +1394,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 prefs.account = limits
                 _state.update { it.copy(busy = false, email = session.email, account = limits, screen = Screen.Welcome) }
             } catch (e: Exception) {
-                _state.update { it.copy(busy = false, screen = Screen.SignIn, signInError = friendlyMessage(e, "Sign-in failed. Tap Sign in again.")) }
+                _state.update { it.copy(busy = false, screen = Screen.SignIn, signInError = friendlyMessage(e, AppText.s(R.string.vm_signin_failed))) }
             }
         }
     }
@@ -1234,7 +1412,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun onPermissionsResult(photosGranted: Boolean) {
         if (!photosGranted) {
-            _state.update { it.copy(permissionError = "Opensolr Photos needs access to your photos to index them. Allow it to continue.") }
+            _state.update { it.copy(permissionError = AppText.s(R.string.vm_need_photos)) }
             return
         }
         _state.update { it.copy(permissionError = null) }
@@ -1278,6 +1456,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val selected = _state.value.selectedFolders
         if (selected.isEmpty()) return
         prefs.folders = selected
+        // The folder filter offers the chosen folders, so its counts are asked for again.
+        prefs.facetsJson = null
         if (prefs.connection == null || _state.value.foldersReturnTo == Screen.Setup) {
             _state.update { it.copy(screen = Screen.Setup) }
             runSetup()
@@ -1292,13 +1472,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     fun runSetup() {
         val session = prefs.session ?: return signedOut()
-        _state.update { it.copy(setupStep = "Connecting to Opensolr", setupError = null, setupNeedsUpgrade = false) }
+        _state.update { it.copy(setupStep = AppText.s(R.string.vm_connecting), setupError = null, setupNeedsUpgrade = false) }
         viewModelScope.launch {
             try {
                 val (connection, outcome) = indexes.ensure(session) { step -> _state.update { it.copy(setupStep = step) } }
                 if (outcome == IndexManager.Outcome.NEEDS_CHOICE) {
                     // The owner says which phone this is before anything is created.
-                    _state.update { it.copy(deviceChoices = indexes.choices, setupStep = "Which one of these is your device?") }
+                    _state.update { it.copy(deviceChoices = indexes.choices, setupStep = AppText.s(R.string.vm_which_device)) }
                     return@launch
                 }
                 SyncScheduler.applySchedule(context, prefs.schedule)
@@ -1308,11 +1488,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 refreshAccount()
                 search(reset = true)
             } catch (e: SignInRequiredException) {
-                signedOut("Your Opensolr sign-in stopped working. Sign in again.")
+                signedOut(AppText.s(R.string.vm_signed_out))
             } catch (e: IndexLimitException) {
-                _state.update { it.copy(setupError = friendlyMessage(e, "The index could not be set up."), setupNeedsUpgrade = true) }
+                _state.update { it.copy(setupError = friendlyMessage(e, AppText.s(R.string.vm_setup_failed)), setupNeedsUpgrade = true) }
             } catch (e: Exception) {
-                _state.update { it.copy(setupError = friendlyMessage(e, "The index could not be set up.")) }
+                _state.update { it.copy(setupError = friendlyMessage(e, AppText.s(R.string.vm_setup_failed))) }
             }
         }
     }
@@ -1456,7 +1636,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // a copy of every document, so the years, the months, the days and the photos in them all
         // come from here and the index is not asked anything at all (Cip, 2026-09-18).
         if (reset && browsingLocally()) { browseLocally(keepPosition); return }
-        _state.update { it.copy(searching = true, searchError = null, suggestions = emptyList(), duplicateGroups = emptyList(), duplicatesMode = false, skippedMode = false, similarToId = null, similarToHit = null, searchGeneration = if (reset && !keepPosition) it.searchGeneration + 1 else it.searchGeneration) }
+        if (groupedView(current)) {
+            if (reset) searchGrouped(keepPosition)
+            return
+        }
+        _state.update { it.copy(searching = true, searchError = null, suggestions = emptyList(), duplicateGroups = emptyList(), duplicatesMode = false, skippedMode = false, similarToId = null, similarToHit = null, resultGroups = emptyList(), searchGeneration = if (reset && !keepPosition) it.searchGeneration + 1 else it.searchGeneration) }
         // The suggestions come from their own words-only request, next to this one.
         if (reset) loadQueryFacets(current.query, current.filters)
         searchJob = viewModelScope.launch {
@@ -1512,9 +1696,201 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: SignInRequiredException) {
-                signedOut("Your Opensolr sign-in stopped working. Sign in again.")
+                signedOut(AppText.s(R.string.vm_signed_out))
             } catch (e: Exception) {
-                _state.update { it.copy(searching = false, searchError = friendlyMessage(e, "Search failed.")) }
+                _state.update { it.copy(searching = false, searchError = friendlyMessage(e, AppText.s(R.string.vm_search_failed))) }
+            }
+        }
+    }
+
+    /**
+     * True when the results are laid out in groups of their own (date, place, people, tags): a
+     * search or a filtered view, never plain browsing, duplicates or the skipped photos.
+     */
+    private fun groupedView(s: UiState): Boolean =
+        s.groupBy != GroupBy.RELEVANCE && !s.duplicatesMode && !s.skippedMode && (s.query.isNotBlank() || s.filters.count > 0)
+
+    /** Opens or folds one zone of Me, for the rest of the session (Cip, 2026-09-20). */
+    fun toggleMeZone(key: String) {
+        _state.update { it.copy(meZonesOpen = if (key in it.meZonesOpen) it.meZonesOpen - key else it.meZonesOpen + key) }
+    }
+
+    /**
+     * Lays the results out by [how], and keeps the choice for the next searches (Cip, 2026-09-19).
+     */
+    fun setGroupBy(how: GroupBy) {
+        if (how == _state.value.groupBy) return
+        prefs.groupBy = how.key
+        _state.update { it.copy(groupBy = how) }
+        if (_state.value.duplicatesMode && _state.value.similarToId != null) loadDuplicates(debounceMs = 0) else search(reset = true)
+    }
+
+    /**
+     * A search laid out in groups (Cip, 2026-09-19): one request brings every photo it finds, as its
+     * id and the values it is grouped by, and the groups with their counts are made from that here.
+     * Photos are only fetched for the groups that are open, from the phone's own copy of the index,
+     * so a group costs no request at all. [keepPosition] reloads the same view - after a sync, back
+     * from another screen - keeping the photos already on it, each as the phone now has it, and the
+     * place in the list.
+     */
+    private fun searchGrouped(keepPosition: Boolean) {
+        searchJob?.cancel()
+        val current = _state.value
+        _state.update { it.copy(searching = true, searchError = null, suggestions = emptyList(), duplicateGroups = emptyList(), skeleton = emptyList(), searchGeneration = if (!keepPosition) it.searchGeneration + 1 else it.searchGeneration) }
+        loadQueryFacets(current.query, current.filters)
+        searchJob = viewModelScope.launch {
+            try {
+                val found = searches.groupedHits(current.query, current.filters, current.freshBias, current.wordsOnly)
+                val groups = withContext(Dispatchers.Default) { buildResultGroups(found, current.groupBy) }
+                val kept = if (keepPosition && current.hits.isNotEmpty()) {
+                    val inView = found.mapTo(HashSet()) { it.id }
+                    withContext(Dispatchers.IO) {
+                        photoCache.docsByIds(current.hits.map { it.id }.filter { it in inView }).map { searches.hitOf(org.json.JSONObject(it)) }
+                    }
+                } else emptyList()
+                groupsLoading.clear()
+                _state.update {
+                    it.copy(
+                        searching = false,
+                        resultGroups = groups,
+                        hits = kept,
+                        numFound = found.size.toLong(),
+                        endReached = true,
+                        searchNotice = null,
+                        didYouMean = null,
+                        searchedQuery = current.query,
+                        resultsGeneration = if (!keepPosition) it.resultsGeneration + 1 else it.resultsGeneration,
+                    )
+                }
+                targetScroll()
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: SignInRequiredException) {
+                signedOut(AppText.s(R.string.vm_signed_out))
+            } catch (e: Exception) {
+                _state.update { it.copy(searching = false, searchError = friendlyMessage(e, AppText.s(R.string.vm_search_failed))) }
+            }
+        }
+    }
+
+    /**
+     * The groups of [found] for [how], each with its photos best match first, in drawing order
+     * (a parent, then its children). A photo sits in every group it belongs to - two people, two
+     * tags - so the grid keys it by group and photo. Photos that have nothing to be grouped by go
+     * in a last group of their own, so every result is somewhere.
+     *
+     * - date: year, month, day, newest first, the last few days on their own as when browsing;
+     * - place: country, region, place;
+     * - people, tags: one group per name or tag, in the order the best matches bring them.
+     */
+    private fun buildResultGroups(found: List<SearchRepository.GroupedHit>, how: GroupBy): List<ResultGroup> {
+        val out = ArrayList<ResultGroup>()
+        when (how) {
+            GroupBy.DATE -> {
+                val dated = found.filter { it.takenMs != null }.sortedByDescending { it.takenMs }
+                val recent = LinkedHashMap<String, MutableList<String>>()
+                val years = LinkedHashMap<String, Pair<String, LinkedHashMap<String, Pair<String, LinkedHashMap<String, Pair<String, MutableList<String>>>>>>>()
+                dated.forEach { hit ->
+                    val at = hit.takenMs!!
+                    if (Actions.isRecentDay(at)) {
+                        recent.getOrPut(Actions.dateHeading(at)) { ArrayList() } += hit.id
+                    } else {
+                        years.getOrPut(Actions.yearHeading(at)) { Actions.yearHeading(at) to LinkedHashMap() }.second
+                            .getOrPut(Actions.monthKey(at)) { Actions.monthHeading(at) to LinkedHashMap() }.second
+                            .getOrPut(Actions.dayKey(at)) { Actions.dayHeading(at) to ArrayList() }.second += hit.id
+                    }
+                }
+                recent.forEach { (heading, ids) -> out += ResultGroup(0, "date:$heading", heading, ids) }
+                years.forEach { (year, yearValue) ->
+                    val months = yearValue.second
+                    out += ResultGroup(0, "date:$year", yearValue.first, months.values.flatMap { m -> m.second.values.flatMap { it.second } })
+                    months.forEach { (monthKey, monthValue) ->
+                        out += ResultGroup(1, "date:$monthKey", monthValue.first, monthValue.second.values.flatMap { it.second })
+                        monthValue.second.forEach { (dayKey, dayValue) -> out += ResultGroup(2, "date:$dayKey", dayValue.first, dayValue.second) }
+                    }
+                }
+                val undated = found.filter { it.takenMs == null }.map { it.id }
+                if (undated.isNotEmpty()) out += ResultGroup(0, "date:none", AppText.s(R.string.vm_no_date), undated)
+            }
+            GroupBy.PLACE -> {
+                val countries = LinkedHashMap<String, LinkedHashMap<String, LinkedHashMap<String, MutableList<String>>>>()
+                val nowhere = ArrayList<String>()
+                found.forEach { hit ->
+                    val country = hit.country
+                    if (country == null) {
+                        nowhere += hit.id
+                        return@forEach
+                    }
+                    countries.getOrPut(country) { LinkedHashMap() }
+                        .getOrPut(hit.region ?: "") { LinkedHashMap() }
+                        .getOrPut(hit.city ?: "") { ArrayList() } += hit.id
+                }
+                val fold = com.opensolr.photos.data.Words::fold
+                countries.forEach { (country, regions) ->
+                    out += ResultGroup(0, "place:$country", country, regions.values.flatMap { r -> r.values.flatten() })
+                    regions.forEach { (region, places) ->
+                        // A region with no name, or named as its country, adds nothing: its places
+                        // sit right under the country.
+                        val regionShown = region.isNotEmpty() && fold(region) != fold(country)
+                        val parent = if (regionShown) region else country
+                        if (regionShown) out += ResultGroup(1, "place:$country/$region", region, places.values.flatten())
+                        // One place named as the group above it says nothing new either - unless
+                        // the country also holds other regions, and then it has to be a group of
+                        // its own or its photos would have nowhere to be drawn.
+                        val redundant = places.size == 1 && fold(places.keys.first()) == fold(parent) && (regionShown || regions.size == 1)
+                        if (!redundant) places.forEach { (place, ids) ->
+                            out += ResultGroup(if (regionShown) 2 else 1, "place:$country/$region/$place", place.ifEmpty { parent }, ids)
+                        }
+                    }
+                }
+                if (nowhere.isNotEmpty()) out += ResultGroup(0, "place:none", AppText.s(R.string.vm_no_place), nowhere)
+            }
+            GroupBy.PEOPLE, GroupBy.TAGS -> {
+                val byValue = LinkedHashMap<String, Pair<String, MutableList<String>>>()
+                val without = ArrayList<String>()
+                found.forEach { hit ->
+                    val values = if (how == GroupBy.PEOPLE) hit.persons else hit.tags
+                    if (values.isEmpty()) without += hit.id
+                    values.forEach { value ->
+                        byValue.getOrPut(com.opensolr.photos.data.Words.fold(value)) { value to ArrayList() }.second += hit.id
+                    }
+                }
+                val prefix = if (how == GroupBy.PEOPLE) "people" else "tag"
+                byValue.forEach { (key, value) -> out += ResultGroup(0, "$prefix:$key", value.first, value.second.distinct()) }
+                if (without.isNotEmpty()) out += ResultGroup(0, "$prefix:none", if (how == GroupBy.PEOPLE) AppText.s(R.string.vm_no_one) else AppText.s(R.string.vm_no_tags), without)
+            }
+            GroupBy.RELEVANCE -> Unit
+        }
+        return out
+    }
+
+    /**
+     * Fetches the photos of one open group of a grouped search: from the phone's own copy of the
+     * index, and from the index only for any the copy does not hold. Once per group at a time.
+     */
+    fun loadResultGroup(name: String, ids: List<String>) {
+        if (!groupsLoading.add("g:$name")) return
+        viewModelScope.launch {
+            try {
+                val have = _state.value.hits.mapTo(HashSet()) { it.id }
+                val missing = ids.filter { it !in have }
+                if (missing.isEmpty()) return@launch
+                val local = withContext(Dispatchers.IO) {
+                    photoCache.docsByIds(missing).map { searches.hitOf(org.json.JSONObject(it)) }
+                }
+                val stillMissing = missing.toSet() - local.mapTo(HashSet()) { it.id }
+                val remote = if (stillMissing.isEmpty()) emptyList() else searches.hitsByIds(stillMissing)
+                _state.update { state ->
+                    val seen = state.hits.mapTo(HashSet()) { it.id }
+                    val added = (local + remote).filter { seen.add(it.id) }
+                    if (added.isEmpty()) state else state.copy(hits = state.hits + added)
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // That group stays empty; opening it again asks once more.
+            } finally {
+                groupsLoading.remove("g:$name")
             }
         }
     }
@@ -1534,9 +1910,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: SignInRequiredException) {
-                signedOut("Your Opensolr sign-in stopped working. Sign in again.")
+                signedOut(AppText.s(R.string.vm_signed_out))
             } catch (e: Exception) {
-                _state.update { it.copy(albumsLoading = false, albumsError = friendlyMessage(e, "The albums could not be loaded.")) }
+                _state.update { it.copy(albumsLoading = false, albumsError = friendlyMessage(e, AppText.s(R.string.vm_albums_failed))) }
             }
         }
     }
@@ -1584,7 +1960,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(albumsWorking = false, albumsError = friendlyMessage(e, "The photos of those albums could not be looked up.")) }
+                _state.update { it.copy(albumsWorking = false, albumsError = friendlyMessage(e, AppText.s(R.string.vm_album_photos_failed))) }
             }
         }
     }
@@ -1645,9 +2021,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: SignInRequiredException) {
-                signedOut("Your Opensolr sign-in stopped working. Sign in again.")
+                signedOut(AppText.s(R.string.vm_signed_out))
             } catch (e: Exception) {
-                _state.update { it.copy(pinsLoading = false, pinsError = friendlyMessage(e, "The map could not be loaded.")) }
+                _state.update { it.copy(pinsLoading = false, pinsError = friendlyMessage(e, AppText.s(R.string.vm_map_failed))) }
             }
         }
     }
@@ -1738,7 +2114,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 withContext(Dispatchers.IO) { photoCache.clearDocs() }
                 prefs.cloneComplete = true
             } catch (e: Exception) {
-                _state.update { it.copy(notice = "The index could not be emptied: ${friendlyMessage(e, "try again")}") }
+                _state.update { it.copy(notice = AppText.s(R.string.vm_empty_failed, friendlyMessage(e, AppText.s(R.string.vm_try_again)))) }
                 return@launch
             }
             // No search follows this one, so the anchor has to go with the mode here.
@@ -1773,13 +2149,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 photoCache.docsLikeDocuments(com.opensolr.photos.search.SearchFilters.DOCUMENT_WORDS)
             }
             if (ids.isEmpty()) {
-                _state.update { it.copy(notice = "No photos that look like documents to read again.") }
+                _state.update { it.copy(notice = AppText.s(R.string.vm_no_documents)) }
                 return@launch
             }
             withContext(Dispatchers.IO) { photoCache.queueActions(ids, com.opensolr.photos.data.PhotoCache.ACTION_INDEX) }
             searches.clearCache()
             _state.update {
-                it.copy(notice = "${ids.size} photo${if (ids.size == 1) "" else "s"} that look like documents will be read again.")
+                it.copy(notice = AppText.p(R.plurals.vm_documents_n, ids.size, Actions.formatCount(ids.size.toLong())))
             }
             SyncScheduler.runNow(context)
         }
@@ -1794,7 +2170,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // so the run is asked to give up between batches, and only then is the work cancelled.
         com.opensolr.photos.sync.SyncWorker.stopRequested.set(true)
         SyncScheduler.stopNow(context)
-        _state.update { it.copy(notice = "Sync stopped. It starts again on its own, or press Force Re-Sync.") }
+        _state.update { it.copy(notice = AppText.s(R.string.vm_sync_stopped)) }
     }
 
     /**
@@ -1825,7 +2201,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(searching = false, searchError = friendlyMessage(e, "Looking for duplicates failed.")) }
+                _state.update { it.copy(searching = false, searchError = friendlyMessage(e, AppText.s(R.string.vm_dup_failed))) }
             }
         }
     }
@@ -1939,7 +2315,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * The slider moved to [level] (0..10): the groups of that kind are asked for a short pause
+     * The slider moved to [level] (a stop of DUPLICATE_FIELDS): the groups of that kind are asked for a short pause
      * after the last move, so dragging across the slider does not send a request per step.
      */
     fun setDuplicateLevel(level: Int) {
@@ -1968,9 +2344,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val loaded: Int
                 val done: Boolean
                 val total: Int
+                var similarGroups = emptyList<ResultGroup>()
                 if (anchor != null) {
                     val (h, g) = searches.similarTo(anchor, level)
                     hits = h; groups = g; loaded = g.size; done = true; total = g.size
+                    // The photos like one photo, laid out by date, place, people or tags when the
+                    // owner chose one (Cip, 2026-09-19): at most a couple of hundred, all loaded.
+                    val how = _state.value.groupBy
+                    if (how != GroupBy.RELEVANCE) similarGroups = withContext(Dispatchers.Default) {
+                        buildResultGroups(h.map { hit ->
+                            SearchRepository.GroupedHit(
+                                id = hit.id,
+                                takenMs = hit.takenMs,
+                                country = hit.country?.trim()?.ifBlank { null },
+                                region = hit.region?.trim()?.ifBlank { null },
+                                city = (hit.city ?: hit.province)?.trim()?.ifBlank { null },
+                                persons = hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() },
+                                tags = hit.customTags,
+                            )
+                        }, how)
+                    }
                 } else {
                     val page = searches.duplicates(level, groupsFrom = 0)
                     hits = page.hits; groups = page.sizes
@@ -1983,14 +2376,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         searching = false,
                         hits = hits,
                         duplicateGroups = groups,
+                        resultGroups = similarGroups,
                         duplicateGroupsLoaded = loaded,
                         duplicateGroupsTotal = total,
                         numFound = hits.size.toLong(),
                         endReached = done,
                         searchNotice = when {
                             hits.isNotEmpty() -> null
-                            anchor != null -> "Nothing else in your index is like this photo at this setting."
-                            else -> "No duplicates of this kind in your index."
+                            anchor != null -> AppText.s(R.string.vm_nothing_similar)
+                            else -> AppText.s(R.string.vm_no_dups)
                         },
                         resultsGeneration = it.resultsGeneration + 1,
                     )
@@ -2001,9 +2395,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: SignInRequiredException) {
-                signedOut("Your Opensolr sign-in stopped working. Sign in again.")
+                signedOut(AppText.s(R.string.vm_signed_out))
             } catch (e: Exception) {
-                _state.update { it.copy(searching = false, searchError = friendlyMessage(e, "Looking for duplicates failed.")) }
+                _state.update { it.copy(searching = false, searchError = friendlyMessage(e, AppText.s(R.string.vm_dup_failed))) }
             }
         }
     }
@@ -2178,9 +2572,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val warnings = PlanWatch.notifyNew(context, prefs, limits)
                 _state.update { it.copy(account = limits, accountRefreshing = false, planWarnings = warnings) }
             } catch (e: SignInRequiredException) {
-                signedOut("Your Opensolr sign-in stopped working. Sign in again.")
+                signedOut(AppText.s(R.string.vm_signed_out))
             } catch (e: Exception) {
-                _state.update { it.copy(accountRefreshing = false, accountError = friendlyMessage(e, "The plan limits could not be read.")) }
+                _state.update { it.copy(accountRefreshing = false, accountError = friendlyMessage(e, AppText.s(R.string.vm_limits_failed))) }
             }
         }
     }
@@ -2256,7 +2650,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         _state.update { it.copy(lastReport = report, account = prefs.account, planWarnings = prefs.account?.let { a -> PlanWatch.evaluate(a) } ?: emptyList(), indexName = prefs.connection?.indexName, environment = prefs.connection?.environment) }
         if (report?.status == "sign_in_required") {
-            signedOut(prefs.pendingNotice ?: "Your Opensolr sign-in stopped working. Sign in again.")
+            signedOut(prefs.pendingNotice ?: AppText.s(R.string.vm_signed_out))
             prefs.pendingNotice = null
             return
         }
@@ -2264,6 +2658,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (report?.status == "device_choice") askDeviceChoice()
         if (report?.status == "update_app") _state.update { it.copy(notice = report.message) }
         refreshSkippedCount()
+        refreshPlacesToWrite()
         // A sync that wrote nothing leaves the results exactly as they are, so nothing is reloaded
         // and nobody loses their place (Cip, 2026-09-18).
         val wrote = report == null || report.added > 0 || report.deleted > 0

@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="al_title">Alben</string>
+    <string name="al_empty">Noch keine Alben: Alben entstehen aus Ihren Tags, den Wörtern der Fotos, Orten, Kameras und Jahren.</string>
+    <string name="al_check_none">Keine wählen</string>
+    <string name="al_check_all">Alle wählen</string>
+    <string name="al_expand_all">Alle öffnen</string>
+    <string name="al_collapse_all">Alle zuklappen</string>
+    <string name="al_share">Teilen</string>
+    <string name="al_delete">Löschen</string>
+    <string name="al_cancel">Abbrechen</string>
+    <string name="al_delete_q">Fotos löschen?</string>
+    <string name="al_del_sections">Das löscht jedes Foto in jedem Album von: %1$s.</string>
+    <string name="al_del_album">Das löscht jedes Foto im Album %1$s.</string>
+    <string name="al_del_albums">Das löscht jedes Foto in den Alben: %1$s.</string>
+    <string name="al_del_note">Die Fotos werden von diesem Telefon gelöscht und aus Ihrem Index entfernt. Ein Foto in mehreren Alben verschwindet aus allen.</string>
+    <string name="al_open_section">Bereich öffnen</string>
+    <string name="al_fold_section">Bereich zuklappen</string>
+    <string name="al_sec_people">Personen</string>
+    <string name="al_sec_tags">Meine Tags (Alben)</string>
+    <string name="al_sec_things">Dinge</string>
+    <string name="al_sec_years">Jahre</string>
+    <string name="al_sec_places">Orte</string>
+    <string name="al_sec_cameras">Kameras</string>
+    <string name="mp_title">Karte</string>
+    <string name="mp_with_place">%1$s mit Ort</string>
+    <string name="mp_search_area">Diesen Bereich durchsuchen</string>
+    <string name="mp_reload">Neu laden</string>
+    <string name="mp_failed">Die Karte konnte nicht geladen werden</string>
+    <string name="mp_none">Noch keines Ihrer indexierten Fotos hat eine GPS-Position.</string>
+    <string name="mp_no_match">Kein Foto mit GPS-Position passt zu dieser Suche.</string>
+    <string name="pp_title">Wo wurde es aufgenommen?</string>
+    <string name="pp_lead">Verschieben Sie die Karte, bis die Nadel auf dem Ort sitzt, oder tippen Sie auf den Ort.</string>
+    <string name="pp_move">Karte verschieben, um einen Ort zu wählen</string>
+    <string name="pp_cancel">Abbrechen</string>
+    <string name="pp_use">Diesen Ort nehmen</string>
+    <string name="rt_reset_confirm">Zurücksetzen und neu synchronisieren</string>
+    <string name="rt_later">Später</string>
+    <string name="rt_reset_title">Ihr Index wird zurückgesetzt</string>
+    <string name="rt_reset_text">Diese Version von Opensolr Photos bringt eine neue Indexkonfiguration. Ihr Index wird jetzt zurückgesetzt und jedes Foto erneut synchronisiert. Das dauert eine Weile; die Suche funktioniert weiter und findet die Fotos, sobald sie zurück sind, und das erneute Lesen zählt zu den KI-Anfragen Ihres Tarifs. Ihre Tags und Änderungen bleiben.</string>
+    <string name="rt_ok">OK</string>
+    <string name="rt_busy_title">Ein Sync läuft bereits</string>
+    <string name="rt_busy_text">Ein Sync läuft bereits.</string>
+    <string name="rt_new_device">Keines davon, dies ist ein neues Gerät</string>
+    <string name="rt_which_device">Welches davon ist Ihr Gerät?</string>
+    <string name="rt_unknown_phone">Unbekanntes Telefon</string>
+    <string name="rt_last_synced">zuletzt synchronisiert %1$s</string>
+    <string name="rt_since">seit %1$s</string>
+    <string name="rt_device_note">So bleiben Ihre Fotos und die Ressourcen Ihres Opensolr-Kontos diesem Telefon zugeordnet.</string>
+    <string name="cp_open_site">Auf opensolr.com öffnen</string>
+    <string name="cp_x_of_y">%1$s von %2$s</string>
+    <string name="cp_back">Zurück</string>
+    <plurals name="al_n_photos">
+        <item quantity="one">%1$s Foto</item>
+        <item quantity="other">%1$s Fotos</item>
+    </plurals>
+    <plurals name="mp_n_here">
+        <item quantity="one">%1$s Foto hier</item>
+        <item quantity="other">%1$s Fotos hier</item>
+    </plurals>
+    <plurals name="rt_n_photos">
+        <item quantity="one">%1$s Foto</item>
+        <item quantity="other">%1$s Fotos</item>
+    </plurals>
+</resources>

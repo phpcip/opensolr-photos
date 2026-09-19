@@ -262,6 +262,20 @@ class AppPrefs(context: Context) {
         get() = prefs.getString(KEY_FACETS, null)
         set(value) = prefs.edit().putString(KEY_FACETS, value).apply()
 
+    /**
+     * Since when new photos that come without a position get the phone's own (Cip, 2026-09-19),
+     * in epoch millis; 0 when the owner has not switched it on. Only files that appear after this
+     * moment are ever considered, so no photo already on the phone is touched.
+     */
+    var autoPlaceSince: Long
+        get() = prefs.getLong(KEY_AUTO_PLACE_SINCE, 0L)
+        set(value) = prefs.edit().putLong(KEY_AUTO_PLACE_SINCE, value).apply()
+
+    /** How search results are laid out (ui.GroupBy key), kept from one search to the next (Cip, 2026-09-19). */
+    var groupBy: String
+        get() = prefs.getString(KEY_GROUP_BY, "relevance") ?: "relevance"
+        set(value) = prefs.edit().putString(KEY_GROUP_BY, value).apply()
+
     /** Whether the app answers gestures with a tap you can feel. On unless the owner says not. */
     var hapticsEnabled: Boolean
         get() = prefs.getBoolean(KEY_HAPTICS, true)
@@ -344,6 +358,8 @@ class AppPrefs(context: Context) {
         private const val KEY_SOLR_USER = "solr_user"
         private const val KEY_SOLR_PASSWORD = "solr_password"
         private const val KEY_ENVIRONMENT = "environment"
+        private const val KEY_AUTO_PLACE_SINCE = "auto_place_since"
+        private const val KEY_GROUP_BY = "group_by"
         private const val KEY_FOLDERS = "folders"
         private const val KEY_FOLDERS_CHOSEN = "folders_chosen"
         private const val KEY_SCHEDULE = "schedule"

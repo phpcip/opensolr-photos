@@ -1,5 +1,7 @@
 package com.opensolr.photos.ui
 
+import com.opensolr.photos.R
+import com.opensolr.photos.AppText
 import android.content.ActivityNotFoundException
 import android.content.ContentUris
 import android.content.Context
@@ -35,6 +37,33 @@ data class DateGroup(
     val to: Long,
 )
 
+/**
+ * One group of a search laid out by date, place, person or tag (Cip, 2026-09-19): what it is
+ * ([name], unique and unchanging, also what its folded state is kept by), what its heading says,
+ * how deep it sits, and every photo of the search in it, best match first. Groups come in the
+ * order they are drawn, each one's children right after it.
+ */
+data class ResultGroup(
+    val level: Int,
+    val name: String,
+    val text: String,
+    val ids: List<String>,
+)
+
+/** The ways the results of a search can be laid out; [key] is what is stored. */
+enum class GroupBy(val key: String, val labelRes: Int) {
+    RELEVANCE("relevance", com.opensolr.photos.R.string.group_relevance),
+    DATE("date", com.opensolr.photos.R.string.group_date),
+    PLACE("place", com.opensolr.photos.R.string.group_place),
+    PEOPLE("people", com.opensolr.photos.R.string.group_people),
+    TAGS("tags", com.opensolr.photos.R.string.group_tags);
+
+    companion object {
+        /** The stored [key] back to its value; anything unknown is the default. */
+        fun of(key: String?): GroupBy = entries.firstOrNull { it.key == key } ?: RELEVANCE
+    }
+}
+
 object Actions {
 
     const val PRICING_URL = "https://opensolr.com/pricing"
@@ -48,7 +77,7 @@ object Actions {
         try {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (e: ActivityNotFoundException) {
-            Toast.makeText(context, "No browser is installed.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, AppText.s(R.string.ac_no_browser), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -69,7 +98,7 @@ object Actions {
             else -> MediaScanner.findByPath(context, hit.path)?.mediaId
         }
         if (mediaId == null) {
-            Toast.makeText(context, "This photo is no longer on your phone. The next Re-Sync removes it from your index.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, AppText.s(R.string.ac_photo_gone), Toast.LENGTH_LONG).show()
             return
         }
         val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, mediaId)
@@ -79,7 +108,7 @@ object Actions {
         try {
             context.startActivity(intent)
         } catch (e: ActivityNotFoundException) {
-            Toast.makeText(context, "No gallery app on this phone can open photos.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, AppText.s(R.string.ac_no_gallery), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -130,7 +159,7 @@ object Actions {
     fun sharePhotos(context: Context, hits: List<PhotoHit>) {
         val uris = ArrayList(contentUris(context, hits))
         if (uris.isEmpty()) {
-            Toast.makeText(context, "These photos are no longer on your phone.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, AppText.s(R.string.ac_photos_gone), Toast.LENGTH_LONG).show()
             return
         }
         val intent = if (uris.size == 1) {
@@ -141,9 +170,9 @@ object Actions {
         intent.type = "image/*"
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         try {
-            context.startActivity(Intent.createChooser(intent, "Share photos").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            context.startActivity(Intent.createChooser(intent, AppText.s(R.string.ac_share_photos)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (e: ActivityNotFoundException) {
-            Toast.makeText(context, "Nothing on this phone can share photos.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, AppText.s(R.string.ac_no_share), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -175,7 +204,7 @@ object Actions {
         try {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=" + Uri.encode(location))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (e: ActivityNotFoundException) {
-            Toast.makeText(context, "No maps app is installed.", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, AppText.s(R.string.ac_no_maps), Toast.LENGTH_LONG).show()
         }
     }
 
@@ -186,11 +215,30 @@ object Actions {
 
     /** One formatter per thread, kept: building one per call showed up on the grid. */
     private val stamp = ThreadLocal.withInitial { SimpleDateFormat("MM/dd/yyyy HH:mm:ss", Locale.US) }
-    private val monthYear = ThreadLocal.withInitial { SimpleDateFormat("MMM'.' yyyy", Locale.US) }
+    private val monthYear = LocalFormat("MMM'.' yyyy", "MMMyyyy")
     private val yearOnly = ThreadLocal.withInitial { SimpleDateFormat("yyyy", Locale.US) }
     private val dayKeyFormat = ThreadLocal.withInitial { SimpleDateFormat("yyyy-MM-dd", Locale.US) }
     private val monthKeyFormat = ThreadLocal.withInitial { SimpleDateFormat("yyyy-MM", Locale.US) }
-    private val fullDay = ThreadLocal.withInitial { SimpleDateFormat("EEE'.' MMM'.' d yyyy", Locale.US) }
+    private val fullDay = LocalFormat("EEE'.' MMM'.' d yyyy", "EEEMMMdyyyy")
+
+    /**
+     * A heading's date format in the app's language (Cip, 2026-09-20): English keeps the exact
+     * wording Cip chose ("Jun. 2026", "Sun. Mar. 15 2026"); every other language gets its own
+     * order and abbreviations from Android for the same fields, where a dot after an abbreviation
+     * that already ends in one would read "Jan.. 2026". One formatter per thread and language.
+     */
+    private class LocalFormat(private val english: String, private val skeleton: String) {
+        private val held = ThreadLocal<Pair<Locale, SimpleDateFormat>>()
+
+        fun get(): SimpleDateFormat {
+            val locale = Locale.getDefault()
+            held.get()?.let { (at, format) -> if (at == locale) return format }
+            val format = if (locale.language == "en") SimpleDateFormat(english, Locale.US)
+            else SimpleDateFormat(android.text.format.DateFormat.getBestDateTimePattern(locale, skeleton), locale)
+            held.set(locale to format)
+            return format
+        }
+    }
 
     /**
      * mm/dd/yyyy hh:mm:ss in the phone's time zone, from a Solr UTC date.
@@ -263,8 +311,8 @@ object Actions {
         }
         val daysAgo = ((startOfToday.timeInMillis - taken.timeInMillis) / 86_400_000L).toInt()
         return when {
-            taken.timeInMillis >= startOfToday.timeInMillis -> "Today"
-            daysAgo < 1 -> "Yesterday"
+            taken.timeInMillis >= startOfToday.timeInMillis -> AppText.s(R.string.ac_today)
+            daysAgo < 1 -> AppText.s(R.string.ac_yesterday)
             daysAgo < 6 -> fullDay.get()!!.format(millis)
             else -> monthYear.get()!!.format(millis)
         }

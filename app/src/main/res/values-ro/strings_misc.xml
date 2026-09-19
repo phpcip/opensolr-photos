@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="al_title">Albume</string>
+    <string name="al_empty">Încă nu sunt albume: ele vin din etichetele tale, cuvintele citite în poze, locuri, camere și ani.</string>
+    <string name="al_check_none">Debifează tot</string>
+    <string name="al_check_all">Bifează tot</string>
+    <string name="al_expand_all">Deschide tot</string>
+    <string name="al_collapse_all">Pliază tot</string>
+    <string name="al_share">Trimite</string>
+    <string name="al_delete">Șterge</string>
+    <string name="al_cancel">Anulează</string>
+    <string name="al_delete_q">Ștergi pozele?</string>
+    <string name="al_del_sections">Se șterge fiecare poză din fiecare album din: %1$s.</string>
+    <string name="al_del_album">Se șterge fiecare poză din albumul %1$s.</string>
+    <string name="al_del_albums">Se șterge fiecare poză din albumele: %1$s.</string>
+    <string name="al_del_note">Pozele sunt șterse de pe telefon și scoase din index. O poză aflată în mai multe albume dispare din toate.</string>
+    <string name="al_open_section">Deschide secțiunea</string>
+    <string name="al_fold_section">Pliază secțiunea</string>
+    <string name="al_sec_people">Persoane</string>
+    <string name="al_sec_tags">Etichetele mele (Albume)</string>
+    <string name="al_sec_things">Lucruri</string>
+    <string name="al_sec_years">Ani</string>
+    <string name="al_sec_places">Locuri</string>
+    <string name="al_sec_cameras">Camere</string>
+    <string name="mp_title">Hartă</string>
+    <string name="mp_with_place">%1$s cu loc</string>
+    <string name="mp_search_area">Caută în zona asta</string>
+    <string name="mp_reload">Reîncarcă</string>
+    <string name="mp_failed">Harta nu s-a putut încărca</string>
+    <string name="mp_none">Nicio poză indexată nu are încă poziție GPS.</string>
+    <string name="mp_no_match">Nicio poză cu poziție GPS nu se potrivește acestei căutări.</string>
+    <string name="pp_title">Unde a fost făcută?</string>
+    <string name="pp_lead">Mută harta până când acul stă pe loc sau atinge locul.</string>
+    <string name="pp_move">Mută harta ca să alegi un loc</string>
+    <string name="pp_cancel">Anulează</string>
+    <string name="pp_use">Folosește locul acesta</string>
+    <string name="rt_reset_confirm">Resetează și resincronizează</string>
+    <string name="rt_later">Mai târziu</string>
+    <string name="rt_reset_title">Indexul va fi resetat</string>
+    <string name="rt_reset_text">Această versiune Opensolr Photos vine cu o nouă configurație a indexului. Indexul va fi resetat acum și fiecare poză sincronizată din nou. Durează o vreme; căutarea merge în continuare și găsește pozele pe măsură ce revin, iar recitirea pozelor contează la cererile AI ale planului. Etichetele și editările tale rămân.</string>
+    <string name="rt_ok">OK</string>
+    <string name="rt_busy_title">Un sync rulează deja</string>
+    <string name="rt_busy_text">Un sync rulează deja.</string>
+    <string name="rt_new_device">Niciunul, e un dispozitiv nou</string>
+    <string name="rt_which_device">Care dintre acestea e dispozitivul tău?</string>
+    <string name="rt_unknown_phone">Telefon necunoscut</string>
+    <string name="rt_last_synced">ultimul sync %1$s</string>
+    <string name="rt_since">din %1$s</string>
+    <string name="rt_device_note">Așa pozele tale și resursele contului Opensolr rămân legate de acest telefon.</string>
+    <string name="cp_open_site">Deschide pe opensolr.com</string>
+    <string name="cp_x_of_y">%1$s din %2$s</string>
+    <string name="cp_back">Înapoi</string>
+    <plurals name="al_n_photos">
+        <item quantity="one">%1$s poză</item>
+        <item quantity="few">%1$s poze</item>
+        <item quantity="other">%1$s de poze</item>
+    </plurals>
+    <plurals name="mp_n_here">
+        <item quantity="one">%1$s poză aici</item>
+        <item quantity="few">%1$s poze aici</item>
+        <item quantity="other">%1$s de poze aici</item>
+    </plurals>
+    <plurals name="rt_n_photos">
+        <item quantity="one">%1$s poză</item>
+        <item quantity="few">%1$s poze</item>
+        <item quantity="other">%1$s de poze</item>
+    </plurals>
+</resources>

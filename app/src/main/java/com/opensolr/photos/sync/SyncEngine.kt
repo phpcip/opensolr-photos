@@ -1,5 +1,7 @@
 package com.opensolr.photos.sync
 
+import com.opensolr.photos.R
+import com.opensolr.photos.AppText
 import android.content.Context
 import com.opensolr.photos.data.AppPrefs
 import com.opensolr.photos.data.IndexConnection
@@ -76,6 +78,62 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
     /** The warning of this run that the month's allowance covers fewer photos than there are to read, if any. */
     private var shortAllowance = ""
 
+    /** The phone's position this run already looked up for new photos, and whether it did. */
+    private var runFix: android.location.Location? = null
+    private var runFixAsked = false
+
+    /**
+     * Places for the new photos of [batch] that came without a position (Cip, 2026-09-19), for a
+     * camera with no GPS whose photos are copied onto the phone. Each is kept on the phone and
+     * returned by photo id.
+     *
+     * New means it appeared after the owner switched this on, so nothing already on the phone is
+     * ever touched; without a position means its original EXIF was read and holds none that can be
+     * used - a position that exists is never replaced. For each such photo, in this order:
+     * - the place of the phone's own photo taken closest in time, within [NEAR_PHOTO_MS]: the
+     *   phone was there when the other camera was, whenever the photos are copied over;
+     * - the phone's position now, only for a photo taken at most [DEVICE_WINDOW_MS] ago: later
+     *   than that the owner may be far from where it was taken. Asked for once a run;
+     * - nothing.
+     * One query on the phone's copy of the index for the whole batch.
+     */
+    private suspend fun newPhotoPlaces(batch: List<LocalPhoto>, already: Set<String>): Map<String, PhotoCache.SetPlace> {
+        val since = prefs.autoPlaceSince
+        if (since <= 0L) return emptyMap()
+        // When each was taken, really (MediaStore, or when it arrived), and the ways the index may
+        // hold the time of the phone's own photos: a camera that writes no time zone is stored at
+        // its wall-clock time as if it were UTC, so both readings are tried against them.
+        val wanted = batch.filter { it.id !in already && it.addedSec * 1000L >= since }
+            .filter { PhotoReader.gpsState(context, it.uri) == PhotoReader.GpsState.MISSING }
+            .associateWith { photo ->
+                val real = photo.dateTakenMs.takeIf { t -> t > 0 } ?: (photo.addedSec * 1000L)
+                real to listOfNotNull(real, PhotoReader.takenAsIndexed(context, photo.uri)).distinct()
+            }
+        if (wanted.isEmpty()) return emptyMap()
+        val readings = wanted.values.flatMap { it.second }
+        val near = cache.positionsBetween(readings.min() - NEAR_PHOTO_MS, readings.max() + NEAR_PHOTO_MS)
+        val now = System.currentTimeMillis()
+        val out = HashMap<String, PhotoCache.SetPlace>()
+        for ((photo, times) in wanted) {
+            val (moment, tries) = times
+            val fromPhoto = near.map { at -> at to tries.minOf { kotlin.math.abs(at.first - it) } }
+                .filter { it.second <= NEAR_PHOTO_MS }
+                .minByOrNull { it.second }
+                ?.first?.let { it.second to it.third }
+            val position = fromPhoto ?: if (now - moment in 0..DEVICE_WINDOW_MS) {
+                if (!runFixAsked) {
+                    runFixAsked = true
+                    runFix = com.opensolr.photos.media.DevicePlace.now(context)
+                }
+                runFix?.let { it.latitude to it.longitude }
+            } else null
+            position ?: continue
+            out[photo.id] = PhotoCache.SetPlace(photo.id, position.first, position.second, owner = false, written = false)
+        }
+        if (out.isNotEmpty()) cache.inTransaction { out.values.forEach { cache.putSetPlace(it) } }
+        return out
+    }
+
     /** Thrown mid-run when the battery is low with no charger; [photos] are left to read. */
     private class ChargerNeededException(val photos: Int) : Exception()
 
@@ -86,7 +144,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
      * Runs one sync and returns what happened. Never throws except for cancellation.
      */
     suspend fun run(onProgress: suspend (Progress) -> Unit): SyncReport {
-        val session = prefs.session ?: return report("sign_in_required", message = "Sign in to Opensolr to sync.")
+        val session = prefs.session ?: return report("sign_in_required", message = AppText.s(R.string.sy_sign_in))
         var localCount = 0
         var indexCount = 0
         var added = 0
@@ -100,9 +158,11 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
         quotaHit = false
         withoutWords = 0
         shortAllowance = ""
+        runFix = null
+        runFixAsked = false
 
         try {
-            onProgress(Progress("Checking your index", 0, 0))
+            onProgress(Progress(AppText.s(R.string.sy_checking), 0, 0))
             val (initialConnection, outcome) = indexes.ensure(session) { onProgress(Progress(it, 0, 0)) }
             recreated = outcome == IndexManager.Outcome.RECREATED
             if (recreated) Notifier.indexRecreated(context)
@@ -110,17 +170,17 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             var solr = SolrClient(connection)
 
             if (outcome == IndexManager.Outcome.NEEDS_CHOICE) {
-                return report("device_choice", message = "Open Opensolr Photos and say which one of your devices this phone is.")
+                return report("device_choice", message = AppText.s(R.string.sy_device))
             }
             if (outcome == IndexManager.Outcome.CONFIG_NEWER) {
-                return report("update_app", message = "Your index was set up by a newer version of Opensolr Photos. Update the app to keep syncing.")
+                return report("update_app", message = AppText.s(R.string.sy_newer))
             }
             val rebuild = outcome == IndexManager.Outcome.NEEDS_REBUILD
             if (rebuild && !prefs.rebuildApproved) {
-                return report("rebuild_required", message = "This version of Opensolr Photos comes with a new index configuration. Your index must be reset and fully re-synced before syncing continues.")
+                return report("rebuild_required", message = AppText.s(R.string.sy_rebuild))
             }
 
-            onProgress(Progress("Looking for photos", 0, 0))
+            onProgress(Progress(AppText.s(R.string.sy_looking), 0, 0))
             // Taken before the scan, so a change made while this run works is newer than it and
             // the next look at the folders still sees it.
             val foldersBefore = MediaScanner.folderStamp(context, prefs.folders)
@@ -142,7 +202,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                 // other (Cip, 2026-09-15): the owner's tags and wording are kept on the phone,
                 // the index is emptied, and only THEN the new configuration goes up. Every
                 // photo is handed to Opensolr again below.
-                onProgress(Progress("Resetting your index", 0, 0))
+                onProgress(Progress(AppText.s(R.string.sy_resetting), 0, 0))
                 withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { keepOwnersEdits(solr) }
                 solr.deleteAll()
                 indexes.applyConfig(session, connection) { onProgress(Progress(it, 0, 0)) }
@@ -159,7 +219,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             forced.forEach { cache.clearWordRetry(it); cache.clearSkipped(it) }
             val skippedSizes = cache.skippedSizes()
             val rereadSince = prefs.rereadAllSince
-            val phase = if (rebuild) "Rebuilding your index" else "Indexing photos"
+            val phase = if (rebuild) AppText.s(R.string.sy_rebuilding) else AppText.s(R.string.sy_indexing)
 
             // Each photo goes to Opensolr once, five per call, with its EXIF and the owner's
             // edits when this phone has them. The server does the rest (words, vector, place,
@@ -189,9 +249,15 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                     throw SyncStoppedException()
                 }
                 val items = ArrayList<IngestItem>(batch.size)
+                // The places this app gave the batch's photos, read in one query for the batch,
+                // and places for the new ones that came without.
+                val placed = cache.setPlaces(batch.map { it.id })
+                val guessed = newPhotoPlaces(batch, placed.keys)
                 for (photo in batch) {
                     val jpeg = try {
-                        PhotoReader.copyForIngest(context, photo)
+                        PhotoReader.copyForIngest(context, photo, placed[photo.id] ?: guessed[photo.id])
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         null
                     }
@@ -242,6 +308,8 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                                 // phone's own copy of the index, so nothing has to be asked back.
                                 result.doc?.let { edits.storeDoc(item.photo.id, it) }
                                 cache.clearActions(listOf(item.photo.id))
+                                // Its place, if this app gave it one, went up on the copy.
+                                if (item.photo.id in placed) cache.markPlacesSynced(listOf(item.photo.id))
                                 if (result.words) {
                                     cache.clearWordRetry(item.photo.id)
                                 } else {
@@ -274,12 +342,12 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             val toDelete = ArrayList<String>(500)
             if (!rebuild) {
                 if (edits.cloneMissing()) {
-                    onProgress(Progress("Reading your index once", 0, 0))
+                    onProgress(Progress(AppText.s(R.string.sy_reading_once), 0, 0))
                     withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { edits.readIndexIntoCache() }
                 }
                 val known = cache.docSizes()
                 indexCount = known.size
-                onProgress(Progress("Comparing with your photos", 0, 0))
+                onProgress(Progress(AppText.s(R.string.sy_comparing), 0, 0))
                 // Gone from the phone, so gone from the index.
                 known.keys.filter { it !in local }.forEach { toDelete += it }
                 // Photos with no words although the plan has AI, unless they are still pausing
@@ -365,7 +433,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             // on a thousand at once - are carried up here, fifty per call and no pictures.
             try {
                 edits.sendWords { done, all ->
-                    onProgress(Progress("Saving your words on $done of $all photos", done, all))
+                    onProgress(Progress(AppText.s(R.string.sy_saving_words, Actions.formatCount(done.toLong()), Actions.formatCount(all.toLong())), done, all))
                 }
             } catch (e: CancellationException) {
                 throw e
@@ -383,11 +451,11 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             else if (withoutWords > 0) {
                 // Nothing broke: the photos are in the index and found by their date, camera,
                 // place, file name and tags; the words come when the plan allows them.
-                val n = "$withoutWords photo${if (withoutWords == 1) "" else "s"}"
+                val n = AppText.p(R.plurals.sy_n_photos, withoutWords, Actions.formatCount(withoutWords.toLong()))
                 message = if (!vectorAllowed)
-                    "$n indexed by date, camera, place, file name and your tags only: your plan does not include photo recognition. Upgrade to have them read into words."
+                    AppText.s(R.string.sy_no_recognition, n)
                 else
-                    "$n indexed without being read into words: the monthly AI requests of your plan are used up. They are read at the first sync after the allowance resets, or now after an upgrade."
+                    AppText.s(R.string.sy_no_words, n)
             }
             val indexAfter = cache.docCount()
             prefs.folderStamp = foldersBefore
@@ -399,38 +467,38 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             // there, because the diff is on what the index holds rather than on a position.
             commitQuietly()
             return report("stopped", added, deleted, failed, localCount, indexCount,
-                "Stopped after $added photo${if (added == 1) "" else "s"}. The next sync carries on from here.", recreated)
+                AppText.p(R.plurals.sy_stopped_after, added, Actions.formatCount(added.toLong())), recreated)
         } catch (e: ChargerNeededException) {
             commitQuietly()
             return report("waiting_charger", added, deleted, failed, localCount, indexCount,
-                "Paused at ${batteryPercent()}% battery after $added photos; ${Actions.formatCount(e.photos.toLong())} are left. It continues on its own when the phone is charging.", recreated)
+                AppText.s(R.string.sy_charger, batteryPercent().toString(), Actions.formatCount(added.toLong()), Actions.formatCount(e.photos.toLong())), recreated)
         } catch (e: RetryLaterException) {
             commitQuietly()
             return report("retry_later", added, deleted, failed, localCount, indexCount, e.message ?: "", recreated)
         } catch (e: SignInRequiredException) {
-            prefs.pendingNotice = "Your Opensolr sign-in stopped working. Sign in again to keep your photos in sync."
+            prefs.pendingNotice = AppText.s(R.string.sy_signin_notice)
             Notifier.signInRequired(context)
             return report("sign_in_required", added, deleted, failed, localCount, indexCount, e.message ?: "", recreated)
         } catch (e: QuotaExceededException) {
             commitQuietly()
-            val reset = e.resetsAt?.takeIf { it.isNotBlank() }?.let { " It resets on ${it.substringBefore(' ')}." } ?: ""
+            val reset = e.resetsAt?.takeIf { it.isNotBlank() }?.let { AppText.s(R.string.sy_resets_on, it.substringBefore(' ')) } ?: ""
             Notifier.planLimit(
-                context, "Monthly AI requests used up",
-                "Opensolr Photos paused after indexing $added photos.$reset Upgrade your plan to continue now."
+                context, AppText.s(R.string.sy_quota_title),
+                AppText.s(R.string.sy_quota_text, Actions.formatCount(added.toLong()), reset)
             )
-            return report("stopped_quota", added, deleted, failed, localCount, indexCount, "The monthly AI requests of your plan are used up.$reset", recreated)
+            return report("stopped_quota", added, deleted, failed, localCount, indexCount, AppText.s(R.string.sy_quota_report, reset), recreated)
         } catch (e: PlanLimitException) {
             Notifier.planLimit(
-                context, "Your photo index is full",
-                "The index reached the disk space or search bandwidth of your Opensolr plan. Upgrade to keep syncing and searching."
+                context, AppText.s(R.string.sy_full_title),
+                AppText.s(R.string.sy_full_text)
             )
             return report("stopped_plan_limit", added, deleted, failed, localCount, indexCount, e.message ?: "", recreated)
         } catch (e: OpensolrException) {
             commitQuietly()
-            return report("failed", added, deleted, failed, localCount, indexCount, friendlyMessage(e, "Sync failed"), recreated)
+            return report("failed", added, deleted, failed, localCount, indexCount, friendlyMessage(e, AppText.s(R.string.sy_failed)), recreated)
         } catch (e: Exception) {
             commitQuietly()
-            return report("failed", added, deleted, failed, localCount, indexCount, "Sync stopped: ${friendlyMessage(e, "try again later")}", recreated)
+            return report("failed", added, deleted, failed, localCount, indexCount, AppText.s(R.string.sy_stopped_err, friendlyMessage(e, AppText.s(R.string.sy_try_later))), recreated)
         }
     }
 
@@ -576,10 +644,10 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
      */
     private fun warnShortAllowance(left: Int, toRead: Int): String {
         val month = SimpleDateFormat("yyyy-MM", Locale.US).format(Date())
-        val text = "Your plan's AI requests cover $left of the ${Actions.formatCount(toRead.toLong())} photos waiting to be read this month. The others are indexed by date, camera, place, file name and your tags, and read at the first sync after the allowance resets, or now after an upgrade at opensolr.com/pricing."
+        val text = AppText.s(R.string.sy_short_text, Actions.formatCount(left.toLong()), Actions.formatCount(toRead.toLong()))
         val key = "ai_short_$month"
         if (key !in prefs.warnedKeys) {
-            Notifier.planLimit(context, "Only $left photos can be read this month", text, key)
+            Notifier.planLimit(context, AppText.s(R.string.sy_short_title, Actions.formatCount(left.toLong())), text, key)
             prefs.warnedKeys = prefs.warnedKeys + key
         }
         return text
@@ -589,7 +657,13 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
         SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(millis)
 
     companion object {
-            /** Photos per photos_ingest call, the most the endpoint takes. */
+        /** How far in time the phone's own photo may be from the other camera's. */
+        private const val NEAR_PHOTO_MS = 30 * 60 * 1000L
+
+        /** How old a photo may be and still get the phone's position at the moment it arrives. */
+        private const val DEVICE_WINDOW_MS = 2 * 60 * 60 * 1000L
+
+        /** Photos per photos_ingest call, the most the endpoint takes. */
         private const val READ_BATCH = 5
 
         /**

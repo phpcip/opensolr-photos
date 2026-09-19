@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="al_title">アルバム</string>
+    <string name="al_empty">まだアルバムはありません。アルバムはタグ、写真から読み取った言葉、場所、カメラ、年から作られます。</string>
+    <string name="al_check_none">すべて解除</string>
+    <string name="al_check_all">すべて選択</string>
+    <string name="al_expand_all">すべて開く</string>
+    <string name="al_collapse_all">すべて閉じる</string>
+    <string name="al_share">共有</string>
+    <string name="al_delete">削除</string>
+    <string name="al_cancel">キャンセル</string>
+    <string name="al_delete_q">写真を削除しますか？</string>
+    <string name="al_del_sections">次のすべてのアルバムの写真が削除されます: %1$s。</string>
+    <string name="al_del_album">アルバム %1$s のすべての写真が削除されます。</string>
+    <string name="al_del_albums">次のアルバムのすべての写真が削除されます: %1$s。</string>
+    <string name="al_del_note">写真はこの端末から削除され、インデックスからも外されます。複数のアルバムにある写真はすべてから消えます。</string>
+    <string name="al_open_section">このセクションを開く</string>
+    <string name="al_fold_section">このセクションを閉じる</string>
+    <string name="al_sec_people">人物</string>
+    <string name="al_sec_tags">マイタグ（アルバム）</string>
+    <string name="al_sec_things">もの</string>
+    <string name="al_sec_years">年</string>
+    <string name="al_sec_places">場所</string>
+    <string name="al_sec_cameras">カメラ</string>
+    <string name="mp_title">地図</string>
+    <string name="mp_with_place">場所あり %1$s</string>
+    <string name="mp_search_area">このエリアを検索</string>
+    <string name="mp_reload">再読み込み</string>
+    <string name="mp_failed">地図を読み込めませんでした</string>
+    <string name="mp_none">インデックス済みの写真にGPS位置のあるものはまだありません。</string>
+    <string name="mp_no_match">この検索に一致するGPS位置付きの写真はありません。</string>
+    <string name="pp_title">どこで撮影しましたか？</string>
+    <string name="pp_lead">ピンが場所に合うまで地図を動かすか、場所をタップしてください。</string>
+    <string name="pp_move">地図を動かして場所を選択</string>
+    <string name="pp_cancel">キャンセル</string>
+    <string name="pp_use">この場所を使う</string>
+    <string name="rt_reset_confirm">リセットして再同期</string>
+    <string name="rt_later">後で</string>
+    <string name="rt_reset_title">インデックスがリセットされます</string>
+    <string name="rt_reset_text">このバージョンのOpensolr Photosには新しいインデックス設定が含まれます。インデックスをリセットし、すべての写真を再同期します。時間がかかりますが、検索はその間も使え、戻った写真から見つかります。写真の読み直しはプランのAIリクエストに数えられます。タグと編集は保持されます。</string>
+    <string name="rt_ok">OK</string>
+    <string name="rt_busy_title">すでに同期中です</string>
+    <string name="rt_busy_text">すでに同期中です。</string>
+    <string name="rt_new_device">どれでもない（新しいデバイス）</string>
+    <string name="rt_which_device">どれがあなたのデバイスですか？</string>
+    <string name="rt_unknown_phone">不明な端末</string>
+    <string name="rt_last_synced">最終同期 %1$s</string>
+    <string name="rt_since">%1$s から</string>
+    <string name="rt_device_note">写真とOpensolrアカウントのリソースをこの端末に紐づけておくためです。</string>
+    <string name="cp_open_site">opensolr.com で開く</string>
+    <string name="cp_x_of_y">%1$s / %2$s</string>
+    <string name="cp_back">戻る</string>
+    <plurals name="al_n_photos">
+        <item quantity="other">%1$s 枚</item>
+    </plurals>
+    <plurals name="mp_n_here">
+        <item quantity="other">ここに写真 %1$s 枚</item>
+    </plurals>
+    <plurals name="rt_n_photos">
+        <item quantity="other">写真 %1$s 枚</item>
+    </plurals>
+</resources>

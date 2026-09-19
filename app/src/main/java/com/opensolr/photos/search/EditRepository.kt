@@ -128,6 +128,8 @@ class EditRepository(private val context: Context) {
         val connection = prefs.connection ?: return 0
         var written = 0
         waiting.chunked(WORDS_BATCH).forEach { batch ->
+            // Places chosen on the map that the index does not have yet, read once per batch.
+            val places = cache.setPlaces(batch).filterValues { !it.synced }
             val items = batch.map { id ->
                 val edits = cache.getEdits(id)
                 // The photo's row is read once and everything taken from it: the fingerprint used to
@@ -140,22 +142,34 @@ class EditRepository(private val context: Context) {
                     persons = edits?.persons ?: doc?.persons,
                     meaning = edits?.meaning,
                     fileHash = doc?.fileHash,
+                    location = places[id]?.let { it.lat to it.lon },
                 )
             }
             val results = api.photosWords(session, connection.indexName, items)
             val done = ArrayList<String>(batch.size)
+            // A place counts as delivered only when the written document carries it: a server that
+            // does not know the field yet answers yes all the same, and the place would never be
+            // sent again.
+            val placed = ArrayList<String>()
             batch.forEachIndexed { index, id ->
                 val answer = results.getOrNull(index)
                 if (answer == null) {
                     // Not in the index (yet): it goes up the ordinary way, with its picture.
                     cache.queueAction(id, PhotoCache.ACTION_INDEX)
                 } else {
-                    storeDoc(id, answer)
+                    places[id]?.let { place ->
+                        val got = com.opensolr.photos.search.parseLatLon(answer.optString("location"))
+                        if (got != null && kotlin.math.abs(got.first - place.lat) < 1e-5 && kotlin.math.abs(got.second - place.lon) < 1e-5) placed += id
+                    }
+                    if (id !in places || id in placed) storeDoc(id, answer)
                     done += id
                     written++
                 }
             }
             cache.clearActions(done)
+            cache.markPlacesSynced(placed)
+            // Not delivered: the words are in, the place waits for the next sync.
+            done.filter { it in places && it !in placed }.let { if (it.isNotEmpty()) cache.queueActions(it, PhotoCache.ACTION_WORDS) }
             onProgress(written, waiting.size)
         }
         return written
@@ -211,6 +225,7 @@ class EditRepository(private val context: Context) {
                 ocr = answer.optString("ocr_t").ifBlank { null },
                 city = answer.optString("city").ifBlank { null },
                 country = answer.optString("country").ifBlank { null },
+                region = answer.optString("region").ifBlank { null },
                 json = answer.toString(),
                 modified = modified ?: had?.modified ?: 0L,
                 embedModel = answer.optString("embed_model").ifBlank { null },

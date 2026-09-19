@@ -1,5 +1,7 @@
 package com.opensolr.photos.net
 
+import com.opensolr.photos.R
+import com.opensolr.photos.AppText
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.net.SocketTimeoutException
@@ -15,33 +17,33 @@ sealed class OpensolrException(message: String) : Exception(message)
  * The saved API key was refused: the key was regenerated or the account is gone. The only fix
  * is to sign in again.
  */
-class SignInRequiredException : OpensolrException("Your Opensolr sign-in is no longer valid.")
+class SignInRequiredException : OpensolrException(AppText.s(R.string.err_sign_in_invalid))
 
 /**
  * The sign-in page handed back a code the server would not exchange (expired, reused, or the
  * sign-in was started on another attempt).
  */
-class SignInFailedException(reason: String) : OpensolrException("Sign-in could not be completed ($reason).")
+class SignInFailedException(reason: String) : OpensolrException(AppText.s(R.string.err_sign_in_failed, reason))
 
 /**
  * The plan's monthly AI requests are used up. Resumes when the allowance resets or the plan grows.
  */
-class QuotaExceededException(val resetsAt: String?) : OpensolrException("The monthly AI requests of your plan are used up.")
+class QuotaExceededException(val resetsAt: String?) : OpensolrException(AppText.s(R.string.err_quota))
 
 /**
  * The plan does not include vector search.
  */
-class VectorNotAllowedException : OpensolrException("Your Opensolr plan does not include vector search.")
+class VectorNotAllowedException : OpensolrException(AppText.s(R.string.err_no_vector))
 
 /**
  * The index refused a request with 403: disk space or search bandwidth of the plan is used up.
  */
-class PlanLimitException : OpensolrException("Your index reached the disk space or search bandwidth of your plan.")
+class PlanLimitException : OpensolrException(AppText.s(R.string.err_plan_limit))
 
 /**
  * The per-minute or per-hour request rate was hit. Safe to retry after [retryAfterSeconds].
  */
-class RateLimitedException(val retryAfterSeconds: Long) : OpensolrException("Too many requests, slowing down.")
+class RateLimitedException(val retryAfterSeconds: Long) : OpensolrException(AppText.s(R.string.err_rate))
 
 /**
  * The account cannot hold another index.
@@ -51,12 +53,12 @@ class IndexLimitException(message: String) : OpensolrException(message)
 /**
  * get_core_info says the index is not in this account.
  */
-class IndexMissingException : OpensolrException("This phone's index is not in your Opensolr account.")
+class IndexMissingException : OpensolrException(AppText.s(R.string.err_index_missing))
 
 /**
  * The index answered 401: its HTTP password changed. Re-reading get_core_info fixes it.
  */
-class SolrAuthException : OpensolrException("The index refused its saved password.")
+class SolrAuthException : OpensolrException(AppText.s(R.string.err_solr_auth))
 
 /**
  * The server refused one photo (for example a format it cannot decode). Only that photo is skipped.
@@ -72,7 +74,7 @@ class ServiceException(message: String) : OpensolrException(message)
  * The run should stop now and be started again a little later by the scheduler: the API is
  * rate limiting, and waiting inside a background job keeps the phone awake for nothing.
  */
-class RetryLaterException(val afterSeconds: Long) : OpensolrException("Opensolr asked to slow down; the sync continues shortly.")
+class RetryLaterException(val afterSeconds: Long) : OpensolrException(AppText.s(R.string.err_retry))
 
 /**
  * What a person is told when something goes wrong, from whatever was thrown.
@@ -85,10 +87,10 @@ class RetryLaterException(val afterSeconds: Long) : OpensolrException("Opensolr 
  */
 fun friendlyMessage(e: Throwable, fallback: String): String = when (e) {
     is OpensolrException -> e.message ?: fallback
-    is UnknownHostException -> "No connection. Check your internet and try again."
-    is SocketTimeoutException -> "Your index took too long to answer. Try again."
-    is SSLException -> "The secure connection could not be made. Try again."
-    is InterruptedIOException -> "The connection took too long. Try again."
-    is IOException -> "The connection failed. Check your internet and try again."
+    is UnknownHostException -> AppText.s(R.string.err_no_connection)
+    is SocketTimeoutException -> AppText.s(R.string.err_timeout)
+    is SSLException -> AppText.s(R.string.err_ssl)
+    is InterruptedIOException -> AppText.s(R.string.err_slow)
+    is IOException -> AppText.s(R.string.err_io)
     else -> fallback
 }

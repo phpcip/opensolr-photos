@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="channel_sync_name">Progreso de sincronización</string>
+    <string name="channel_sync_description">Muestra el progreso mientras se indexan tus fotos.</string>
+    <string name="channel_alerts_name">Avisos de la cuenta</string>
+    <string name="channel_alerts_description">Límites del plan alcanzados, inicio de sesión necesario, índice recreado.</string>
+</resources>
