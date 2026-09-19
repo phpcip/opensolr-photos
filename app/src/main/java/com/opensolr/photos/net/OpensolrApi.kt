@@ -76,6 +76,62 @@ data class PlaceInfo(
 )
 
 /**
+ * A place found by name, from Opensolr's place_search: what to show in a list of choices,
+ * and where to put the map when one of them is chosen.
+ *
+ * @property kind "city", "region" or "country", as the gazetteer classes the place
+ */
+data class PlaceHit(
+    val name: String,
+    val region: String?,
+    val country: String?,
+    val countryCode: String,
+    val lat: Double,
+    val lon: Double,
+    val kind: String,
+) {
+    /** The place written the way the app writes places everywhere else. */
+    val label: String get() = listOfNotNull(name, region, country).distinct().joinToString(", ")
+
+    companion object {
+        /** The list as one JSON text, for the phone's own cache. */
+        fun listToJson(hits: List<PlaceHit>): String = org.json.JSONArray().apply {
+            hits.forEach { h ->
+                val o = JSONObject()
+                    .put("place", h.name)
+                    .put("country_code", h.countryCode)
+                    .put("lat", h.lat)
+                    .put("lon", h.lon)
+                    .put("kind", h.kind)
+                // A fact the gazetteer does not have is left out, not written as a null.
+                h.region?.let { o.put("region", it) }
+                h.country?.let { o.put("country", it) }
+                put(o)
+            }
+        }.toString()
+
+        /** The same list read back, in the shape the answer itself carries. */
+        fun listFromJson(text: String): List<PlaceHit> {
+            val array = org.json.JSONArray(text)
+            return (0 until array.length()).mapNotNull { i ->
+                val o = array.optJSONObject(i) ?: return@mapNotNull null
+                val name = o.optString("place")
+                if (name.isBlank()) return@mapNotNull null
+                PlaceHit(
+                    name = name,
+                    region = o.optString("region").ifBlank { null },
+                    country = o.optString("country").ifBlank { null },
+                    countryCode = o.optString("country_code"),
+                    lat = o.optDouble("lat", Double.NaN),
+                    lon = o.optDouble("lon", Double.NaN),
+                    kind = o.optString("kind").ifBlank { "city" },
+                ).takeIf { !it.lat.isNaN() && !it.lon.isNaN() }
+            }
+        }
+    }
+}
+
+/**
  * An index of the account, with the phone it belongs to when it is an Opensolr Photos index.
  *
  * @property deviceName  how the phone called itself when the index was created, or null
@@ -280,6 +336,35 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
             )
         }
         out
+    }
+
+    /**
+     * Places whose name begins with what was typed, biggest first, for the map to fly to
+     * (Cip, 2026-09-20). Empty when nothing is known by that name - which is an answer, not
+     * a failure, so the search box stays quiet instead of showing an error while typing.
+     */
+    suspend fun searchPlaces(session: Session, query: String, limit: Int = 10): List<PlaceHit> = withContext(Dispatchers.IO) {
+        if (query.isBlank()) return@withContext emptyList()
+        val json = parseObject(post(MANAGEMENT + "place_search", form(session) {
+            add("q", query.trim())
+            add("limit", limit.toString())
+        }))
+        if (!json.optBoolean("status")) return@withContext emptyList()
+        val places = json.optJSONArray("places") ?: return@withContext emptyList()
+        (0 until places.length()).mapNotNull { i ->
+            val o = places.optJSONObject(i) ?: return@mapNotNull null
+            val name = o.optString("place")
+            if (name.isBlank()) return@mapNotNull null
+            PlaceHit(
+                name = name,
+                region = o.optString("region").ifBlank { null },
+                country = o.optString("country").ifBlank { null },
+                countryCode = o.optString("country_code"),
+                lat = o.optDouble("lat", Double.NaN),
+                lon = o.optDouble("lon", Double.NaN),
+                kind = o.optString("kind").ifBlank { "city" },
+            ).takeIf { !it.lat.isNaN() && !it.lon.isNaN() }
+        }
     }
 
     /**

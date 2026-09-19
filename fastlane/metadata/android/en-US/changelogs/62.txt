@@ -1,0 +1,1 @@
+Search for a city or town on the map instead of dragging the world to it, and the name you picked stays in the box. The map opens where the photo is, or where your phone is when the photo has no place. Answers are held on your phone for as long as you chose in Me. The buttons on the map no longer hide behind the navigation bar.

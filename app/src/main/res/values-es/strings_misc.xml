@@ -31,6 +31,8 @@
     <string name="mp_no_match">Ninguna foto con posición GPS coincide con esta búsqueda.</string>
     <string name="pp_title">¿Dónde se tomó?</string>
     <string name="pp_lead">Mueve el mapa hasta que el marcador quede sobre el lugar, o toca el lugar.</string>
+    <string name="pp_search">Buscar ciudad / localidad</string>
+    <string name="pp_search_none">No hay ningún lugar así</string>
     <string name="pp_move">Mueve el mapa para elegir un lugar</string>
     <string name="pp_cancel">Cancelar</string>
     <string name="pp_use">Usar este lugar</string>

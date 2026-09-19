@@ -376,6 +376,7 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
             if (pickingPlace) {
                 PlacePickerDialog(
                     start = targets.firstNotNullOfOrNull { it.latLon },
+                    viewModel = viewModel,
                     onDismiss = { pickingPlace = false },
                     onPick = { lat, lon ->
                         pickingPlace = false

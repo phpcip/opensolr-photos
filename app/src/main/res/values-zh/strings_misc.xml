@@ -31,6 +31,8 @@
     <string name="mp_no_match">没有带 GPS 位置的照片与此搜索匹配。</string>
     <string name="pp_title">在哪里拍摄的？</string>
     <string name="pp_lead">移动地图直到图钉落在该地点，或直接点按该地点。</string>
+    <string name="pp_search">搜索城市 / 地区</string>
+    <string name="pp_search_none">找不到该名称的地点</string>
     <string name="pp_move">移动地图以选择地点</string>
     <string name="pp_cancel">取消</string>
     <string name="pp_use">使用此地点</string>

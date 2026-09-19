@@ -31,6 +31,8 @@
     <string name="mp_no_match">Kein Foto mit GPS-Position passt zu dieser Suche.</string>
     <string name="pp_title">Wo wurde es aufgenommen?</string>
     <string name="pp_lead">Verschieben Sie die Karte, bis die Nadel auf dem Ort sitzt, oder tippen Sie auf den Ort.</string>
+    <string name="pp_search">Stadt / Ort suchen</string>
+    <string name="pp_search_none">Kein Ort mit diesem Namen</string>
     <string name="pp_move">Karte verschieben, um einen Ort zu wählen</string>
     <string name="pp_cancel">Abbrechen</string>
     <string name="pp_use">Diesen Ort nehmen</string>

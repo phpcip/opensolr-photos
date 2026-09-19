@@ -3060,7 +3060,7 @@ internal fun DetailsSheet(
         }
     }
     if (picking) {
-        PlacePickerDialog(start = hit.latLon, onDismiss = { picking = false }, onPick = { lat, lon -> savePlace(lat, lon) })
+        PlacePickerDialog(start = hit.latLon, viewModel = viewModel, onDismiss = { picking = false }, onPick = { lat, lon -> savePlace(lat, lon) })
     }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = p.paper, shape = Corner) {
         Column(

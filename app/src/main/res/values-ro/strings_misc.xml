@@ -31,6 +31,8 @@
     <string name="mp_no_match">Nicio poză cu poziție GPS nu se potrivește acestei căutări.</string>
     <string name="pp_title">Unde a fost făcută?</string>
     <string name="pp_lead">Mută harta până când acul stă pe loc sau atinge locul.</string>
+    <string name="pp_search">Caută un oraș / localitate</string>
+    <string name="pp_search_none">Niciun loc cu acest nume</string>
     <string name="pp_move">Mută harta ca să alegi un loc</string>
     <string name="pp_cancel">Anulează</string>
     <string name="pp_use">Folosește locul acesta</string>

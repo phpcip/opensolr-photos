@@ -31,6 +31,8 @@
     <string name="mp_no_match">No photo with a GPS position matches this search.</string>
     <string name="pp_title">Where was it taken?</string>
     <string name="pp_lead">Move the map until the pin sits on the place, or tap the place.</string>
+    <string name="pp_search">Search for a city or town</string>
+    <string name="pp_search_none">Nothing by that name</string>
     <string name="pp_move">Move the map to choose a place</string>
     <string name="pp_cancel">Cancel</string>
     <string name="pp_use">Use this place</string>

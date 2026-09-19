@@ -31,6 +31,8 @@
     <string name="mp_no_match">この検索に一致するGPS位置付きの写真はありません。</string>
     <string name="pp_title">どこで撮影しましたか？</string>
     <string name="pp_lead">ピンが場所に合うまで地図を動かすか、場所をタップしてください。</string>
+    <string name="pp_search">都市・地名を検索</string>
+    <string name="pp_search_none">その名前の場所はありません</string>
     <string name="pp_move">地図を動かして場所を選択</string>
     <string name="pp_cancel">キャンセル</string>
     <string name="pp_use">この場所を使う</string>

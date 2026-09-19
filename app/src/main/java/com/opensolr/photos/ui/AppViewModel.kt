@@ -2559,6 +2559,40 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
+     * Places whose name begins with what was typed, for the map picker's search box
+     * (Cip, 2026-09-20). Empty for an unknown name, and empty when the account cannot be
+     * asked: a search box that fails quietly is better than one that shouts while typing.
+     *
+     * Held on the phone in the same cache as every other answer, for the number of seconds
+     * the owner chose in Me (Cip, 2026-09-20): towns do not move, and typing the same name
+     * again - or one letter more and then back - must not cost another request. The whole
+     * answer is stored as it came, so a hit is a read from SQLite and nothing leaves the phone.
+     */
+    suspend fun searchPlaces(query: String): List<com.opensolr.photos.net.PlaceHit> {
+        val session = prefs.session ?: return emptyList()
+        val q = query.trim()
+        if (q.length < 2) return emptyList()
+
+        val cache = com.opensolr.photos.data.SearchCache.of(context)
+        val key = com.opensolr.photos.data.SearchCache.key(
+            session.email, "/place_search", listOf("q" to q.lowercase(java.util.Locale.ROOT)),
+        )
+        cache.get(key, prefs.cacheSeconds)?.let { stored ->
+            runCatching { com.opensolr.photos.net.PlaceHit.listFromJson(stored) }.getOrNull()?.let { return it }
+        }
+        return try {
+            // Only an answer with places in it is kept: "nothing by that name" is as often the
+            // network, or a gap that gets filled server-side, and holding it for a day would
+            // keep answering nothing long after the name became findable.
+            api.searchPlaces(session, q).also {
+                if (it.isNotEmpty()) cache.put(key, com.opensolr.photos.net.PlaceHit.listToJson(it))
+            }
+        } catch (e: Exception) {
+            emptyList()
+        }
+    }
+
+    /**
      * Reads the plan limits and usage again.
      */
     fun refreshAccount() {
