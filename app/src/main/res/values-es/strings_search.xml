@@ -103,6 +103,7 @@
     <string name="done">Listo</string>
     <string name="no_value">Ningún valor coincide.</string>
     <string name="cd_selected">Seleccionado</string>
+    <string name="cd_select_photo">Seleccionar foto</string>
     <string name="more_values">%1$s más, escribe para acotar</string>
     <string name="sec_place">Lugar</string>
     <string name="add_place">Añadir un lugar</string>

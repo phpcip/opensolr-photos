@@ -52,6 +52,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.opensolr.photos.ui.AccentButton
+import com.opensolr.photos.ui.Actions
 import com.opensolr.photos.ui.GhostButton
 import com.opensolr.photos.ui.ScreenHeader
 import com.opensolr.photos.ui.theme.LocalPalette
@@ -269,13 +270,13 @@ fun PlacePickerDialog(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
                         )
                     }
+                    // Names that repeat inside the same commune and county - and they do -
+                    // carry their own line underneath with how many live there and where
+                    // exactly it is, so no two choices ever read the same (Cip, 2026-09-20).
+                    val repeated = hits.groupingBy { it.label }.eachCount().filterValues { it > 1 }.keys
                     hits.forEach { hit ->
-                        Text(
-                            hit.label,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = p.ink,
-                            maxLines = 2,
-                            modifier = Modifier
+                        Column(
+                            Modifier
                                 .fillMaxWidth()
                                 .clickable {
                                     keyboard?.hide()
@@ -289,7 +290,25 @@ fun PlacePickerDialog(
                                     centre = hit.lat to hit.lon
                                 }
                                 .padding(horizontal = 14.dp, vertical = 10.dp),
-                        )
+                        ) {
+                            Text(
+                                hit.label,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = p.ink,
+                                maxLines = 2,
+                            )
+                            if (hit.label in repeated) {
+                                Text(
+                                    listOfNotNull(
+                                        hit.population.takeIf { it > 0 }?.let { Actions.formatCount(it.toLong()) + " \u00b7 " },
+                                        String.format(Locale.US, "%.4f, %.4f", hit.lat, hit.lon),
+                                    ).joinToString(""),
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = p.muted,
+                                    maxLines = 1,
+                                )
+                            }
+                        }
                     }
                 }
             }

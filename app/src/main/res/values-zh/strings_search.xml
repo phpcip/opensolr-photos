@@ -103,6 +103,7 @@
     <string name="done">完成</string>
     <string name="no_value">没有匹配的值。</string>
     <string name="cd_selected">已选</string>
+    <string name="cd_select_photo">选择照片</string>
     <string name="more_values">还有 %1$s 个，输入以缩小范围</string>
     <string name="sec_place">地点</string>
     <string name="add_place">添加地点</string>

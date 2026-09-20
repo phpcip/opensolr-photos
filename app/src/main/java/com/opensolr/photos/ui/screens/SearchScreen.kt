@@ -193,6 +193,11 @@ import com.opensolr.photos.ui.UiState
 import com.opensolr.photos.ui.theme.LocalPalette
 import android.content.ContentUris
 import android.provider.MediaStore
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.composed
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.ui.semantics.onLongClick
+import androidx.compose.ui.semantics.semantics
 
 private val Corner = RoundedCornerShape(2.dp)
 
@@ -247,6 +252,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     // with nothing in it showed the whole library under its "nothing here" line (Cip, 2026-09-19).
     // The headings the grid writes itself, in the app's language; their keys stay in English.
     val gridWords = GridWords(stringResource(R.string.best_matches), stringResource(R.string.also_similar), stringResource(R.string.of_the_same))
+    // Read out by the accessibility services for the action that starts picking photos.
+    val selectLabel = stringResource(R.string.cd_select_photo)
     val rows = remember(state.hits, state.searchedQuery, state.duplicateGroups, state.collapsedHeadings, state.skeleton, state.duplicatesMode, state.skippedMode, state.resultGroups) {
         if (state.resultGroups.isNotEmpty() && (!state.duplicatesMode || state.similarToId != null) && !state.skippedMode) {
             buildResultGroupRows(state.resultGroups, state.hits, state.collapsedHeadings)
@@ -757,7 +764,13 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(112.dp),
                 state = gridState,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().dragSelect(
+                    gridState = gridState,
+                    rowsNow = { currentRows },
+                    onStart = { id -> Haptics.tick(view, strong = true); viewModel.beginDragSelect(id) },
+                    onRange = { ids -> Haptics.tick(view, strong = false); viewModel.dragSelectTo(ids) },
+                    onEnd = { movedAway -> viewModel.endDragSelect(movedAway) },
+                ),
                 // Room under the last row for the dock, so it never covers a photo.
                 contentPadding = PaddingValues(start = 2.dp, end = 2.dp, bottom = if (state.selecting) 96.dp else 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
@@ -867,19 +880,24 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                             ) {
                                 Thumbnail(
                                     hit = hit,
-                                    modifier = Modifier.combinedClickable(
-                                        onClick = { if (state.selecting) viewModel.toggleSelected(hit.id) else viewing = hit },
-                                        // A long press starts picking photos, as every gallery
-                                        // does. The details live in the full screen view now,
-                                        // a swipe up from the photo itself (Cip, 2026-09-16).
-                                        onLongClick = {
-                                            if (!state.selecting) {
-                                                Haptics.tick(view, strong = true)
-                                                viewModel.setSelecting(true)
+                                    // The long press that starts picking photos belongs to the
+                                    // grid itself now (see dragSelect), so the finger can stay
+                                    // down and go on picking as it travels. It must not also sit
+                                    // on the photo: two long presses with the same timeout fired
+                                    // together and the second one untucked what the first ticked.
+                                    // The action is still declared for the accessibility
+                                    // services, which perform it by name rather than by gesture.
+                                    modifier = Modifier
+                                        .combinedClickable(
+                                            onClick = { if (state.selecting) viewModel.toggleSelected(hit.id) else viewing = hit },
+                                        )
+                                        .semantics {
+                                            onLongClick(label = selectLabel) {
+                                                if (!state.selecting) viewModel.setSelecting(true)
+                                                viewModel.toggleSelected(hit.id)
+                                                true
                                             }
-                                            viewModel.toggleSelected(hit.id)
                                         },
-                                    ),
                                 )
                                 // Photos the owner has tagged, marked in every view (Cip,
                                 // 2026-09-16): a small tag on a translucent dark square, so it
@@ -2238,8 +2256,40 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
         label = "fastScrollerAlpha",
     )
 
-    val index = if (dragging && aimed >= 0) aimed else gridState.firstVisibleItemIndex
-    val fraction = if (total <= 1) 0f else (index.toFloat() / (total - 1)).coerceIn(0f, 1f)
+    // How tall the list is, row by row, as a running total (Cip, 2026-09-20).
+    //
+    // The bar used to map the finger onto the ROW NUMBER, which made every row the same width on
+    // it: a collapsed group, one row, took as much of the bar as a single photo, so with one group
+    // open and forty folded the forty shared a sliver and the finger could not stop on any of
+    // them. Now the bar is a map of the scroll itself - a folded group is a heading tall, an open
+    // one is as tall as its photos - so the finger travels the way the list does.
+    //
+    // The heights come from what is on screen (so a phone's own sizes are used) and are guessed
+    // from the theme only until something has been drawn. One pass over the rows, made again only
+    // when the list itself changes.
+    val columns = gridState.layoutInfo.visibleItemsInfo.maxOfOrNull { it.column + 1 }?.coerceAtLeast(1) ?: 3
+    val fallbackCell = with(LocalDensity.current) { 114.dp.toPx() }
+    val fallbackHeading = with(LocalDensity.current) { 44.dp.toPx() }
+    val cellPx = gridState.layoutInfo.visibleItemsInfo
+        .firstOrNull { (rows.getOrNull(it.index) is GridRow.Photo) }?.size?.height?.toFloat() ?: fallbackCell
+    val headingPx = gridState.layoutInfo.visibleItemsInfo
+        .firstOrNull { (rows.getOrNull(it.index) is GridRow.Heading) }?.size?.height?.toFloat() ?: fallbackHeading
+    val tops = remember(rows, columns, cellPx, headingPx) {
+        val out = FloatArray(rows.size + 1)
+        var y = 0f
+        rows.forEachIndexed { i, row ->
+            out[i] = y
+            // A photo is one cell of its row, so a row of them adds one cell's height in all.
+            y += if (row is GridRow.Heading) headingPx else cellPx / columns
+        }
+        out[rows.size] = y
+        out
+    }
+    val viewportPx = gridState.layoutInfo.viewportSize.height.toFloat()
+    val scrollablePx = (tops[rows.size] - viewportPx).coerceAtLeast(1f)
+    val atPx = if (dragging && aimed >= 0) tops[aimed.coerceIn(0, rows.lastIndex)]
+    else tops[gridState.firstVisibleItemIndex.coerceIn(0, rows.lastIndex)] + gridState.firstVisibleItemScrollOffset
+    val fraction = (atPx / scrollablePx).coerceIn(0f, 1f)
 
     BoxWithConstraints(
         Modifier
@@ -2259,7 +2309,23 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
             if (now.isEmpty()) return
             val last = now.lastIndex
             val at = if (travelPx <= 0f) 0f else ((y - halfThumbPx) / travelPx).coerceIn(0f, 1f)
-            val target = (last * at).roundToInt().coerceIn(0, last)
+            // Where in the whole height of the list the finger is standing, and the row that
+            // holds that place - the row numbers are no longer evenly spread along the bar.
+            val wanted = at * scrollablePx
+            var lo = 0
+            var hi = minOf(last, tops.size - 2)
+            while (lo < hi) {
+                val mid = (lo + hi + 1) / 2
+                if (tops[mid] <= wanted) lo = mid else hi = mid - 1
+            }
+            var target = lo.coerceIn(0, last)
+            // A heading within reach of where the finger points takes it: what a thumb is aiming
+            // at is a group, not the third photo inside it, and a folded group is too small a
+            // mark to hit otherwise (Cip, 2026-09-20).
+            val near = (target - SNAP_ROWS).coerceAtLeast(0)..(target + SNAP_ROWS).coerceAtMost(last)
+            near.minByOrNull { i ->
+                if (now.getOrNull(i) !is GridRow.Heading) Float.MAX_VALUE else kotlin.math.abs(tops[i] - wanted)
+            }?.let { i -> if (now.getOrNull(i) is GridRow.Heading && kotlin.math.abs(tops[i] - wanted) <= headingPx * 2f) target = i }
             if (target == aimed) return
             // Every heading between where the finger was and where it is now. Only a year and a
             // month are felt - a year firmly, a month faintly; days go by in silence, or a long
@@ -2275,7 +2341,10 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
             }
             if (crossedYear || crossedMonth) Haptics.tick(view, crossedYear)
             aimed = target
-            scope.launch { gridState.scrollToItem(target) }
+            // Onto the row, and into it by however much of it lies above the finger, so the list
+            // follows the finger smoothly instead of hopping a whole row at a time.
+            val into = (wanted - tops[target]).coerceAtLeast(0f).roundToInt()
+            scope.launch { gridState.scrollToItem(target, into) }
         }
 
         Box(
@@ -3231,6 +3300,12 @@ private val REBUILD_PHASES = setOf("Resetting your index", "Updating the index c
 @OptIn(ExperimentalFoundationApi::class)
 private fun Modifier.combinedClickableCompat(onClick: () -> Unit): Modifier = this.combinedClickable(onClick = onClick)
 
+/**
+ * How many rows either side of the finger the bar looks at for a heading to settle on. A group is
+ * what a thumb aims for; landing three photos into one is landing nowhere.
+ */
+private const val SNAP_ROWS = 4
+
 /** The mark of a photo the phone could not read: a red frame and a red "!" (Cip, 2026-09-17). */
 private val SkippedRed = Color(0xFFE53E3E)
 
@@ -3260,3 +3335,144 @@ internal fun headingStyle(level: Int): androidx.compose.ui.text.TextStyle =
         // (Cip, 2026-09-18).
         else -> MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp)
     }
+
+/**
+ * Picking photos by dragging, as every gallery does (Cip, 2026-09-20): press and hold a photo,
+ * keep the finger down, and everything between that photo and the one under the finger is ticked
+ * as it travels. Dragging back up unticks what the drag itself ticked. Near the top or the bottom
+ * edge the grid scrolls itself, so a selection can run past what is on screen.
+ *
+ * The press is taken here, on the grid, rather than on each photo: a photo's own long press ends
+ * the moment it fires, and what is wanted is a gesture that goes on while the finger is down. The
+ * events are taken in the first pass and consumed from the long press onwards, so neither the
+ * grid's own scrolling nor the photo underneath sees them - which is what keeps the list still
+ * while the finger picks, and what keeps a lifted finger from also counting as a tap.
+ *
+ * Nothing is consumed before the press is recognised, so an ordinary tap and an ordinary scroll
+ * behave exactly as they did.
+ *
+ * @param rowsNow the rows the grid is drawing right now, read at the moment they are needed:
+ *                the list is rebuilt while a drag is running (every tick changes the state) and
+ *                a captured copy would go stale under the finger.
+ */
+private fun Modifier.dragSelect(
+    gridState: androidx.compose.foundation.lazy.grid.LazyGridState,
+    rowsNow: () -> List<GridRow>,
+    onStart: (String) -> Unit,
+    onRange: (List<String>) -> Unit,
+    onEnd: (Boolean) -> Unit,
+): Modifier = composed {
+    val scope = rememberCoroutineScope()
+    // Where the finger is, while it is down: the edge scroller reads it on every frame.
+    val at = remember { mutableStateOf<Offset?>(null) }
+    val anchorIndex = remember { mutableStateOf<Int?>(null) }
+    val edgePx = with(LocalDensity.current) { DRAG_EDGE.toPx() }
+    val stepPx = with(LocalDensity.current) { DRAG_STEP.toPx() }
+
+    /** The row under [point], or the last one above it when the point is in a gap. */
+    fun rowIndexAt(point: Offset): Int? {
+        val items = gridState.layoutInfo.visibleItemsInfo
+        if (items.isEmpty()) return null
+        items.forEach { item ->
+            val withinY = point.y >= item.offset.y && point.y <= item.offset.y + item.size.height
+            val withinX = point.x >= item.offset.x && point.x <= item.offset.x + item.size.width
+            if (withinY && withinX) return item.index
+        }
+        // Between two photos of a row, or out to the side: the last one that starts above the
+        // finger, so the range never stalls while the finger is in a gap.
+        return items.lastOrNull { it.offset.y <= point.y }?.index ?: items.first().index
+    }
+
+    /** Every photo between the row the drag began on and the row under the finger. */
+    fun idsTo(point: Offset): List<String>? {
+        val anchor = anchorIndex.value ?: return null
+        val here = rowIndexAt(point) ?: return null
+        val rows = rowsNow()
+        val from = minOf(anchor, here).coerceAtLeast(0)
+        val to = maxOf(anchor, here).coerceAtMost(rows.lastIndex)
+        if (from > to) return null
+        // Headings are skipped: a drag picks photos, and a group is taken whole by its own tick.
+        return (from..to).mapNotNull { (rows.getOrNull(it) as? GridRow.Photo)?.hit?.id }
+    }
+
+    this.pointerInput(Unit) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            // A press that moves, or lets go, before the time is up is a scroll or a tap: left
+            // alone entirely, unconsumed, for the grid and the photo to deal with as always.
+            val left = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                var moved = false
+                while (!moved) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: return@withTimeoutOrNull true
+                    if (!change.pressed) return@withTimeoutOrNull true
+                    moved = (change.position - down.position).getDistance() > viewConfiguration.touchSlop
+                }
+                true
+            }
+            if (left != null) return@awaitEachGesture
+            val startIndex = rowIndexAt(down.position) ?: return@awaitEachGesture
+            val startId = (rowsNow().getOrNull(startIndex) as? GridRow.Photo)?.hit?.id ?: return@awaitEachGesture
+            anchorIndex.value = startIndex
+            at.value = down.position
+            onStart(startId)
+
+            // The grid scrolls itself while the finger rests near an edge, and the range is
+            // worked out again on every step, since the photos move under the finger.
+            var covered = 1
+            var movedAway = false
+            val scrolling = scope.launch {
+                while (true) {
+                    val point = at.value ?: break
+                    val height = gridState.layoutInfo.viewportSize.height.toFloat()
+                    val speed = when {
+                        point.y < edgePx -> -(edgePx - point.y) / edgePx * stepPx
+                        point.y > height - edgePx -> (point.y - (height - edgePx)) / edgePx * stepPx
+                        else -> 0f
+                    }
+                    if (speed != 0f) {
+                        gridState.scrollBy(speed)
+                        idsTo(point)?.let { ids ->
+                            if (ids.size != covered) {
+                                covered = ids.size
+                                movedAway = true
+                                onRange(ids)
+                            }
+                        }
+                    }
+                    kotlinx.coroutines.delay(16)
+                }
+            }
+
+            try {
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    if (!change.pressed) {
+                        change.consume()
+                        break
+                    }
+                    change.consume()
+                    at.value = change.position
+                    val ids = idsTo(change.position) ?: continue
+                    if (ids.size != covered) {
+                        covered = ids.size
+                        movedAway = true
+                        onRange(ids)
+                    }
+                }
+            } finally {
+                scrolling.cancel()
+                at.value = null
+                anchorIndex.value = null
+                onEnd(movedAway)
+            }
+        }
+    }
+}
+
+/** How close to an edge the finger has to be for the grid to start scrolling under it. */
+private val DRAG_EDGE = 72.dp
+
+/** How far the grid scrolls per frame when the finger sits right at the edge. */
+private val DRAG_STEP = 14.dp

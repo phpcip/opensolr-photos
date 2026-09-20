@@ -83,15 +83,23 @@ data class PlaceInfo(
  */
 data class PlaceHit(
     val name: String,
+    /** The division the place sits in below the region - a commune, a district, a borough. */
+    val province: String?,
     val region: String?,
     val country: String?,
     val countryCode: String,
     val lat: Double,
     val lon: Double,
     val kind: String,
+    /** How many people live there, 0 when the gazetteer does not say. */
+    val population: Int = 0,
 ) {
-    /** The place written the way the app writes places everywhere else. */
-    val label: String get() = listOfNotNull(name, region, country).distinct().joinToString(", ")
+    /**
+     * The place written the way the app writes places everywhere else, the commune included
+     * (Cip, 2026-09-20): a county holds more than one Valea Mare, and without the commune under
+     * the name the two of them read as the same line twice.
+     */
+    val label: String get() = listOfNotNull(name, province, region, country).distinct().joinToString(", ")
 
     companion object {
         /** The list as one JSON text, for the phone's own cache. */
@@ -104,8 +112,10 @@ data class PlaceHit(
                     .put("lon", h.lon)
                     .put("kind", h.kind)
                 // A fact the gazetteer does not have is left out, not written as a null.
+                h.province?.let { o.put("province", it) }
                 h.region?.let { o.put("region", it) }
                 h.country?.let { o.put("country", it) }
+                if (h.population > 0) o.put("population", h.population)
                 put(o)
             }
         }.toString()
@@ -119,12 +129,14 @@ data class PlaceHit(
                 if (name.isBlank()) return@mapNotNull null
                 PlaceHit(
                     name = name,
+                    province = o.optString("province").ifBlank { null },
                     region = o.optString("region").ifBlank { null },
                     country = o.optString("country").ifBlank { null },
                     countryCode = o.optString("country_code"),
                     lat = o.optDouble("lat", Double.NaN),
                     lon = o.optDouble("lon", Double.NaN),
                     kind = o.optString("kind").ifBlank { "city" },
+                    population = o.optInt("population", 0),
                 ).takeIf { !it.lat.isNaN() && !it.lon.isNaN() }
             }
         }
@@ -357,12 +369,14 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
             if (name.isBlank()) return@mapNotNull null
             PlaceHit(
                 name = name,
+                province = o.optString("province").ifBlank { null },
                 region = o.optString("region").ifBlank { null },
                 country = o.optString("country").ifBlank { null },
                 countryCode = o.optString("country_code"),
                 lat = o.optDouble("lat", Double.NaN),
                 lon = o.optDouble("lon", Double.NaN),
                 kind = o.optString("kind").ifBlank { "city" },
+                population = o.optInt("population", 0),
             ).takeIf { !it.lat.isNaN() && !it.lon.isNaN() }
         }
     }

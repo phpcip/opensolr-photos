@@ -58,6 +58,14 @@ which needs no VIBRATE permission and obeys the phone's own haptics setting. Day
 library would buzz without stopping. Its visuals fade when the grid stops, but the strip stays touchable:
 gated on the same animation there would be nothing to grab from a standing start.
 
+The bar is a map of the grid's **height**, not of its row count (Cip, 2026-09-20). By row number every row
+took the same width on the bar, so a folded group — one row — was as wide as a single photo: with one group
+open and forty folded, the forty shared a sliver and a finger could not stop on any of them. Each row now
+takes the bar in proportion to how tall it really is (a heading's height for a folded group, a cell's height
+per row of photos, measured from what is on screen), the finger lands inside a row rather than on top of it,
+and a heading within a few rows of where it points takes it, since what a thumb aims at is a group and not
+the third photo inside one.
+
 The grouping is done on the phone in `buildRows`, from `taken_at`, which every hit already carries; it costs
 no request. Headings sit on a faint band of the app's accent (`headingBand`: 18% for a year, 11% for a
 month, 6% for a day) with the theme's ink on it, so they read as something to tap on light and dark alike
@@ -321,7 +329,15 @@ downloaded to draw the grid.
     and the swipe to the next photo dies with them.
   - **Tag** opens the tags over the photo; leaving them puts the photo's details back.
 - **Selecting photos**: there is no *Select* button and no *Check all*. A long press on a photo starts
-  selection, as every gallery does, and it ends by itself when the last tick goes, or at once with a tap on the ✓ count above the grid, which clears every tick. The bar at the bottom
+  selection, as every gallery does, and it ends by itself when the last tick goes, or at once with a tap on the ✓ count above the grid, which clears every tick.
+  **Keep the finger down after the long press and drag**: every photo between the one it started on and the
+  one under the finger is ticked as it travels, dragging back unticks what the drag itself ticked, and near
+  the top or bottom edge the grid scrolls itself so the run can pass what is on screen. Headings are skipped
+  — a group is taken whole by its own tick. The press is taken by the grid rather than by each photo (a
+  photo's own long press ends the instant it fires), in the first pointer pass and consumed from the press
+  onwards, so neither the grid's scrolling nor the photo underneath sees the drag; nothing is consumed
+  before the press is recognised, so an ordinary tap and an ordinary scroll are untouched. The action is
+  still declared in the photo's semantics, for the accessibility services. The bar at the bottom
   works on the ticked photos: **Tag**, **Share**, **Delete**, and **Re-sync N** to have them read again by
   CLIP (each counts as new AI requests).
 - **A tap you can feel** answers picking photos, crossing a year or a month on the scroll bar, a filter going

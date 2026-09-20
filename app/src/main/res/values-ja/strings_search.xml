@@ -103,6 +103,7 @@
     <string name="done">完了</string>
     <string name="no_value">一致する値がありません。</string>
     <string name="cd_selected">選択済み</string>
+    <string name="cd_select_photo">写真を選択</string>
     <string name="more_values">ほか %1$s 件、入力して絞り込み</string>
     <string name="sec_place">場所</string>
     <string name="add_place">場所を追加</string>

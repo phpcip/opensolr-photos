@@ -103,6 +103,7 @@
     <string name="done">Done</string>
     <string name="no_value">No value matches.</string>
     <string name="cd_selected">Selected</string>
+    <string name="cd_select_photo">Select photo</string>
     <string name="more_values">%1$s more, type to narrow</string>
     <string name="sec_place">Place</string>
     <string name="add_place">Add a place</string>

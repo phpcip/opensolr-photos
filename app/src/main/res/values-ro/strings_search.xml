@@ -103,6 +103,7 @@
     <string name="done">Gata</string>
     <string name="no_value">Nicio valoare nu se potrivește.</string>
     <string name="cd_selected">Selectat</string>
+    <string name="cd_select_photo">Selectează poza</string>
     <string name="more_values">Încă %1$s, scrie ca să restrângi</string>
     <string name="sec_place">Loc</string>
     <string name="add_place">Adaugă un loc</string>

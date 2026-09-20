@@ -103,6 +103,7 @@
     <string name="done">Fertig</string>
     <string name="no_value">Kein Wert passt.</string>
     <string name="cd_selected">Ausgewählt</string>
+    <string name="cd_select_photo">Foto auswählen</string>
     <string name="more_values">%1$s weitere, tippen zum Eingrenzen</string>
     <string name="sec_place">Ort</string>
     <string name="add_place">Ort hinzufügen</string>

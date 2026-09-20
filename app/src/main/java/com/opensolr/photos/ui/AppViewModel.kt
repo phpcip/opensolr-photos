@@ -2282,6 +2282,53 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** The selection as it stood when the finger went down, while a drag is picking photos. */
+    private var dragBase: Set<String>? = null
+
+    /** The photo the drag started on, and whether it was already ticked then. */
+    private var dragAnchor: Pair<String, Boolean>? = null
+
+    /**
+     * A long press on a photo, with the finger still down: selection starts (if it had not
+     * already), that photo is ticked, and the selection as it stood is kept, so that dragging
+     * up and down from here only ever adds to it and never eats what was ticked before
+     * (Cip, 2026-09-20).
+     */
+    fun beginDragSelect(id: String) {
+        val current = _state.value
+        val base = if (current.selecting) current.selectedIds else emptySet()
+        dragBase = base
+        dragAnchor = id to (id in base)
+        _state.update { it.copy(selecting = true, selectedIds = base + id) }
+    }
+
+    /**
+     * The finger has reached [ids] - every photo between the one the drag started on and the one
+     * under it now. Set, not toggled: dragging back up unticks what the drag itself ticked, and
+     * leaves everything else exactly as it was.
+     */
+    fun dragSelectTo(ids: Collection<String>) {
+        val base = dragBase ?: return
+        _state.update { it.copy(selecting = true, selectedIds = base + ids) }
+    }
+
+    /**
+     * The finger is up. A long press that never left its own photo stays what it always was - a
+     * tap that ticks or unticks that one photo - so a second long press on a ticked photo takes
+     * it off again.
+     */
+    fun endDragSelect(movedAway: Boolean) {
+        val anchor = dragAnchor
+        dragBase = null
+        dragAnchor = null
+        if (movedAway || anchor == null || !anchor.second) return
+        _state.update {
+            val next = it.selectedIds - anchor.first
+            if (next.isEmpty()) it.copy(selecting = false, selectedIds = emptySet(), selectedOffscreen = emptyMap(), selectedGroups = emptyMap())
+            else it.copy(selectedIds = next)
+        }
+    }
+
     /**
      * Enters or leaves photo selection on the grid.
      */
