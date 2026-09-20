@@ -2481,11 +2481,15 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
             while (walk >= 0 && (heading == null || day == null)) {
                 val row = rows[walk]
                 if (row is GridRow.Heading) {
-                    if (row.level == 0 && heading == null) heading = row.name
+                    // What the heading SAYS, never what it is called under the hood (Cip,
+                    // 2026-09-20): laid out by place, people, tags, folder or camera, a group is
+                    // named by a key of its own making, and the badge was showing that key.
+                    // The count the heading carries is dropped, whether the group is open
+                    // (" . 120") or folded away (" (120)"); only the name belongs in the badge.
+                    if (row.level == 0 && heading == null) heading = headingLabel(row)
                     // The day under the month, so the bar says exactly where the finger is, not
-                    // only which month it is passing (Cip, 2026-09-16). Its text carries a count
-                    // when the day is folded away; only the name of the day belongs in the badge.
-                    if (row.level == 1 && day == null) day = row.text.substringBefore(" (")
+                    // only which month it is passing (Cip, 2026-09-16).
+                    if (row.level == 1 && day == null) day = headingLabel(row)
                 }
                 walk--
             }
@@ -3403,6 +3407,14 @@ private const val SNAP_ROWS = 4
  * that the map never changes while the finger is on the bar.
  */
 private val HEADING_HEIGHTS = listOf(46.dp, 40.dp, 38.dp)
+
+/**
+ * What a group heading says, without the count it carries: the badge on the scroll bar names the
+ * group the finger is standing on, and a group laid out by place, people, tags, folder or camera
+ * is named under the hood by a key ("folder:Pictures/2019") that nobody should ever read.
+ */
+private fun headingLabel(row: GridRow.Heading): String =
+    row.text.substringBefore(" \u00b7 ").substringBefore(" (").trim().ifBlank { row.name }
 
 /** The mark of a photo the phone could not read: a red frame and a red "!" (Cip, 2026-09-17). */
 private val SkippedRed = Color(0xFFE53E3E)

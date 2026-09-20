@@ -1,0 +1,1 @@
+The badge on the scroll bar names the group your finger is standing on. Laid out by place, people, tags, folder or camera it was showing the name the group carries under the hood, like "folder:Pictures/2019", instead of what the group is called.
