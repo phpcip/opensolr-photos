@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
@@ -150,18 +151,12 @@ fun PlacePickerDialog(
                 }
             }
         }
-        // The system bars as the activity's own window sees them: a dialog window reports none on
-        // some phones, which put the buttons under the navigation bar (Cip, 2026-09-19).
-        val density = androidx.compose.ui.platform.LocalDensity.current
-        val bars = remember {
-            var host: android.content.Context? = context
-            while (host is android.content.ContextWrapper && host !is android.app.Activity) host = host.baseContext
-            val decor = (host as? android.app.Activity)?.window?.decorView
-            val insets = decor?.let { androidx.core.view.ViewCompat.getRootWindowInsets(it) }
-                ?.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars())
-            with(density) { (insets?.top ?: 0).toDp() to (insets?.bottom ?: 0).toDp() }
-        }
-        Column(Modifier.fillMaxSize().background(p.paper).padding(top = bars.first, bottom = bars.second)) {
+        // The padding comes from the insets THIS window is given, never from numbers read
+        // somewhere else: when the window covers the system bars it is told how tall they are,
+        // and when the system has already inset it, it is told zero. Measuring the activity
+        // instead added a second status bar's worth of padding on a window that was already
+        // inset, which pushed the buttons clean off the bottom of the screen (Cip, twice).
+        Column(Modifier.fillMaxSize().background(p.paper).safeDrawingPadding()) {
             Box(Modifier.padding(horizontal = 8.dp)) { ScreenHeader(stringResource(R.string.pp_title), onBack = onDismiss) }
             Text(
                 stringResource(R.string.pp_lead),

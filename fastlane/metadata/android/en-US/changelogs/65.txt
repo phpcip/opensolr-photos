@@ -1,0 +1,1 @@
+The buttons under the map stay on the screen on every phone: the space for the system bars is now taken from the window the map is actually drawn in, instead of being measured somewhere else and added twice.
