@@ -2570,7 +2570,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      */
     suspend fun searchPlaces(query: String): List<com.opensolr.photos.net.PlaceHit> {
         val session = prefs.session ?: return emptyList()
-        val q = query.trim()
+        // "Fântâni, Dolj, Romania" - the way the chosen place is written back into the box, and
+        // the way a person writes a place - has to find what the same words without commas find
+        // (Cip, 2026-09-20). No place name carries a comma, so it is a separator here.
+        val q = query.replace(Regex("[,;]+"), " ").replace(Regex("\\s+"), " ").trim()
         if (q.length < 2) return emptyList()
 
         val cache = com.opensolr.photos.data.SearchCache.of(context)
