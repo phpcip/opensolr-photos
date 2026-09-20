@@ -22,7 +22,7 @@
     <string name="err_words_refused">Die Wörter wurden abgelehnt: %1$s</string>
     <string name="err_sign_in_to_search">Zum Suchen anmelden</string>
     <string name="err_not_set_up">Ihr Index ist noch nicht eingerichtet. Öffnen Sie Sync und starten Sie einen Sync.</string>
-    <string name="err_dup_needs_reset">Für Duplikate muss Ihr Index für diese App-Version zurückgesetzt werden. Öffnen Sie den Fotobildschirm, um zu starten.</string>
+    <string name="err_dup_needs_reset">Für ähnliche Fotos muss Ihr Index für diese App-Version zurückgesetzt werden. Öffnen Sie den Fotobildschirm, um zu starten.</string>
     <string name="err_similar_needs_reset">Für ähnliche Fotos muss Ihr Index für diese App-Version zurückgesetzt werden. Öffnen Sie den Fotobildschirm, um zu starten.</string>
     <string name="err_not_reachable">Der Index wurde nicht erreichbar</string>
     <string name="err_config_not_live">Die Indexkonfiguration wurde nicht wirksam. Versuchen Sie Sync in einer Minute erneut.</string>
@@ -119,9 +119,9 @@
     <string name="vm_try_again">erneut versuchen</string>
     <string name="vm_no_documents">Keine Fotos, die wie Dokumente aussehen, zum erneuten Lesen.</string>
     <string name="vm_sync_stopped">Sync gestoppt. Er startet von selbst wieder, oder tippen Sie auf Neu-Sync.</string>
-    <string name="vm_dup_failed">Die Suche nach Duplikaten ist fehlgeschlagen.</string>
+    <string name="vm_dup_failed">Die Suche nach ähnlichen Fotos ist fehlgeschlagen.</string>
     <string name="vm_nothing_similar">Nichts anderes in Ihrem Index ähnelt diesem Foto bei dieser Einstellung.</string>
-    <string name="vm_no_dups">Keine Duplikate dieser Art in Ihrem Index.</string>
+    <string name="vm_no_dups">Keine ähnlichen Fotos dieser Art in Ihrem Index.</string>
     <string name="vm_limits_failed">Die Tariflimits konnten nicht gelesen werden.</string>
     <plurals name="sy_n_photos">
         <item quantity="one">%1$s Foto</item>

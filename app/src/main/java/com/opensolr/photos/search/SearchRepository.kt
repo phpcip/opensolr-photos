@@ -162,13 +162,16 @@ data class NearFilter(val lat: Double, val lon: Double, val radiusKm: Double) {
 }
 
 /**
- * One page of duplicate groups: the photos laid out group after group, the size of each group,
- * how many groups there are in all, and whether this page was the last.
+ * One page of alike-photo groups: the photos laid out group after group, the size of each group,
+ * how many groups there are in all, how many groups this page took (not a fixed number: a page
+ * stops on a budget of photos, so the next one must start where this one really ended), and
+ * whether this page was the last.
  */
 data class DuplicatePage(
     val hits: List<PhotoHit>,
     val sizes: List<Int>,
     val totalGroups: Int,
+    val groupsUsed: Int,
     val endReached: Boolean,
 )
 
@@ -657,10 +660,10 @@ class SearchRepository(private val context: Context) {
     }
 
     /**
-     * Duplicates of one kind, [level] a stop on the slider (see DUPLICATE_FIELDS): photos that
+     * Alike photos of one kind, [level] a stop on the slider (see DUPLICATE_FIELDS): photos that
      * share the chosen duplicate key, made on the server from CLIP's words and the EXIF. The
      * groups are known from ONE facet request, never a walk over the index; only the photos
-     * of those groups are then fetched, for the grid and the photo sheet.
+     * of those groups are then fetched, in ONE request as well, for the grid and the photo sheet.
      *
      * Returns the photos laid out group after group, with the size of each group.
      */
@@ -679,26 +682,37 @@ class SearchRepository(private val context: Context) {
             if (e.message?.contains("HTTP 400") == true) throw ServiceException(AppText.s(R.string.err_dup_needs_reset))
             throw e
         }
-        if (groups.isEmpty()) return DuplicatePage(emptyList(), emptyList(), 0, true)
+        if (groups.isEmpty()) return DuplicatePage(emptyList(), emptyList(), 0, 0, true)
 
-        // Only the groups this page shows. The whole set of ids arrives in the one facet request
-        // above and is cheap to hold; the documents are not. Asking for all of them meant 8000
-        // photos and forty requests to fill a screen that shows three groups (Cip, 2026-09-16).
-        val page = groups.drop(groupsFrom).take(groupsLimit.coerceAtLeast(1))
-        if (page.isEmpty()) return DuplicatePage(emptyList(), emptyList(), groups.size, true)
-
-        // The documents themselves, in batches, then laid out in the order of their group.
-        val wanted = page.flatten()
-        val found = HashMap<String, PhotoHit>(wanted.size)
-        wanted.chunked(200).forEach { batch ->
-            val params = ArrayList<Pair<String, String>>()
-            params += "q" to "*:*"
-            params += "fq" to "{!terms f=id separator=| v=\$dupIds}"
-            params += "dupIds" to batch.joinToString("|")
-            params += "fl" to FIELDS
-            params += "rows" to batch.size.toString()
-            parse(select(params), false, null).hits.forEach { found[it.id] = it }
+        // Only the groups this page shows, and only as many photos as ONE request carries
+        // (Cip, 2026-09-20). The whole set of ids arrives in the one facet request above and is
+        // cheap to hold; the documents are not. A page is at most [groupsLimit] groups AND at
+        // most DOCS_PAGE photos, whichever comes first - one group always goes in, so a page is
+        // never empty - so filling a screen is a single request instead of the forty it took
+        // when a group of eight thousand was still called a duplicate.
+        val page = ArrayList<List<String>>(groupsLimit.coerceAtLeast(1))
+        var budget = 0
+        var at = groupsFrom
+        while (at < groups.size && page.size < groupsLimit.coerceAtLeast(1)) {
+            val group = groups[at]
+            if (page.isNotEmpty() && budget + group.size > DOCS_PAGE) break
+            page += group
+            budget += group.size
+            at++
         }
+        val used = at - groupsFrom
+        if (page.isEmpty()) return DuplicatePage(emptyList(), emptyList(), groups.size, 0, true)
+
+        // The documents themselves, in one request, then laid out in the order of their group.
+        val wanted = page.flatten()
+        val params = ArrayList<Pair<String, String>>()
+        params += "q" to "*:*"
+        params += "fq" to "{!terms f=id separator=| v=\$dupIds}"
+        params += "dupIds" to wanted.joinToString("|")
+        params += "fl" to FIELDS
+        params += "rows" to wanted.size.toString()
+        val found = HashMap<String, PhotoHit>(wanted.size)
+        parse(select(params), false, null).hits.forEach { found[it.id] = it }
         val hits = ArrayList<PhotoHit>(wanted.size)
         val sizes = ArrayList<Int>(page.size)
         page.forEach { group ->
@@ -708,7 +722,7 @@ class SearchRepository(private val context: Context) {
                 sizes += present.size
             }
         }
-        return DuplicatePage(hits, sizes, groups.size, groupsFrom + page.size >= groups.size)
+        return DuplicatePage(hits, sizes, groups.size, used, at >= groups.size)
     }
 
     /**
@@ -990,7 +1004,9 @@ class SearchRepository(private val context: Context) {
      * walks back and forth over the same few kinds, and each walk is otherwise a full request.
      */
     private suspend fun cachedDuplicateGroups(connection: IndexConnection, field: String): List<List<String>> {
-        val key = SearchCache.key(connection.indexName, "/duplicates", listOf("field" to field))
+        // The cap is part of the key: a list taken apart before it was in force is a different
+        // answer, and must not be handed back from a cache written by an older version.
+        val key = SearchCache.key(connection.indexName, "/duplicates", listOf("field" to field, "cap" to MAX_GROUP.toString()))
         val ttl = prefs.cacheSeconds
         // Already taken apart once. The slider walks back and forth over the same few kinds and
         // every page of the grid asks again, and the groups of a big library are tens of thousands
@@ -1015,52 +1031,36 @@ class SearchRepository(private val context: Context) {
         // on every stop it crosses, and an answer the index has already given must not be lost
         // between the call and the cache.
         return withContext(NonCancellable) {
-            val found = SolrClient(connection).duplicateGroups(field)
-            val groups = if (field in MULTI_KEY_FIELDS) mergeOverlapping(found) else found
+            val found = SolrClient(connection).duplicateGroups(field, MAX_GROUP, MAX_GROUPS)
+            val groups = if (field in MULTI_KEY_FIELDS) withoutSharedPhotos(found) else found
             cache.put(key, JSONArray(groups.map { JSONArray(it) }).toString())
             rememberGroups(key, groups)
         }
     }
 
     /**
-     * Groups that share a photo, made into one group (Cip, 2026-09-19). With the "any K words"
-     * keys a photo carries several keys, so it can sit in two groups at once - A with B over two
-     * words, B with C over two others - and "Select 1 of each duplicate" would then mark B in
-     * both. Joined, A, B and C are one group and exactly one of them is kept.
+     * A photo shown in one group only (Cip, 2026-09-20). With the "any K words" keys a photo
+     * carries several keys, so it turns up in several groups - A with B over four words, B with
+     * C over four others - and "Select 1 of each" would then tick B twice.
      *
-     * One pass of union-find over the ids the facet already returned: near-linear in the number
-     * of ids, no request of its own. Largest groups first, as the facet orders them.
+     * The groups used to be joined into one instead (union-find). That is single-linkage
+     * chaining: A-B and B-C make A, B and C one group, and on a loose key the chain runs through
+     * the whole library - which is how one group came to hold eight thousand of nine thousand
+     * photos. Here each group stays what the index actually found, the biggest first, and a
+     * photo already placed is simply skipped in the groups that follow; a group left with fewer
+     * than two photos of its own is dropped.
      */
-    private fun mergeOverlapping(groups: List<List<String>>): List<List<String>> {
-        val parent = HashMap<String, String>()
-        fun root(id: String): String {
-            var top = id
-            while (true) {
-                val up = parent[top]
-                if (up == null || up == top) break
-                top = up
-            }
-            var at = id
-            while (at != top) {
-                val up = parent.getValue(at)
-                parent[at] = top
-                at = up
-            }
-            return top
-        }
+    private fun withoutSharedPhotos(groups: List<List<String>>): List<List<String>> {
+        val taken = HashSet<String>()
+        val out = ArrayList<List<String>>(groups.size)
         groups.forEach { group ->
-            val first = root(group[0])
-            for (i in 1 until group.size) {
-                val other = root(group[i])
-                if (other != first) parent[other] = first
+            val own = group.filter { it !in taken }
+            if (own.size >= 2) {
+                taken += own
+                out += own
             }
         }
-        val merged = LinkedHashMap<String, MutableList<String>>()
-        val seen = HashSet<String>()
-        groups.forEach { group ->
-            group.forEach { id -> if (seen.add(id)) merged.getOrPut(root(id)) { ArrayList() }.add(id) }
-        }
-        return merged.values.filter { it.size >= 2 }.sortedByDescending { it.size }
+        return out
     }
 
     /** Keeps [groups] under [key], ready to be handed back without being read again. */
@@ -1323,15 +1323,19 @@ class SearchRepository(private val context: Context) {
         private const val LEGACY_QF = "meaning^3 text file_name_text folder_text camera_text"
         private const val LEGACY_FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,labels"
         /**
-         * The duplicate keys the slider walks through, loosest first (Cip, 2026-09-19): any 2, 3
-         * and 4 of CLIP's first five words, all five the same, then the EXIF a simple edit keeps.
-         * Made on the server by photos_ingest. The "any" keys are several per photo, in *_ss;
-         * the "first K" and EXIF-plus-words stops are gone - the first because the rank of two
-         * near-equal words swaps between shots of one scene, the second because it never grouped
-         * anything the EXIF alone did not.
+         * The keys the slider walks through, loosest first (Cip, 2026-09-20): CLIP's first 2 and
+         * first 3 words, any 4 of its first five, all five, then the EXIF a simple edit keeps.
+         * Made on the server by photos_ingest.
+         *
+         * "Any 2" and "any 3" are gone: two photos sharing two of five generic CLIP words ("sky",
+         * "outdoor") are not alike in any useful sense - half a library shares them, and the stop
+         * could only ever answer with one enormous group. The ordered "first K" keys take their
+         * place at the loose end, where a swap in the rank of two near-equal words matters less
+         * than it does at the tight end. EXIF-plus-words is still gone: it never grouped anything
+         * the EXIF alone did not.
          */
         val DUPLICATE_FIELDS = listOf(
-            "dup_any2_ss", "dup_any3_ss", "dup_any4_ss", "dup_w5_hash",
+            "dup_w2_hash", "dup_w3_hash", "dup_any4_ss", "dup_w5_hash",
             "dup_exif_hash",
             // The same file name (without the folder: several folders can be indexed) and the
             // same size in bytes, straight from the stored fields, which have docValues already.
@@ -1342,13 +1346,27 @@ class SearchRepository(private val context: Context) {
             "file_hash",
         )
         /** The duplicate keys a photo carries several of, whose groups can share photos. */
-        val MULTI_KEY_FIELDS = setOf("dup_any2_ss", "dup_any3_ss", "dup_any4_ss")
+        val MULTI_KEY_FIELDS = setOf("dup_any4_ss")
 
-        /** The slider's stop when the duplicates open: all five words the same. */
+        /**
+         * Most photos a group may hold to still be a group of alike photos (Cip, 2026-09-20).
+         * Above it the key stopped describing a photo and started describing a category - "any
+         * 4 words" on a phone full of holiday snaps - and the view filled with the library
+         * itself. Applied where the facet is read, so such a value costs nothing to skip.
+         */
+        const val MAX_GROUP = 50
+
+        /** Most groups one facet request brings back, biggest first: far more than the grid pages through. */
+        const val MAX_GROUPS = 2000
+
+        /** The slider's stop when the view opens: all five words the same. */
         const val DEFAULT_DUPLICATE_LEVEL = 3
 
-        /** Groups of duplicates fetched at a time; the rest follow as the grid is scrolled. */
+        /** Groups fetched at a time; the rest follow as the grid is scrolled. */
         const val GROUPS_PAGE = 20
+
+        /** Most photos one page of groups fetches, so a page is always a single request. */
+        const val DOCS_PAGE = 300
 
         /** Most photos "Show similar photos" brings back for one anchor photo. */
         private const val SIMILAR_ROWS = 200

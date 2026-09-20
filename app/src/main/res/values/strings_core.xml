@@ -22,7 +22,7 @@
     <string name="err_words_refused">The words were refused: %1$s</string>
     <string name="err_sign_in_to_search">Sign in to search</string>
     <string name="err_not_set_up">Your index is not set up yet. Open Sync and start a sync.</string>
-    <string name="err_dup_needs_reset">Finding duplicates needs your index reset for this version of the app. Open the app\'s photos screen to start it.</string>
+    <string name="err_dup_needs_reset">Finding similar photos needs your index reset for this version of the app. Open the app\'s photos screen to start it.</string>
     <string name="err_similar_needs_reset">Finding similar photos needs your index reset for this version of the app. Open the app\'s photos screen to start it.</string>
     <string name="err_not_reachable">The index did not become reachable</string>
     <string name="err_config_not_live">The index configuration did not take effect. Try Sync again in a minute.</string>
@@ -119,9 +119,9 @@
     <string name="vm_try_again">try again</string>
     <string name="vm_no_documents">No photos that look like documents to read again.</string>
     <string name="vm_sync_stopped">Sync stopped. It starts again on its own, or press Force Re-Sync.</string>
-    <string name="vm_dup_failed">Looking for duplicates failed.</string>
+    <string name="vm_dup_failed">Looking for similar photos failed.</string>
     <string name="vm_nothing_similar">Nothing else in your index is like this photo at this setting.</string>
-    <string name="vm_no_dups">No duplicates of this kind in your index.</string>
+    <string name="vm_no_dups">No similar photos of this kind in your index.</string>
     <string name="vm_limits_failed">The plan limits could not be read.</string>
     <plurals name="sy_n_photos">
         <item quantity="one">%1$s photo</item>

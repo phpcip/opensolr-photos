@@ -22,7 +22,7 @@
     <string name="err_words_refused">文字被拒绝：%1$s</string>
     <string name="err_sign_in_to_search">登录后才能搜索</string>
     <string name="err_not_set_up">你的索引尚未设置。打开“同步”并开始同步。</string>
-    <string name="err_dup_needs_reset">查找重复需要为此版本重置索引。打开照片界面即可开始。</string>
+    <string name="err_dup_needs_reset">查找相似照片需要为此版本重置索引。打开照片界面即可开始。</string>
     <string name="err_similar_needs_reset">查找相似照片需要为此版本重置索引。打开照片界面即可开始。</string>
     <string name="err_not_reachable">无法访问索引</string>
     <string name="err_config_not_live">索引配置未生效。请一分钟后再次同步。</string>
@@ -119,9 +119,9 @@
     <string name="vm_try_again">请重试</string>
     <string name="vm_no_documents">没有需要重新读取的文档类照片。</string>
     <string name="vm_sync_stopped">同步已停止。它会自动重新开始，或点按“重新同步”。</string>
-    <string name="vm_dup_failed">查找重复失败。</string>
+    <string name="vm_dup_failed">查找相似照片失败。</string>
     <string name="vm_nothing_similar">在此设置下，索引中没有与这张照片相似的其他照片。</string>
-    <string name="vm_no_dups">索引中没有此类重复。</string>
+    <string name="vm_no_dups">索引中没有此类相似照片。</string>
     <string name="vm_limits_failed">无法读取套餐限额。</string>
     <plurals name="sy_n_photos">
         <item quantity="other">%1$s 张照片</item>

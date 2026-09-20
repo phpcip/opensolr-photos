@@ -1731,9 +1731,9 @@ private fun DuplicateLevelSlider(level: Int, onLevel: (Int) -> Unit, canSelect: 
     }
 }
 
-/** What each stop of the duplicates slider groups, in the order of DUPLICATE_FIELDS. */
+/** What each stop of the slider groups, in the order of DUPLICATE_FIELDS. */
 private val DUPLICATE_KIND_NAMES = listOf(
-    "Any 2 words the same", "Any 3 words the same", "Any 4 words the same", "All 5 words the same",
+    "Same first 2 words", "Same first 3 words", "Any 4 words the same", "All 5 words the same",
     "Same photo (EXIF)",
     "Same file name", "Same file size", "Same file (exact copy)",
 )

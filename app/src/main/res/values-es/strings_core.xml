@@ -22,7 +22,7 @@
     <string name="err_words_refused">Las palabras fueron rechazadas: %1$s</string>
     <string name="err_sign_in_to_search">Inicia sesión para buscar</string>
     <string name="err_not_set_up">Tu índice aún no está configurado. Abre Sinc. e inicia una sincronización.</string>
-    <string name="err_dup_needs_reset">Buscar duplicados requiere reiniciar tu índice para esta versión de la app. Abre la pantalla de fotos para empezar.</string>
+    <string name="err_dup_needs_reset">Buscar fotos parecidas requiere reiniciar tu índice para esta versión de la app. Abre la pantalla de fotos para empezar.</string>
     <string name="err_similar_needs_reset">Buscar fotos parecidas requiere reiniciar tu índice para esta versión de la app. Abre la pantalla de fotos para empezar.</string>
     <string name="err_not_reachable">No se pudo acceder al índice</string>
     <string name="err_config_not_live">La configuración del índice no se aplicó. Vuelve a sincronizar en un minuto.</string>
@@ -119,9 +119,9 @@
     <string name="vm_try_again">inténtalo de nuevo</string>
     <string name="vm_no_documents">No hay fotos que parezcan documentos para volver a leer.</string>
     <string name="vm_sync_stopped">Sincronización detenida. Vuelve a empezar sola, o toca Resinc.</string>
-    <string name="vm_dup_failed">Falló la búsqueda de duplicados.</string>
+    <string name="vm_dup_failed">Falló la búsqueda de fotos parecidas.</string>
     <string name="vm_nothing_similar">Nada más en tu índice se parece a esta foto con este ajuste.</string>
-    <string name="vm_no_dups">No hay duplicados de este tipo en tu índice.</string>
+    <string name="vm_no_dups">No hay fotos parecidas de este tipo en tu índice.</string>
     <string name="vm_limits_failed">No se pudieron leer los límites del plan.</string>
     <plurals name="sy_n_photos">
         <item quantity="one">%1$s foto</item>

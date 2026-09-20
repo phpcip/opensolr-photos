@@ -131,26 +131,36 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
     }
 
     /**
-     * Groups of duplicates of one kind, in one request: a facet on the duplicate key [field]
+     * Groups of alike photos of one kind, in one request: a facet on the duplicate key [field]
      * (one of SearchRepository.DUPLICATE_FIELDS) keeping values held by two photos or more,
      * with the ids of each. Biggest group first. An index on a configuration without the
      * duplicate keys answers 400.
+     *
+     * Bounded on both sides, because a loose key groups half a library into one value (Cip,
+     * 2026-09-20): a value held by more than [maxGroup] photos is a category, not a set of
+     * copies, and is dropped by its count without its ids being looked at; the ids sub-facet
+     * asks for [maxGroup] + 1 of them, so neither the answer nor the parsing of it grows with
+     * the size of such a value. At most [maxGroups] values come back, the biggest first, which
+     * is far more than the grid ever pages through.
      */
-    suspend fun duplicateGroups(field: String): List<List<String>> {
+    suspend fun duplicateGroups(field: String, maxGroup: Int, maxGroups: Int): List<List<String>> {
         val facet = JSONObject().put(
             "groups",
             JSONObject()
                 .put("type", "terms")
                 .put("field", field)
                 .put("mincount", 2)
-                .put("limit", -1)
+                .put("limit", maxGroups)
                 .put("sort", "count desc")
-                .put("facet", JSONObject().put("ids", JSONObject().put("type", "terms").put("field", "id").put("limit", -1))),
+                .put("facet", JSONObject().put("ids", JSONObject().put("type", "terms").put("field", "id").put("limit", maxGroup + 1))),
         )
         val json = select(listOf("q" to "*:*", "rows" to "0", "json.facet" to facet.toString()))
         val buckets = json.optJSONObject("facets")?.optJSONObject("groups")?.optJSONArray("buckets") ?: return emptyList()
         return (0 until buckets.length()).mapNotNull { i ->
-            val ids = buckets.optJSONObject(i)?.optJSONObject("ids")?.optJSONArray("buckets") ?: return@mapNotNull null
+            val bucket = buckets.optJSONObject(i) ?: return@mapNotNull null
+            // The count, not the number of ids returned: the ids are capped just above the cap.
+            if (bucket.optLong("count") > maxGroup) return@mapNotNull null
+            val ids = bucket.optJSONObject("ids")?.optJSONArray("buckets") ?: return@mapNotNull null
             (0 until ids.length()).mapNotNull { k -> ids.optJSONObject(k)?.optString("val")?.takeIf { it.isNotEmpty() } }
                 .takeIf { it.size >= 2 }
         }

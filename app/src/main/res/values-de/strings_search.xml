@@ -14,7 +14,7 @@
     <string name="cd_end_selection">Auswahl beenden</string>
     <string name="ai">KI</string>
     <string name="filters">Filter</string>
-    <string name="dup_open">Fotos derselben Sache</string>
+    <string name="dup_open">Ähnliche Fotos</string>
     <string name="back_all">Zurück zu allen Fotos</string>
     <string name="skipped_open">Nicht lesbare Fotos</string>
     <string name="reload">Neu laden</string>
@@ -38,7 +38,7 @@
     <string name="best_matches">Beste Treffer</string>
     <string name="also_similar">Auch ähnlich</string>
     <string name="cd_sync_running">Sync läuft</string>
-    <string name="select_one_each">Von jedem Duplikat 1 wählen</string>
+    <string name="select_one_each">Aus jeder Gruppe 1 wählen</string>
     <string name="chip_with_location">Mit Ort</string>
     <string name="chip_tagged">Mit Tags</string>
     <string name="chip_not_tagged">Ohne Tags</string>
@@ -128,8 +128,8 @@
         <item quantity="other">%1$s Fotos löschen?</item>
     </plurals>
     <string-array name="dup_kinds">
-        <item>2 beliebige Wörter gleich</item>
-        <item>3 beliebige Wörter gleich</item>
+        <item>Erste 2 Wörter gleich</item>
+        <item>Erste 3 Wörter gleich</item>
         <item>4 beliebige Wörter gleich</item>
         <item>Alle 5 Wörter gleich</item>
         <item>Gleiches Foto (EXIF)</item>

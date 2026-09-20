@@ -2193,7 +2193,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         searching = false,
                         hits = it.hits + page.hits,
                         duplicateGroups = it.duplicateGroups + page.sizes,
-                        duplicateGroupsLoaded = from + com.opensolr.photos.search.SearchRepository.GROUPS_PAGE,
+                        // Where this page really ended: a page stops on its budget of photos, so
+                        // the number of groups it took is not a fixed one (Cip, 2026-09-20).
+                        duplicateGroupsLoaded = from + page.groupsUsed,
                         numFound = (it.hits.size + page.hits.size).toLong(),
                         endReached = page.endReached,
                     )
@@ -2367,7 +2369,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     val page = searches.duplicates(level, groupsFrom = 0)
                     hits = page.hits; groups = page.sizes
-                    loaded = com.opensolr.photos.search.SearchRepository.GROUPS_PAGE
+                    // The groups this page really took, not a fixed page size: it stops on its
+                    // budget of photos as well (Cip, 2026-09-20).
+                    loaded = page.groupsUsed
                     done = page.endReached; total = page.totalGroups
                 }
                 _state.update {

@@ -37,7 +37,7 @@ APK, so the app always uploads exactly what is in the repository.
 | `persons_ss` | string, multi | The same names, each kept whole. No declared field of its own: it matches the `*_ss` dynamic field. The People filter, the People albums and the phone's copy read it; `persons_t` is analysed text and gives words |
 | `embeddings` | dense vector, 1024, cosine | Vector of `meaning`. On a plan without vector search nothing is sent to be read at all, so `meaning`, `labels`, `ocr_t` and `embeddings` all stay empty: the document is date, camera, place, file name and the owner's own words, and search is lexical |
 | `clip_model`, `embed_model` | string | What produced the labels and the vector |
-| `dup_w1_hash` … `dup_w5_hash`, `dup_exif_hash`, `dup_exif_w1_hash` … `dup_exif_w5_hash` | string (`*_hash`) | Duplicate keys, written by the server ([duplicates](duplicates.md)) |
+| `dup_w2_hash` … `dup_w5_hash`, `dup_any4_ss`, `dup_exif_hash` | string (`*_hash`, `*_ss`) | The keys groups of alike photos are made of, written by the server ([similar photos](duplicates.md)) |
 | `file_hash` | string (`*_hash`) | md5 of the original file, from the phone; the strictest duplicates stop. It is also the identity check on every sync: a photo whose size or modification time changed is weighed against the md5 the index already holds, and if it matches the picture is not read again. It is the key by which the words already in the document (`meaning`, `labels`, `ocr_t`) survive a pass that cannot read the photo |
 | `indexed_at` | date | When the document was written |
 

@@ -14,7 +14,7 @@
     <string name="cd_end_selection">選択を終了</string>
     <string name="ai">AI</string>
     <string name="filters">フィルター</string>
-    <string name="dup_open">同じ内容の写真</string>
+    <string name="dup_open">類似の写真</string>
     <string name="back_all">すべての写真に戻る</string>
     <string name="skipped_open">読み込めなかった写真</string>
     <string name="reload">再読み込み</string>
@@ -38,7 +38,7 @@
     <string name="best_matches">最も一致</string>
     <string name="also_similar">類似</string>
     <string name="cd_sync_running">同期中</string>
-    <string name="select_one_each">各重複から1枚を選択</string>
+    <string name="select_one_each">各グループから1枚を選択</string>
     <string name="chip_with_location">位置情報あり</string>
     <string name="chip_tagged">タグあり</string>
     <string name="chip_not_tagged">タグなし</string>
@@ -125,8 +125,8 @@
         <item quantity="other">%1$s 枚の写真を削除しますか？</item>
     </plurals>
     <string-array name="dup_kinds">
-        <item>任意の2語が一致</item>
-        <item>任意の3語が一致</item>
+        <item>最初の2語が一致</item>
+        <item>最初の3語が一致</item>
         <item>任意の4語が一致</item>
         <item>5語すべて一致</item>
         <item>同じ写真（EXIF）</item>

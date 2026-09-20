@@ -22,7 +22,7 @@
     <string name="err_words_refused">Les mots ont été refusés : %1$s</string>
     <string name="err_sign_in_to_search">Connectez-vous pour chercher</string>
     <string name="err_not_set_up">Votre index n\'est pas encore configuré. Ouvrez Synchro et lancez une synchro.</string>
-    <string name="err_dup_needs_reset">La recherche de doublons nécessite de réinitialiser votre index pour cette version. Ouvrez l\'écran des photos pour commencer.</string>
+    <string name="err_dup_needs_reset">La recherche de photos similaires nécessite de réinitialiser votre index pour cette version. Ouvrez l\'écran des photos pour commencer.</string>
     <string name="err_similar_needs_reset">La recherche de photos similaires nécessite de réinitialiser votre index pour cette version. Ouvrez l\'écran des photos pour commencer.</string>
     <string name="err_not_reachable">L\'index n\'est pas devenu joignable</string>
     <string name="err_config_not_live">La configuration de l\'index n\'a pas pris effet. Relancez la synchro dans une minute.</string>
@@ -119,9 +119,9 @@
     <string name="vm_try_again">réessayez</string>
     <string name="vm_no_documents">Aucune photo ressemblant à un document à relire.</string>
     <string name="vm_sync_stopped">Synchro arrêtée. Elle redémarre seule, ou touchez Resync.</string>
-    <string name="vm_dup_failed">La recherche de doublons a échoué.</string>
+    <string name="vm_dup_failed">La recherche de photos similaires a échoué.</string>
     <string name="vm_nothing_similar">Rien d\'autre dans votre index ne ressemble à cette photo avec ce réglage.</string>
-    <string name="vm_no_dups">Aucun doublon de ce type dans votre index.</string>
+    <string name="vm_no_dups">Aucune photo similaire de ce type dans votre index.</string>
     <string name="vm_limits_failed">Les limites du forfait n\'ont pas pu être lues.</string>
     <plurals name="sy_n_photos">
         <item quantity="one">%1$s photo</item>

@@ -14,7 +14,7 @@
     <string name="cd_end_selection">结束选择</string>
     <string name="ai">AI</string>
     <string name="filters">筛选</string>
-    <string name="dup_open">同一内容的照片</string>
+    <string name="dup_open">相似照片</string>
     <string name="back_all">返回全部照片</string>
     <string name="skipped_open">无法读取的照片</string>
     <string name="reload">重新加载</string>
@@ -38,7 +38,7 @@
     <string name="best_matches">最佳匹配</string>
     <string name="also_similar">相似照片</string>
     <string name="cd_sync_running">正在同步</string>
-    <string name="select_one_each">每组重复选 1 张</string>
+    <string name="select_one_each">每组选 1 张</string>
     <string name="chip_with_location">有地点</string>
     <string name="chip_tagged">有标签</string>
     <string name="chip_not_tagged">无标签</string>
@@ -125,8 +125,8 @@
         <item quantity="other">删除 %1$s 张照片？</item>
     </plurals>
     <string-array name="dup_kinds">
-        <item>任意 2 个词相同</item>
-        <item>任意 3 个词相同</item>
+        <item>前 2 个词相同</item>
+        <item>前 3 个词相同</item>
         <item>任意 4 个词相同</item>
         <item>5 个词全部相同</item>
         <item>同一张照片（EXIF）</item>

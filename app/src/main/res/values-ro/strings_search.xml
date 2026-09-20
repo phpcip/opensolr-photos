@@ -14,7 +14,7 @@
     <string name="cd_end_selection">Încheie selecția</string>
     <string name="ai">AI</string>
     <string name="filters">Filtre</string>
-    <string name="dup_open">Poze cu același lucru</string>
+    <string name="dup_open">Poze asemănătoare</string>
     <string name="back_all">Înapoi la toate pozele</string>
     <string name="skipped_open">Poze care n-au putut fi citite</string>
     <string name="reload">Reîncarcă</string>
@@ -38,7 +38,7 @@
     <string name="best_matches">Cele mai potrivite</string>
     <string name="also_similar">Și asemănătoare</string>
     <string name="cd_sync_running">Sync în curs</string>
-    <string name="select_one_each">Alege câte 1 din fiecare duplicat</string>
+    <string name="select_one_each">Alege câte 1 din fiecare grup</string>
     <string name="chip_with_location">Cu loc</string>
     <string name="chip_tagged">Etichetate</string>
     <string name="chip_not_tagged">Fără etichete</string>
@@ -131,8 +131,8 @@
         <item quantity="other">Ștergi %1$s de poze?</item>
     </plurals>
     <string-array name="dup_kinds">
-        <item>Oricare 2 cuvinte la fel</item>
-        <item>Oricare 3 cuvinte la fel</item>
+        <item>Primele 2 cuvinte la fel</item>
+        <item>Primele 3 cuvinte la fel</item>
         <item>Oricare 4 cuvinte la fel</item>
         <item>Toate cele 5 cuvinte la fel</item>
         <item>Aceeași poză (EXIF)</item>

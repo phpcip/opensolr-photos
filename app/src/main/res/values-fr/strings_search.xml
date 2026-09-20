@@ -14,7 +14,7 @@
     <string name="cd_end_selection">Terminer la sélection</string>
     <string name="ai">IA</string>
     <string name="filters">Filtres</string>
-    <string name="dup_open">Photos de la même chose</string>
+    <string name="dup_open">Photos similaires</string>
     <string name="back_all">Retour à toutes les photos</string>
     <string name="skipped_open">Photos illisibles</string>
     <string name="reload">Recharger</string>
@@ -38,7 +38,7 @@
     <string name="best_matches">Meilleurs résultats</string>
     <string name="also_similar">Aussi similaires</string>
     <string name="cd_sync_running">Synchro en cours</string>
-    <string name="select_one_each">Choisir 1 de chaque doublon</string>
+    <string name="select_one_each">Choisir 1 de chaque groupe</string>
     <string name="chip_with_location">Avec lieu</string>
     <string name="chip_tagged">Étiquetées</string>
     <string name="chip_not_tagged">Sans étiquette</string>
@@ -131,8 +131,8 @@
         <item quantity="other">Supprimer %1$s photos ?</item>
     </plurals>
     <string-array name="dup_kinds">
-        <item>2 mots quelconques identiques</item>
-        <item>3 mots quelconques identiques</item>
+        <item>2 premiers mots identiques</item>
+        <item>3 premiers mots identiques</item>
         <item>4 mots quelconques identiques</item>
         <item>Les 5 mots identiques</item>
         <item>Même photo (EXIF)</item>

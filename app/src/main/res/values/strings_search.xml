@@ -14,7 +14,7 @@
     <string name="cd_end_selection">End selection</string>
     <string name="ai">AI</string>
     <string name="filters">Filters</string>
-    <string name="dup_open">Photos of the same thing</string>
+    <string name="dup_open">Similar photos</string>
     <string name="back_all">Back to all photos</string>
     <string name="skipped_open">Photos that could not be read</string>
     <string name="reload">Reload</string>
@@ -38,7 +38,7 @@
     <string name="best_matches">Best matches</string>
     <string name="also_similar">Also similar</string>
     <string name="cd_sync_running">Sync in progress</string>
-    <string name="select_one_each">Select 1 of each duplicate</string>
+    <string name="select_one_each">Select 1 of each group</string>
     <string name="chip_with_location">With location</string>
     <string name="chip_tagged">Tagged</string>
     <string name="chip_not_tagged">Not tagged</string>
@@ -128,8 +128,8 @@
         <item quantity="other">Delete %1$s photos?</item>
     </plurals>
     <string-array name="dup_kinds">
-        <item>Any 2 words the same</item>
-        <item>Any 3 words the same</item>
+        <item>Same first 2 words</item>
+        <item>Same first 3 words</item>
         <item>Any 4 words the same</item>
         <item>All 5 words the same</item>
         <item>Same photo (EXIF)</item>

@@ -22,7 +22,7 @@
     <string name="err_words_refused">Cuvintele au fost refuzate: %1$s</string>
     <string name="err_sign_in_to_search">Autentifică-te ca să cauți</string>
     <string name="err_not_set_up">Indexul nu e încă configurat. Deschide Sync și pornește un sync.</string>
-    <string name="err_dup_needs_reset">Căutarea duplicatelor cere resetarea indexului pentru această versiune. Deschide ecranul de poze ca să pornească.</string>
+    <string name="err_dup_needs_reset">Căutarea pozelor asemănătoare cere resetarea indexului pentru această versiune. Deschide ecranul de poze ca să pornească.</string>
     <string name="err_similar_needs_reset">Căutarea pozelor asemănătoare cere resetarea indexului pentru această versiune. Deschide ecranul de poze ca să pornească.</string>
     <string name="err_not_reachable">Indexul n-a devenit accesibil</string>
     <string name="err_config_not_live">Configurația indexului nu s-a aplicat. Încearcă Sync din nou peste un minut.</string>
@@ -119,9 +119,9 @@
     <string name="vm_try_again">încearcă din nou</string>
     <string name="vm_no_documents">Nu sunt poze care arată a documente de recitit.</string>
     <string name="vm_sync_stopped">Sync oprit. Pornește singur din nou sau atinge Re-Sync.</string>
-    <string name="vm_dup_failed">Căutarea duplicatelor a eșuat.</string>
+    <string name="vm_dup_failed">Căutarea pozelor asemănătoare a eșuat.</string>
     <string name="vm_nothing_similar">Nimic altceva din index nu seamănă cu această poză la această setare.</string>
-    <string name="vm_no_dups">Niciun duplicat de acest fel în index.</string>
+    <string name="vm_no_dups">Nicio poză asemănătoare de acest fel în index.</string>
     <string name="vm_limits_failed">Limitele planului nu s-au putut citi.</string>
     <plurals name="sy_n_photos">
         <item quantity="one">%1$s poză</item>

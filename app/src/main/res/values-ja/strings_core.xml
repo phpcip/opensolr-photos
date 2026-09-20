@@ -22,7 +22,7 @@
     <string name="err_words_refused">言葉が拒否されました: %1$s</string>
     <string name="err_sign_in_to_search">検索するにはログインしてください</string>
     <string name="err_not_set_up">インデックスがまだ設定されていません。同期を開いて同期を開始してください。</string>
-    <string name="err_dup_needs_reset">重複を探すには、このバージョン用にインデックスのリセットが必要です。写真画面を開くと開始します。</string>
+    <string name="err_dup_needs_reset">類似の写真を探すには、このバージョン用にインデックスのリセットが必要です。写真画面を開くと開始します。</string>
     <string name="err_similar_needs_reset">類似の写真を探すには、このバージョン用にインデックスのリセットが必要です。写真画面を開くと開始します。</string>
     <string name="err_not_reachable">インデックスに接続できませんでした</string>
     <string name="err_config_not_live">インデックス設定が反映されませんでした。1分後にもう一度同期してください。</string>
@@ -119,9 +119,9 @@
     <string name="vm_try_again">再試行してください</string>
     <string name="vm_no_documents">読み直す書類のような写真はありません。</string>
     <string name="vm_sync_stopped">同期を停止しました。自動で再開するか、再同期をタップしてください。</string>
-    <string name="vm_dup_failed">重複の検索に失敗しました。</string>
+    <string name="vm_dup_failed">類似の写真の検索に失敗しました。</string>
     <string name="vm_nothing_similar">この設定では、インデックスにこの写真と似たものはありません。</string>
-    <string name="vm_no_dups">インデックスにこの種類の重複はありません。</string>
+    <string name="vm_no_dups">インデックスにこの種類の類似の写真はありません。</string>
     <string name="vm_limits_failed">プランの上限を読み込めませんでした。</string>
     <plurals name="sy_n_photos">
         <item quantity="other">写真 %1$s 枚</item>
