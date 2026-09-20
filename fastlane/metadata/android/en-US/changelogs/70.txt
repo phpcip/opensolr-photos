@@ -1,0 +1,1 @@
+Similar photos stays where you left it: deleting a photo, or a sync finishing after an edit, no longer sends the grid back to the top of the list. Pull to refresh now gives a knock you can feel the moment the gesture takes.

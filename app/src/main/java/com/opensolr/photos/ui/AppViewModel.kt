@@ -2351,12 +2351,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * One facet request for the groups of the current kind, replacing whatever is on the grid.
      */
-    private fun loadDuplicates(debounceMs: Long) {
+    private fun loadDuplicates(debounceMs: Long, keepPages: Boolean = false) {
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             if (debounceMs > 0) kotlinx.coroutines.delay(debounceMs)
             val level = _state.value.duplicateLevel
             val anchor = _state.value.similarToId
+            // How far down the owner had already scrolled, for a reload of the same view.
+            val hadGroups = _state.value.duplicateGroupsLoaded
             _state.update { it.copy(searching = true, searchError = null, suggestions = emptyList()) }
             try {
                 // Anchored to a photo, or over the whole index: the same slider, the same grid.
@@ -2390,12 +2392,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         }, how)
                     }
                 } else {
-                    val page = searches.duplicates(level, groupsFrom = 0)
-                    hits = page.hits; groups = page.sizes
+                    val first = searches.duplicates(level, groupsFrom = 0)
+                    val allHits = ArrayList(first.hits)
+                    val allSizes = ArrayList(first.sizes)
                     // The groups this page really took, not a fixed page size: it stops on its
                     // budget of photos as well (Cip, 2026-09-20).
-                    loaded = page.groupsUsed
-                    done = page.endReached; total = page.totalGroups
+                    var used = first.groupsUsed
+                    var end = first.endReached
+                    // A RELOAD of the same view brings back every page the owner had already
+                    // scrolled through, not the first one alone (Cip, 2026-09-20). Deleting a
+                    // photo, or a sync finishing, used to rebuild the view out of its first page,
+                    // so the row the grid was standing on no longer existed and it went back to
+                    // the top. Only a reload does this; opening the view, or moving the slider,
+                    // is a new view and starts at one page.
+                    while (keepPages && !end && used < hadGroups) {
+                        val next = searches.duplicates(level, groupsFrom = used)
+                        if (next.groupsUsed == 0) break
+                        allHits += next.hits
+                        allSizes += next.sizes
+                        used += next.groupsUsed
+                        end = next.endReached
+                    }
+                    hits = allHits; groups = allSizes
+                    loaded = used
+                    done = end; total = first.totalGroups
                 }
                 _state.update {
                     if (!it.duplicatesMode || it.duplicateLevel != level || it.similarToId != anchor) it
@@ -2455,7 +2475,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // A reload of the same search, so the grid stays where the owner left it.
         when {
             _state.value.skippedMode -> loadSkipped()
-            _state.value.duplicatesMode -> loadDuplicates(debounceMs = 0)
+            // Keeping the pages already scrolled through, so the grid stays where it was.
+            _state.value.duplicatesMode -> loadDuplicates(debounceMs = 0, keepPages = true)
             else -> search(reset = true, keepPosition = true, keepLoaded = true)
         }
     }

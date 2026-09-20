@@ -36,4 +36,20 @@ object Haptics {
         }
         view.performHapticFeedback(constant)
     }
+
+    /**
+     * The knock a pull to refresh gives back the moment it takes (Cip, 2026-09-20): a gesture that
+     * starts something heavy has to be felt, not only seen. Heavier than a scroller tick - on
+     * Android 12 and up the phone's own "gesture accepted" thud, and a long press below it, which
+     * is the strongest thing every phone plays without the vibrate permission.
+     */
+    fun thud(view: View) {
+        if (!enabled) return
+        val constant = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            HapticFeedbackConstants.CONFIRM
+        } else {
+            HapticFeedbackConstants.LONG_PRESS
+        }
+        view.performHapticFeedback(constant)
+    }
 }

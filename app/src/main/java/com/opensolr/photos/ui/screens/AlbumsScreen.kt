@@ -152,7 +152,8 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
         val pullState = rememberPullToRefreshState()
         PullToRefreshBox(
             isRefreshing = pulled && state.albumsLoading,
-            onRefresh = { pulled = true; viewModel.openAlbums(force = true) },
+            // Felt as well as seen, as on the photos grid.
+            onRefresh = { Haptics.thud(view); pulled = true; viewModel.openAlbums(force = true) },
             state = pullState,
             modifier = Modifier.fillMaxSize(),
             indicator = {

@@ -740,7 +740,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         val pullState = rememberPullToRefreshState()
         PullToRefreshBox(
             isRefreshing = pulled && state.searching,
-            onRefresh = { pulled = true; viewModel.forceRefresh(toTop = true); viewModel.syncNow() },
+            // Felt as well as seen: the pull has taken, and what follows is a reload and a sync.
+            onRefresh = { Haptics.thud(view); pulled = true; viewModel.forceRefresh(toTop = true); viewModel.syncNow() },
             state = pullState,
             modifier = Modifier.fillMaxSize(),
             indicator = {
