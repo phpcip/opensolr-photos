@@ -1,0 +1,1 @@
+The map's buttons stay on the screen on every phone, and the map opened from a single photo behaves like the one opened from many. Search a city or town by name. Tag is always the first action on the left. Each row of buttons has its own shade, so buttons look like buttons. Titles are bold, explanations lighter and shorter, nothing is written over your photo.

@@ -21,7 +21,7 @@
     <string name="sync_btn_reread">Recitește</string>
     <string name="sync_btn_documents">Documente</string>
     <string name="sync_btn_reset">Reset</string>
-    <string name="sync_buttons_text">Re-Sync ia doar pozele noi și pe cele șterse. Stop oprește rularea în curs; următoarea pornește singură. Recitește trimite fiecare poză din nou prin Opensolr, fără să golească nimic, ca să primească ce face Opensolr mai bine acum. Documente recitește bonurile, etichetele și capturile. Reset golește indexul și citește fiecare poză.</string>
+    <string name="sync_buttons_text">Re-Sync: doar pozele noi și cele șterse. Stop: oprește rularea curentă. Re-citire: trimite din nou toate pozele, fără să golească nimic. Documente: recitește textul tipărit. Reset: golește indexul și citește tot.</string>
     <string name="sync_auto">Re-Sync automat</string>
     <string name="sync_daily">Zilnic</string>
     <string name="sync_weekly">Săptămânal</string>
@@ -30,13 +30,13 @@
     <string name="sync_folders">Foldere indexate</string>
     <string name="sync_change_folders">Schimbă folderele</string>
     <string name="sync_ocr_q">Recitești documentele?</string>
-    <string name="sync_ocr_text">Pozele cu text tipărit ies din index și următorul sync le pune înapoi, cu citirea curățată. Nu costă nimic din plan: o poză citită o dată nu se mai citește. Etichetele rămân. Pozele nu sunt atinse.</string>
+    <string name="sync_ocr_text">Pozele cu text tipărit se citesc din nou, curățate, la următorul sync. Nu costă nimic pe planul tău. Etichetele rămân, pozele nu se ating.</string>
     <string name="sync_rebuild">Refă</string>
     <string name="sync_cancel">Anulează</string>
     <string name="sync_reread_q">Recitești toate pozele?</string>
-    <string name="sync_reread_text">Fiecare poză trece din nou prin Opensolr, ca la prima indexare, și primește ce face Opensolr acum: cuvintele, locul, persoanele și vectorul de căutare. Nu se golește nimic: căutarea merge tot timpul, iar fiecare poză e doar rescrisă. Etichetele, persoanele numite și formulările tale rămân. Pozele nu sunt atinse. Dacă se oprește, următorul sync continuă de unde a rămas.</string>
+    <string name="sync_reread_text">Fiecare poză trece din nou prin Opensolr și se scrie la loc: cuvinte, loc, persoane, vector. Nu se golește nimic, căutarea merge, etichetele rămân, pozele nu se ating. Poți opri oricând.</string>
     <string name="sync_reset_q">Resetezi indexul?</string>
-    <string name="sync_reset_text">Fiecare poză e scoasă și citită din nou, ceea ce contează ca cereri AI noi. Etichetele rămân. Pozele nu sunt atinse.</string>
+    <string name="sync_reset_text">Fiecare poză se golește și se citește din nou, ceea ce contează ca cereri AI noi. Etichetele rămân, pozele nu se ating.</string>
     <string name="st_none">Încă n-a rulat niciun sync.</string>
     <string name="st_no_photos">Nu s-au găsit poze în folderele alese.</string>
     <string name="st_none_read">Nicio poză n-a putut fi citită. Nu s-a indexat nimic.</string>

@@ -51,6 +51,10 @@ data class Palette(
      * itself, which already read well.
      */
     val buttonFill: Color,
+    /** The row of tools under the header: a shade apart from it, so the two rows read as two. */
+    val toolFill: Color,
+    /** The bar that appears when photos are ticked: a shade the other two never use. */
+    val dockFill: Color,
 )
 
 private val LightPalette = Palette(
@@ -66,6 +70,8 @@ private val LightPalette = Palette(
     accentFill = Color(0xFFA8481B),
     onAccentFill = Color(0xFFFFFFFF),
     buttonFill = Color(0xFFF3EFE9),
+    toolFill = Color(0xFFFAF7F2),
+    dockFill = Color(0xFFEAE4DA),
 )
 
 private val DarkPalette = Palette(
@@ -82,6 +88,8 @@ private val DarkPalette = Palette(
     accentFill = Color(0xFFB4551F),
     onAccentFill = Color(0xFFFFFFFF),
     buttonFill = Color(0xFF111111),
+    toolFill = Color(0xFF1A1917),
+    dockFill = Color(0xFF26231F),
 )
 
 val LocalPalette = staticCompositionLocalOf { LightPalette }
@@ -112,7 +120,7 @@ private val AppTypography = Typography(
     headlineSmall = style(22, FontWeight.Bold, 1.2, -0.01),
     titleLarge = style(20, FontWeight.Bold, 1.25),
     titleMedium = style(17, FontWeight.Bold, 1.3),
-    titleSmall = style(15, FontWeight.SemiBold, 1.3),
+    titleSmall = style(15, FontWeight.Bold, 1.3),
     // One step heavier than regular (Cip, 2026-09-20): at 400 the text read hairline-thin.
     bodyLarge = style(17, FontWeight.Medium, 1.5),
     bodyMedium = style(15, FontWeight.Medium, 1.5),

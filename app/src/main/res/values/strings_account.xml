@@ -47,7 +47,7 @@
     <string name="acc_language_text">The app follows your phone\'s language when it speaks it, and English otherwise.</string>
     <string name="acc_places">Places</string>
     <string name="acc_place_new">Place new photos</string>
-    <string name="acc_place_new_text">A new photo that comes without a position, from a camera with no GPS, gets the place of the photo this phone took closest to it in time (within 30 minutes). Failing that, a photo taken in the last 2 hours gets the phone\'s position when it arrives. Photos that already have one, and every photo already on the phone, are never touched.</string>
+    <string name="acc_place_new_text">A new photo without a position takes the place of the phone photo closest to it in time (within 30 minutes), or, if taken in the last 2 hours, the phone\'s own position. Photos that already have one are never touched.</string>
     <string name="acc_place_no_location">Without location access only the phone\'s own photos are used. Allow location for the app to use the phone\'s position as well.</string>
     <string name="acc_place_no_background">Android lets the app know the phone\'s position only while it is open, so photos synced in the background get only the place of the phone\'s own photos. Allow \"all the time\" in the app\'s location permission to change that.</string>
     <string name="acc_save_places">Save the places into the photos</string>
@@ -60,7 +60,7 @@
     <string name="acc_semantic">Semantic</string>
     <string name="acc_lexical">Lexical</string>
     <string name="acc_cache">Search cache</string>
-    <string name="acc_cache_text">Answers from your index are kept on this phone and reused, so asking the same thing twice does not spend your plan\'s search bandwidth twice. Your own tags, deleted photos and every finished sync empty it straight away, whatever the number below says.</string>
+    <string name="acc_cache_text">Answers from your index are kept on this phone and reused, so the same question is not paid for twice. Your own tags, deleted photos and every finished sync empty it at once.</string>
     <string name="acc_cache_seconds">Reuse an answer for this many seconds</string>
     <string name="acc_cache_limits">At least %1$s seconds, at most a day. In force: %2$s seconds.</string>
     <string name="acc_save">Save</string>

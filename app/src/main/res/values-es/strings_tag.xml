@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="tg_lead">Se ponen en las fotos marcadas, y en nada más de tu índice. Al guardar se escriben en este teléfono al momento; tu índice se actualiza en la siguiente sincronización.</string>
+    <string name="tg_lead">Solo se aplican a las fotos marcadas. Se guardan en este teléfono al instante; tu índice se actualiza en la próxima sincronización.</string>
     <string name="tg_people">Personas</string>
-    <string name="tg_people_replace">Reemplazar: estos nombres pasan a ser los únicos de cada foto marcada. Los actuales se quitan, en tu índice y en los archivos.</string>
+    <string name="tg_people_replace">Reemplazar: estos serán los únicos nombres en cada foto marcada, en tu índice y en los archivos.</string>
     <string name="tg_people_add">Añadir: estos nombres se suman a los que ya tiene cada foto.</string>
     <string name="tg_add_name">Añadir un nombre</string>
     <string name="tg_add">Añadir</string>
     <string name="tg_people_in_photos">Personas en tus fotos</string>
     <string name="tg_my_tags">Mis etiquetas (Álbumes)</string>
-    <string name="tg_tags_replace">Reemplazar: estas etiquetas pasan a ser las únicas de cada foto marcada. Las actuales se quitan, en tu índice y en los archivos.</string>
+    <string name="tg_tags_replace">Reemplazar: estas serán las únicas etiquetas en cada foto marcada, en tu índice y en los archivos.</string>
     <string name="tg_tags_add">Añadir: estas etiquetas se suman a las que ya tiene cada foto.</string>
     <string name="tg_add_tag">Añade una etiqueta, p. ej. Maria, vacaciones 2021</string>
     <string name="tg_your_tags">Tus etiquetas</string>

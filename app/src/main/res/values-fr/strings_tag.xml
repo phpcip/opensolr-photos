@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="tg_lead">Elles vont sur les photos cochées, et sur rien d\'autre dans votre index. L\'enregistrement les écrit tout de suite sur ce téléphone ; votre index est mis à jour par la synchro suivante.</string>
+    <string name="tg_lead">S\'appliquent aux seules photos cochées. Enregistré aussitôt sur ce téléphone ; votre index suit à la prochaine synchronisation.</string>
     <string name="tg_people">Personnes</string>
-    <string name="tg_people_replace">Remplacer : ces noms deviennent les seuls noms de chaque photo cochée. Les noms actuels sont retirés, dans votre index et dans les fichiers.</string>
+    <string name="tg_people_replace">Remplacer : ce seront les seuls noms sur chaque photo cochée, dans l\'index et dans les fichiers.</string>
     <string name="tg_people_add">Ajouter : ces noms s\'ajoutent à ceux de chaque photo.</string>
     <string name="tg_add_name">Ajouter un nom</string>
     <string name="tg_add">Ajouter</string>
     <string name="tg_people_in_photos">Personnes dans vos photos</string>
     <string name="tg_my_tags">Mes étiquettes (Albums)</string>
-    <string name="tg_tags_replace">Remplacer : ces étiquettes deviennent les seules de chaque photo cochée. Les étiquettes actuelles sont retirées, dans votre index et dans les fichiers.</string>
+    <string name="tg_tags_replace">Remplacer : ce seront les seuls tags sur chaque photo cochée, dans l\'index et dans les fichiers.</string>
     <string name="tg_tags_add">Ajouter : ces étiquettes s\'ajoutent à celles de chaque photo.</string>
     <string name="tg_add_tag">Ajouter une étiquette, ex. Maria, vacances 2021</string>
     <string name="tg_your_tags">Vos étiquettes</string>

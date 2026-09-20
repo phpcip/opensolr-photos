@@ -47,7 +47,7 @@
     <string name="acc_language_text">Aplicația folosește limba telefonului dacă o știe, altfel engleza.</string>
     <string name="acc_places">Locuri</string>
     <string name="acc_place_new">Pune loc pozelor noi</string>
-    <string name="acc_place_new_text">O poză nouă fără poziție, de la un aparat fără GPS, primește locul pozei făcute de acest telefon cel mai aproape în timp (în 30 de minute). Altfel, o poză făcută în ultimele 2 ore primește poziția telefonului când ajunge. Pozele care au deja poziție și toate pozele deja aflate pe telefon nu sunt atinse niciodată.</string>
+    <string name="acc_place_new_text">O poză nouă fără poziție ia locul pozei de telefon cea mai apropiată în timp (30 de minute) sau, dacă e din ultimele 2 ore, poziția telefonului. Pozele care au deja loc nu se ating.</string>
     <string name="acc_place_no_location">Fără acces la locație se folosesc doar pozele telefonului. Permite locația ca să se folosească și poziția telefonului.</string>
     <string name="acc_place_no_background">Android îi dă aplicației poziția doar cât e deschisă, așa că pozele sincronizate în fundal primesc doar locul pozelor telefonului. Permite „Tot timpul” în permisiunea de locație a aplicației.</string>
     <string name="acc_save_places">Scrie locurile în poze</string>
@@ -60,7 +60,7 @@
     <string name="acc_semantic">Semantic</string>
     <string name="acc_lexical">Lexical</string>
     <string name="acc_cache">Memorie de căutare</string>
-    <string name="acc_cache_text">Răspunsurile indexului sunt păstrate pe telefon și refolosite, ca aceeași întrebare pusă de două ori să nu consume de două ori trafic. Etichetele tale, pozele șterse și fiecare sync terminat o golesc imediat, orice ar scrie mai jos.</string>
+    <string name="acc_cache_text">Răspunsurile din index rămân pe telefon și se refolosesc, ca aceeași întrebare să nu coste de două ori. Etichetele tale, pozele șterse și orice sync încheiat îl golesc pe loc.</string>
     <string name="acc_cache_seconds">Refolosește un răspuns atâtea secunde</string>
     <string name="acc_cache_limits">Minim %1$s secunde, maxim o zi. Acum: %2$s secunde.</string>
     <string name="acc_save">Salvează</string>

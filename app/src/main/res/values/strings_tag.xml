@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="tg_lead">These go on the photos you ticked, and on nothing else in your index. Saving writes them on this phone at once; your index is updated by the sync that follows.</string>
+    <string name="tg_lead">These go only on the photos you ticked. Saved on this phone at once; your index follows with the next sync.</string>
     <string name="tg_people">People</string>
-    <string name="tg_people_replace">Replace: these names become the only names on every ticked photo. Names they have now are removed, in your index and in the files.</string>
+    <string name="tg_people_replace">Replace: these become the only names on every ticked photo, in your index and in the files.</string>
     <string name="tg_people_add">Add: these names go on top of the names each photo already has.</string>
     <string name="tg_add_name">Add a name</string>
     <string name="tg_add">Add</string>
     <string name="tg_people_in_photos">People in your photos</string>
     <string name="tg_my_tags">My tags (Albums)</string>
-    <string name="tg_tags_replace">Replace: these tags become the only tags on every ticked photo. Tags they have now are removed, in your index and in the files.</string>
+    <string name="tg_tags_replace">Replace: these become the only tags on every ticked photo, in your index and in the files.</string>
     <string name="tg_tags_add">Add: these tags go on top of the tags each photo already has.</string>
     <string name="tg_add_tag">Add a tag, e.g. Maria, holiday 2021</string>
     <string name="tg_your_tags">Your tags</string>

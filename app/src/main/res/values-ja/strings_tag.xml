@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="tg_lead">チェックした写真だけに付き、インデックスの他の写真には付きません。保存するとこの端末にすぐ書き込まれ、インデックスは次の同期で更新されます。</string>
+    <string name="tg_lead">チェックした写真だけに付きます。端末にはすぐ保存され、索引は次の同期で更新されます。</string>
     <string name="tg_people">人物</string>
-    <string name="tg_people_replace">置き換え: チェックした各写真の名前がこれだけになります。既存の名前はインデックスとファイルから削除されます。</string>
+    <string name="tg_people_replace">置き換え：チェックした写真の名前はこれだけになります（索引とファイルの両方）。</string>
     <string name="tg_people_add">追加: 各写真の既存の名前に加えられます。</string>
     <string name="tg_add_name">名前を追加</string>
     <string name="tg_add">追加</string>
     <string name="tg_people_in_photos">写真に写っている人物</string>
     <string name="tg_my_tags">マイタグ（アルバム）</string>
-    <string name="tg_tags_replace">置き換え: チェックした各写真のタグがこれだけになります。既存のタグはインデックスとファイルから削除されます。</string>
+    <string name="tg_tags_replace">置き換え：チェックした写真のタグはこれだけになります（索引とファイルの両方）。</string>
     <string name="tg_tags_add">追加: 各写真の既存のタグに加えられます。</string>
     <string name="tg_add_tag">タグを追加（例: Maria、休暇 2021）</string>
     <string name="tg_your_tags">あなたのタグ</string>

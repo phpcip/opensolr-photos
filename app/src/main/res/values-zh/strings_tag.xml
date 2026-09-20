@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="tg_lead">只会添加到你勾选的照片上，不会影响索引中的其他照片。保存后立即写入本手机；索引会在接下来的同步中更新。</string>
+    <string name="tg_lead">只加在你勾选的照片上。立即保存在本机，索引会在下次同步时更新。</string>
     <string name="tg_people">人物</string>
-    <string name="tg_people_replace">替换：这些名字将成为每张勾选照片上的唯一名字。现有名字会从索引和文件中移除。</string>
+    <string name="tg_people_replace">替换：勾选的照片上只保留这些人名（索引和文件中都是）。</string>
     <string name="tg_people_add">添加：这些名字会加到每张照片已有的名字上。</string>
     <string name="tg_add_name">添加名字</string>
     <string name="tg_add">添加</string>
     <string name="tg_people_in_photos">照片中的人物</string>
     <string name="tg_my_tags">我的标签（相册）</string>
-    <string name="tg_tags_replace">替换：这些标签将成为每张勾选照片上的唯一标签。现有标签会从索引和文件中移除。</string>
+    <string name="tg_tags_replace">替换：勾选的照片上只保留这些标签（索引和文件中都是）。</string>
     <string name="tg_tags_add">添加：这些标签会加到每张照片已有的标签上。</string>
     <string name="tg_add_tag">添加标签，例如 Maria、2021 假期</string>
     <string name="tg_your_tags">你的标签</string>

@@ -47,7 +47,7 @@
     <string name="acc_language_text">L\'app suit la langue de votre téléphone quand elle la parle, sinon l\'anglais.</string>
     <string name="acc_places">Lieux</string>
     <string name="acc_place_new">Placer les nouvelles photos</string>
-    <string name="acc_place_new_text">Une nouvelle photo sans position, venant d\'un appareil sans GPS, reçoit le lieu de la photo prise par ce téléphone le plus près dans le temps (à moins de 30 minutes). À défaut, une photo prise dans les 2 dernières heures reçoit la position du téléphone à son arrivée. Les photos qui ont déjà une position, et toutes celles déjà sur le téléphone, ne sont jamais modifiées.</string>
+    <string name="acc_place_new_text">Une nouvelle photo sans position prend le lieu de la photo du téléphone la plus proche dans le temps (30 minutes), ou, si elle date de moins de 2 heures, la position du téléphone. Celles qui en ont une ne sont jamais touchées.</string>
     <string name="acc_place_no_location">Sans accès à la position, seules les photos du téléphone sont utilisées. Autorisez la position pour utiliser aussi celle du téléphone.</string>
     <string name="acc_place_no_background">Android ne donne la position à l\'app que lorsqu\'elle est ouverte ; les photos synchronisées en arrière-plan ne reçoivent donc que le lieu des photos du téléphone. Autorisez « Toujours » dans l\'autorisation de position de l\'app.</string>
     <string name="acc_save_places">Écrire les lieux dans les photos</string>
@@ -60,7 +60,7 @@
     <string name="acc_semantic">Sémantique</string>
     <string name="acc_lexical">Lexical</string>
     <string name="acc_cache">Cache de recherche</string>
-    <string name="acc_cache_text">Les réponses de votre index sont gardées sur ce téléphone et réutilisées : poser deux fois la même question ne coûte pas deux fois de bande passante. Vos étiquettes, les photos supprimées et chaque synchro terminée le vident aussitôt, quel que soit le nombre ci-dessous.</string>
+    <string name="acc_cache_text">Les réponses de votre index restent sur ce téléphone et sont réutilisées, pour ne pas payer deux fois la même question. Vos tags, les photos supprimées et chaque synchronisation terminée le vident aussitôt.</string>
     <string name="acc_cache_seconds">Réutiliser une réponse pendant (secondes)</string>
     <string name="acc_cache_limits">Au moins %1$s secondes, au plus un jour. En vigueur : %2$s secondes.</string>
     <string name="acc_save">Enregistrer</string>

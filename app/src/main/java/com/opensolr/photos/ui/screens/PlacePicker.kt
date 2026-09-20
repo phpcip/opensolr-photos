@@ -16,7 +16,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
@@ -60,6 +63,12 @@ import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.MapEventsOverlay
 import java.util.Locale
 import kotlinx.coroutines.launch
+
+/** The least room kept above the map, for a phone that reports no status bar of its own. */
+private val MIN_TOP_ROOM = 24.dp
+
+/** The least room kept under the buttons, for a gesture bar a phone does not declare. */
+private val MIN_BOTTOM_ROOM = 28.dp
 
 /**
  * The map on which the owner puts a photo somewhere else (Cip, 2026-09-19): the pin stays in the
@@ -134,29 +143,37 @@ fun PlacePickerDialog(
     }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-        // The dialog's own window is made to cover the whole screen, system bars included, so the
-        // padding below is measured against the same rectangle the content is laid out in. Left to
-        // itself the window stops under the status bar, the content is pushed down by its height
-        // and the buttons fall off the bottom of the screen (Cip, 2026-09-20).
+        // The window covers the whole screen, and the room for the system bars is whatever THIS
+        // window is told they are - never less than a finger's worth at the bottom and a status
+        // bar's worth at the top. The floors are the point: a phone that reports nothing (some
+        // do, with gesture navigation) would otherwise put the buttons under its gesture bar,
+        // which is exactly what Cip kept seeing. The same "real inset, never less than this"
+        // rule the photo viewer has used since September.
         val view = androidx.compose.ui.platform.LocalView.current
         androidx.compose.runtime.SideEffect {
-            (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.let { window ->
-                window.setLayout(
-                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                )
-                androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
-                    window.attributes = window.attributes.apply { fitInsetsTypes = 0 }
-                }
+            val window = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window ?: return@SideEffect
+            window.setLayout(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            )
+            androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+                window.attributes = window.attributes.apply { fitInsetsTypes = 0 }
             }
         }
-        // The padding comes from the insets THIS window is given, never from numbers read
-        // somewhere else: when the window covers the system bars it is told how tall they are,
-        // and when the system has already inset it, it is told zero. Measuring the activity
-        // instead added a second status bar's worth of padding on a window that was already
-        // inset, which pushed the buttons clean off the bottom of the screen (Cip, twice).
-        Column(Modifier.fillMaxSize().background(p.paper).safeDrawingPadding()) {
+        val room = androidx.compose.foundation.layout.WindowInsets.safeDrawing.asPaddingValues()
+        val direction = androidx.compose.ui.platform.LocalLayoutDirection.current
+        Column(
+            Modifier
+                .fillMaxSize()
+                .background(p.paper)
+                .padding(
+                    top = maxOf(room.calculateTopPadding(), MIN_TOP_ROOM),
+                    bottom = maxOf(room.calculateBottomPadding(), MIN_BOTTOM_ROOM),
+                    start = room.calculateStartPadding(direction),
+                    end = room.calculateEndPadding(direction),
+                )
+        ) {
             Box(Modifier.padding(horizontal = 8.dp)) { ScreenHeader(stringResource(R.string.pp_title), onBack = onDismiss) }
             Text(
                 stringResource(R.string.pp_lead),

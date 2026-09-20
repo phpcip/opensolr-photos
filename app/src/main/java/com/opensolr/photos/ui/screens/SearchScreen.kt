@@ -1159,12 +1159,13 @@ private fun SelectionDock(
             .padding(horizontal = 6.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        DockAction(R.drawable.ic_share, stringResource(R.string.act_share), enabled = count > 0, onClick = onShare)
-        DockAction(R.drawable.ic_delete, stringResource(R.string.act_delete), enabled = count > 0, onClick = onDelete)
-        DockAction(R.drawable.ic_sync, if (count > 0) stringResource(R.string.dock_resync_n, Actions.formatCompact(count.toLong())) else stringResource(R.string.dock_resync), enabled = count > 0, accent = true, onClick = onResync)
-        // Last: the photos that are ticked, and only those. Selection now leaves by itself when
-        // the last tick goes, so "tag everything on screen" has nowhere to live (Cip, 2026-09-18).
+        // Tag first, on the left, exactly where it is under a single photo, then share, then the
+        // re-sync, and delete last, away from the rest (Cip, 2026-09-20). They act on the photos
+        // that are ticked, and only those.
         DockAction(R.drawable.ic_tag, stringResource(R.string.dock_tag_n, Actions.formatCompact(count.toLong())), enabled = count > 0, onClick = onTag)
+        DockAction(R.drawable.ic_share, stringResource(R.string.act_share), enabled = count > 0, onClick = onShare)
+        DockAction(R.drawable.ic_sync, if (count > 0) stringResource(R.string.dock_resync_n, Actions.formatCompact(count.toLong())) else stringResource(R.string.dock_resync), enabled = count > 0, accent = true, onClick = onResync)
+        DockAction(R.drawable.ic_delete, stringResource(R.string.act_delete), enabled = count > 0, onClick = onDelete)
     }
 }
 
@@ -1181,9 +1182,14 @@ internal fun DockAction(icon: Int, label: String, enabled: Boolean, accent: Bool
     }
     Column(
         Modifier
+            .padding(horizontal = 3.dp)
             .clip(Corner)
+            // Each one is drawn as a button of its own, on a shade neither row above it uses, so
+            // it is plain that these are things to press (Cip, 2026-09-20).
+            .background(p.dockFill)
+            .border(1.dp, p.hairline, Corner)
             .then(if (enabled) Modifier.combinedClickableCompat(onClick) else Modifier)
-            .padding(horizontal = 16.dp, vertical = 4.dp),
+            .padding(horizontal = 12.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(painterResource(icon), contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
@@ -1803,7 +1809,9 @@ internal fun IconAction(
             .padding(start = 6.dp)
             .size(36.dp)
             .clip(Corner)
-            .background(p.buttonFill)
+            // A shade apart from the header row above it, so the two rows do not read as one
+            // long strip of buttons (Cip, 2026-09-20).
+            .background(p.toolFill)
             .border(1.dp, if (active) (if (danger) SkippedRed else p.accent) else p.hairline, Corner)
             .combinedClickableCompat { if (enabled) onClick() },
         contentAlignment = Alignment.Center,
@@ -2681,16 +2689,9 @@ internal fun PhotoViewer(
             }
 
             val hit = hits.getOrNull(pager.currentPage)
-            // Which one of how many, so a swipe through a long result set has a place in it.
+            // Nothing is written over the photo: the counter that used to sit at the top is gone
+            // (Cip, 2026-09-20). A photo shown whole is shown whole.
             if (showActions && hit != null) {
-                Text(
-                    stringResource(R.string.viewer_position, Actions.formatCount((pager.currentPage + 1).toLong()), Actions.formatCount(hits.size.toLong())),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = Color.White,
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = maxOf(topInset, 12.dp) + 12.dp),
-                )
                 // A quiet hint that the photo has more to say: three chevrons drifting upwards
                 // over the action bar, faintest at the top (Cip, 2026-09-16).
                 // Only while the photo is whole: magnified, a swipe up moves the picture, so the
@@ -3059,10 +3060,13 @@ internal fun DetailsSheet(
             }
         }
     }
-    if (picking) {
-        PlacePickerDialog(start = hit.latLon, viewModel = viewModel, onDismiss = { picking = false }, onPick = { lat, lon -> savePlace(lat, lon) })
-    }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = p.paper, shape = Corner) {
+        // The map belongs to the sheet, not beside it: opened as a sibling its window was made
+        // before the sheet's and the sheet could sit over its buttons on some phones, which is
+        // why moving a single photo misbehaved where moving many did not (Cip, 2026-09-20).
+        if (picking) {
+            PlacePickerDialog(start = hit.latLon, viewModel = viewModel, onDismiss = { picking = false }, onPick = { lat, lon -> savePlace(lat, lon) })
+        }
         Column(
             Modifier
                 .fillMaxWidth()

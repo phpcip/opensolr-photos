@@ -21,7 +21,7 @@
     <string name="sync_btn_reread">再読込</string>
     <string name="sync_btn_documents">書類</string>
     <string name="sync_btn_reset">リセット</string>
-    <string name="sync_buttons_text">再同期は新しい写真と削除された写真だけを処理します。停止は実行中の処理を終了し、次は自動で始まります。再読込は何も空にせずに全写真をOpensolrに通し直し、改善された処理を反映します。書類はレシート、ラベル、スクリーンショットを読み直します。リセットはインデックスを空にして全写真を読み込みます。</string>
+    <string name="sync_buttons_text">Re-Sync：新規と削除のみ。停止：実行中の処理を終えます。再読込：索引を空にせず全写真を送り直します。ドキュメント：印字された文字を読み直します。リセット：索引を空にして全部読み直します。</string>
     <string name="sync_auto">自動再同期</string>
     <string name="sync_daily">毎日</string>
     <string name="sync_weekly">毎週</string>
@@ -30,13 +30,13 @@
     <string name="sync_folders">インデックス対象のフォルダー</string>
     <string name="sync_change_folders">フォルダーを変更</string>
     <string name="sync_ocr_q">書類を読み直しますか？</string>
-    <string name="sync_ocr_text">印刷された文字を含む写真はインデックスから外され、次の同期で読み取りを整えて戻されます。プランの費用はかかりません（一度読んだ写真は二度と読みません）。タグは保持されます。写真は変更されません。</string>
+    <string name="sync_ocr_text">印字のある写真は次回の同期で読み直し、整えられます。プランの費用はかかりません。タグは残り、写真は変わりません。</string>
     <string name="sync_rebuild">再構築</string>
     <string name="sync_cancel">キャンセル</string>
     <string name="sync_reread_q">すべての写真を読み直しますか？</string>
-    <string name="sync_reread_text">すべての写真が最初のインデックス時と同じようにOpensolrを再び通り、言葉、場所、人物、検索ベクトルといった現在の処理結果を得ます。何も空にしないので検索は常に使え、各写真は書き直されるだけです。タグ、名前を付けた人物、独自の説明は保持されます。写真は変更されません。途中で止まっても、次の同期で続きから再開します。</string>
+    <string name="sync_reread_text">すべての写真をもう一度 Opensolr に通して書き直します（言葉・場所・人物・ベクトル）。索引は空になりません。検索は使え、タグは残り、写真は変わりません。途中で止めても安全です。</string>
     <string name="sync_reset_q">インデックスをリセットしますか？</string>
-    <string name="sync_reset_text">すべての写真が消去されて読み直され、新しいAIリクエストとして数えられます。タグは保持されます。写真は変更されません。</string>
+    <string name="sync_reset_text">すべての写真を空にして読み直します（新しい AI リクエストとして数えます）。タグは残り、写真は変わりません。</string>
     <string name="st_none">まだ同期していません。</string>
     <string name="st_no_photos">選んだフォルダーに写真が見つかりませんでした。</string>
     <string name="st_none_read">読み込めた写真はありません。何もインデックスされていません。</string>

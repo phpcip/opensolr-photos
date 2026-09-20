@@ -47,7 +47,7 @@
     <string name="acc_language_text">如果支持手机的语言，应用会使用它，否则使用英语。</string>
     <string name="acc_places">地点</string>
     <string name="acc_place_new">为新照片添加地点</string>
-    <string name="acc_place_new_text">来自无 GPS 相机、没有位置的新照片，会获得本手机在时间上最接近（30 分钟内）拍摄的照片的地点。否则，最近 2 小时内拍摄的照片会在到达时获得手机的位置。已有位置的照片以及手机上已有的所有照片都不会被改动。</string>
+    <string name="acc_place_new_text">没有位置的新照片会取用时间上最接近的手机照片的地点（30 分钟内）；若是最近 2 小时拍的，则取手机当前位置。已有位置的照片不会改动。</string>
     <string name="acc_place_no_location">没有位置权限时，只使用手机自己的照片。允许位置权限即可同时使用手机的位置。</string>
     <string name="acc_place_no_background">Android 仅在应用打开时提供位置，因此后台同步的照片只会获得手机照片的地点。请在应用的位置权限中选择“始终允许”。</string>
     <string name="acc_save_places">将地点写入照片</string>
@@ -60,7 +60,7 @@
     <string name="acc_semantic">语义</string>
     <string name="acc_lexical">词汇</string>
     <string name="acc_cache">搜索缓存</string>
-    <string name="acc_cache_text">索引的回答会保存在本手机上并重复使用，同样的问题问两次不会消耗两次带宽。修改标签、删除照片和每次同步完成都会立即清空缓存。</string>
+    <string name="acc_cache_text">索引的结果会保存在本机并重复使用，同一个问题不会花费两次。你的标签、删除照片以及每次同步完成都会立即清空它。</string>
     <string name="acc_cache_seconds">回答重复使用的秒数</string>
     <string name="acc_cache_limits">至少 %1$s 秒，最多一天。当前：%2$s 秒。</string>
     <string name="acc_save">保存</string>

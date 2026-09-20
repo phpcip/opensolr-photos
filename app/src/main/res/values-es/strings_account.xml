@@ -47,7 +47,7 @@
     <string name="acc_language_text">La app sigue el idioma de tu teléfono si lo habla; si no, usa el inglés.</string>
     <string name="acc_places">Lugares</string>
     <string name="acc_place_new">Ubicar fotos nuevas</string>
-    <string name="acc_place_new_text">Una foto nueva sin posición, de una cámara sin GPS, recibe el lugar de la foto que este teléfono tomó más cerca en el tiempo (en 30 minutos). Si no, una foto tomada en las últimas 2 horas recibe la posición del teléfono al llegar. Las fotos que ya tienen una, y todas las que ya están en el teléfono, nunca se tocan.</string>
+    <string name="acc_place_new_text">Una foto nueva sin posición toma el lugar de la foto del móvil más cercana en el tiempo (30 minutos), o, si es de las últimas 2 horas, la posición del móvil. Las que ya tienen una no se tocan.</string>
     <string name="acc_place_no_location">Sin acceso a la ubicación solo se usan las fotos del propio teléfono. Permite la ubicación para usar también la posición del teléfono.</string>
     <string name="acc_place_no_background">Android solo da la posición a la app mientras está abierta, así que las fotos sincronizadas en segundo plano solo reciben el lugar de las fotos del teléfono. Permite «Siempre» en el permiso de ubicación de la app.</string>
     <string name="acc_save_places">Guardar los lugares en las fotos</string>
@@ -60,7 +60,7 @@
     <string name="acc_semantic">Semántico</string>
     <string name="acc_lexical">Léxico</string>
     <string name="acc_cache">Caché de búsqueda</string>
-    <string name="acc_cache_text">Las respuestas de tu índice se guardan en este teléfono y se reutilizan, así que preguntar lo mismo dos veces no gasta el doble de ancho de banda. Tus etiquetas, las fotos eliminadas y cada sincronización terminada lo vacían al momento, diga lo que diga el número de abajo.</string>
+    <string name="acc_cache_text">Las respuestas de tu índice se guardan en este teléfono y se reutilizan, para no pagar dos veces la misma pregunta. Tus etiquetas, las fotos borradas y cada sincronización terminada lo vacían al instante.</string>
     <string name="acc_cache_seconds">Reutilizar una respuesta durante (segundos)</string>
     <string name="acc_cache_limits">Al menos %1$s segundos, como mucho un día. Actual: %2$s segundos.</string>
     <string name="acc_save">Guardar</string>

@@ -21,7 +21,7 @@
     <string name="sync_btn_reread">Neu lesen</string>
     <string name="sync_btn_documents">Dokumente</string>
     <string name="sync_btn_reset">Reset</string>
-    <string name="sync_buttons_text">Neu-Sync nimmt nur neue und gelöschte Fotos. Stopp beendet den laufenden Durchgang; der nächste startet von selbst. Neu lesen schickt jedes Foto erneut durch Opensolr, ohne etwas zu leeren, um zu bekommen, was Opensolr jetzt besser kann. Dokumente liest Belege, Etiketten und Screenshots neu. Reset leert den Index und liest jedes Foto.</string>
+    <string name="sync_buttons_text">Re-Sync: nur neue und gelöschte Fotos. Stopp: beendet den laufenden Durchgang. Erneut lesen: schickt alle Fotos wieder durch Opensolr, ohne zu leeren. Dokumente: liest gedruckten Text neu. Zurücksetzen: leert den Index und liest alles.</string>
     <string name="sync_auto">Automatischer Neu-Sync</string>
     <string name="sync_daily">Täglich</string>
     <string name="sync_weekly">Wöchentlich</string>
@@ -30,13 +30,13 @@
     <string name="sync_folders">Indexierte Ordner</string>
     <string name="sync_change_folders">Ordner ändern</string>
     <string name="sync_ocr_q">Dokumente neu lesen?</string>
-    <string name="sync_ocr_text">Fotos mit gedrucktem Text verlassen den Index, und der nächste Sync fügt sie mit bereinigter Lesung wieder hinzu. Es kostet nichts: Ein einmal gelesenes Foto wird nie erneut gelesen. Ihre Tags bleiben. Ihre Fotos werden nicht verändert.</string>
+    <string name="sync_ocr_text">Fotos mit gedrucktem Text werden beim nächsten Sync erneut gelesen, bereinigt. Kostet nichts in Ihrem Tarif. Tags bleiben, Fotos unberührt.</string>
     <string name="sync_rebuild">Neu aufbauen</string>
     <string name="sync_cancel">Abbrechen</string>
     <string name="sync_reread_q">Alle Fotos neu lesen?</string>
-    <string name="sync_reread_text">Jedes Foto geht erneut durch Opensolr, wie beim ersten Indexieren, und bekommt, was Opensolr jetzt kann: die Wörter, den Ort, die Personen und seinen Suchvektor. Nichts wird geleert: Die Suche funktioniert die ganze Zeit, und jedes Foto wird einfach neu geschrieben. Ihre Tags, benannten Personen und eigenen Formulierungen bleiben. Ihre Fotos werden nicht verändert. Stoppt es, macht der nächste Sync dort weiter.</string>
+    <string name="sync_reread_text">Jedes Foto geht erneut durch Opensolr und wird neu geschrieben: Wörter, Ort, Personen, Vektor. Nichts wird geleert, die Suche läuft weiter, Ihre Tags bleiben, Ihre Fotos bleiben unberührt. Abbrechen ist sicher.</string>
     <string name="sync_reset_q">Index zurücksetzen?</string>
-    <string name="sync_reset_text">Jedes Foto wird daraus entfernt und neu gelesen, was als neue KI-Anfragen zählt. Ihre Tags bleiben. Ihre Fotos werden nicht verändert.</string>
+    <string name="sync_reset_text">Jedes Foto wird geleert und neu gelesen, das zählt als neue AI-Anfragen. Tags bleiben, Fotos unberührt.</string>
     <string name="st_none">Noch kein Sync gelaufen.</string>
     <string name="st_no_photos">In den gewählten Ordnern wurden keine Fotos gefunden.</string>
     <string name="st_none_read">Kein Foto konnte gelesen werden. Nichts wurde indexiert.</string>

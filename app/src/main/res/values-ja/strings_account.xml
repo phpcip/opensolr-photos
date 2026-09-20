@@ -47,7 +47,7 @@
     <string name="acc_language_text">アプリは端末の言語に対応していればその言語、そうでなければ英語を使います。</string>
     <string name="acc_places">場所</string>
     <string name="acc_place_new">新しい写真に場所を付ける</string>
-    <string name="acc_place_new_text">GPSのないカメラなどから届いた位置情報のない新しい写真には、この端末で時間的に最も近く（30分以内）に撮った写真の場所が付きます。ない場合は、過去2時間以内に撮った写真に届いた時点の端末の位置が付きます。位置情報のある写真と、すでに端末にある写真は変更されません。</string>
+    <string name="acc_place_new_text">位置のない新しい写真は、時間が最も近い端末の写真の場所（30 分以内）を受け取ります。直近 2 時間の写真なら端末の現在地を使います。すでに位置がある写真は変更しません。</string>
     <string name="acc_place_no_location">位置情報へのアクセスがない場合は、端末の写真だけを使います。端末の位置も使うには位置情報を許可してください。</string>
     <string name="acc_place_no_background">Androidはアプリが開いている間だけ位置を渡すため、バックグラウンドで同期された写真には端末の写真の場所だけが付きます。アプリの位置情報の権限で「常に許可」を選んでください。</string>
     <string name="acc_save_places">場所を写真に書き込む</string>
@@ -60,7 +60,7 @@
     <string name="acc_semantic">意味</string>
     <string name="acc_lexical">語句</string>
     <string name="acc_cache">検索キャッシュ</string>
-    <string name="acc_cache_text">インデックスの回答はこの端末に保存されて再利用されるため、同じ質問を2回しても帯域を2回使いません。タグの変更、写真の削除、同期の完了ですぐに空になります。</string>
+    <string name="acc_cache_text">索引からの答えはこの端末に保存して再利用します。同じ問い合わせを二度支払う必要はありません。タグの編集、写真の削除、同期の完了で即座に消えます。</string>
     <string name="acc_cache_seconds">回答を再利用する秒数</string>
     <string name="acc_cache_limits">最短 %1$s 秒、最長1日。現在: %2$s 秒。</string>
     <string name="acc_save">保存</string>

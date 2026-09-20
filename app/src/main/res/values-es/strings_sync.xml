@@ -21,7 +21,7 @@
     <string name="sync_btn_reread">Releer</string>
     <string name="sync_btn_documents">Documentos</string>
     <string name="sync_btn_reset">Reinicio</string>
-    <string name="sync_buttons_text">Resinc. toma solo fotos nuevas y eliminadas. Parar termina la ejecución en curso; la siguiente empieza sola. Releer vuelve a pasar cada foto por Opensolr sin vaciar nada, para obtener lo que Opensolr hace mejor ahora. Documentos vuelve a leer recibos, etiquetas y capturas. Reinicio vacía el índice y lee cada foto.</string>
+    <string name="sync_buttons_text">Re-Sync: solo fotos nuevas y borradas. Parar: termina la pasada actual. Releer: manda todas las fotos otra vez, sin vaciar nada. Documentos: vuelve a leer el texto impreso. Reiniciar: vacía el índice y lee todo.</string>
     <string name="sync_auto">Resinc. automática</string>
     <string name="sync_daily">Cada día</string>
     <string name="sync_weekly">Cada semana</string>
@@ -30,13 +30,13 @@
     <string name="sync_folders">Carpetas indexadas</string>
     <string name="sync_change_folders">Cambiar carpetas</string>
     <string name="sync_ocr_q">¿Volver a leer tus documentos?</string>
-    <string name="sync_ocr_text">Las fotos con texto impreso salen del índice y la próxima sincronización las devuelve con la lectura limpia. No cuesta nada: una foto leída una vez no se vuelve a leer. Tus etiquetas se conservan. Tus fotos no se tocan.</string>
+    <string name="sync_ocr_text">Las fotos con texto impreso se releen, ya limpias, en la próxima sincronización. No cuesta nada en tu plan. Tus etiquetas se conservan y tus fotos no se tocan.</string>
     <string name="sync_rebuild">Reconstruir</string>
     <string name="sync_cancel">Cancelar</string>
     <string name="sync_reread_q">¿Releer todas las fotos?</string>
-    <string name="sync_reread_text">Cada foto vuelve a pasar por Opensolr, como la primera vez, y recibe lo que Opensolr hace ahora: las palabras, el lugar, las personas y su vector de búsqueda. No se vacía nada: la búsqueda sigue funcionando todo el tiempo y cada foto simplemente se reescribe. Tus etiquetas, las personas nombradas y tu propia redacción se conservan. Tus fotos no se tocan. Si se detiene, la siguiente sincronización sigue donde quedó.</string>
+    <string name="sync_reread_text">Cada foto vuelve a pasar por Opensolr y se escribe de nuevo: palabras, lugar, personas, vector. No se vacía nada, la búsqueda sigue, tus etiquetas se conservan y tus fotos no se tocan. Parar es seguro.</string>
     <string name="sync_reset_q">¿Reiniciar tu índice?</string>
-    <string name="sync_reset_text">Se vacía de cada foto y se vuelve a leer, lo que cuenta como nuevas solicitudes de IA. Tus etiquetas se conservan. Tus fotos no se tocan.</string>
+    <string name="sync_reset_text">Cada foto se vacía y se vuelve a leer, lo que cuenta como nuevas peticiones de AI. Tus etiquetas se conservan y tus fotos no se tocan.</string>
     <string name="st_none">Aún no se ha sincronizado.</string>
     <string name="st_no_photos">No se encontraron fotos en las carpetas elegidas.</string>
     <string name="st_none_read">No se pudo leer ninguna foto. No se indexó nada.</string>

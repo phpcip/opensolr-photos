@@ -47,7 +47,7 @@
     <string name="acc_language_text">Die App folgt der Sprache Ihres Telefons, wenn sie diese spricht, sonst Englisch.</string>
     <string name="acc_places">Orte</string>
     <string name="acc_place_new">Neuen Fotos einen Ort geben</string>
-    <string name="acc_place_new_text">Ein neues Foto ohne Position, von einer Kamera ohne GPS, bekommt den Ort des Fotos, das dieses Telefon zeitlich am nächsten aufgenommen hat (innerhalb von 30 Minuten). Sonst bekommt ein Foto aus den letzten 2 Stunden beim Eintreffen die Position des Telefons. Fotos mit Position und alle bereits vorhandenen Fotos werden nie verändert.</string>
+    <string name="acc_place_new_text">Ein neues Foto ohne Position übernimmt den Ort des zeitlich nächsten Handyfotos (innerhalb von 30 Minuten) oder, wenn in den letzten 2 Stunden aufgenommen, die Position des Handys. Fotos mit Position bleiben unberührt.</string>
     <string name="acc_place_no_location">Ohne Standortzugriff werden nur die eigenen Fotos des Telefons genutzt. Erlauben Sie den Standort, damit auch die Position des Telefons genutzt wird.</string>
     <string name="acc_place_no_background">Android gibt der App die Position nur, solange sie geöffnet ist; im Hintergrund synchronisierte Fotos bekommen daher nur den Ort der eigenen Fotos. Erlauben Sie „Immer“ in der Standortberechtigung der App.</string>
     <string name="acc_save_places">Orte in die Fotos schreiben</string>
@@ -60,7 +60,7 @@
     <string name="acc_semantic">Semantik</string>
     <string name="acc_lexical">Lexik</string>
     <string name="acc_cache">Such-Cache</string>
-    <string name="acc_cache_text">Antworten Ihres Index werden auf diesem Telefon gespeichert und wiederverwendet, damit dieselbe Frage nicht zweimal Bandbreite kostet. Ihre Tags, gelöschte Fotos und jeder abgeschlossene Sync leeren ihn sofort, egal welche Zahl unten steht.</string>
+    <string name="acc_cache_text">Antworten aus Ihrem Index bleiben auf diesem Telefon und werden wiederverwendet, damit dieselbe Frage nicht zweimal zählt. Eigene Tags, gelöschte Fotos und jeder beendete Sync leeren ihn sofort.</string>
     <string name="acc_cache_seconds">Antwort so viele Sekunden wiederverwenden</string>
     <string name="acc_cache_limits">Mindestens %1$s Sekunden, höchstens ein Tag. Aktuell: %2$s Sekunden.</string>
     <string name="acc_save">Speichern</string>

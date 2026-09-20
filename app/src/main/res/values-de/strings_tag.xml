@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="tg_lead">Diese kommen auf die ausgewählten Fotos und auf nichts sonst im Index. Speichern schreibt sie sofort auf diesem Telefon; Ihr Index wird beim folgenden Sync aktualisiert.</string>
+    <string name="tg_lead">Gilt nur für die markierten Fotos. Sofort auf diesem Telefon gespeichert; Ihr Index folgt beim nächsten Sync.</string>
     <string name="tg_people">Personen</string>
-    <string name="tg_people_replace">Ersetzen: Diese Namen werden die einzigen Namen auf jedem ausgewählten Foto. Bisherige Namen werden entfernt, im Index und in den Dateien.</string>
+    <string name="tg_people_replace">Ersetzen: nur noch diese Namen auf jedem markierten Foto, im Index und in den Dateien.</string>
     <string name="tg_people_add">Hinzufügen: Diese Namen kommen zu den Namen jedes Fotos hinzu.</string>
     <string name="tg_add_name">Namen hinzufügen</string>
     <string name="tg_add">Hinzuf.</string>
     <string name="tg_people_in_photos">Personen in Ihren Fotos</string>
     <string name="tg_my_tags">Meine Tags (Alben)</string>
-    <string name="tg_tags_replace">Ersetzen: Diese Tags werden die einzigen Tags auf jedem ausgewählten Foto. Bisherige Tags werden entfernt, im Index und in den Dateien.</string>
+    <string name="tg_tags_replace">Ersetzen: nur noch diese Tags auf jedem markierten Foto, im Index und in den Dateien.</string>
     <string name="tg_tags_add">Hinzufügen: Diese Tags kommen zu den Tags jedes Fotos hinzu.</string>
     <string name="tg_add_tag">Tag hinzufügen, z. B. Maria, Urlaub 2021</string>
     <string name="tg_your_tags">Ihre Tags</string>
