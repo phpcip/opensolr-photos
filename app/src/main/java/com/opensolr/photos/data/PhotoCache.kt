@@ -156,6 +156,11 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
             addColumnIfMissing(db, "docs", "camera", "TEXT")
             backfillFolderAndCamera(db)
         }
+        if (oldVersion in 17..17) {
+            // The folder column held the last part of the path only; it holds the whole of it
+            // now, so the grid can lay the folders out as the tree they are (Cip, 2026-09-20).
+            backfillFolderAndCamera(db)
+        }
     }
 
     /** Fills the folder name and the camera from the stored documents, once, a page at a time. */
@@ -167,7 +172,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
                 } catch (e: Exception) {
                     return@forEachPage
                 }
-                val folder: String? = com.opensolr.photos.search.SearchFilters.folderName(doc.optString("folder"))
+                val folder: String? = com.opensolr.photos.search.SearchFilters.folderPath(doc.optString("folder"))
                 val camera: String? = com.opensolr.photos.search.SearchFilters.cameraName(doc.optString("camera_make"), doc.optString("camera_model"))
                 if (folder == null && camera == null) return@forEachPage
                 update.clearBindings()
@@ -549,7 +554,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         val fileHash: String? = null,
         /** The first division under the country (a county, a state), for grouping by place. */
         val region: String? = null,
-        /** The name of the folder the photo is in, its last part only, for grouping by folder. */
+        /** The whole path of the folder the photo is in, for grouping by folder. */
         val folder: String? = null,
         /** The camera that took it, make and model as one name, for grouping by camera. */
         val camera: String? = null,
@@ -1291,7 +1296,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
     companion object {
         private const val NAME = "photo_cache.db"
-        private const val VERSION = 17
+        private const val VERSION = 18
 
         /**
          * The one handle on this database for the whole app.

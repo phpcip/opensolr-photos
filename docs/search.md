@@ -208,9 +208,13 @@ The button above the grid chooses the layout, and the choice is kept from one se
 nothing typed offers all but *Best match*). Folder and camera are one value per photo, so no photo is drawn
 twice; photos with neither sit in a last group of their own, *No folder* / *No camera*.
 
-A folder is named by the **last part of its path** only — *Camera*, *Screenshots*, *WhatsApp Images* — since
-the media store names a folder by its whole path, which is why the folder is not a filter either. A camera is
-its make and model as one name, *Nikon Z6*, with the make left off when the model already begins with it.
+Folders are laid out as the **tree they are**, three levels deep as the date grouping is: *Pictures*, then
+*2019* under it, then *11*. A library kept as `2019/11`, `2019/07`, `2024/02` would otherwise come out as a
+flat list of *11*, *07* and *02*, which names nothing. A folder holding nothing but one other folder is
+written as one line (*Pictures / 2019*); anything deeper than the third level is held by the group at the
+bottom; and photos lying directly in a folder that also holds folders get a line of their own under its name.
+A camera is its make and model as one name, *Nikon Z6*, with the make left off when the model already begins
+with it.
 
 Grouping costs no extra request: a typed search asks for the values it groups by in the same request as the
 results (`id,taken_at,city,province,region,country,persons_ss,custom_tags,folder,camera_make,camera_model`),

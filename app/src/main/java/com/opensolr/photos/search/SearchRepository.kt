@@ -94,14 +94,14 @@ data class SearchFilters(
         const val FOLDER_ROOTS = "folder_root"
 
         /**
-         * The name of a folder as a group is headed: its LAST part only (Cip, 2026-09-20).
-         * The media store names a folder by its whole path, so grouping by the path itself gives
-         * a list of "Documents/photos/2019/summer" lines that all look alike - the same reason
-         * the folder is not a filter. "Camera", "Screenshots", "WhatsApp Images" is what the
-         * owner calls them. Photos of two folders with the same last name share a group, which
-         * is the point of naming them that way.
+         * A photo's folder as the grid groups by it: its whole path, tidied of the slashes at
+         * either end (Cip, 2026-09-20).
+         *
+         * The last part alone was tried first and thrown out: a library kept as 2019/11, 2019/07,
+         * 2024/02 came out as a flat list of "11", "07" and "02", which names nothing. The grid
+         * builds a tree out of the parts instead, so each name is read under the one above it.
          */
-        fun folderName(path: String?): String? = path?.trim()?.trim('/')?.substringAfterLast('/')?.ifBlank { null }
+        fun folderPath(path: String?): String? = path?.trim()?.trim('/')?.ifBlank { null }
 
         /**
          * The camera as one name: "Nikon Z6", not a bare "Z6". The make is left off when the model
@@ -380,7 +380,7 @@ class SearchRepository(private val context: Context) {
         val city: String?,
         val persons: List<String>,
         val tags: List<String>,
-        /** The name of the folder the photo is in - its last part only, see [SearchFilters.folderName]. */
+        /** The whole path of the folder the photo is in, see [SearchFilters.folderPath]. */
         val folder: String? = null,
         /** The camera that took it, make and model as one name, see [SearchFilters.cameraName]. */
         val camera: String? = null,
@@ -412,7 +412,7 @@ class SearchRepository(private val context: Context) {
                 city = (d.optString("city").trim().ifBlank { null }) ?: d.optString("province").trim().ifBlank { null },
                 persons = list(d, "persons_ss"),
                 tags = list(d, "custom_tags"),
-                folder = SearchFilters.folderName(d.optString("folder")),
+                folder = SearchFilters.folderPath(d.optString("folder")),
                 camera = SearchFilters.cameraName(d.optString("camera_make"), d.optString("camera_model")),
             )
         }

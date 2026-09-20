@@ -1683,7 +1683,7 @@ private fun DuplicateLevelSlider(level: Int, onLevel: (Int) -> Unit, canSelect: 
     val p = LocalPalette.current
     var value by remember { mutableStateOf(level.toFloat()) }
     LaunchedEffect(level) { if (value.roundToInt() != level) value = level.toFloat() }
-    val stop = value.roundToInt().coerceIn(0, DUPLICATE_KIND_NAMES.size - 1)
+    val stop = level.coerceIn(0, DUPLICATE_KIND_NAMES.size - 1)
     // Which set of scale colours reads on the current background: ink is near-black on paper
     // and near-white on a dark screen, so it says which theme is in force without asking.
     val dark = p.ink.red > 0.5f
@@ -1698,16 +1698,24 @@ private fun DuplicateLevelSlider(level: Int, onLevel: (Int) -> Unit, canSelect: 
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
         Slider(
             value = value,
+            // The thumb glides instead of snapping from notch to notch, and a stop is only left
+            // once the finger is most of the way to the next one (Cip, 2026-09-20): rounding at
+            // the halfway mark made the kinds flick past under a thumb that had barely moved.
             onValueChange = {
                 value = it
-                val rounded = it.roundToInt()
-                if (rounded != level) {
+                val next = if (kotlin.math.abs(it - level) < STOP_SLOP) level else it.roundToInt()
+                if (next != level) {
                     Haptics.tick(view, strong = false)
-                    onLevel(rounded)
+                    onLevel(next)
                 }
             },
+            // Let go and the thumb settles on the stop it chose, rather than between two of them.
+            onValueChangeFinished = { value = level.toFloat() },
             valueRange = 0f..(DUPLICATE_KIND_NAMES.size - 1).toFloat(),
-            steps = DUPLICATE_KIND_NAMES.size - 2,
+            // No notches for the thumb to jump between: with them the slider moved a whole stop
+            // at a time, which is what made it feel twitchy. The stops are still exactly where
+            // they were - it is only the way the thumb travels between them that changed.
+            steps = 0,
             colors = SliderDefaults.colors(
                 thumbColor = colour,
                 activeTrackColor = colour,
@@ -1738,6 +1746,13 @@ private val DUPLICATE_KIND_NAMES = listOf(
     "Same photo (EXIF)",
     "Same file name", "Same file size", "Same file (exact copy)",
 )
+
+/**
+ * How far towards the next stop the finger has to travel before the slider takes it: most of the
+ * way, not half of it (Cip, 2026-09-20). Halfway meant a thumb that had barely moved flicked
+ * through two or three kinds, and every one of them asked the index.
+ */
+private const val STOP_SLOP = 0.7f
 
 /** The EXIF stop, where the words-to-EXIF colour scale ends. */
 private const val DUPLICATE_EXIF_STOP = 3

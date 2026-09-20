@@ -1863,26 +1863,79 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // One group per folder name or per camera, in the order the best matches bring them,
             // with everything that has none in a last group of its own (Cip, 2026-09-20). Both
             // are one value per photo, so no photo is ever drawn twice.
-            GroupBy.FOLDER, GroupBy.CAMERA -> {
+            GroupBy.CAMERA -> {
                 val byValue = LinkedHashMap<String, Pair<String, MutableList<String>>>()
                 val without = ArrayList<String>()
                 found.forEach { hit ->
-                    val value = (if (how == GroupBy.FOLDER) hit.folder else hit.camera)?.trim()?.ifBlank { null }
+                    val value = hit.camera?.trim()?.ifBlank { null }
                     if (value == null) without += hit.id
                     else byValue.getOrPut(com.opensolr.photos.data.Words.fold(value)) { value to ArrayList() }.second += hit.id
                 }
-                val prefix = if (how == GroupBy.FOLDER) "folder" else "camera"
-                byValue.forEach { (key, value) -> out += ResultGroup(0, "$prefix:$key", value.first, value.second) }
-                if (without.isNotEmpty()) out += ResultGroup(
-                    0,
-                    "$prefix:none",
-                    if (how == GroupBy.FOLDER) AppText.s(R.string.vm_no_folder) else AppText.s(R.string.vm_no_camera),
-                    without,
-                )
+                byValue.forEach { (key, value) -> out += ResultGroup(0, "camera:$key", value.first, value.second) }
+                if (without.isNotEmpty()) out += ResultGroup(0, "camera:none", AppText.s(R.string.vm_no_camera), without)
+            }
+            // The folders as they really sit, one inside another, and not as a flat list of their
+            // last names (Cip, 2026-09-20): a library kept as 2019/11, 2019/07, 2024/02 showed
+            // "11", "07" and "02" side by side, which says nothing about anything.
+            GroupBy.FOLDER -> {
+                val root = FolderNode("")
+                val without = ArrayList<String>()
+                found.forEach { hit ->
+                    val path = hit.folder?.trim()?.trim('/')?.ifBlank { null }
+                    if (path == null) {
+                        without += hit.id
+                        return@forEach
+                    }
+                    var at = root
+                    path.split('/').filter { it.isNotEmpty() }.forEach { segment ->
+                        at = at.children.getOrPut(com.opensolr.photos.data.Words.fold(segment)) { FolderNode(segment) }
+                        at.all += hit.id
+                    }
+                    at.own += hit.id
+                }
+                root.children.values.forEach { child -> addFolderGroups(out, child, child.name, child.name, 0) }
+                if (without.isNotEmpty()) out += ResultGroup(0, "folder:none", AppText.s(R.string.vm_no_folder), without)
             }
             GroupBy.RELEVANCE -> Unit
         }
         return out
+    }
+
+    /**
+     * One folder while the photos are being sorted into a tree: the folders directly inside it,
+     * the photos lying in it, and the photos of the whole branch under it.
+     */
+    private class FolderNode(val name: String) {
+        val children = LinkedHashMap<String, FolderNode>()
+        val own = ArrayList<String>()
+        val all = ArrayList<String>()
+    }
+
+    /**
+     * Writes [node] and the branch under it out as groups, headed by the folder's own name.
+     *
+     * A folder holding nothing but one other folder is written as a single line - *Pictures /
+     * 2019* - because a level of its own for it would be a line with one arrow on it and nothing
+     * else. Below [FOLDER_LEVELS] the tree stops and the deepest group simply holds everything
+     * under it, so an oddly deep library never walks the grid off the side of the screen. Photos
+     * lying directly in a folder that also holds folders get a line of their own under its name,
+     * or they would have nowhere to be drawn: the grid only draws photos under a group with
+     * nothing beneath it.
+     */
+    private fun addFolderGroups(out: MutableList<ResultGroup>, node: FolderNode, path: String, name: String, level: Int) {
+        var at = node
+        var key = path
+        var label = name
+        while (at.own.isEmpty() && at.children.size == 1) {
+            val only = at.children.values.first()
+            key = "$key/${only.name}"
+            label = "$label / ${only.name}"
+            at = only
+        }
+        out += ResultGroup(level, "folder:$key", label, at.all)
+        if (at.children.isEmpty() || level >= FOLDER_LEVELS - 1) return
+        if (at.own.isNotEmpty()) out += ResultGroup(level + 1, "folder:$key/.", label, at.own)
+        at.children.values.forEach { child -> addFolderGroups(out, child, "$key/${child.name}", child.name, level + 1) }
     }
 
     /**
@@ -2386,7 +2439,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                                 city = (hit.city ?: hit.province)?.trim()?.ifBlank { null },
                                 persons = hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() },
                                 tags = hit.customTags,
-                                folder = com.opensolr.photos.search.SearchFilters.folderName(hit.folder),
+                                folder = com.opensolr.photos.search.SearchFilters.folderPath(hit.folder),
                                 camera = com.opensolr.photos.search.SearchFilters.cameraName(hit.cameraMake, hit.cameraModel),
                             )
                         }, how)
@@ -2769,6 +2822,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         /** How long a passing line ("Saved…") stays on the grid. */
         private const val FLASH_MS = 4000L
+
+        /**
+         * How deep the grid draws the folder tree, as the date grouping draws year, month and
+         * day. Anything deeper is held by the group at the bottom, so its photos are all there
+         * without the headings marching off the side of the screen.
+         */
+        private const val FOLDER_LEVELS = 3
 
         /**
          * The shortest a refresh is allowed to look like it took. Browsing is answered by the phone
