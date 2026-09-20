@@ -23,7 +23,7 @@
     <string name="back_to_search">検索に戻る</string>
     <string name="tagging_progress">%2$s 枚中 %1$s 枚にタグ付け中…</string>
     <string name="tagging">写真にタグ付け中…</string>
-    <string name="did_you_mean">もしかして </string>
+    <string name="did_you_mean">もしかして</string>
     <string name="ticking_group">グループ全体を選択中…</string>
     <string name="search_failed_title">検索できませんでした</string>
     <string name="open_group">グループを開く</string>

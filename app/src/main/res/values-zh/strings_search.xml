@@ -23,7 +23,7 @@
     <string name="back_to_search">返回搜索</string>
     <string name="tagging_progress">正在为 %2$s 张中的 %1$s 张添加标签…</string>
     <string name="tagging">正在为照片添加标签…</string>
-    <string name="did_you_mean">你是不是要找 </string>
+    <string name="did_you_mean">你是不是要找</string>
     <string name="ticking_group">正在勾选整个分组…</string>
     <string name="search_failed_title">搜索失败</string>
     <string name="open_group">展开此分组</string>

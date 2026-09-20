@@ -23,7 +23,7 @@
     <string name="back_to_search">Retour à la recherche</string>
     <string name="tagging_progress">Étiquetage de %1$s sur %2$s photos…</string>
     <string name="tagging">Étiquetage de vos photos…</string>
-    <string name="did_you_mean">Vouliez-vous dire </string>
+    <string name="did_you_mean">Vouliez-vous dire</string>
     <string name="ticking_group">Sélection du groupe entier…</string>
     <string name="search_failed_title">La recherche a échoué</string>
     <string name="open_group">Ouvrir ce groupe</string>

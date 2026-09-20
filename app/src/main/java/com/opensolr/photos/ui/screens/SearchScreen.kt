@@ -711,6 +711,9 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                     .padding(horizontal = 20.dp, vertical = 6.dp),
             ) {
                 Text(stringResource(R.string.did_you_mean), style = MaterialTheme.typography.bodyMedium, color = p.muted)
+                // The gap is laid out here: a space written at the end of the text itself is
+                // trimmed away before it ever reaches the screen (Cip, 2026-09-20).
+                Spacer(Modifier.width(4.dp))
                 Text(corrected, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = p.accent)
                 Text("?", style = MaterialTheme.typography.bodyMedium, color = p.muted)
             }

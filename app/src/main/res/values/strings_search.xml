@@ -23,7 +23,7 @@
     <string name="back_to_search">Back to search</string>
     <string name="tagging_progress">Tagging %1$s of %2$s photos…</string>
     <string name="tagging">Tagging your photos…</string>
-    <string name="did_you_mean">Did you mean </string>
+    <string name="did_you_mean">Did you mean</string>
     <string name="ticking_group">Ticking the whole group…</string>
     <string name="search_failed_title">Search did not work</string>
     <string name="open_group">Open this group</string>
