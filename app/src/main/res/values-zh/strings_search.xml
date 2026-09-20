@@ -94,6 +94,7 @@
     <string name="act_map">在地图上显示</string>
     <string name="act_nearby">附近的照片</string>
     <string name="act_delete">删除</string>
+    <string name="dock_delete">删除</string>
     <string name="show_fewer">收起</string>
     <string name="show_all">显示全部（%1$s）</string>
     <string name="search_values">在 %1$s 个值中搜索</string>

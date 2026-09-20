@@ -91,7 +91,7 @@ class PhotoClusterOverlay(
         color = colors.onAccent
         textSize = 12f * density
         textAlign = Paint.Align.CENTER
-        typeface = ResourcesCompat.getFont(context, R.font.space_grotesk)?.let { Typeface.create(it, Typeface.BOLD) } ?: Typeface.DEFAULT_BOLD
+        typeface = ResourcesCompat.getFont(context, R.font.space_grotesk_bold)?.let { Typeface.create(it, Typeface.BOLD) } ?: Typeface.DEFAULT_BOLD
     }
     private val bitmapPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val clipPath = Path()

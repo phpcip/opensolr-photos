@@ -94,6 +94,7 @@
     <string name="act_map">Auf Karte zeigen</string>
     <string name="act_nearby">Fotos in der Nähe</string>
     <string name="act_delete">Löschen</string>
+    <string name="dock_delete">Lösch</string>
     <string name="show_fewer">Weniger zeigen</string>
     <string name="show_all">Alle zeigen (%1$s)</string>
     <string name="search_values">%1$s Werte durchsuchen</string>

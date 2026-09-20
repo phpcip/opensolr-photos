@@ -1165,7 +1165,8 @@ private fun SelectionDock(
         DockAction(R.drawable.ic_tag, stringResource(R.string.dock_tag_n, Actions.formatCompact(count.toLong())), enabled = count > 0, onClick = onTag)
         DockAction(R.drawable.ic_share, stringResource(R.string.act_share), enabled = count > 0, onClick = onShare)
         DockAction(R.drawable.ic_sync, if (count > 0) stringResource(R.string.dock_resync_n, Actions.formatCompact(count.toLong())) else stringResource(R.string.dock_resync), enabled = count > 0, accent = true, onClick = onResync)
-        DockAction(R.drawable.ic_delete, stringResource(R.string.act_delete), enabled = count > 0, onClick = onDelete)
+        // Short word here: four labels with counts in them do not fit a narrow phone (Cip, 2026-09-20).
+        DockAction(R.drawable.ic_delete, stringResource(R.string.dock_delete), enabled = count > 0, onClick = onDelete)
     }
 }
 

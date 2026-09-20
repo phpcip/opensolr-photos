@@ -1,0 +1,1 @@
+Bold text is bold on every phone: the app now carries one font file per weight instead of asking one variable file for all of them, which some phones ignore. The delete button in the selection bar uses a short word, so four buttons fit a narrow screen.

@@ -94,6 +94,7 @@
     <string name="act_map">Arată pe hartă</string>
     <string name="act_nearby">Poze din apropiere</string>
     <string name="act_delete">Șterge</string>
+    <string name="dock_delete">Șterg</string>
     <string name="show_fewer">Arată mai puține</string>
     <string name="show_all">Arată toate (%1$s)</string>
     <string name="search_values">Caută între %1$s valori</string>

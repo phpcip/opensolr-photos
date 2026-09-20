@@ -16,7 +16,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.unit.dp
@@ -100,10 +99,14 @@ val LocalPalette = staticCompositionLocalOf { LightPalette }
  */
 @OptIn(ExperimentalTextApi::class)
 private val SpaceGrotesk = FontFamily(
-    Font(R.font.space_grotesk, FontWeight.Normal, variationSettings = FontVariation.Settings(FontVariation.weight(400))),
-    Font(R.font.space_grotesk, FontWeight.Medium, variationSettings = FontVariation.Settings(FontVariation.weight(500))),
-    Font(R.font.space_grotesk, FontWeight.SemiBold, variationSettings = FontVariation.Settings(FontVariation.weight(600))),
-    Font(R.font.space_grotesk, FontWeight.Bold, variationSettings = FontVariation.Settings(FontVariation.weight(700))),
+    // One file per weight, cut from the variable font. Asking one variable file for four
+    // weights works only where the ROM applies the weight axis: on MIUI it does not, and because
+    // the app declared it had the exact face for each weight, nothing was even synthesised - every
+    // title came out at 400 (Cip, on a POCO, 2026-09-20).
+    Font(R.font.space_grotesk_regular, FontWeight.Normal),
+    Font(R.font.space_grotesk_medium, FontWeight.Medium),
+    Font(R.font.space_grotesk_semibold, FontWeight.SemiBold),
+    Font(R.font.space_grotesk_bold, FontWeight.Bold),
 )
 
 private fun style(size: Int, weight: FontWeight, line: Double = 1.4, tracking: Double = 0.0) = TextStyle(
