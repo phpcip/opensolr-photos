@@ -58,7 +58,14 @@ which needs no VIBRATE permission and obeys the phone's own haptics setting. Day
 library would buzz without stopping. Its visuals fade when the grid stops, but the strip stays touchable:
 gated on the same animation there would be nothing to grab from a standing start.
 
-The bar is a map of the grid's **height**, not of its row count (Cip, 2026-09-20). By row number every row
+The bar is a map of the grid's **height**, not of its row count (Cip, 2026-09-20). The map is packed the
+way the grid packs — photos fill a line of as many columns as the screen holds, a heading takes a line of
+its own and closes the one before it, and a group whose last line is half empty still costs a whole line.
+The row heights are learned once, the first time each kind of row is drawn, and held still while a finger
+is on the bar; the grid's own top and bottom padding counts towards the travel, so the bar reaches the last
+line. Measuring the grid as it moved, or counting a photo as a third of a line, were the two ways this went
+wrong: the first made the bar shiver, the second made the bar and the grid disagree about where anything
+was as soon as photos were on screen. By row number every row
 took the same width on the bar, so a folded group — one row — was as wide as a single photo: with one group
 open and forty folded, the forty shared a sliver and a finger could not stop on any of them. Each row now
 takes the bar in proportion to how tall it really is (a heading's height for a folded group, a cell's height

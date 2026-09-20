@@ -1,0 +1,3 @@
+The bar down the right edge holds still and the thumb is where the grid really is: it was measuring the grid as the grid moved under it, and counting a group's half empty last line as smaller than it is, so it shivered and then disagreed with the grid about where anything was. It also moves inside a line now instead of jumping a whole line at a time, and taps only when it changes row.
+
+On Android 14 and up, choosing "Select photos..." instead of allowing everything used to read as a refusal and left the app stuck on the permission screen; it is now an answer the app works with. Every language travels in the app again, whichever store it came from, so the language you choose in Me is always there.

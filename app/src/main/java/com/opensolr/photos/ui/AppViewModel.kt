@@ -2505,7 +2505,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     // so the row the grid was standing on no longer existed and it went back to
                     // the top. Only a reload does this; opening the view, or moving the slider,
                     // is a new view and starts at one page.
-                    while (keepPages && !end && used < hadGroups) {
+                    // Bounded: a reload brings back the pages that were scrolled through, not an
+                    // unbounded walk. Ten pages is deeper than anyone scrolls a view of groups,
+                    // and it keeps the cost of the sync that finishes behind it in proportion.
+                    var pages = 1
+                    while (keepPages && !end && used < hadGroups && pages < REPAGE_MAX) {
+                        pages++
                         val next = searches.duplicates(level, groupsFrom = used)
                         if (next.groupsUsed == 0) break
                         allHits += next.hits
@@ -2866,6 +2871,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         /** How often the latest release is asked for. */
         private const val UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L
         private val CODE_PATTERN = Regex("^[A-Za-z0-9_-]{43}$")
+
+        /** Most pages a reload of the similar photos brings back, to land where it was left. */
+        private const val REPAGE_MAX = 10
 
         /** How long a passing line ("Saved…") stays on the grid. */
         private const val FLASH_MS = 4000L

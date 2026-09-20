@@ -198,6 +198,9 @@ import androidx.compose.ui.composed
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.ui.unit.IntOffset
 
 private val Corner = RoundedCornerShape(2.dp)
 
@@ -768,7 +771,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                     gridState = gridState,
                     rowsNow = { currentRows },
                     onStart = { id -> Haptics.tick(view, strong = true); viewModel.beginDragSelect(id) },
-                    onRange = { ids -> Haptics.tick(view, strong = false); viewModel.dragSelectTo(ids) },
+                    onRange = { ids, felt -> if (felt) Haptics.tick(view, strong = false); viewModel.dragSelectTo(ids) },
                     onEnd = { movedAway -> viewModel.endDragSelect(movedAway) },
                 ),
                 // Room under the last row for the dock, so it never covers a photo.
@@ -2240,6 +2243,10 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
     var dragging by remember { mutableStateOf(false) }
     // The row the finger is over, which is not where the grid is until it has caught up.
     var aimed by remember { mutableIntStateOf(-1) }
+    // How far into that row the finger stands, and the one scroll the bar is allowed to have
+    // running at a time.
+    var lastInto by remember { mutableFloatStateOf(0f) }
+    var scrollJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     // The rows as they are now, read by the drag, which outlives any one list: filters, groups
     // opening and photos loading all change it under a finger. A drag that went on reading the
     // list it started with walked past the end of a shorter one and crashed the app (Cip, 2026-09-18).
@@ -2259,37 +2266,104 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
     // How tall the list is, row by row, as a running total (Cip, 2026-09-20).
     //
     // The bar used to map the finger onto the ROW NUMBER, which made every row the same width on
-    // it: a collapsed group, one row, took as much of the bar as a single photo, so with one group
+    // it: a folded group, one row, took as much of the bar as a single photo, so with one group
     // open and forty folded the forty shared a sliver and the finger could not stop on any of
-    // them. Now the bar is a map of the scroll itself - a folded group is a heading tall, an open
-    // one is as tall as its photos - so the finger travels the way the list does.
+    // them. The bar is a map of the scroll itself instead - a folded group is a heading tall, an
+    // open one is as tall as its photos.
     //
-    // The heights come from what is on screen (so a phone's own sizes are used) and are guessed
-    // from the theme only until something has been drawn. One pass over the rows, made again only
-    // when the list itself changes.
-    val columns = gridState.layoutInfo.visibleItemsInfo.maxOfOrNull { it.column + 1 }?.coerceAtLeast(1) ?: 3
-    val fallbackCell = with(LocalDensity.current) { 114.dp.toPx() }
-    val fallbackHeading = with(LocalDensity.current) { 44.dp.toPx() }
-    val cellPx = gridState.layoutInfo.visibleItemsInfo
-        .firstOrNull { (rows.getOrNull(it.index) is GridRow.Photo) }?.size?.height?.toFloat() ?: fallbackCell
-    val headingPx = gridState.layoutInfo.visibleItemsInfo
-        .firstOrNull { (rows.getOrNull(it.index) is GridRow.Heading) }?.size?.height?.toFloat() ?: fallbackHeading
-    val tops = remember(rows, columns, cellPx, headingPx) {
+    // The map is PACKED THE WAY THE GRID PACKS, and this is the whole of it: photos fill a line
+    // of [columns], a heading takes a line of its own and ends the line before it, and a group
+    // whose last line is half empty still costs a whole line. Adding a third of a cell per photo
+    // instead made the map shorter than the grid by one part-line per group - with a hundred
+    // groups the bar and the grid were talking about different places, which is why the thumb
+    // could not be taken hold of once photos were on screen (Cip, 2026-09-20).
+    //
+    // The heights themselves are learned ONCE from the grid, the first time a kind of row is
+    // drawn, and never read again while it moves: reading them every frame changed the map under
+    // the finger and the bar shivered. Until a kind has been seen, the theme's own sizes stand in.
+    val density = LocalDensity.current
+    val learned = remember { mutableStateMapOf<Int, Float>() }
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.layoutInfo.visibleItemsInfo }
+            .collect { items ->
+                items.forEach { item ->
+                    val row = currentRows.getOrNull(item.index) ?: return@forEach
+                    val height = item.size.height
+                    if (height <= 0) return@forEach
+                    // Photos are kept under -1, whatever their level; headings under their own;
+                    // how many photos stand side by side under -2, counted from photos alone.
+                    val key = if (row is GridRow.Heading) row.level.coerceIn(0, HEADING_HEIGHTS.lastIndex) else -1
+                    if (!learned.containsKey(key)) learned[key] = height.toFloat()
+                    if (row !is GridRow.Heading) {
+                        val wide = (item.column + 1).toFloat()
+                        if ((learned[-2] ?: 0f) < wide) learned[-2] = wide
+                    }
+                }
+            }
+    }
+    val fallbackCell = with(density) { 114.dp.toPx() }
+    val fallbackHeadings = with(density) { HEADING_HEIGHTS.map { it.toPx() } }
+    // What has been learned so far, taken as a set and then held while the finger is on the bar:
+    // meeting a kind of heading for the first time mid-drag would otherwise redraw the map under
+    // the finger, which is the one thing this map must never do.
+    val heightsKey = learned.entries.sortedBy { it.key }.joinToString { "${it.key}:${it.value}" }
+    var heights by remember { mutableStateOf<Map<Int, Float>>(emptyMap()) }
+    LaunchedEffect(heightsKey, dragging) { if (!dragging) heights = learned.toMap() }
+    val cellPx = heights[-1] ?: fallbackCell
+    // How many photos stand side by side, as counted off the grid itself and then left alone.
+    val columns = (heights[-2] ?: 3f).toInt().coerceAtLeast(1)
+    val tops = remember(rows, columns, heights, cellPx) {
         val out = FloatArray(rows.size + 1)
         var y = 0f
+        var inLine = 0
         rows.forEachIndexed { i, row ->
-            out[i] = y
-            // A photo is one cell of its row, so a row of them adds one cell's height in all.
-            y += if (row is GridRow.Heading) headingPx else cellPx / columns
+            if (row is GridRow.Heading) {
+                // A heading is a line of its own, and it closes whatever line was being filled.
+                if (inLine > 0) { y += cellPx; inLine = 0 }
+                out[i] = y
+                val level = row.level.coerceIn(0, HEADING_HEIGHTS.lastIndex)
+                y += heights[level] ?: fallbackHeadings[level]
+            } else {
+                // Every photo of a line stands at the line's own top: aiming inside a line is
+                // then the offset the grid itself is given.
+                out[i] = y
+                inLine++
+                if (inLine >= columns) { y += cellPx; inLine = 0 }
+            }
         }
+        if (inLine > 0) y += cellPx
         out[rows.size] = y
         out
     }
-    val viewportPx = gridState.layoutInfo.viewportSize.height.toFloat()
-    val scrollablePx = (tops[rows.size] - viewportPx).coerceAtLeast(1f)
-    val atPx = if (dragging && aimed >= 0) tops[aimed.coerceIn(0, rows.lastIndex)]
-    else tops[gridState.firstVisibleItemIndex.coerceIn(0, rows.lastIndex)] + gridState.firstVisibleItemScrollOffset
-    val fraction = (atPx / scrollablePx).coerceIn(0f, 1f)
+    // What the grid can actually travel: its content, plus the room it keeps above and below it
+    // (the bottom one grows while photos are being picked, to leave the dock clear), less what
+    // fits on screen. Leaving the padding out left the bar unable to reach the last line.
+    val info = gridState.layoutInfo
+    val viewportPx = info.viewportSize.height.toFloat()
+    val paddingPx = (info.beforeContentPadding + info.afterContentPadding).toFloat()
+    val travelledPx = tops[rows.size] + paddingPx - viewportPx
+    val scrollable = travelledPx > 1f
+    val scrollablePx = travelledPx.coerceAtLeast(1f)
+    val topsNow by rememberUpdatedState(tops)
+    val scrollableNow by rememberUpdatedState(scrollablePx)
+    val cellNow by rememberUpdatedState(cellPx)
+    val canTravel by rememberUpdatedState(scrollable)
+    // Where the thumb stands, worked out WITHOUT being read here: the grid's first visible row and
+    // its offset change on every frame of a scroll, and reading them in the body of this function
+    // rebuilt the whole bar sixty times a second (Cip, 2026-09-20). Read inside a derived value,
+    // and then only by the offset below - which is laid out, not recomposed.
+    val fraction = remember(gridState) {
+        derivedStateOf {
+            val map = topsNow
+            if (!canTravel || map.size < 2) 0f
+            else {
+                val lastRow = map.size - 2
+                val px = if (dragging && aimed >= 0) map[aimed.coerceIn(0, lastRow)]
+                else map[gridState.firstVisibleItemIndex.coerceIn(0, lastRow)] + gridState.firstVisibleItemScrollOffset
+                (px / scrollableNow).coerceIn(0f, 1f)
+            }
+        }
+    }
 
     BoxWithConstraints(
         Modifier
@@ -2303,6 +2377,7 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
         val density = LocalDensity.current
         val travelPx = with(density) { travel.toPx() }
         val halfThumbPx = with(density) { FAST_SCROLL_THUMB.toPx() } / 2f
+        val labelLiftPx = with(density) { FAST_SCROLL_LABEL_LIFT.toPx() }
         // A drag anywhere on the bar takes the thumb, wherever the finger landed.
         fun aimAt(y: Float) {
             val now = currentRows
@@ -2311,7 +2386,8 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
             val at = if (travelPx <= 0f) 0f else ((y - halfThumbPx) / travelPx).coerceIn(0f, 1f)
             // Where in the whole height of the list the finger is standing, and the row that
             // holds that place - the row numbers are no longer evenly spread along the bar.
-            val wanted = at * scrollablePx
+            val tops = topsNow
+            val wanted = at * scrollableNow
             var lo = 0
             var hi = minOf(last, tops.size - 2)
             while (lo < hi) {
@@ -2322,29 +2398,41 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
             // A heading within reach of where the finger points takes it: what a thumb is aiming
             // at is a group, not the third photo inside it, and a folded group is too small a
             // mark to hit otherwise (Cip, 2026-09-20).
-            val near = (target - SNAP_ROWS).coerceAtLeast(0)..(target + SNAP_ROWS).coerceAtMost(last)
+            // Bounded by the map as well as by the list: a group opening under the finger makes
+            // the list longer than the map that was drawn when the drag began.
+            val mapped = minOf(last, tops.size - 2)
+            val near = (target - SNAP_ROWS).coerceAtLeast(0)..(target + SNAP_ROWS).coerceAtMost(mapped)
             near.minByOrNull { i ->
                 if (now.getOrNull(i) !is GridRow.Heading) Float.MAX_VALUE else kotlin.math.abs(tops[i] - wanted)
-            }?.let { i -> if (now.getOrNull(i) is GridRow.Heading && kotlin.math.abs(tops[i] - wanted) <= headingPx * 2f) target = i }
-            if (target == aimed) return
+            }?.let { i -> if (now.getOrNull(i) is GridRow.Heading && kotlin.math.abs(tops[i] - wanted) <= cellNow) target = i }
+            val into = (wanted - tops[target]).coerceAtLeast(0f)
+            // The same row, and the finger has barely moved inside it: nothing to do. Without the
+            // second half of this the bar could only move a whole line at a time.
+            if (target == aimed && kotlin.math.abs(into - lastInto) < 2f) return
+            lastInto = into
             // Every heading between where the finger was and where it is now. Only a year and a
             // month are felt - a year firmly, a month faintly; days go by in silence, or a long
             // library would buzz without stopping (Cip, 2026-09-18).
-            // A place aimed at in a longer list is brought inside this one.
-            val from = if (aimed < 0) target else aimed.coerceAtMost(last)
-            var crossedMonth = false
-            var crossedYear = false
-            for (i in minOf(from, target)..maxOf(from, target)) {
-                val row = now[i]
-                if (row !is GridRow.Heading) continue
-                if (row.level == 0) crossedYear = true else if (row.level == 1) crossedMonth = true
+            // A place aimed at in a longer list is brought inside this one. Only when the row
+            // itself changes: sliding INSIDE a heading's own row would otherwise tap for every
+            // pixel of it (Cip, 2026-09-20).
+            if (target != aimed) {
+                val from = if (aimed < 0) target else aimed.coerceAtMost(last)
+                var crossedMonth = false
+                var crossedYear = false
+                for (i in minOf(from, target)..maxOf(from, target)) {
+                    val row = now[i]
+                    if (row !is GridRow.Heading) continue
+                    if (row.level == 0) crossedYear = true else if (row.level == 1) crossedMonth = true
+                }
+                if (crossedYear || crossedMonth) Haptics.tick(view, crossedYear)
             }
-            if (crossedYear || crossedMonth) Haptics.tick(view, crossedYear)
             aimed = target
             // Onto the row, and into it by however much of it lies above the finger, so the list
-            // follows the finger smoothly instead of hopping a whole row at a time.
-            val into = (wanted - tops[target]).coerceAtLeast(0f).roundToInt()
-            scope.launch { gridState.scrollToItem(target, into) }
+            // follows the finger smoothly instead of hopping a whole row at a time. One scroll at
+            // a time: a coroutine per finger movement left a queue of them fighting over the grid.
+            scrollJob?.cancel()
+            scrollJob = scope.launch { gridState.scrollToItem(target, into.roundToInt()) }
         }
 
         Box(
@@ -2371,7 +2459,9 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
 
         Box(
             Modifier
-                .offset(y = travel * fraction)
+                // Placed in the layout pass, from the value above: moving the thumb costs no
+                // recomposition of the bar or of anything else on the screen.
+                .offset { IntOffset(0, (travelPx * fraction.value).roundToInt()) }
                 .align(Alignment.TopEnd)
                 .padding(end = 4.dp)
                 .size(width = 16.dp, height = FAST_SCROLL_THUMB)
@@ -2402,8 +2492,9 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
             if (!heading.isNullOrBlank()) {
                 Box(
                     Modifier
-                        // Lifted clear of the thumb: under the finger it could not be read.
-                        .offset(y = (travel * fraction - FAST_SCROLL_LABEL_LIFT).coerceAtLeast(0.dp))
+                        // Lifted clear of the thumb: under the finger it could not be read. Laid
+                        // out from the same value as the thumb, so the two never disagree.
+                        .offset { IntOffset(0, (travelPx * fraction.value - labelLiftPx).roundToInt().coerceAtLeast(0)) }
                         .align(Alignment.TopEnd)
                         .padding(end = FAST_SCROLL_WIDTH + 4.dp)
                         .background(p.accentFill, Corner)
@@ -3306,6 +3397,13 @@ private fun Modifier.combinedClickableCompat(onClick: () -> Unit): Modifier = th
  */
 private const val SNAP_ROWS = 4
 
+/**
+ * How tall a group heading stands, by its level, as the bar's map of the grid reckons it: the
+ * padding and the type of the row as they are laid out above. Worked out rather than measured, so
+ * that the map never changes while the finger is on the bar.
+ */
+private val HEADING_HEIGHTS = listOf(46.dp, 40.dp, 38.dp)
+
 /** The mark of a photo the phone could not read: a red frame and a red "!" (Cip, 2026-09-17). */
 private val SkippedRed = Color(0xFFE53E3E)
 
@@ -3359,7 +3457,7 @@ private fun Modifier.dragSelect(
     gridState: androidx.compose.foundation.lazy.grid.LazyGridState,
     rowsNow: () -> List<GridRow>,
     onStart: (String) -> Unit,
-    onRange: (List<String>) -> Unit,
+    onRange: (List<String>, Boolean) -> Unit,
     onEnd: (Boolean) -> Unit,
 ): Modifier = composed {
     val scope = rememberCoroutineScope()
@@ -3436,7 +3534,9 @@ private fun Modifier.dragSelect(
                             if (ids.size != covered) {
                                 covered = ids.size
                                 movedAway = true
-                                onRange(ids)
+                                // Quietly: the finger is standing still, the grid is doing the
+                                // travelling, and a tap per photo at sixty a second is a buzz.
+                                onRange(ids, false)
                             }
                         }
                     }
@@ -3458,7 +3558,7 @@ private fun Modifier.dragSelect(
                     if (ids.size != covered) {
                         covered = ids.size
                         movedAway = true
-                        onRange(ids)
+                        onRange(ids, true)
                     }
                 }
             } finally {

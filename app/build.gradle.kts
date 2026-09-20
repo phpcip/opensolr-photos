@@ -17,12 +17,21 @@ android {
     namespace = "com.opensolr.photos"
     compileSdk = 36
 
+    // Every language travels in the bundle. The app has a language of its own in Me, and a store
+    // that splits a bundle by language delivers only the phone's own: choosing any other would
+    // then fall back to English until the missing one was downloaded (Cip, 2026-09-20).
+    bundle {
+        language {
+            enableSplit = false
+        }
+    }
+
     defaultConfig {
         applicationId = "com.opensolr.photos"
         minSdk = 26
         targetSdk = 36
-        versionCode = 72
-        versionName = "3.4.0"
+        versionCode = 73
+        versionName = "3.4.1"
     }
 
     signingConfigs {

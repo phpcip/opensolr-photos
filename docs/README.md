@@ -12,7 +12,7 @@
 | [Search](search.md) | The header, query building, grouping, filters, autocomplete, deleting, editing tags, the search cache |
 | [Map](map.md) | Markers, groups, Search this area, what the map sends |
 | [Albums](albums.md) | The sections, the one facet request, covers and names |
-| [Duplicates](duplicates.md) | The 13 slider stops, the keys behind them, Select 1 of each duplicate |
+| [Similar photos](duplicates.md) | The 7 slider stops, the keys behind them, the caps on a group, Select 1 of each group |
 | [Index schema](index-schema.md) | Every field of the index, the analyzers, the vector field, the duplicate keys |
 | [Plan limits](plan-limits.md) | AI requests, disk space, bandwidth, indexes, and what happens at a limit |
 | [Privacy and security](privacy-and-security.md) | What is stored where, what travels, how it is protected |

@@ -183,21 +183,28 @@ fun PermissionsScreen(state: UiState, viewModel: AppViewModel) {
     val p = LocalPalette.current
     val context = LocalContext.current
     val photoPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
+    // Android 14 and up: "Select photos..." grants this one INSTEAD of the one above. Asked for
+    // alongside it and counted as an answer, or picking a few photos reads as a refusal and the
+    // app never leaves this screen (Cip, 2026-09-20).
+    val partialPermission = "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
+    fun photosAllowed(): Boolean =
+        ContextCompat.checkSelfPermission(context, photoPermission) == PackageManager.PERMISSION_GRANTED ||
+            (Build.VERSION.SDK_INT >= 34 && ContextCompat.checkSelfPermission(context, partialPermission) == PackageManager.PERMISSION_GRANTED)
     val requested = buildList {
         add(photoPermission)
+        if (Build.VERSION.SDK_INT >= 34) add(partialPermission)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) add(Manifest.permission.ACCESS_MEDIA_LOCATION)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
         // Coarse position only, read once, to create the index on the nearest Opensolr server.
         add(Manifest.permission.ACCESS_COARSE_LOCATION)
     }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-        val granted = result[photoPermission] == true ||
-            ContextCompat.checkSelfPermission(context, photoPermission) == PackageManager.PERMISSION_GRANTED
+        val granted = result[photoPermission] == true || result[partialPermission] == true || photosAllowed()
         viewModel.onPermissionsResult(granted)
     }
 
     LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(context, photoPermission) == PackageManager.PERMISSION_GRANTED &&
+        if (photosAllowed() &&
             (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
                 ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_MEDIA_LOCATION) == PackageManager.PERMISSION_GRANTED)
         ) {
