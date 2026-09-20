@@ -1,9 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 420" role="img" aria-label="Opensolr Photos: find any photo on your phone by what is in it">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 420" role="img" aria-label="Opensolr Photos: your photos never go to Google, and you still find them in a second">
   <rect x="0.5" y="0.5" width="1279" height="419" fill="#ffffff" stroke="#d9d4cc"/>
   <g font-family="'Space Grotesk', 'Segoe UI', Helvetica, Arial, sans-serif">
     <text x="64" y="150" font-size="64" font-weight="700" fill="#111111">Opensolr Photos</text>
-    <text x="64" y="206" font-size="26" fill="#4a4540">Find any photo on your phone</text>
-    <text x="64" y="242" font-size="26" fill="#4a4540">by what is in it.</text>
+    <text x="64" y="206" font-size="26" fill="#4a4540">Your photos never go to Google.</text>
+    <text x="64" y="242" font-size="26" fill="#4a4540">And you still find them in a second.</text>
     <line x1="64" y1="282" x2="600" y2="282" stroke="#d9d4cc" stroke-width="1.5"/>
     <text x="64" y="322" font-size="20" fill="#111111">Android · Open source · MIT</text>
     <text x="64" y="354" font-size="20" fill="#111111">Backed by your own Opensolr Index</text>

@@ -1,23 +1,50 @@
 <p align="center">
-  <img src="docs/images/banner.svg" alt="Opensolr Photos: find any photo on your phone by what is in it" width="100%">
+  <img src="docs/images/banner.svg" alt="Opensolr Photos: your photos never go to Google, and you still find them in a second" width="100%">
 </p>
 
 # Opensolr Photos
 
-**Find any photo on your phone by what is in it.**
+**Your photos never go to Google. And you still find them in a second.**
 
 Opensolr Photos is a free, open source Android app that turns the photo folders on your phone into a
-search engine. Type *dog on the beach*, *birthday cake* or *snow in the mountains*, narrow it down by year,
-folder, camera, city or country, see them on a map, and tap a result to open it in Google Photos or your
-phone's own gallery.
+search engine. Twenty thousand photos and scanned documents become searchable in plain words, receipts
+are found by the number printed on them, your people, places and tags are written **into the photo files
+themselves**, and the duplicates you have been carrying for years finally go.
 
 The search engine behind it is **your own Opensolr Index**, created by the app in your Opensolr account,
-one per phone. No photo backup, no Google account, no ads, no analytics.
+one per phone — and the free Opensolr account, which costs nothing and never expires, already runs it.
 
 **[Download the APK](https://github.com/phpcip/opensolr-photos/releases/latest/download/opensolr-photos.apk)** ·
 [Website](https://opensolr.com/opensolr-photos) ·
 [Documentation](https://opensolr.com/opensolr-photos-docs) ·
 [Releases](https://github.com/phpcip/opensolr-photos/releases)
+
+---
+
+## Why it exists
+
+Six problems, in the order they mattered. Everything in the feature table below serves one of them.
+
+1. **The pictures were going to Google.** Family, holidays, documents, everything, into someone else's
+   cloud to be read by someone else's models. Here your library never leaves your folders: no photo
+   backup, no Google account, no ads, no analytics. To read a photo the app sends a 640 px copy that is
+   described and thrown away; the originals stay where they are.
+2. **Twenty thousand photos, and no way to find one.** Type what you remember — *dog on the beach*,
+   *my passport*, a friend's name — and the photo is on screen. A real search engine, not a grid you
+   scroll until your thumb hurts.
+3. **"I need the petrol receipt from 3 September."** The words printed inside every receipt, invoice
+   and contract are read and indexed. Search the shop, the total or the receipt number, find it, share
+   it from the app. Your accountant gets it in about fifteen seconds.
+4. **Metadata belongs in the photo, not in a sidecar.** Google keeps your people, places and labels in
+   its own database and hands you a JSON file on the way out. Here every name goes into XMP
+   `Iptc4xmpExt:PersonInImage`, every tag into `dc:subject`, your own wording into `opensolr:Meaning`,
+   and a corrected position into the photo's own EXIF GPS. Copy the file anywhere and the work goes
+   with it; reinstall and the app reads your words back out of the files.
+5. **The same picture, thirty times.** One slider walks seven steps, from photos that merely show the
+   same thing to the same file byte for byte. *Select 1 of each group* ticks one photo per group and
+   leaves the first alone, so a group can never be emptied by accident.
+6. **Nothing you have to take on trust.** Every line is here, MIT licensed. Read exactly what leaves
+   the phone in [docs/privacy-and-security.md](docs/privacy-and-security.md), or build the APK yourself.
 
 ---
 
@@ -34,7 +61,7 @@ one per phone. No photo backup, no Google account, no ads, no analytics.
 | **Your own tags and words** | Tag the selected photos: People first, then *My tags (Albums)*, each with an Add / Replace switch. Add puts your words on top of what each photo carries; Replace makes them the whole of that field on every ticked photo, and says so. Under the form, what the ticked photos already carry, with counts. Saving is finished on the phone; the sync that starts straight after carries the change up. Your words always win over what Opensolr saw. Writing them into the photo files themselves happens on the spot, with Android's permission dialog and a progress bar, and a photo with no date of its own keeps the date the index has for it instead of jumping to today. |
 | **Autocomplete and spelling** | As you type in the search box, your tags, the words your photos were read into, the cameras and the places are offered by the index, and the same prefix typed again is answered from the phone; a misspelt search gets a *Did you mean*. In the tagging sheet, the tags and the names offered come from the phone's own copy, without a request. |
 | **Albums** | People, My tags, Things, Places, Cameras and Years, built from your index in one request, each album with a cover of its three newest photos. |
-| **Duplicates** | A slider from *Same first word* to *Same photo (EXIF)*, *Same file name* and *Same file size* groups alike photos; *Select 1 of each duplicate* ticks them for review, sharing or deleting. |
+| **Similar photos** | A seven-step slider groups alike photos, from *Same first 3 words* through *Any 4 words the same*, *All 5 words the same*, *Same photo (EXIF)*, *Same file name* and *Same file size* to *Same file (exact copy)*; *Select 1 of each group* ticks one photo per group, leaving the first alone, for review, sharing or deleting. The keys come from the picture and its EXIF only, never from your tags. |
 | **Delete** | Delete selected photos from the phone and the index at once, after the app's own warning (and Android's, on Android 11 and newer). |
 | **A map** | Every photo with a GPS position, grouped into thumbnail markers on OpenStreetMap. Tap a group and its photos open straight away, in a sheet that drags up to the whole screen and says where *here* is, in city and country; or *Search this area*. The night map is dimmed rather than colour-inverted, so the sea stays blue. The place is written into the index in words (city, region, country). |
 | **Opens in your gallery** | Tap a result: it opens in Google Photos or your phone's gallery app. Its details show the people first, as chips, then *My tags (Albums)*, then what the photo shows, as plain text. |
