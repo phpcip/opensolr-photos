@@ -53,6 +53,8 @@
     <string name="group_place">場所</string>
     <string name="group_people">人物</string>
     <string name="group_tags">マイタグ</string>
+    <string name="group_folder">フォルダー</string>
+    <string name="group_camera">カメラ</string>
     <string name="cd_change_place">場所を変更</string>
     <string name="empty_indexing">写真をインデックス中です。追加されるとここに表示されます。</string>
     <string name="empty_nothing">まだ何もインデックスされていません。同期を開いて始めてください。</string>
@@ -125,7 +127,6 @@
         <item quantity="other">%1$s 枚の写真を削除しますか？</item>
     </plurals>
     <string-array name="dup_kinds">
-        <item>最初の2語が一致</item>
         <item>最初の3語が一致</item>
         <item>任意の4語が一致</item>
         <item>5語すべて一致</item>

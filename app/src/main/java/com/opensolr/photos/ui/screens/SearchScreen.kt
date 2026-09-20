@@ -1671,7 +1671,7 @@ private fun SyncIcon(running: Boolean) {
 
 /**
  * The duplicates slider: one stop per SearchRepository.DUPLICATE_FIELDS, the name of the kind
- * under it. Its colour tells where it stands: black at the loosest "any 2 words" stop, turning
+ * under it. Its colour tells where it stands: black at the loosest "first 3 words" stop, turning
  * green by the EXIF stop, then a neutral colour for the file stops, which are not on that scale.
  * The thumb follows the finger at once; the level reaches [onLevel] on every stop crossed, and
  * the view model waits for the finger to settle before asking the index.
@@ -1733,13 +1733,13 @@ private fun DuplicateLevelSlider(level: Int, onLevel: (Int) -> Unit, canSelect: 
 
 /** What each stop of the slider groups, in the order of DUPLICATE_FIELDS. */
 private val DUPLICATE_KIND_NAMES = listOf(
-    "Same first 2 words", "Same first 3 words", "Any 4 words the same", "All 5 words the same",
+    "Same first 3 words", "Any 4 words the same", "All 5 words the same",
     "Same photo (EXIF)",
     "Same file name", "Same file size", "Same file (exact copy)",
 )
 
 /** The EXIF stop, where the words-to-EXIF colour scale ends. */
-private const val DUPLICATE_EXIF_STOP = 4
+private const val DUPLICATE_EXIF_STOP = 3
 /**
  * The ends of the duplicates scale, one set per theme (Cip, 2026-09-16). On paper the loosest
  * stop is near-black; on a dark screen that is the colour of the screen itself, so the thumb,

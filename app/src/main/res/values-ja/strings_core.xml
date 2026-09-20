@@ -112,6 +112,8 @@
     <string name="vm_no_place">場所なし</string>
     <string name="vm_no_one">人物名なし</string>
     <string name="vm_no_tags">タグなし</string>
+    <string name="vm_no_folder">フォルダーなし</string>
+    <string name="vm_no_camera">カメラなし</string>
     <string name="vm_albums_failed">アルバムを読み込めませんでした。</string>
     <string name="vm_album_photos_failed">これらのアルバムの写真を見つけられませんでした。</string>
     <string name="vm_map_failed">地図を読み込めませんでした。</string>

@@ -148,6 +148,35 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
             addColumnIfMissing(db, "docs", "region", "TEXT")
             backfillRegion(db)
         }
+        if (oldVersion < 17) {
+            // The folder's name and the camera as columns, for browsing grouped by either of them
+            // (Cip, 2026-09-20). Both are already in the stored document, so they are filled in
+            // one pass over the copy and nothing is asked of the index.
+            addColumnIfMissing(db, "docs", "folder", "TEXT")
+            addColumnIfMissing(db, "docs", "camera", "TEXT")
+            backfillFolderAndCamera(db)
+        }
+    }
+
+    /** Fills the folder name and the camera from the stored documents, once, a page at a time. */
+    private fun backfillFolderAndCamera(db: SQLiteDatabase) {
+        db.compileStatement("UPDATE docs SET folder = ?, camera = ? WHERE id = ?").use { update ->
+            forEachPage(db, "docs", arrayOf("id", "json"), "json IS NOT NULL") { id, row ->
+                val doc = try {
+                    org.json.JSONObject(row[1] ?: return@forEachPage)
+                } catch (e: Exception) {
+                    return@forEachPage
+                }
+                val folder: String? = com.opensolr.photos.search.SearchFilters.folderName(doc.optString("folder"))
+                val camera: String? = com.opensolr.photos.search.SearchFilters.cameraName(doc.optString("camera_make"), doc.optString("camera_model"))
+                if (folder == null && camera == null) return@forEachPage
+                update.clearBindings()
+                if (folder == null) update.bindNull(1) else update.bindString(1, folder)
+                if (camera == null) update.bindNull(2) else update.bindString(2, camera)
+                update.bindString(3, id)
+                update.executeUpdateDelete()
+            }
+        }
     }
 
     /**
@@ -187,7 +216,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         } catch (e: Exception) {
             emptyList()
         }
-        readableDatabase.query("docs", arrayOf("id", "taken_ms", "city", "region", "country", "persons_json", "tags_json"), null, null, null, null, "taken_ms DESC").use { c ->
+        readableDatabase.query("docs", arrayOf("id", "taken_ms", "city", "region", "country", "persons_json", "tags_json", "folder", "camera"), null, null, null, null, "taken_ms DESC").use { c ->
             while (c.moveToNext()) {
                 out += com.opensolr.photos.search.SearchRepository.GroupedHit(
                     id = c.getString(0),
@@ -197,6 +226,8 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
                     country = c.getString(4)?.trim()?.ifBlank { null },
                     persons = list(c.getString(5)),
                     tags = list(c.getString(6)),
+                    folder = c.getString(7)?.trim()?.ifBlank { null },
+                    camera = c.getString(8)?.trim()?.ifBlank { null },
                 )
             }
         }
@@ -518,6 +549,10 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         val fileHash: String? = null,
         /** The first division under the country (a county, a state), for grouping by place. */
         val region: String? = null,
+        /** The name of the folder the photo is in, its last part only, for grouping by folder. */
+        val folder: String? = null,
+        /** The camera that took it, make and model as one name, for grouping by camera. */
+        val camera: String? = null,
     )
 
     /**
@@ -536,6 +571,8 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
             if (doc.city == null) putNull("city") else put("city", doc.city)
             if (doc.country == null) putNull("country") else put("country", doc.country)
             if (doc.region == null) putNull("region") else put("region", doc.region)
+            if (doc.folder == null) putNull("folder") else put("folder", doc.folder)
+            if (doc.camera == null) putNull("camera") else put("camera", doc.camera)
             if (doc.json == null) putNull("json") else put("json", doc.json)
             put("modified", doc.modified)
             put("taken_ms", com.opensolr.photos.ui.Actions.solrDateMillis(doc.takenAt) ?: 0L)
@@ -1254,7 +1291,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
     companion object {
         private const val NAME = "photo_cache.db"
-        private const val VERSION = 16
+        private const val VERSION = 17
 
         /**
          * The one handle on this database for the whole app.
@@ -1277,7 +1314,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         /** The names the server gives a position; they belong to that position only. */
         private val PLACE_NAME_FIELDS = listOf("city", "region", "province", "community", "country", "country_code")
 
-        private const val DOCS_TABLE = "CREATE TABLE IF NOT EXISTS docs (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, indexed_at INTEGER NOT NULL, taken_at TEXT, tags_json TEXT, persons_json TEXT, meaning TEXT, ocr TEXT, city TEXT, country TEXT, json TEXT, modified INTEGER NOT NULL DEFAULT 0, taken_ms INTEGER NOT NULL DEFAULT 0, embed_model TEXT, file_hash TEXT, region TEXT)"
+        private const val DOCS_TABLE = "CREATE TABLE IF NOT EXISTS docs (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, indexed_at INTEGER NOT NULL, taken_at TEXT, tags_json TEXT, persons_json TEXT, meaning TEXT, ocr TEXT, city TEXT, country TEXT, json TEXT, modified INTEGER NOT NULL DEFAULT 0, taken_ms INTEGER NOT NULL DEFAULT 0, embed_model TEXT, file_hash TEXT, region TEXT, folder TEXT, camera TEXT)"
         /** When each photo was taken, as a number: the grid asks for a stretch of time constantly. */
         private const val DOCS_TAKEN_INDEX = "CREATE INDEX IF NOT EXISTS docs_taken_ms ON docs (taken_ms)"
 

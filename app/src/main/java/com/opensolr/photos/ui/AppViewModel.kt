@@ -145,7 +145,7 @@ data class UiState(
     val autoPlaceLocation: Boolean = false,
     /** Whether the owner let the app know the phone's position while it is in the background. */
     val autoPlaceBackground: Boolean = false,
-    /** The duplicates slider, a stop of SearchRepository.DUPLICATE_FIELDS; 3 = all five words the same. */
+    /** The duplicates slider, a stop of SearchRepository.DUPLICATE_FIELDS; 2 = all five words the same. */
     val duplicateLevel: Int = com.opensolr.photos.search.SearchRepository.DEFAULT_DUPLICATE_LEVEL,
     /** With "Show similar photos", the id of the photo the slider is anchored to; null for plain duplicates. */
     val similarToId: String? = null,
@@ -1088,7 +1088,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             // Browsing by place, people or tags is laid out from the phone's copy as well, in one
             // query on its columns (Cip, 2026-09-19); by date it is the skeleton, as always.
             val how = _state.value.groupBy
-            val byValue = how == GroupBy.PLACE || how == GroupBy.PEOPLE || how == GroupBy.TAGS
+            val byValue = how == GroupBy.PLACE || how == GroupBy.PEOPLE || how == GroupBy.TAGS ||
+                how == GroupBy.FOLDER || how == GroupBy.CAMERA
             val groups = if (byValue) emptyList() else withContext(Dispatchers.IO) { buildSkeleton(photoCache.takenTimes()) }
             val valueGroups = if (!byValue) emptyList() else withContext(Dispatchers.IO) { buildResultGroups(photoCache.groupingRows(), how) }
             val count = withContext(Dispatchers.IO) { photoCache.docCount() }
@@ -1859,6 +1860,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 byValue.forEach { (key, value) -> out += ResultGroup(0, "$prefix:$key", value.first, value.second.distinct()) }
                 if (without.isNotEmpty()) out += ResultGroup(0, "$prefix:none", if (how == GroupBy.PEOPLE) AppText.s(R.string.vm_no_one) else AppText.s(R.string.vm_no_tags), without)
             }
+            // One group per folder name or per camera, in the order the best matches bring them,
+            // with everything that has none in a last group of its own (Cip, 2026-09-20). Both
+            // are one value per photo, so no photo is ever drawn twice.
+            GroupBy.FOLDER, GroupBy.CAMERA -> {
+                val byValue = LinkedHashMap<String, Pair<String, MutableList<String>>>()
+                val without = ArrayList<String>()
+                found.forEach { hit ->
+                    val value = (if (how == GroupBy.FOLDER) hit.folder else hit.camera)?.trim()?.ifBlank { null }
+                    if (value == null) without += hit.id
+                    else byValue.getOrPut(com.opensolr.photos.data.Words.fold(value)) { value to ArrayList() }.second += hit.id
+                }
+                val prefix = if (how == GroupBy.FOLDER) "folder" else "camera"
+                byValue.forEach { (key, value) -> out += ResultGroup(0, "$prefix:$key", value.first, value.second) }
+                if (without.isNotEmpty()) out += ResultGroup(
+                    0,
+                    "$prefix:none",
+                    if (how == GroupBy.FOLDER) AppText.s(R.string.vm_no_folder) else AppText.s(R.string.vm_no_camera),
+                    without,
+                )
+            }
             GroupBy.RELEVANCE -> Unit
         }
         return out
@@ -2363,6 +2384,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                                 city = (hit.city ?: hit.province)?.trim()?.ifBlank { null },
                                 persons = hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() },
                                 tags = hit.customTags,
+                                folder = com.opensolr.photos.search.SearchFilters.folderName(hit.folder),
+                                camera = com.opensolr.photos.search.SearchFilters.cameraName(hit.cameraMake, hit.cameraModel),
                             )
                         }, how)
                     }

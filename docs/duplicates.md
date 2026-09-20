@@ -6,27 +6,26 @@ calls a group a duplicate, because only the last stop can prove one.
 
 ## The slider
 
-8 stops, from 0 to 7, with the name of the kind under it. The default is stop 3.
+7 stops, from 0 to 6, with the name of the kind under it. The default is stop 2.
 
 | Stop | Name | Photos are grouped when they have the same… | Field |
 |---|---|---|---|
-| 0 | *Same first 2 words* | first 2 words CLIP gave them | `dup_w2_hash` |
-| 1 | *Same first 3 words* | first 3 words | `dup_w3_hash` |
-| 2 | *Any 4 words the same* | any 4 of CLIP's first five words, whatever their rank | `dup_any4_ss` |
-| 3 | *All 5 words the same* | all five words | `dup_w5_hash` |
-| 4 | *Same photo (EXIF)* | EXIF: time taken, camera make, camera model, lens, ISO, exposure, f-number, focal length, GPS position, altitude | `dup_exif_hash` |
-| 5 | *Same file name* | file name only, without the folder, since several folders can be indexed | `file_name` |
-| 6 | *Same file size* | size in bytes. Not the same as the same file: a camera pads its files to whole blocks, so unrelated photos share a size exactly | `size_bytes` |
-| 7 | *Same file (exact copy)* | the md5 of the original file, worked out on the phone — the server only ever sees the 640 px copy | `file_hash` |
+| 0 | *Same first 3 words* | first 3 words CLIP gave them | `dup_w3_hash` |
+| 1 | *Any 4 words the same* | any 4 of CLIP's first five words, whatever their rank | `dup_any4_ss` |
+| 2 | *All 5 words the same* | all five words | `dup_w5_hash` |
+| 3 | *Same photo (EXIF)* | EXIF: time taken, camera make, camera model, lens, ISO, exposure, f-number, focal length, GPS position, altitude | `dup_exif_hash` |
+| 4 | *Same file name* | file name only, without the folder, since several folders can be indexed | `file_name` |
+| 5 | *Same file size* | size in bytes. Not the same as the same file: a camera pads its files to whole blocks, so unrelated photos share a size exactly | `size_bytes` |
+| 6 | *Same file (exact copy)* | the md5 of the original file, worked out on the phone — the server only ever sees the 640 px copy | `file_hash` |
 
 The words key is made of CLIP's labels, lower-cased, de-duplicated, sorted, and hashed with md5. The EXIF
 key leaves out file size, pixel size, orientation and modification time, so a photo that went through a
 simple edit keeps it.
 
-There is no *any 2* or *any 3 words* stop (Cip, 2026-09-20). Two photos that share two of five generic CLIP
-words — *sky*, *outdoor*, *person* — are not alike in any useful sense: on a real library half the photos
-share them, so the stop could only ever answer with one enormous group. The ordered *first 2* and *first 3*
-keys hold the loose end instead.
+Nothing looser than three words is offered (Cip, 2026-09-20). The *any 2* and *any 3 words* stops went
+first: two photos that share two of five generic CLIP words — *sky*, *outdoor*, *person* — are not alike in
+any useful sense, and on a real library half the photos share them. *Same first 2 words* went with them for
+the same reason: still noise, whatever the order of the words.
 
 The slider's colour follows the stop: the loosest tone at 0, through green at the EXIF stop; the three file
 stops are neutral, being on a scale of their own. The scale has one set of colours for the light theme and
@@ -47,9 +46,17 @@ Two bounds keep the view a view of photos rather than of the library (`SearchRep
 `MAX_GROUPS`):
 
 - a value held by **more than 50 photos is dropped**, by its count, before its ids are even read: at that
-  size the key is describing a category, not a set of copies;
+  size the key is describing a category, not a set of copies. At the loosest stop (*Same first 3 words*) the
+  cap is **5**;
 - at most **2000 values** come back per request, the biggest first, which is far more than the grid pages
   through.
+
+The loosest stop asks for one more thing: the photos of a group must have been taken by the **same camera**
+as well (`camera_model`, as a sub-facet of the key, so it is still one request). Three CLIP words on their
+own pair photos by arithmetic rather than by likeness — the vocabulary the model really uses on a phone's
+photos is a few hundred words, so any two photos have a fair chance of landing on the same three — and the
+camera turns those pairs back into photos taken by one person, of one thing, with one device. Photos with no
+camera in their EXIF (screenshots, downloads, scans) are not grouped at that stop at all.
 
 With the multi-valued key (*any 4 words*) a photo carries several keys and so turns up in several groups.
 The first group it appears in keeps it and the later ones skip it; a group left with fewer than two photos

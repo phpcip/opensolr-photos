@@ -53,6 +53,8 @@
     <string name="group_place">Lieu</string>
     <string name="group_people">Personnes</string>
     <string name="group_tags">Mes étiquettes</string>
+    <string name="group_folder">Dossier</string>
+    <string name="group_camera">Appareil photo</string>
     <string name="cd_change_place">Changer le lieu</string>
     <string name="empty_indexing">Vos photos sont en cours d\'indexation. Elles apparaissent ici au fur et à mesure.</string>
     <string name="empty_nothing">Rien n\'est encore indexé. Ouvrez Synchro pour commencer.</string>
@@ -131,7 +133,6 @@
         <item quantity="other">Supprimer %1$s photos ?</item>
     </plurals>
     <string-array name="dup_kinds">
-        <item>2 premiers mots identiques</item>
         <item>3 premiers mots identiques</item>
         <item>4 mots quelconques identiques</item>
         <item>Les 5 mots identiques</item>

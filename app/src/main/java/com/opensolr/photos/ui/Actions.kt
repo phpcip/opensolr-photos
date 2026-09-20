@@ -56,7 +56,11 @@ enum class GroupBy(val key: String, val labelRes: Int) {
     DATE("date", com.opensolr.photos.R.string.group_date),
     PLACE("place", com.opensolr.photos.R.string.group_place),
     PEOPLE("people", com.opensolr.photos.R.string.group_people),
-    TAGS("tags", com.opensolr.photos.R.string.group_tags);
+    TAGS("tags", com.opensolr.photos.R.string.group_tags),
+    // The folder a photo sits in and the camera that took it (Cip, 2026-09-20): the two facts a
+    // library is sorted by that the other four do not cover.
+    FOLDER("folder", com.opensolr.photos.R.string.group_folder),
+    CAMERA("camera", com.opensolr.photos.R.string.group_camera);
 
     companion object {
         /** The stored [key] back to its value; anything unknown is the default. */

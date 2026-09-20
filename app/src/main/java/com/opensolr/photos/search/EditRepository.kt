@@ -226,6 +226,10 @@ class EditRepository(private val context: Context) {
                 city = answer.optString("city").ifBlank { null },
                 country = answer.optString("country").ifBlank { null },
                 region = answer.optString("region").ifBlank { null },
+                // Written with the row, from the document already open here, so grouping by
+                // folder or by camera is a query on columns (Cip, 2026-09-20).
+                folder = SearchFilters.folderName(answer.optString("folder")),
+                camera = SearchFilters.cameraName(answer.optString("camera_make"), answer.optString("camera_model")),
                 json = answer.toString(),
                 modified = modified ?: had?.modified ?: 0L,
                 embedModel = answer.optString("embed_model").ifBlank { null },

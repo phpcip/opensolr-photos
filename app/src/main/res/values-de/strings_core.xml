@@ -112,6 +112,8 @@
     <string name="vm_no_place">Kein Ort</string>
     <string name="vm_no_one">Niemand benannt</string>
     <string name="vm_no_tags">Keine Tags</string>
+    <string name="vm_no_folder">Kein Ordner</string>
+    <string name="vm_no_camera">Keine Kamera</string>
     <string name="vm_albums_failed">Die Alben konnten nicht geladen werden.</string>
     <string name="vm_album_photos_failed">Die Fotos dieser Alben konnten nicht gefunden werden.</string>
     <string name="vm_map_failed">Die Karte konnte nicht geladen werden.</string>

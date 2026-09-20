@@ -1,0 +1,1 @@
+Lay the grid out by folder or by camera, as you already can by date, place, people or your tags. A folder is named by its last part, a camera by its make and model. Similar photos is tighter too: the loosest setting is gone, the one that remains asks for the same camera as well, and it leaves out any group of more than five, so what you scroll through is worth looking at.

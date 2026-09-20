@@ -94,6 +94,26 @@ data class SearchFilters(
         const val FOLDER_ROOTS = "folder_root"
 
         /**
+         * The name of a folder as a group is headed: its LAST part only (Cip, 2026-09-20).
+         * The media store names a folder by its whole path, so grouping by the path itself gives
+         * a list of "Documents/photos/2019/summer" lines that all look alike - the same reason
+         * the folder is not a filter. "Camera", "Screenshots", "WhatsApp Images" is what the
+         * owner calls them. Photos of two folders with the same last name share a group, which
+         * is the point of naming them that way.
+         */
+        fun folderName(path: String?): String? = path?.trim()?.trim('/')?.substringAfterLast('/')?.ifBlank { null }
+
+        /**
+         * The camera as one name: "Nikon Z6", not a bare "Z6". The make is left off when the model
+         * already begins with it, which most makers write into the model themselves.
+         */
+        fun cameraName(make: String?, model: String?): String? {
+            val m = model?.trim()?.ifBlank { null } ?: return null
+            val brand = make?.trim()?.ifBlank { null } ?: return m
+            return if (m.startsWith(brand, ignoreCase = true)) m else "$brand $m"
+        }
+
+        /**
          * The scanned folders of [chosen] as the filter offers them: each ending in "/", and none
          * that sits inside another, whose photos the outer one already counts.
          */
@@ -360,6 +380,10 @@ class SearchRepository(private val context: Context) {
         val city: String?,
         val persons: List<String>,
         val tags: List<String>,
+        /** The name of the folder the photo is in - its last part only, see [SearchFilters.folderName]. */
+        val folder: String? = null,
+        /** The camera that took it, make and model as one name, see [SearchFilters.cameraName]. */
+        val camera: String? = null,
     )
 
     /**
@@ -370,7 +394,7 @@ class SearchRepository(private val context: Context) {
      */
     suspend fun groupedHits(query: String, filters: SearchFilters, freshBias: Boolean = false, wordsOnly: Boolean = false): List<GroupedHit> {
         val (params, _, _) = queryParams(query, filters, legacy = false, wordsOnly = wordsOnly, freshBias = freshBias)
-        params += "fl" to "id,taken_at,city,province,region,country,persons_ss,custom_tags"
+        params += "fl" to "id,taken_at,city,province,region,country,persons_ss,custom_tags,folder,camera_make,camera_model"
         params += "start" to "0"
         params += "rows" to GROUP_TICK_MAX.toString()
         if (params.none { it.first == "sort" }) params += "sort" to "taken_at desc, id asc"
@@ -388,6 +412,8 @@ class SearchRepository(private val context: Context) {
                 city = (d.optString("city").trim().ifBlank { null }) ?: d.optString("province").trim().ifBlank { null },
                 persons = list(d, "persons_ss"),
                 tags = list(d, "custom_tags"),
+                folder = SearchFilters.folderName(d.optString("folder")),
+                camera = SearchFilters.cameraName(d.optString("camera_make"), d.optString("camera_model")),
             )
         }
     }
@@ -1004,9 +1030,16 @@ class SearchRepository(private val context: Context) {
      * walks back and forth over the same few kinds, and each walk is otherwise a full request.
      */
     private suspend fun cachedDuplicateGroups(connection: IndexConnection, field: String): List<List<String>> {
-        // The cap is part of the key: a list taken apart before it was in force is a different
-        // answer, and must not be handed back from a cache written by an older version.
-        val key = SearchCache.key(connection.indexName, "/duplicates", listOf("field" to field, "cap" to MAX_GROUP.toString()))
+        val cap = maxGroupOf(field)
+        val within = withinOf(field)
+        // The cap and the second field are part of the key: a list taken apart under different
+        // rules is a different answer, and must not be handed back from a cache written under the
+        // old ones.
+        val key = SearchCache.key(
+            connection.indexName,
+            "/duplicates",
+            listOf("field" to field, "cap" to cap.toString(), "within" to (within ?: "")),
+        )
         val ttl = prefs.cacheSeconds
         // Already taken apart once. The slider walks back and forth over the same few kinds and
         // every page of the grid asks again, and the groups of a big library are tens of thousands
@@ -1031,7 +1064,7 @@ class SearchRepository(private val context: Context) {
         // on every stop it crosses, and an answer the index has already given must not be lost
         // between the call and the cache.
         return withContext(NonCancellable) {
-            val found = SolrClient(connection).duplicateGroups(field, MAX_GROUP, MAX_GROUPS)
+            val found = SolrClient(connection).duplicateGroups(field, cap, MAX_GROUPS, within)
             val groups = if (field in MULTI_KEY_FIELDS) withoutSharedPhotos(found) else found
             cache.put(key, JSONArray(groups.map { JSONArray(it) }).toString())
             rememberGroups(key, groups)
@@ -1323,19 +1356,18 @@ class SearchRepository(private val context: Context) {
         private const val LEGACY_QF = "meaning^3 text file_name_text folder_text camera_text"
         private const val LEGACY_FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,labels"
         /**
-         * The keys the slider walks through, loosest first (Cip, 2026-09-20): CLIP's first 2 and
-         * first 3 words, any 4 of its first five, all five, then the EXIF a simple edit keeps.
-         * Made on the server by photos_ingest.
+         * The keys the slider walks through, loosest first (Cip, 2026-09-20): CLIP's first 3
+         * words, any 4 of its first five, all five, then the EXIF a simple edit keeps. Made on
+         * the server by photos_ingest.
          *
-         * "Any 2" and "any 3" are gone: two photos sharing two of five generic CLIP words ("sky",
-         * "outdoor") are not alike in any useful sense - half a library shares them, and the stop
-         * could only ever answer with one enormous group. The ordered "first K" keys take their
-         * place at the loose end, where a swap in the rank of two near-equal words matters less
-         * than it does at the tight end. EXIF-plus-words is still gone: it never grouped anything
-         * the EXIF alone did not.
+         * Nothing looser than three words is offered. "Any 2" and "any 3" went first - two photos
+         * sharing two of five generic CLIP words ("sky", "outdoor") are not alike in any useful
+         * sense, and half a library shares them - and "same first 2 words" went with them for the
+         * same reason: still noise, whatever the order of the words. EXIF-plus-words is gone too:
+         * it never grouped anything the EXIF alone did not.
          */
         val DUPLICATE_FIELDS = listOf(
-            "dup_w2_hash", "dup_w3_hash", "dup_any4_ss", "dup_w5_hash",
+            "dup_w3_hash", "dup_any4_ss", "dup_w5_hash",
             "dup_exif_hash",
             // The same file name (without the folder: several folders can be indexed) and the
             // same size in bytes, straight from the stored fields, which have docValues already.
@@ -1356,11 +1388,35 @@ class SearchRepository(private val context: Context) {
          */
         const val MAX_GROUP = 50
 
+        /**
+         * The same, for the loosest stop alone (Cip, 2026-09-20). Three CLIP words are still a
+         * subject rather than a photo: at that setting a group of half a dozen is already a shelf
+         * of lookalikes nobody is going to delete, so only small groups are worth drawing there.
+         */
+        const val LOOSE_MAX_GROUP = 5
+
+        /** The loosest stop, the only one held to the tighter cap and to a second field. */
+        private const val LOOSE_FIELD = "dup_w3_hash"
+
+        /** How big a group may be at [field]: the loosest words stop is held tighter than the rest. */
+        fun maxGroupOf(field: String): Int = if (field == LOOSE_FIELD) LOOSE_MAX_GROUP else MAX_GROUP
+
+        /**
+         * A second thing the photos of a group must share at [field], or null where the key is
+         * enough (Cip, 2026-09-20). Three CLIP words alone pair photos by arithmetic rather than
+         * by likeness - the vocabulary the model really uses on a phone's photos is a few hundred
+         * words, so any two photos have a fair chance of landing on the same three - and asking
+         * for the same camera as well is what turns those pairs back into photos taken by one
+         * person, of one thing, with one device. Photos with no camera in their EXIF (screenshots,
+         * downloads, scans) are not grouped at this stop at all.
+         */
+        fun withinOf(field: String): String? = if (field == LOOSE_FIELD) "camera_model" else null
+
         /** Most groups one facet request brings back, biggest first: far more than the grid pages through. */
         const val MAX_GROUPS = 2000
 
         /** The slider's stop when the view opens: all five words the same. */
-        const val DEFAULT_DUPLICATE_LEVEL = 3
+        const val DEFAULT_DUPLICATE_LEVEL = 2
 
         /** Groups fetched at a time; the rest follow as the grid is scrolled. */
         const val GROUPS_PAGE = 20

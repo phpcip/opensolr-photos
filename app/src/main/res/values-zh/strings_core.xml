@@ -112,6 +112,8 @@
     <string name="vm_no_place">无地点</string>
     <string name="vm_no_one">无人物</string>
     <string name="vm_no_tags">无标签</string>
+    <string name="vm_no_folder">无文件夹</string>
+    <string name="vm_no_camera">无相机</string>
     <string name="vm_albums_failed">无法加载相册。</string>
     <string name="vm_album_photos_failed">无法查找这些相册中的照片。</string>
     <string name="vm_map_failed">无法加载地图。</string>

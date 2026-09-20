@@ -53,6 +53,8 @@
     <string name="group_place">Place</string>
     <string name="group_people">People</string>
     <string name="group_tags">My tags</string>
+    <string name="group_folder">Folder</string>
+    <string name="group_camera">Camera</string>
     <string name="cd_change_place">Change the place</string>
     <string name="empty_indexing">Your photos are being indexed. They appear here as they are added.</string>
     <string name="empty_nothing">Nothing is indexed yet. Open Sync to start.</string>
@@ -128,7 +130,6 @@
         <item quantity="other">Delete %1$s photos?</item>
     </plurals>
     <string-array name="dup_kinds">
-        <item>Same first 2 words</item>
         <item>Same first 3 words</item>
         <item>Any 4 words the same</item>
         <item>All 5 words the same</item>

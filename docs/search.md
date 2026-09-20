@@ -201,6 +201,22 @@ again, and what was read out of it is never lost: if a later pass cannot read th
 vector search, or the month's AI allowance used up — the printed text and the words already held are kept,
 as long as the md5 says it is still the same file.
 
+### How the grid is laid out
+
+The button above the grid chooses the layout, and the choice is kept from one search to the next:
+**Best match**, **Date**, **Place**, **People**, **My tags**, **Folder** and **Camera** (browsing with
+nothing typed offers all but *Best match*). Folder and camera are one value per photo, so no photo is drawn
+twice; photos with neither sit in a last group of their own, *No folder* / *No camera*.
+
+A folder is named by the **last part of its path** only — *Camera*, *Screenshots*, *WhatsApp Images* — since
+the media store names a folder by its whole path, which is why the folder is not a filter either. A camera is
+its make and model as one name, *Nikon Z6*, with the make left off when the model already begins with it.
+
+Grouping costs no extra request: a typed search asks for the values it groups by in the same request as the
+results (`id,taken_at,city,province,region,country,persons_ss,custom_tags,folder,camera_make,camera_model`),
+and browsing reads them from the phone's own copy of the index in one query on its columns — `folder` and
+`camera` are columns of that copy, filled from the stored document once, on upgrade.
+
 ### When the grid regroups
 
 The grid's grouping follows the **last search that ran**, not the text being typed: typing alone never

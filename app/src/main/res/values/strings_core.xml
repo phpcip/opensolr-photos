@@ -112,6 +112,8 @@
     <string name="vm_no_place">No place</string>
     <string name="vm_no_one">No one named</string>
     <string name="vm_no_tags">No tags</string>
+    <string name="vm_no_folder">No folder</string>
+    <string name="vm_no_camera">No camera</string>
     <string name="vm_albums_failed">The albums could not be loaded.</string>
     <string name="vm_album_photos_failed">The photos of those albums could not be looked up.</string>
     <string name="vm_map_failed">The map could not be loaded.</string>

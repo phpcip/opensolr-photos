@@ -142,8 +142,25 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
      * asks for [maxGroup] + 1 of them, so neither the answer nor the parsing of it grows with
      * the size of such a value. At most [maxGroups] values come back, the biggest first, which
      * is far more than the grid ever pages through.
+     *
+     * [within] asks for a second thing to be the same as well (Cip, 2026-09-20): the key's value
+     * is split by that field, and a group is one value of the key AND one value of [within] -
+     * the same three words AND the same camera. Still one request, because the split is a
+     * sub-facet; photos where [within] is empty fall out of the answer, having nothing to be
+     * grouped by. With a split the cap is read on the inner group, since a key held by hundreds
+     * of photos can still hold a pair per camera.
      */
-    suspend fun duplicateGroups(field: String, maxGroup: Int, maxGroups: Int): List<List<String>> {
+    suspend fun duplicateGroups(field: String, maxGroup: Int, maxGroups: Int, within: String? = null): List<List<String>> {
+        fun ids() = JSONObject().put("type", "terms").put("field", "id").put("limit", maxGroup + 1)
+        val inner = within?.let {
+            JSONObject()
+                .put("type", "terms")
+                .put("field", it)
+                .put("mincount", 2)
+                .put("limit", WITHIN_LIMIT)
+                .put("sort", "count desc")
+                .put("facet", JSONObject().put("ids", ids()))
+        }
         val facet = JSONObject().put(
             "groups",
             JSONObject()
@@ -152,18 +169,31 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
                 .put("mincount", 2)
                 .put("limit", maxGroups)
                 .put("sort", "count desc")
-                .put("facet", JSONObject().put("ids", JSONObject().put("type", "terms").put("field", "id").put("limit", maxGroup + 1))),
+                .put("facet", if (inner != null) JSONObject().put("within", inner) else JSONObject().put("ids", ids())),
         )
         val json = select(listOf("q" to "*:*", "rows" to "0", "json.facet" to facet.toString()))
         val buckets = json.optJSONObject("facets")?.optJSONObject("groups")?.optJSONArray("buckets") ?: return emptyList()
-        return (0 until buckets.length()).mapNotNull { i ->
-            val bucket = buckets.optJSONObject(i) ?: return@mapNotNull null
+        /** The ids of one bucket, when it holds between two and [maxGroup] photos. */
+        fun groupOf(bucket: JSONObject?): List<String>? {
+            if (bucket == null) return null
             // The count, not the number of ids returned: the ids are capped just above the cap.
-            if (bucket.optLong("count") > maxGroup) return@mapNotNull null
-            val ids = bucket.optJSONObject("ids")?.optJSONArray("buckets") ?: return@mapNotNull null
-            (0 until ids.length()).mapNotNull { k -> ids.optJSONObject(k)?.optString("val")?.takeIf { it.isNotEmpty() } }
+            if (bucket.optLong("count") > maxGroup) return null
+            val ids = bucket.optJSONObject("ids")?.optJSONArray("buckets") ?: return null
+            return (0 until ids.length()).mapNotNull { k -> ids.optJSONObject(k)?.optString("val")?.takeIf { it.isNotEmpty() } }
                 .takeIf { it.size >= 2 }
         }
+        val out = ArrayList<List<String>>(buckets.length())
+        for (i in 0 until buckets.length()) {
+            val bucket = buckets.optJSONObject(i) ?: continue
+            if (within == null) {
+                groupOf(bucket)?.let { out += it }
+                continue
+            }
+            val split = bucket.optJSONObject("within")?.optJSONArray("buckets") ?: continue
+            for (k in 0 until split.length()) groupOf(split.optJSONObject(k))?.let { out += it }
+        }
+        // Biggest first, as the flat answer already comes: a split answer is ordered by its key.
+        return out.sortedByDescending { it.size }
     }
 
     /**
@@ -329,5 +359,11 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
 
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaType()
+
+        /**
+         * Values of the second field a duplicate key is split by, per key value: a library holds
+         * a handful of cameras, so this is a ceiling rather than a limit anyone reaches.
+         */
+        private const val WITHIN_LIMIT = 50
     }
 }

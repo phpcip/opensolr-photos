@@ -53,6 +53,8 @@
     <string name="group_place">地点</string>
     <string name="group_people">人物</string>
     <string name="group_tags">我的标签</string>
+    <string name="group_folder">文件夹</string>
+    <string name="group_camera">相机</string>
     <string name="cd_change_place">更改地点</string>
     <string name="empty_indexing">正在为你的照片建立索引，添加后会显示在这里。</string>
     <string name="empty_nothing">尚未建立任何索引。打开“同步”开始。</string>
@@ -125,7 +127,6 @@
         <item quantity="other">删除 %1$s 张照片？</item>
     </plurals>
     <string-array name="dup_kinds">
-        <item>前 2 个词相同</item>
         <item>前 3 个词相同</item>
         <item>任意 4 个词相同</item>
         <item>5 个词全部相同</item>

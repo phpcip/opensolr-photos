@@ -112,6 +112,8 @@
     <string name="vm_no_place">Fără loc</string>
     <string name="vm_no_one">Nimeni numit</string>
     <string name="vm_no_tags">Fără etichete</string>
+    <string name="vm_no_folder">Fără folder</string>
+    <string name="vm_no_camera">Fără aparat foto</string>
     <string name="vm_albums_failed">Albumele nu s-au putut încărca.</string>
     <string name="vm_album_photos_failed">Pozele acestor albume nu s-au putut găsi.</string>
     <string name="vm_map_failed">Harta nu s-a putut încărca.</string>

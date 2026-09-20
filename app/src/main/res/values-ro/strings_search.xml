@@ -53,6 +53,8 @@
     <string name="group_place">Loc</string>
     <string name="group_people">Persoane</string>
     <string name="group_tags">Etichetele mele</string>
+    <string name="group_folder">Folder</string>
+    <string name="group_camera">Aparat foto</string>
     <string name="cd_change_place">Schimbă locul</string>
     <string name="empty_indexing">Pozele tale se indexează. Apar aici pe măsură ce sunt adăugate.</string>
     <string name="empty_nothing">Încă nu e nimic indexat. Deschide Sync ca să începi.</string>
@@ -131,7 +133,6 @@
         <item quantity="other">Ștergi %1$s de poze?</item>
     </plurals>
     <string-array name="dup_kinds">
-        <item>Primele 2 cuvinte la fel</item>
         <item>Primele 3 cuvinte la fel</item>
         <item>Oricare 4 cuvinte la fel</item>
         <item>Toate cele 5 cuvinte la fel</item>

@@ -112,6 +112,8 @@
     <string name="vm_no_place">Sans lieu</string>
     <string name="vm_no_one">Personne de nommé</string>
     <string name="vm_no_tags">Sans étiquettes</string>
+    <string name="vm_no_folder">Sans dossier</string>
+    <string name="vm_no_camera">Sans appareil photo</string>
     <string name="vm_albums_failed">Les albums n\'ont pas pu être chargés.</string>
     <string name="vm_album_photos_failed">Les photos de ces albums n\'ont pas pu être trouvées.</string>
     <string name="vm_map_failed">La carte n\'a pas pu être chargée.</string>

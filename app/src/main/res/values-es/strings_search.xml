@@ -53,6 +53,8 @@
     <string name="group_place">Lugar</string>
     <string name="group_people">Personas</string>
     <string name="group_tags">Mis etiquetas</string>
+    <string name="group_folder">Carpeta</string>
+    <string name="group_camera">Cámara</string>
     <string name="cd_change_place">Cambiar el lugar</string>
     <string name="empty_indexing">Tus fotos se están indexando. Aparecen aquí a medida que se añaden.</string>
     <string name="empty_nothing">Aún no hay nada indexado. Abre Sinc. para empezar.</string>
@@ -131,7 +133,6 @@
         <item quantity="other">¿Eliminar %1$s fotos?</item>
     </plurals>
     <string-array name="dup_kinds">
-        <item>Mismas 2 primeras palabras</item>
         <item>Mismas 3 primeras palabras</item>
         <item>4 palabras cualesquiera iguales</item>
         <item>Las 5 palabras iguales</item>
