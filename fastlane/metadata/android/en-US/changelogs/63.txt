@@ -1,0 +1,1 @@
+The place search shows that it is working while the answer is on its way, instead of looking empty.

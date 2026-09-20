@@ -183,28 +183,49 @@ fun PlacePickerDialog(
             // for again - the list would reopen under a name that was already settled. Editing
             // the text makes it a question again.
             var picked by remember { mutableStateOf<String?>(null) }
+            // True while the account is being asked, so the box shows that something is on its
+            // way rather than sitting empty (Cip, 2026-09-20).
+            var searching by remember { mutableStateOf(false) }
             val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
             LaunchedEffect(term) {
                 val q = term.trim()
                 if (q == picked) {
                     hits = emptyList()
                     searched = false
+                    searching = false
                     return@LaunchedEffect
                 }
                 if (q.length < 2) {
                     hits = emptyList()
                     searched = false
+                    searching = false
                     return@LaunchedEffect
                 }
                 kotlinx.coroutines.delay(350)
-                hits = viewModel.searchPlaces(q)
-                searched = true
+                searching = true
+                try {
+                    hits = viewModel.searchPlaces(q)
+                    searched = true
+                } finally {
+                    // A letter typed meanwhile cancels this search; the one that replaces it
+                    // turns the spinner on again, so it is never left spinning.
+                    searching = false
+                }
             }
             OutlinedTextField(
                 value = term,
                 onValueChange = { term = it },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
                 placeholder = { Text(stringResource(R.string.pp_search), color = p.muted) },
+                trailingIcon = {
+                    if (searching) {
+                        androidx.compose.material3.CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            color = p.accent,
+                            strokeWidth = 2.dp,
+                        )
+                    }
+                },
                 singleLine = true,
                 shape = RoundedCornerShape(2.dp),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
@@ -217,7 +238,7 @@ fun PlacePickerDialog(
                     unfocusedTextColor = p.ink,
                 ),
             )
-            if (term.trim().length >= 2 && (hits.isNotEmpty() || searched)) {
+            if (term.trim().length >= 2 && (hits.isNotEmpty() || (searched && !searching))) {
                 Spacer(Modifier.height(6.dp))
                 Column(
                     Modifier
