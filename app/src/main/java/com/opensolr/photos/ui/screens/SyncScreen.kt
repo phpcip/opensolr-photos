@@ -48,10 +48,6 @@ import com.opensolr.photos.ui.SectionLabel
 import com.opensolr.photos.ui.UiState
 import com.opensolr.photos.ui.theme.LocalPalette
 
-/**
- * The Sync screen: live progress, the result of the last run, the schedule, Force Re-Sync, and
- * the folders being indexed.
- */
 @Composable
 fun SyncScreen(state: UiState, viewModel: AppViewModel) {
     val p = LocalPalette.current
@@ -85,16 +81,14 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
                     LinearProgressIndicator(Modifier.fillMaxWidth().height(6.dp), color = p.accent, trackColor = p.chip, strokeCap = StrokeCap.Butt)
                 }
             }
-            // Queued means only that: waiting for its conditions. Saying which one would be a
-            // guess, and it used to blame the network while the network was fine (Cip, 2026-09-16).
+
             sync.queued -> Text(stringResource(R.string.sync_queued), style = MaterialTheme.typography.titleMedium, color = p.ink)
             else -> Text(statusLine(state), style = MaterialTheme.typography.titleMedium, color = p.ink)
         }
         Spacer(Modifier.height(20.dp))
 
         state.lastReport?.let { report ->
-            // What the last run did, shown briefly after it finishes, then gone: the rows below
-            // always say what is true now, not what one run changed.
+
             var showOutcome by remember(report.finishedAt) { mutableStateOf(System.currentTimeMillis() - report.finishedAt < OUTCOME_VISIBLE_MS) }
             LaunchedEffect(report.finishedAt) {
                 if (showOutcome) { delay(OUTCOME_VISIBLE_MS); showOutcome = false }
@@ -124,14 +118,11 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
             Spacer(Modifier.height(20.dp))
         }
 
-        // The four actions as one row of the header's own cells: icon over a short label, the
-        // way the top bar of the photos screen reads (Cip, 2026-09-16). Four stacked buttons
-        // each with a line of explanation under it had taken over the screen.
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             HeaderItem(stringResource(R.string.sync_btn_resync), onClick = { viewModel.forceResync() }) {
                 Icon(painterResource(R.drawable.ic_sync), contentDescription = null, tint = p.accent, modifier = Modifier.size(20.dp))
             }
-            // Only offered while something is actually going: nothing to stop otherwise.
+
             HeaderItem(stringResource(R.string.sync_btn_stop), active = state.sync.busy, onClick = { viewModel.stopSync() }) {
                 Icon(
                     painterResource(R.drawable.ic_stop),
@@ -221,9 +212,6 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
     }
 }
 
-/**
- * One radio row of the schedule choice.
- */
 @Composable
 private fun ScheduleOption(label: String, selected: Boolean, onSelect: () -> Unit) {
     val p = LocalPalette.current
@@ -236,10 +224,6 @@ private fun ScheduleOption(label: String, selected: Boolean, onSelect: () -> Uni
     }
 }
 
-/**
- * One line summing up the state when nothing runs.
- */
-/** How long the outcome of a finished run stays on screen. */
 private const val OUTCOME_VISIBLE_MS = 8000L
 
 @Composable
@@ -263,9 +247,6 @@ private fun statusLine(state: UiState): String {
     }
 }
 
-/**
- * Human wording of a report status.
- */
 @Composable
 private fun resultLabel(status: String): String = when (status) {
     "ok" -> stringResource(R.string.rs_ok)

@@ -9,33 +9,12 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-/**
- * What the plan's limits mean for the app right now, in words, and one notification per
- * situation.
- *
- * Every warning has a key; a notification for a key is posted once, and the monthly ones
- * (AI requests, bandwidth) carry the month in the key so they come back every month. The
- * same warnings are shown on the account screen, so nothing depends on a notification
- * being seen.
- */
 object PlanWatch {
 
-    /**
-     * One thing the owner should know.
-     *
-     * @property key    what it is about; notifications are posted once per key
-     * @property title  short, for the notification and the account screen
-     * @property text   what it means and what to do
-     * @property urgent true at a hard limit, false at the 90% warning
-     */
     data class Warning(val key: String, val title: String, val text: String, val urgent: Boolean)
 
-    /** Share of a limit from which the owner is warned. */
     private const val WARN_AT = 0.9
 
-    /**
-     * The warnings [limits] call for. Nothing is posted here.
-     */
     fun evaluate(limits: AccountLimits): List<Warning> {
         val month = SimpleDateFormat("yyyy-MM", Locale.US).format(Date())
         val out = ArrayList<Warning>()
@@ -88,9 +67,6 @@ object PlanWatch {
         return out
     }
 
-    /**
-     * Evaluates [limits] and posts a notification for every warning not posted before.
-     */
     fun notifyNew(context: Context, prefs: AppPrefs, limits: AccountLimits): List<Warning> {
         val warnings = evaluate(limits)
         val seen = prefs.warnedKeys
@@ -100,8 +76,5 @@ object PlanWatch {
         return warnings
     }
 
-    /**
-     * "93%" of a share.
-     */
     private fun percent(share: Double): String = "${(share * 100).toInt()}%"
 }

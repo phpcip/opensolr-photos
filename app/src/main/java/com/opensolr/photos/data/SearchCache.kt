@@ -6,28 +6,8 @@ import android.database.sqlite.SQLiteDatabase
 import android.database.sqlite.SQLiteOpenHelper
 import java.security.MessageDigest
 
-/**
- * Answers the index already gave, kept on the phone for as long as the owner chose.
- *
- * Every search costs bandwidth against the plan, and the app asks the same questions again and
- * again: the same query typed twice, the grid redrawn after a photo was opened, Albums and
- * Duplicates rebuilt exactly as before. An answer is stored here under the request that
- * produced it and reused until it is older than the chosen number of seconds.
- *
- * Only reads of the index pass through here (searches, facets, albums, duplicates,
- * suggestions). Writing, deleting and the sync's walk over ids never do: a re-sync compares
- * against what is in the index right now, and stale ids there would delete the wrong photos.
- * Anything this app writes empties the cache at once, whatever the number of seconds says, so
- * a tag the owner just added is never missing from the next screen.
- *
- * The cache is this phone's alone: a plain table in the app's private storage, cleared with
- * one button and never shared with anyone.
- */
 class SearchCache private constructor(context: Context) : SQLiteOpenHelper(context.applicationContext, NAME, null, VERSION) {
 
-    /**
-     * Creates the single table: the request key, the answer, and when it was stored.
-     */
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
             "CREATE TABLE responses (" +
@@ -37,18 +17,11 @@ class SearchCache private constructor(context: Context) : SQLiteOpenHelper(conte
         )
     }
 
-    /**
-     * Cached answers are free to lose: a new version simply starts with an empty table.
-     */
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
         db.execSQL("DROP TABLE IF EXISTS responses")
         onCreate(db)
     }
 
-    /**
-     * The stored answer for [key] when it is younger than [ttlSeconds], otherwise null. A
-     * ttl of zero or less switches the cache off for this read.
-     */
     fun get(key: String, ttlSeconds: Int): String? {
         if (ttlSeconds <= 0) return null
         val oldest = System.currentTimeMillis() - ttlSeconds * 1000L
@@ -61,10 +34,6 @@ class SearchCache private constructor(context: Context) : SQLiteOpenHelper(conte
         }
     }
 
-    /**
-     * Stores [body] as the answer to [key]. Oversized answers are not stored: the point is to
-     * save bandwidth, not to fill the phone.
-     */
     fun put(key: String, body: String) {
         if (body.length > MAX_BODY_CHARS) return
         val values = ContentValues().apply {
@@ -77,26 +46,16 @@ class SearchCache private constructor(context: Context) : SQLiteOpenHelper(conte
         prune(db)
     }
 
-    /**
-     * Empties the cache: the "Clear cache" button, and every write this app makes.
-     */
     fun clear() {
         writableDatabase.delete("responses", null, null)
     }
 
-    /**
-     * How many answers are stored right now, for the account screen.
-     */
     fun count(): Int {
         readableDatabase.rawQuery("SELECT COUNT(*) FROM responses", null).use { cursor ->
             return if (cursor.moveToFirst()) cursor.getInt(0) else 0
         }
     }
 
-    /**
-     * Keeps the newest [MAX_ROWS] answers. Runs after a write, which is rare enough (one per
-     * uncached request) for a single delete to cost nothing.
-     */
     private fun prune(db: SQLiteDatabase) {
         db.execSQL(
             "DELETE FROM responses WHERE key NOT IN (SELECT key FROM responses ORDER BY stored DESC LIMIT ?)",
@@ -108,37 +67,22 @@ class SearchCache private constructor(context: Context) : SQLiteOpenHelper(conte
         private const val NAME = "search_cache.db"
         private const val VERSION = 1
 
-        /**
-         * The one handle on this database for the whole app: opened once and kept, rather than
-         * opened again by every screen and left for the collector to find (Cip, 2026-09-18).
-         */
         @Volatile private var shared: SearchCache? = null
 
-        /** The shared handle, made on first use. */
         fun of(context: Context): SearchCache = shared ?: synchronized(this) {
             shared ?: SearchCache(context.applicationContext).also { shared = it }
         }
 
-        /** An answer bigger than this is served but not stored. */
         private const val MAX_BODY_CHARS = 700_000
 
-        /** How many answers are kept before the oldest are dropped. */
         private const val MAX_ROWS = 400
 
-        /** Fewer seconds than this are not offered: below a minute the cache saves nothing worth having. */
         const val MIN_SECONDS = 60
 
-        /** The longest the owner may hold on to an answer: a day. */
         const val MAX_SECONDS = 86_400
 
-        /** What a fresh install caches for, until the owner says otherwise. */
         const val DEFAULT_SECONDS = 60
 
-        /**
-         * The key of one request: which index it went to, which handler, and every parameter
-         * with its value, order-independent. Two requests share a key only when the index would
-         * answer them identically.
-         */
         fun key(indexName: String, path: String, params: List<Pair<String, String>>): String {
             val text = buildString {
                 append(indexName).append(' ').append(path)

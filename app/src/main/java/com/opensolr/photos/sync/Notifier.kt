@@ -13,13 +13,6 @@ import androidx.core.app.NotificationManagerCompat
 import com.opensolr.photos.MainActivity
 import com.opensolr.photos.R
 
-/**
- * Every notification the app posts.
- *
- * Two channels: a quiet one for sync progress, and an alerts channel for the few things the
- * user has to act on (sign in again, plan limit reached, index recreated). Alerts about plan
- * limits open the Opensolr pricing page in the browser.
- */
 object Notifier {
 
     const val CHANNEL_SYNC = "sync"
@@ -30,9 +23,6 @@ object Notifier {
     private const val ALERT_RECREATED = 2003
     const val PRICING_URL = "https://opensolr.com/pricing"
 
-    /**
-     * Creates both channels. Safe to call repeatedly.
-     */
     fun createChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
         manager.createNotificationChannel(
@@ -45,9 +35,6 @@ object Notifier {
         )
     }
 
-    /**
-     * The ongoing notification shown while a sync runs. [total] of 0 shows an indeterminate bar.
-     */
     fun progress(context: Context, title: String, text: String, done: Int, total: Int): Notification =
         NotificationCompat.Builder(context, CHANNEL_SYNC)
             .setSmallIcon(R.drawable.ic_notification)
@@ -60,9 +47,6 @@ object Notifier {
             .setContentIntent(openApp(context, MainActivity.DESTINATION_SYNC))
             .build()
 
-    /**
-     * The saved sign-in no longer works: the API key was changed or the account was closed.
-     */
     fun signInRequired(context: Context) = post(
         context, ALERT_SIGN_IN,
         NotificationCompat.Builder(context, CHANNEL_ALERTS)
@@ -74,12 +58,8 @@ object Notifier {
             .build()
     )
 
-    /**
-     * The plan ran out of something: disk space, search bandwidth or AI requests. Tapping
-     * opens the pricing page.
-     */
     fun planLimit(context: Context, title: String, text: String, key: String = "") = post(
-        // One notification per situation (key), so a disk warning does not replace an AI one.
+
         context, if (key.isEmpty()) ALERT_LIMIT else ALERT_LIMIT + 1 + (key.hashCode() and 0x7fff),
         NotificationCompat.Builder(context, CHANNEL_ALERTS)
             .setSmallIcon(R.drawable.ic_notification)
@@ -92,9 +72,6 @@ object Notifier {
             .build()
     )
 
-    /**
-     * The index had disappeared from the account and was created again, empty.
-     */
     fun indexRecreated(context: Context) = post(
         context, ALERT_RECREATED,
         NotificationCompat.Builder(context, CHANNEL_ALERTS)
@@ -107,9 +84,6 @@ object Notifier {
             .build()
     )
 
-    /**
-     * Posts a notification, silently doing nothing when the user has not allowed notifications.
-     */
     private fun post(context: Context, id: Int, notification: Notification) {
         try {
             NotificationManagerCompat.from(context).notify(id, notification)
@@ -117,9 +91,6 @@ object Notifier {
         }
     }
 
-    /**
-     * Opens the app, optionally on a given screen.
-     */
     private fun openApp(context: Context, destination: String?): PendingIntent {
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -128,9 +99,6 @@ object Notifier {
         return PendingIntent.getActivity(context, destination.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
-    /**
-     * Opens https://opensolr.com/pricing in the browser.
-     */
     private fun openPricing(context: Context): PendingIntent {
         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(PRICING_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         return PendingIntent.getActivity(context, 7, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)

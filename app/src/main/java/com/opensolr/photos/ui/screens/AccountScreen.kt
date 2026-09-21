@@ -50,9 +50,6 @@ import com.opensolr.photos.ui.UiState
 import com.opensolr.photos.ui.UsageRow
 import com.opensolr.photos.ui.theme.LocalPalette
 
-/**
- * The Opensolr account zone: every limit of the plan with what is used, and a clear way to upgrade.
- */
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun AccountScreen(state: UiState, viewModel: AppViewModel) {
@@ -61,7 +58,6 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
     var confirmSignOut by remember { mutableStateOf(false) }
     val account = state.account
 
-    // What the cache holds right now, read when the screen opens.
     LaunchedEffect(Unit) {
         viewModel.refreshCacheInfo()
         viewModel.refreshPlacesToWrite()
@@ -75,12 +71,9 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
     ) {
         ScreenHeader(stringResource(R.string.acc_title), onBack = { viewModel.back() })
 
-        // Five zones, all folded until opened, each remembered as it was left for as long as
-        // the app runs (Cip, 2026-09-20). A folded zone still says, on its heading, how many
-        // things in it want attention: a new version, a plan warning.
         FilterGroup(stringResource(R.string.acc_zone_updates), if (state.update != null) 1 else 0, "updates" in state.meZonesOpen, { viewModel.toggleMeZone("updates") }) {
             Column {
-                // The installed version, and a check that does not wait for the once-a-day one.
+
                 InfoRow(stringResource(R.string.acc_app_version), BuildConfig.VERSION_NAME)
                 Spacer(Modifier.height(10.dp))
                 GhostButton(
@@ -89,8 +82,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                     enabled = !state.updateChecking,
                     modifier = Modifier.fillMaxWidth(),
                 )
-                // A newer release found by the daily check is said here, never on the photos screen
-                // (Cip, 2026-09-17: the main screen carries as few messages as possible).
+
                 if (state.updateResult == null) {
                     state.update?.let { newer ->
                         Spacer(Modifier.height(12.dp))
@@ -102,7 +94,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                 state.updateResult?.let { result ->
                     Spacer(Modifier.height(12.dp))
                     Notice(result, title = if (state.update != null) stringResource(R.string.acc_update_available) else stringResource(R.string.acc_version))
-                    // A newer release leads to its page; the install stays the user's and Android's.
+
                     state.update?.let { newer ->
                         Spacer(Modifier.height(10.dp))
                         AccentButton(stringResource(R.string.acc_download, newer.version), onClick = { Actions.openUrl(context, newer.pageUrl) }, modifier = Modifier.fillMaxWidth())
@@ -123,7 +115,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
         FilterGroup(stringResource(R.string.acc_zone_stats), state.planWarnings.size, "stats" in state.meZonesOpen, { viewModel.toggleMeZone("stats") }) {
             Column {
                 if (account != null) {
-                    // What the limits mean right now, before the numbers.
+
                     state.planWarnings.forEach { warning ->
                         Notice(warning.text, title = warning.title)
                         Spacer(Modifier.height(10.dp))
@@ -135,8 +127,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                         if (account.diskLimitMb > 0) (account.diskUsedMb / account.diskLimitMb).toFloat() else null,
                     )
                     UsageRow(
-                        // Short on purpose: a big allowance ("7 MB of 200000.0 GB") leaves the value no
-                        // room next to a long label (Cip, 2026-09-16).
+
                         stringResource(R.string.acc_bw),
                         Actions.formatMb(account.bandwidthUsedMb), Actions.formatMb(account.bandwidthLimitMb),
                         if (account.bandwidthLimitMb > 0) (account.bandwidthUsedMb / account.bandwidthLimitMb).toFloat() else null,
@@ -157,7 +148,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                     if (account.indexedDocs > 0) InfoRow(stringResource(R.string.acc_photos_index), Actions.formatCount(account.indexedDocs))
                     InfoRow(stringResource(R.string.acc_updated), Actions.formatDate(account.refreshedAt))
                     Spacer(Modifier.height(20.dp))
-    
+
                     Notice(
                         stringResource(R.string.acc_limit_text),
                         title = stringResource(R.string.acc_limit_title),
@@ -176,7 +167,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
         }
         FilterGroup(stringResource(R.string.acc_zone_settings), 0, "settings" in state.meZonesOpen, { viewModel.toggleMeZone("settings") }) {
             Column {
-                // The taps the app gives back under a finger, which not everyone wants.
+
                 SectionLabel(stringResource(R.string.acc_feedback))
                 Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -195,9 +186,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                     )
                 }
                 Spacer(Modifier.height(28.dp))
-    
-                // The app's language (Cip, 2026-09-20): the phone's own by default, or one picked here.
-                // On Android 13 and later it is the same setting as the system's per-app language.
+
                 SectionLabel(stringResource(R.string.acc_language))
                 Spacer(Modifier.height(6.dp))
                 Text(stringResource(R.string.acc_language_text), style = MaterialTheme.typography.bodySmall, color = p.muted)
@@ -226,9 +215,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                     }
                 }
                 Spacer(Modifier.height(28.dp))
-    
-                // New photos that come without a position get the phone's own (Cip, 2026-09-19). Android
-                // asks first; in the background, where the sync runs, it asks a second time.
+
                 SectionLabel(stringResource(R.string.acc_places))
                 val backgroundAsk = androidx.activity.compose.rememberLauncherForActivityResult(
                     androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
@@ -288,9 +275,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                     GhostButton(stringResource(R.string.acc_save_places), onClick = writePlaces, modifier = Modifier.fillMaxWidth())
                 }
                 Spacer(Modifier.height(28.dp))
-    
-                // Semantic <-> lexical balance of a search by meaning, as the search platform's settings
-                // have it (Cip, 2026-09-17): 0 is meaning only, 1 is words only.
+
                 SectionLabel(stringResource(R.string.acc_tuning))
                 Spacer(Modifier.height(10.dp))
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
@@ -306,8 +291,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                             state.account?.vectorAllowed == true,
                     )
                 }
-                // Only means something where search by meaning runs: with vector search on the plan and
-                // AI requests left this month. Otherwise shown greyed out, with the reason (Cip, 2026-09-17).
+
                 val limits = state.account
                 val balanceUsable = limits != null && limits.vectorAllowed &&
                     (limits.maxAiRequests <= 0 || limits.aiRequestsUsed < limits.maxAiRequests)
@@ -342,8 +326,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                     Text(String.format(java.util.Locale.US, "%.2f", balance), style = MaterialTheme.typography.bodyLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = p.ink)
                 }
                 Spacer(Modifier.height(28.dp))
-    
-                // How long an answer from the index may be reused, and a way to throw them all away.
+
                 SectionLabel(stringResource(R.string.acc_cache))
                 Spacer(Modifier.height(10.dp))
                 Text(
@@ -351,7 +334,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                     style = MaterialTheme.typography.bodyMedium, color = p.muted,
                 )
                 Spacer(Modifier.height(14.dp))
-                // Reset whenever the stored value changes, so the field always shows what is in force.
+
                 var seconds by remember(state.cacheSeconds) { mutableStateOf(state.cacheSeconds.toString()) }
                 OutlinedTextField(
                     value = seconds,

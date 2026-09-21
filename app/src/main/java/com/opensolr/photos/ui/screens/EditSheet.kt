@@ -85,33 +85,27 @@ import com.opensolr.photos.ui.theme.LocalPalette
 
 private val Corner = RoundedCornerShape(2.dp)
 
-/**
- * Editing what a photo is found by: the owner's tags, one per entry, and the words that
- * describe what the photo shows. The owner's words always win over what Opensolr saw, and
- * "Reset" brings Opensolr's words back.
- */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit) {
-    // The photo as the results hold it now: whoever opened this may still have the copy from
-    // before an earlier save (Cip, 2026-09-17).
+
     @Suppress("NAME_SHADOWING")
     val hit = state.hits.firstOrNull { it.id == hit.id } ?: hit
     val p = LocalPalette.current
-    // A tap anywhere outside the fields takes the focus away, so the tag suggestions close.
+
     val focusManager = LocalFocusManager.current
     val clipWords = remember(hit.id) { hit.labels.filter { it.isNotBlank() }.joinToString(", ") }
     var tags by remember(hit.id) { mutableStateOf(hit.customTags) }
     var newTag by remember(hit.id) { mutableStateOf("") }
     var meaning by remember(hit.id) { mutableStateOf(hit.meaning) }
-    // The names of the people in the photo, the same ones the file carries in its XMP.
+
     val context = LocalContext.current
     val originalPersons = remember(hit.id) { hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() } }
     var persons by remember(hit.id) { mutableStateOf(originalPersons) }
     var newPerson by remember(hit.id) { mutableStateOf("") }
-    // Names already in the index, offered while the People field has focus.
+
     var personFieldFocused by remember(hit.id) { mutableStateOf(false) }
-    // Closed by a touch outside the People field and its list, like the tag suggestions.
+
     var peopleDismissed by remember(hit.id) { mutableStateOf(false) }
     var personSuggestions by remember(hit.id) { mutableStateOf(emptyList<String>()) }
     LaunchedEffect(newPerson, personFieldFocused, persons) {
@@ -119,22 +113,19 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
         if (newPerson.isNotEmpty()) delay(250)
         personSuggestions = viewModel.personSuggestions(newPerson, persons)
     }
-    // Autocomplete of the tag field: shown while it has focus, asked again a short pause after
-    // the last keystroke, and whenever the photo's tags change (a picked tag leaves the list).
+
     var tagFieldFocused by remember(hit.id) { mutableStateOf(false) }
     var suggestions by remember(hit.id) { mutableStateOf(TagSuggestions(emptyList(), emptyList())) }
-    // True while the suggestions are being asked for: a thin line under the field says so.
+
     var suggestionsLoading by remember(hit.id) { mutableStateOf(false) }
-    // Closed by a touch outside the tag field and its list; opened again by typing or by going
-    // back into the field (Cip, 2026-09-16). Focus alone did not close them inside the sheet.
+
     var suggestionsDismissed by remember(hit.id) { mutableStateOf(false) }
-    // Where the sheet content, the tag field row and the suggestion list are, to tell a touch
-    // inside them from a touch outside.
+
     var sheetCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var tagRowCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var suggestionListCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var personAreaCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    // Reopening the list (suggestionsDismissed back to false) asks for fresh suggestions too.
+
     LaunchedEffect(newTag, tagFieldFocused, tags, suggestionsDismissed) {
         if (!tagFieldFocused || suggestionsDismissed) { suggestionsLoading = false; return@LaunchedEffect }
         suggestionsLoading = true
@@ -142,12 +133,11 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
             if (newTag.isNotEmpty()) delay(250)
             suggestions = viewModel.tagSuggestions(newTag, tags)
         } finally {
-            // Also when a newer keystroke cancels this run: the next run raises it again.
+
             suggestionsLoading = false
         }
     }
 
-    // Adds what was typed as one or more names (commas split), ignoring blanks and repeats.
     fun addPerson() {
         val parts = newPerson.split(',').map { it.trim() }.filter { it.isNotEmpty() }
         if (parts.isEmpty()) return
@@ -155,22 +145,15 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
         newPerson = ""
     }
 
-    // The owner's own wording, or null when the text is still what Opensolr saw.
     fun ownWording(): String? = meaning.trim().takeIf { it.isNotEmpty() && it != clipWords }
 
-    // Saves everything; tags and names go into the index whether or not the file could be written.
     fun finishSave(changedPersons: List<String>?) {
         val wording = ownWording()
         viewModel.saveEdits(hit, tags, wording, changedPersons, onDone = onDismiss)
     }
 
-    // Android asks the owner once before the app may change a photo it did not create; on yes
-    // the tags and the names are written into the file's XMP, on the phone, so any other app sees
-    // them too (Cip, 2026-09-17).
     val originalTags = remember(hit.id) { hit.customTags }
-    // The keywords already written in the file (by Lightroom, digiKam, Windows...) are offered
-    // here, when the owner edits, never at indexing: the tags in the index are the owner's own
-    // and nothing else goes in unasked (Cip, 2026-09-17). Kept only if the owner saves them.
+
     LaunchedEffect(hit.id) {
         val fromFile = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             Actions.contentUris(context, listOf(hit)).firstOrNull()?.let { PhotoReader.tagsIn(context, it) } ?: emptyList()
@@ -187,13 +170,11 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
         finishSave(if (namesChanged) persons else null)
     }
 
-    // Adds a picked suggestion as a tag and empties the field for the next one.
     fun pick(tag: String) {
         tags = (tags + tag).distinctWords()
         newTag = ""
     }
 
-    // Adds what was typed as one or more tags (commas split), ignoring blanks and repeats.
     fun addTag() {
         val parts = newTag.split(',').map { it.trim() }.filter { it.isNotEmpty() }
         if (parts.isEmpty()) return
@@ -201,8 +182,6 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
         newTag = ""
     }
 
-    // The whole screen, and no drag closes it: pulling down to see the top of the form closed it
-    // by accident (Cip, 2026-09-19). Back, Cancel and Save are the ways out.
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -210,16 +189,13 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
         shape = Corner,
         dragHandle = null,
     ) {
-        // Full height from the start (Cip, 2026-09-15): the sheet never grows or shrinks with
-        // the length of the tag suggestions.
+
         Column(
             Modifier
                 .fillMaxWidth()
                 .fillMaxHeight()
                 .onGloballyPositioned { sheetCoords = it }
-                // Every touch is seen here first (Initial pass, before the sheet or the scroll can
-                // take it): one outside the tag field row and the suggestion list closes the list
-                // and takes the focus away. Touches inside them work as before.
+
                 .pointerInput(Unit) {
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
@@ -232,8 +208,7 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                             suggestionsDismissed = true
                         } else if (inside(tagRowCoords)) {
                             peopleDismissed = true
-                            // Back into the tag field: the list opens again, whether or not the
-                            // field's focus changes (it may still hold it after a dismissal).
+
                             suggestionsDismissed = false
                         } else if (!inside(suggestionListCoords)) {
                             suggestionsDismissed = true
@@ -354,14 +329,13 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                 )
                 TextButton(onClick = { addTag() }, enabled = newTag.isNotBlank()) { Text(stringResource(R.string.tg_add), color = p.accent) }
             }
-            // Discreet loading: a 2dp accent line under the field while suggestions are asked for;
-            // the same height is kept when idle, so nothing below moves.
+
             Box(Modifier.fillMaxWidth().padding(top = 4.dp).height(2.dp)) {
                 if (tagFieldFocused && !suggestionsDismissed && suggestionsLoading) {
                     LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp), color = p.accent, trackColor = p.chip)
                 }
             }
-            // The owner's own tags first, then words from the photos' meanings, under a divider.
+
             if (tagFieldFocused && !suggestionsDismissed && !suggestions.isEmpty) {
                 Spacer(Modifier.height(6.dp))
                 Column(
@@ -413,11 +387,10 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                     onClick = {
                         addTag()
                         addPerson()
-                        // The wording is an edit only when it differs from what Opensolr saw.
+
                         val names = persons
                         val namesChanged = names != originalPersons
-                        // Every save writes the tags into the file as well, changed or not: the
-                        // file and the index always carry the same tags (Cip, 2026-09-17).
+
                         run {
                             val uri = Actions.contentUris(context, listOf(hit)).firstOrNull()
                             when {
@@ -442,18 +415,12 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
     }
 }
 
-/**
- * The small heading of a group in the tag suggestions.
- */
 @Composable
 private fun SuggestionHeading(text: String) {
     val p = LocalPalette.current
     Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, color = p.muted, modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 2.dp))
 }
 
-/**
- * One tag suggestion: tapping it adds the tag to the photo.
- */
 @Composable
 private fun SuggestionRow(text: String, onPick: () -> Unit) {
     val p = LocalPalette.current

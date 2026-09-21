@@ -70,35 +70,18 @@ import java.util.Locale
 
 private val Corner = RoundedCornerShape(2.dp)
 
-/** Every section of Stats by its key, for folding them all away at once. */
 private val STAT_SECTIONS = listOf("overview", "years", "months", "weekdays", "hours", "people", "tags", "things", "countries", "cities", "cameras")
 
-/**
- * Which sections of Stats are folded, as the session holds them, and how to fold or open one.
- *
- * @property keys    the folded sections
- * @property toggle  folds or opens the section of that key
- */
 private class Folds(val keys: Set<String>, val toggle: (String) -> Unit)
 
-/** Lines a table shows before "Show all". */
 private const val TABLE_ROWS = 10
 
-/** The least width of a table's count column, so the header and every count line up on the right. */
 private val COUNT_WIDTH = 72.dp
 
-/** The width of a table's share column, room for the longest heading ("Procent", "Anteil"). */
 private val SHARE_WIDTH = 76.dp
 
-/** Bars a ranked chart (people, tags, places...) draws: the rest are in its table. */
 private const val CHART_BARS = 10
 
-/**
- * Stats: the library in numbers, from the phone's own copy of the index - an overview, then
- * photos per year, month, day of the week and hour, then people, tags, things, places and
- * cameras. Each section is a chart with its table under it; a line that names a filter opens the
- * grid on those photos, as an album did.
- */
 @Composable
 fun StatsScreen(state: UiState, viewModel: AppViewModel) {
     val p = LocalPalette.current
@@ -170,20 +153,12 @@ fun StatsScreen(state: UiState, viewModel: AppViewModel) {
     }
 }
 
-/**
- * A section heading, drawn like a month on the grid and like the filter groups, that folds its
- * section away on a tap. Sections start open; which are folded lasts for the whole session.
- */
 private fun LazyListScope.section(key: String, titleRes: Int, folded: Folds) {
     item(key = "h:$key") {
         FilterGroup(stringResource(titleRes), active = 0, open = key !in folded.keys, onToggle = { folded.toggle(key) }) {}
     }
 }
 
-/**
- * Photos per year, per month of the year, per day of the week and per hour of the day: a column
- * chart each with its table. Only the years open photos; the others have no filter to open.
- */
 private fun LazyListScope.timeSections(
     stats: LibraryStats,
     locale: Locale,
@@ -242,10 +217,6 @@ private fun LazyListScope.timeSections(
     }
 }
 
-/**
- * A ranked section - people, tags, things, countries, cities, cameras: a bar per value for the
- * [CHART_BARS] biggest, then the table of all of them. Nothing is drawn for an empty list.
- */
 private fun LazyListScope.ranked(
     key: String,
     titleRes: Int,
@@ -264,11 +235,6 @@ private fun LazyListScope.ranked(
     table(key, column, rows, total, locale, expanded, open)
 }
 
-/**
- * A table under a chart: the value, how many photos, and their share of the library. [all] shows
- * every line at once (months, days, hours, whose empty lines the chart alone shows); otherwise
- * the first [TABLE_ROWS] and a "Show all".
- */
 private fun LazyListScope.table(
     key: String,
     column: Int,
@@ -304,10 +270,6 @@ private fun LazyListScope.table(
     item(key = "gap:$key") { Spacer(Modifier.height(12.dp)) }
 }
 
-/**
- * The overview: tiles, two to a row, each a number over what it counts, and for the counts of
- * photos their share of the library.
- */
 @Composable
 private fun Overview(stats: LibraryStats, locale: Locale) {
     val context = LocalContext.current
@@ -332,7 +294,6 @@ private fun Overview(stats: LibraryStats, locale: Locale) {
     }
 }
 
-/** One overview tile: the number big, what it counts under it, and its share when it has one. */
 @Composable
 private fun Tile(value: String, label: String, part: String?, modifier: Modifier) {
     val p = LocalPalette.current
@@ -349,12 +310,6 @@ private fun Tile(value: String, label: String, part: String?, modifier: Modifier
     }
 }
 
-/**
- * A column per value, drawn on one canvas: the bars in the accent, a hairline at the top with the
- * biggest count over it, and the labels under the bars. A label is drawn only where it fits: when
- * they are too many for the width, every second (third, ...) one is, so none ever overlaps another
- * or leaves the chart. [onTap] gets the index of the column tapped, when columns open anything.
- */
 @Composable
 private fun ColumnChart(values: List<Int>, labels: List<String>, locale: Locale, description: String, onTap: ((Int) -> Unit)?) {
     if (values.isEmpty()) return
@@ -407,16 +362,11 @@ private fun ColumnChart(values: List<Int>, labels: List<String>, locale: Locale,
     }
 }
 
-/** Every how many columns a label goes, so each has at least [columnsPerLabel] columns of room. */
 private fun labelStep(columnsPerLabel: Float): Int {
     val needed = kotlin.math.ceil(columnsPerLabel.toDouble()).toInt().coerceAtLeast(1)
     return listOf(1, 2, 3, 4, 6, 8, 12).firstOrNull { it >= needed } ?: needed
 }
 
-/**
- * The biggest values of a ranked section as horizontal bars: the name, the bar, the count. A
- * name too long for its share of the width ends in an ellipsis; the table under it has it whole.
- */
 @Composable
 private fun BarChart(rows: List<StatRow>, locale: Locale, open: (StatRow) -> Unit) {
     val p = LocalPalette.current
@@ -456,7 +406,6 @@ private fun BarChart(rows: List<StatRow>, locale: Locale, open: (StatRow) -> Uni
     }
 }
 
-/** The header of a table: what the lines are, photos, share. */
 @Composable
 private fun TableHeader(name: String) {
     val p = LocalPalette.current
@@ -487,7 +436,6 @@ private fun TableHeader(name: String) {
     }
 }
 
-/** One line of a table; a line that names a filter opens its photos and says so with an arrow. */
 @Composable
 private fun TableRow(row: StatRow, total: Int, locale: Locale, open: (StatRow) -> Unit) {
     val p = LocalPalette.current
@@ -528,7 +476,6 @@ private fun TableRow(row: StatRow, total: Int, locale: Locale, open: (StatRow) -
     }
 }
 
-/** [count] as a share of [total], whole percents, "<1%" for a share too small to round up to one. */
 private fun share(count: Int, total: Int, locale: Locale): String {
     val format = NumberFormat.getPercentInstance(locale).apply { maximumFractionDigits = 0 }
     if (total <= 0 || count <= 0) return format.format(0)

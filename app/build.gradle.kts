@@ -17,9 +17,6 @@ android {
     namespace = "com.opensolr.photos"
     compileSdk = 36
 
-    // Every language travels in the bundle. The app has a language of its own in Me, and a store
-    // that splits a bundle by language delivers only the phone's own: choosing any other would
-    // then fall back to English until the missing one was downloaded (Cip, 2026-09-20).
     bundle {
         language {
             enableSplit = false
@@ -41,9 +38,7 @@ android {
                 storePassword = signingProperties.getProperty("storePassword")
                 keyAlias = signingProperties.getProperty("keyAlias")
                 keyPassword = signingProperties.getProperty("keyPassword")
-                // Every APK signature scheme, so each Android version verifies the release with the
-                // scheme it trusts most: v1 (JAR) for the oldest, v2 and v3 for 7.0+ / 9.0+, v4 for
-                // incremental installs on 11+. Fewer "unverified" prompts at install time.
+
                 enableV1Signing = true
                 enableV2Signing = true
                 enableV3Signing = true
@@ -52,8 +47,6 @@ android {
         }
     }
 
-    // No Google "dependency info" block in the APK: it is encrypted for Google alone, so nobody
-    // else can verify what it says. IzzyOnDroid and F-Droid refuse APKs that carry it.
     dependenciesInfo {
         includeInApk = false
         includeInBundle = false

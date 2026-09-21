@@ -65,20 +65,10 @@ import org.osmdroid.views.overlay.MapEventsOverlay
 import java.util.Locale
 import kotlinx.coroutines.launch
 
-/** The least room kept above the map, for a phone that reports no status bar of its own. */
 private val MIN_TOP_ROOM = 24.dp
 
-/** The least room kept under the buttons, for a gesture bar a phone does not declare. */
 private val MIN_BOTTOM_ROOM = 28.dp
 
-/**
- * The map on which the owner puts a photo somewhere else (Cip, 2026-09-19): the pin stays in the
- * middle and the map moves under it - dragged, brought there by a tap, or found by name in the
- * search box. [start] is where the photo is now, and the map opens there: a photo that already
- * has a place is being corrected, so it starts from its own place, not from the phone's
- * (Cip, 2026-09-20). Without one the map opens where the phone is. [onPick] gets the point under
- * the pin.
- */
 @Composable
 fun PlacePickerDialog(
     start: Pair<Double, Double>?,
@@ -131,8 +121,6 @@ fun PlacePickerDialog(
         }
     }
 
-    // Without a place to start from, the map opens where the phone is rather than on the whole
-    // world, close enough to recognise the streets (Cip, 2026-09-20).
     if (start == null) {
         androidx.compose.runtime.LaunchedEffect(Unit) {
             com.opensolr.photos.media.DevicePlace.now(context)?.let { here ->
@@ -144,12 +132,7 @@ fun PlacePickerDialog(
     }
 
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
-        // The window covers the whole screen, and the room for the system bars is whatever THIS
-        // window is told they are - never less than a finger's worth at the bottom and a status
-        // bar's worth at the top. The floors are the point: a phone that reports nothing (some
-        // do, with gesture navigation) would otherwise put the buttons under its gesture bar,
-        // which is exactly what Cip kept seeing. The same "real inset, never less than this"
-        // rule the photo viewer has used since September.
+
         val view = androidx.compose.ui.platform.LocalView.current
         androidx.compose.runtime.SideEffect {
             val window = (view.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window ?: return@SideEffect
@@ -184,20 +167,12 @@ fun PlacePickerDialog(
             )
             Spacer(Modifier.height(8.dp))
 
-            // Finding a place by name, for a photo taken somewhere the owner cannot drag the
-            // world to (Cip, 2026-09-20). What is typed is asked of the account a moment after
-            // the typing stops, never on every letter; a chosen place moves the map and closes
-            // the list, and nothing is written until "Use this place" is pressed.
             var term by remember { mutableStateOf("") }
             var hits by remember { mutableStateOf<List<com.opensolr.photos.net.PlaceHit>>(emptyList()) }
             var searched by remember { mutableStateOf(false) }
-            // The name of the place that was chosen from the list: it stays written in the box,
-            // so the owner can see where the map went (Cip, 2026-09-20), and it is not searched
-            // for again - the list would reopen under a name that was already settled. Editing
-            // the text makes it a question again.
+
             var picked by remember { mutableStateOf<String?>(null) }
-            // True while the account is being asked, so the box shows that something is on its
-            // way rather than sitting empty (Cip, 2026-09-20).
+
             var searching by remember { mutableStateOf(false) }
             val keyboard = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
             LaunchedEffect(term) {
@@ -220,8 +195,7 @@ fun PlacePickerDialog(
                     hits = viewModel.searchPlaces(q)
                     searched = true
                 } finally {
-                    // A letter typed meanwhile cancels this search; the one that replaces it
-                    // turns the spinner on again, so it is never left spinning.
+
                     searching = false
                 }
             }
@@ -270,9 +244,7 @@ fun PlacePickerDialog(
                             modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
                         )
                     }
-                    // Names that repeat inside the same commune and county - and they do -
-                    // carry their own line underneath with how many live there and where
-                    // exactly it is, so no two choices ever read the same (Cip, 2026-09-20).
+
                     val repeated = hits.groupingBy { it.label }.eachCount().filterValues { it > 1 }.keys
                     hits.forEach { hit ->
                         Column(
@@ -284,7 +256,7 @@ fun PlacePickerDialog(
                                     term = hit.label
                                     hits = emptyList()
                                     searched = false
-                                    // A town is looked at from closer than a county or a country.
+
                                     mapView.controller.setZoom(if (hit.kind == "city") 13.0 else 9.0)
                                     mapView.controller.setCenter(GeoPoint(hit.lat, hit.lon))
                                     centre = hit.lat to hit.lon
@@ -315,8 +287,7 @@ fun PlacePickerDialog(
             Spacer(Modifier.height(8.dp))
             Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
                 AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize().clipToBounds())
-                // The pin's point is its bottom tip, so it is lifted by half its height to put the
-                // tip on the centre of the map.
+
                 Icon(
                     Icons.Filled.Place,
                     contentDescription = null,
@@ -346,11 +317,6 @@ fun PlacePickerDialog(
     }
 }
 
-/**
- * Asks Android, once for all of them, to let the app write the positions given to new photos into
- * their files, and writes them on yes (Cip, 2026-09-19). Returns the function that starts it; the
- * screens that offer it hold one each.
- */
 @Composable
 fun rememberPlaceWriter(viewModel: com.opensolr.photos.ui.AppViewModel): () -> Unit {
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -368,11 +334,6 @@ fun rememberPlaceWriter(viewModel: com.opensolr.photos.ui.AppViewModel): () -> U
     }
 }
 
-/**
- * Keeps a bottom sheet where it is while its form is scrolled (Cip, 2026-09-19): whatever the form
- * does not scroll itself - a pull down at its top, a fling past its end - is taken here, so the
- * sheet under it never moves and never closes on its own. Put before the form's verticalScroll.
- */
 @Composable
 fun rememberNoSheetDrag(): androidx.compose.ui.input.nestedscroll.NestedScrollConnection = remember {
     object : androidx.compose.ui.input.nestedscroll.NestedScrollConnection {

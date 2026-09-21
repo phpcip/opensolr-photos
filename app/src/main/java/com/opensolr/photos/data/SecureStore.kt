@@ -9,15 +9,6 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 
-/**
- * Encrypts the two secrets the app holds (the account API key and the index password) with
- * an AES-256-GCM key generated inside the Android Keystore.
- *
- * The key material never leaves the Keystore, so a copy of the app's private files taken off
- * the phone is useless without the phone itself. Every value is stored as base64 of
- * IV (12 bytes) followed by the ciphertext and its 128-bit tag, and GCM rejects any value that
- * was tampered with.
- */
 object SecureStore {
 
     private const val KEYSTORE = "AndroidKeyStore"
@@ -26,9 +17,6 @@ object SecureStore {
     private const val IV_BYTES = 12
     private const val TAG_BITS = 128
 
-    /**
-     * Returns the app's Keystore key, creating it on first use.
-     */
     private fun key(): SecretKey {
         val keyStore = KeyStore.getInstance(KEYSTORE).apply { load(null) }
         (keyStore.getEntry(KEY_ALIAS, null) as? KeyStore.SecretKeyEntry)?.let { return it.secretKey }
@@ -44,9 +32,6 @@ object SecureStore {
         return generator.generateKey()
     }
 
-    /**
-     * Encrypts [plain] and returns base64(IV + ciphertext + tag).
-     */
     fun encrypt(plain: String): String {
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.ENCRYPT_MODE, key())
@@ -54,11 +39,6 @@ object SecureStore {
         return Base64.encodeToString(sealed, Base64.NO_WRAP)
     }
 
-    /**
-     * Decrypts a value produced by [encrypt]. Returns null when the value is damaged, was
-     * tampered with, or the Keystore key is gone (for example after the app data was restored
-     * onto another phone).
-     */
     fun decrypt(sealed: String): String? = try {
         val bytes = Base64.decode(sealed, Base64.NO_WRAP)
         val cipher = Cipher.getInstance(TRANSFORMATION)

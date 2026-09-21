@@ -2,20 +2,8 @@ package com.opensolr.photos.data
 
 import org.json.JSONObject
 
-/**
- * The signed-in Opensolr account: the email and the account API key returned by /app/token.
- */
 data class Session(val email: String, val apiKey: String)
 
-/**
- * Where the phone's Opensolr Index answers and the credentials it wants.
- *
- * @property indexName    photos_<ANDROID_ID>__dense
- * @property baseUrl      connection_url from get_core_info, e.g. https://fi.solrcluster.com:443/solr/photos_x__dense
- * @property username     HTTP Basic user of the index
- * @property password     HTTP Basic password of the index
- * @property environment  the Opensolr environment (region) the index lives in
- */
 data class IndexConnection(
     val indexName: String,
     val baseUrl: String,
@@ -24,12 +12,6 @@ data class IndexConnection(
     val environment: String,
 )
 
-/**
- * Plan limits and usage of the account, as reported by /app/token and get_account_summary.
- *
- * Sizes are megabytes, exactly as the platform reports them. A limit of 0 for AI requests
- * means the plan has no monthly cap.
- */
 data class AccountLimits(
     val plan: String,
     val vectorAllowed: Boolean,
@@ -43,26 +25,17 @@ data class AccountLimits(
     val bandwidthUsedMb: Double,
     val indexedDocs: Long,
     val refreshedAt: Long,
-    /** What the plan costs per [recurrence], 0 when free or corporate. */
+
     val price: Double = 0.0,
-    /** The billing period as the platform names it: "1 Month", "1 Year", "3 Months". */
+
     val recurrence: String = "",
-    /** The account's API rate limits, so the app paces itself instead of being refused. */
+
     val maxPerMinute: Int = 120,
     val maxPerHour: Int = 1200,
-    /**
-     * How many photos count as ONE metered AI request, as the platform reports it in
-     * get_account_summary (its own config decides it, not the app). Ten by default, which is
-     * what it has been since photos were charged a tenth each; a server that changes the
-     * divisor changes what the owner is told here too.
-     */
+
     val photosPerRequest: Int = 10,
 ) {
 
-    /**
-     * The plan as shown to the owner: the price and its period when there is one, "€2,815 / month",
-     * otherwise the plan's name.
-     */
     val planLabel: String get() {
         if (price <= 0.0) return plan.ifBlank { "Opensolr" }
         val amount = java.text.NumberFormat.getIntegerInstance(java.util.Locale.US).format(Math.round(price))
@@ -76,30 +49,15 @@ data class AccountLimits(
         return "€$amount / $period"
     }
 
-    /**
-     * How many photos the monthly AI allowance covers, or null when the plan has no cap.
-     */
     val photosPerMonth: Int? get() = if (maxAiRequests <= 0) null else maxAiRequests * photosPerRequest
 
-    /**
-     * How many more photos this month's remaining allowance covers, or null when uncapped.
-     */
     val photosLeftThisMonth: Int? get() =
         if (maxAiRequests <= 0) null else ((maxAiRequests - aiRequestsUsed).coerceAtLeast(0)) * photosPerRequest
 
-    /**
-     * True once disk space of the index is used up.
-     */
     val diskFull: Boolean get() = diskLimitMb > 0 && diskUsedMb >= diskLimitMb
 
-    /**
-     * True once the monthly search bandwidth of the index is used up.
-     */
     val bandwidthFull: Boolean get() = bandwidthLimitMb > 0 && bandwidthUsedMb >= bandwidthLimitMb
 
-    /**
-     * Serialises to the JSON kept in preferences.
-     */
     fun toJson(): String = JSONObject()
         .put("plan", plan)
         .put("vector_allowed", vectorAllowed)
@@ -117,11 +75,6 @@ data class AccountLimits(
 
     companion object {
 
-        /**
-         * Reads the limits from a platform JSON object (the `account` block of /app/token, the
-         * `msg` of get_account_summary, or [toJson] output). Missing fields keep [previous]'s
-         * value, so a summary that carries no index count does not erase the one from sign-in.
-         */
         fun fromJson(json: JSONObject, previous: AccountLimits? = null): AccountLimits = AccountLimits(
             plan = json.optString("plan", previous?.plan ?: ""),
             vectorAllowed = if (json.has("vector_allowed")) json.optBoolean("vector_allowed") else previous?.vectorAllowed ?: false,
@@ -135,40 +88,23 @@ data class AccountLimits(
             bandwidthUsedMb = if (json.has("bandwidth_used_mb")) json.optDouble("bandwidth_used_mb") else previous?.bandwidthUsedMb ?: 0.0,
             indexedDocs = if (json.has("indexed_docs")) json.optLong("indexed_docs") else previous?.indexedDocs ?: 0L,
             refreshedAt = if (json.has("refreshed_at")) json.optLong("refreshed_at") else System.currentTimeMillis(),
-            // The platform formats the price with thousands separators ("2,815.20"): a number again here.
+
             price = if (json.has("price")) json.optString("price").replace(",", "").toDoubleOrNull() ?: previous?.price ?: 0.0 else previous?.price ?: 0.0,
             recurrence = if (json.has("recurrence")) json.optString("recurrence") else previous?.recurrence ?: "",
             maxPerMinute = if (json.has("max_per_minute")) json.optInt("max_per_minute").coerceAtLeast(1) else previous?.maxPerMinute ?: 120,
             maxPerHour = if (json.has("max_per_hour")) json.optInt("max_per_hour").coerceAtLeast(1) else previous?.maxPerHour ?: 1200,
-            // Never zero, or the photo counts below would divide the allowance into nothing.
+
             photosPerRequest = if (json.has("photos_per_request")) json.optInt("photos_per_request").coerceAtLeast(1) else previous?.photosPerRequest ?: 10,
         )
     }
 }
 
-/**
- * How often the scheduled Re-Sync runs.
- */
 enum class SyncSchedule(val days: Long) {
     DAILY(1),
     WEEKLY(7),
     MONTHLY(30),
 }
 
-/**
- * The result of the last sync run, kept so the Sync screen can show it after the app restarts.
- *
- * @property finishedAt  wall-clock millis when the run ended
- * @property status      ok, failed, stopped_quota, stopped_plan_limit, sign_in_required
- * @property added       photos written to the index
- * @property deleted     documents removed because the photo is no longer on the phone
- * @property failed      photos that could not be read and were skipped
- * @property localCount  photos found in the chosen folders
- * @property indexCount  documents the index held before the run
- * @property indexAfter  documents the index holds after the run (what the Sync screen shows)
- * @property message     human-readable detail for failures
- * @property recreated   true when the index had disappeared and was created again
- */
 data class SyncReport(
     val finishedAt: Long,
     val status: String,
@@ -182,9 +118,6 @@ data class SyncReport(
     val indexAfter: Int = 0,
 ) {
 
-    /**
-     * Serialises to the JSON kept in preferences.
-     */
     fun toJson(): String = JSONObject()
         .put("finished_at", finishedAt)
         .put("status", status)
@@ -200,9 +133,6 @@ data class SyncReport(
 
     companion object {
 
-        /**
-         * Parses [toJson] output; null when the value is missing or damaged.
-         */
         fun fromJson(raw: String?): SyncReport? = try {
             raw?.let {
                 val json = JSONObject(it)

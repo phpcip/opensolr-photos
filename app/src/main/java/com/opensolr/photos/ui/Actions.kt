@@ -19,30 +19,17 @@ import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
 
-/**
- * Things the UI hands off to other apps, and the formats it shows numbers and dates in.
- */
-/**
- * One group of the grid as the phone knows it from its own copy of the index: a year, a month in
- * it, or a day in that month, with how many photos it holds and the stretch of time it covers.
- */
 data class DateGroup(
     val level: Int,
-    /** What the group is, unchanging, and what its folded state is kept by. */
+
     val name: String,
-    /** What the heading says. */
+
     val text: String,
     val count: Int,
     val from: Long,
     val to: Long,
 )
 
-/**
- * One group of a search laid out by date, place, person or tag (Cip, 2026-09-19): what it is
- * ([name], unique and unchanging, also what its folded state is kept by), what its heading says,
- * how deep it sits, and every photo of the search in it, best match first. Groups come in the
- * order they are drawn, each one's children right after it.
- */
 data class ResultGroup(
     val level: Int,
     val name: String,
@@ -50,20 +37,18 @@ data class ResultGroup(
     val ids: List<String>,
 )
 
-/** The ways the results of a search can be laid out; [key] is what is stored. */
 enum class GroupBy(val key: String, val labelRes: Int) {
     RELEVANCE("relevance", com.opensolr.photos.R.string.group_relevance),
     DATE("date", com.opensolr.photos.R.string.group_date),
     PLACE("place", com.opensolr.photos.R.string.group_place),
     PEOPLE("people", com.opensolr.photos.R.string.group_people),
     TAGS("tags", com.opensolr.photos.R.string.group_tags),
-    // The folder a photo sits in and the camera that took it (Cip, 2026-09-20): the two facts a
-    // library is sorted by that the other four do not cover.
+
     FOLDER("folder", com.opensolr.photos.R.string.group_folder),
     CAMERA("camera", com.opensolr.photos.R.string.group_camera);
 
     companion object {
-        /** The stored [key] back to its value; anything unknown is the default. */
+
         fun of(key: String?): GroupBy = entries.firstOrNull { it.key == key } ?: RELEVANCE
     }
 }
@@ -74,9 +59,6 @@ object Actions {
     const val DASHBOARD_URL = "https://opensolr.com/admin/solr_manager/dashboard"
     const val PROJECT_URL = "https://opensolr.com/opensolr-photos"
 
-    /**
-     * Opens [url] in the default browser, in a new tab.
-     */
     fun openUrl(context: Context, url: String) {
         try {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -85,17 +67,9 @@ object Actions {
         }
     }
 
-    /**
-     * The control panel page of the index on opensolr.com.
-     */
     fun indexPanelUrl(indexName: String): String =
         "https://opensolr.com/admin/solr_manager/tools/" + Uri.encode(indexName)
 
-    /**
-     * Opens a result in the phone's gallery app (Google Photos, or the phone's own gallery).
-     * When the MediaStore id stored in the index went stale, the photo is looked up again by
-     * its path; when it is gone from the phone, the user is told the next Re-Sync removes it.
-     */
     fun openPhoto(context: Context, hit: PhotoHit) {
         val mediaId = when {
             hit.mediaId > 0 && MediaScanner.exists(context, hit.mediaId) -> hit.mediaId
@@ -116,31 +90,21 @@ object Actions {
         }
     }
 
-    /**
-     * The MediaStore content URIs of [hits] that are still on the phone, looked up by path when
-     * the id stored in the index went stale.
-     */
     fun contentUris(context: Context, hits: List<PhotoHit>): List<Uri> {
         if (hits.isEmpty()) return emptyList()
-        // Which of the remembered media ids still exist, asked in ONE query for the whole batch,
-        // not one per photo: tagging a thousand photos used to mean a thousand round trips to
-        // MediaStore before a single word was written (Cip, 2026-09-18).
+
         val wanted = hits.mapNotNull { it.mediaId.takeIf { id -> id > 0 } }.toSet()
         val alive = MediaScanner.existing(context, wanted)
         return hits.mapNotNull { hit ->
             val mediaId = when {
                 hit.mediaId > 0 && hit.mediaId in alive -> hit.mediaId
-                // Only a photo whose row has moved costs a lookup of its own, by path.
+
                 else -> MediaScanner.findByPath(context, hit.path)?.mediaId
             }
             mediaId?.let { ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, it) }
         }
     }
 
-    /**
-     * The same as [contentUris], but keyed by photo, for a caller that has to write to each file in
-     * turn and must not look each one up on its own.
-     */
     fun contentUrisByPhoto(context: Context, hits: List<PhotoHit>): Map<String, Uri> {
         if (hits.isEmpty()) return emptyMap()
         val wanted = hits.mapNotNull { it.mediaId.takeIf { id -> id > 0 } }.toSet()
@@ -156,10 +120,6 @@ object Actions {
         return out
     }
 
-    /**
-     * Hands the selected photos to whatever the user shares with. The photos themselves are
-     * shared, straight from the phone; nothing goes through Opensolr.
-     */
     fun sharePhotos(context: Context, hits: List<PhotoHit>) {
         val uris = ArrayList(contentUris(context, hits))
         if (uris.isEmpty()) {
@@ -180,11 +140,6 @@ object Actions {
         }
     }
 
-    /**
-     * Asks Android to delete [uris]. From Android 11 the system itself shows the confirmation
-     * and does the deleting, so the app never removes a photo on its own; below that, the app
-     * deletes what it has permission to and returns how many went.
-     */
     fun deleteRequest(context: Context, uris: List<Uri>): IntentSender? {
         if (uris.isEmpty()) return null
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
@@ -194,16 +149,13 @@ object Actions {
                 try {
                     context.contentResolver.delete(it, null, null)
                 } catch (e: Exception) {
-                    // A photo another app owns cannot be deleted without the system dialog.
+
                 }
             }
             null
         }
     }
 
-    /**
-     * Opens a "lat,lon" location in the maps app.
-     */
     fun openMap(context: Context, location: String) {
         try {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=" + Uri.encode(location))).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
@@ -212,12 +164,8 @@ object Actions {
         }
     }
 
-    /**
-     * mm/dd/yyyy hh:mm:ss in the phone's time zone, from epoch millis.
-     */
     fun formatDate(millis: Long): String = stamp.get()!!.format(millis)
 
-    /** One formatter per thread, kept: building one per call showed up on the grid. */
     private val stamp = ThreadLocal.withInitial { SimpleDateFormat("MM/dd/yyyy HH:mm:ss", Locale.US) }
     private val monthYear = LocalFormat("MMM'.' yyyy", "MMMyyyy")
     private val yearOnly = ThreadLocal.withInitial { SimpleDateFormat("yyyy", Locale.US) }
@@ -225,12 +173,6 @@ object Actions {
     private val monthKeyFormat = ThreadLocal.withInitial { SimpleDateFormat("yyyy-MM", Locale.US) }
     private val fullDay = LocalFormat("EEE'.' MMM'.' d yyyy", "EEEMMMdyyyy")
 
-    /**
-     * A heading's date format in the app's language (Cip, 2026-09-20): English keeps the exact
-     * wording Cip chose ("Jun. 2026", "Sun. Mar. 15 2026"); every other language gets its own
-     * order and abbreviations from Android for the same fields, where a dot after an abbreviation
-     * that already ends in one would read "Jan.. 2026". One formatter per thread and language.
-     */
     private class LocalFormat(private val english: String, private val skeleton: String) {
         private val held = ThreadLocal<Pair<Locale, SimpleDateFormat>>()
 
@@ -244,20 +186,11 @@ object Actions {
         }
     }
 
-    /**
-     * mm/dd/yyyy hh:mm:ss in the phone's time zone, from a Solr UTC date.
-     */
     fun formatSolrDate(value: String?): String? = solrDateMillis(value)?.let { formatDate(it) }
 
-    /**
-     * A Solr UTC date as epoch millis, or null when it is missing or malformed.
-     */
     fun solrDateMillis(value: String?): Long? {
         if (value.isNullOrBlank()) return null
-        // Read digit by digit instead of through a date formatter. This is called for every photo
-        // on the grid, on every rebuild of the rows, and a formatter built and thrown away each
-        // time was the single most expensive thing in drawing a big library (Cip, 2026-09-18).
-        // Shape: yyyy-MM-ddTHH:mm:ssZ, with optional fractional seconds before the Z.
+
         if (value.length < 20 || value[4] != '-' || value[7] != '-' || value[10] != 'T' ||
             value[13] != ':' || value[16] != ':'
         ) {
@@ -281,8 +214,7 @@ object Actions {
         if (year < 0 || month < 1 || month > 12 || day < 1 || day > 31 || hour < 0 || minute < 0 || second < 0) {
             return legacyDateMillis(value)
         }
-        // Days since the epoch, by the civil-from-days algorithm: no calendar object, no time zone
-        // lookup, no allocation.
+
         val y = if (month <= 2) year - 1 else year
         val era = (if (y >= 0) y else y - 399) / 400
         val yoe = y - era * 400
@@ -292,9 +224,6 @@ object Actions {
         return days * 86_400_000L + hour * 3_600_000L + minute * 60_000L + second * 1000L
     }
 
-    /**
-     * The slow path, for a date that is not in the shape above: a formatter, as before.
-     */
     private fun legacyDateMillis(value: String): Long? = try {
         SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
             .parse(value.replace(Regex("\\.\\d+Z$"), "Z"))?.time
@@ -302,11 +231,6 @@ object Actions {
         null
     }
 
-    /**
-     * The heading a photo taken at [millis] belongs under, in the phone's time zone: the day
-     * for the last week ("Today", "Yesterday", "Mon. Sep. 14 2026") and the month before that
-     * ("Jun. 2026"). Every heading carries its year, so none can be read as another year's.
-     */
     fun dateHeading(millis: Long): String {
         val now = Calendar.getInstance()
         val taken = Calendar.getInstance().apply { timeInMillis = millis }
@@ -322,11 +246,6 @@ object Actions {
         }
     }
 
-    /**
-     * True when [millis] falls in the stretch [dateHeading] already names by the day itself -
-     * Today, Yesterday, or a weekday in the last six days. Those headings are days, so they get
-     * no days of their own underneath.
-     */
     fun isRecentDay(millis: Long): Boolean {
         val startOfToday = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0); set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
@@ -334,37 +253,16 @@ object Actions {
         return millis >= startOfToday || (startOfToday - millis) / 86_400_000L < 6
     }
 
-    /**
-     * The day a photo belongs to, as a key that never changes wording: 2025-09-16. The heading
-     * on screen is [dayHeading]; this is what the folded/selected state is kept by, because a
-     * key built from the words on screen breaks the moment the words change.
-     */
     fun dayKey(millis: Long): String = dayKeyFormat.get()!!.format(millis)
 
-    /**
-     * A day, whole: "Sun. Mar. 15 2026" (Cip, 2026-09-18). A heading scrolled far from its
-     * month and year still says which day it is.
-     */
     fun dayHeading(millis: Long): String = fullDay.get()!!.format(millis)
 
-    /**
-     * The year a photo belongs to, as the heading says it and as its key: "2016".
-     */
     fun yearHeading(millis: Long): String = yearOnly.get()!!.format(millis)
 
-    /**
-     * A month with its year: "Jun. 2026" (Cip, 2026-09-18).
-     */
     fun monthHeading(millis: Long): String = monthYear.get()!!.format(millis)
 
-    /**
-     * The month a photo belongs to, as a key that never changes wording: 2016-01.
-     */
     fun monthKey(millis: Long): String = monthKeyFormat.get()!!.format(millis)
 
-    /**
-     * The whole year [millis] falls in, by the same reckoning as [daySpan].
-     */
     fun yearSpan(millis: Long): Pair<Long, Long> {
         val start = java.util.Calendar.getInstance().apply {
             timeInMillis = millis
@@ -378,11 +276,6 @@ object Actions {
         return start.timeInMillis to end.timeInMillis - 1000
     }
 
-    /**
-     * The whole day [millis] falls in, from its first instant to its last, in the phone's own time
-     * zone - the same one the headings are written in, so a tick on "Tuesday 16" takes exactly the
-     * photos written under it.
-     */
     fun daySpan(millis: Long): Pair<Long, Long> {
         val start = java.util.Calendar.getInstance().apply {
             timeInMillis = millis
@@ -395,9 +288,6 @@ object Actions {
         return start.timeInMillis to end.timeInMillis - 1000
     }
 
-    /**
-     * The whole month [millis] falls in, by the same reckoning as [daySpan].
-     */
     fun monthSpan(millis: Long): Pair<Long, Long> {
         val start = java.util.Calendar.getInstance().apply {
             timeInMillis = millis
@@ -411,9 +301,6 @@ object Actions {
         return start.timeInMillis to end.timeInMillis - 1000
     }
 
-    /**
-     * A count short enough to always fit a line of buttons: 842, 1.2K, 23K, 1.4M (Cip, 2026-09-17).
-     */
     fun formatCompact(value: Long): String = when {
         value < 1_000 -> value.toString()
         value < 10_000 -> String.format(Locale.US, "%.1fK", value / 1_000.0).replace(".0K", "K")
@@ -422,15 +309,8 @@ object Actions {
         else -> "${value / 1_000_000}M"
     }
 
-    /**
-     * 12,345
-     */
     fun formatCount(value: Long): String = NumberFormat.getIntegerInstance(Locale.US).format(value)
 
-    /**
-     * A file's size in the unit that suits it, kilobytes at the smallest: "812 KB", "4.2 MB",
-     * "1.49 GB". Never "10000 KB" (Cip, 2026-09-16).
-     */
     fun formatFileSize(bytes: Long): String {
         if (bytes <= 0) return ""
         val kb = bytes / 1024.0
@@ -445,9 +325,6 @@ object Actions {
         }
     }
 
-    /**
-     * Megabytes as "812 MB" or "1.4 GB".
-     */
     fun formatMb(mb: Double): String =
         if (mb >= 1000) String.format(Locale.US, "%.1f GB", mb / 1000) else String.format(Locale.US, "%.0f MB", mb)
 }

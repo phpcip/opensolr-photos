@@ -205,9 +205,6 @@ import androidx.compose.ui.unit.IntOffset
 
 private val Corner = RoundedCornerShape(2.dp)
 
-/**
- * The main screen: search box, filters, and the photo grid.
- */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SearchScreen(state: UiState, viewModel: AppViewModel) {
@@ -217,15 +214,12 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     val latestState by androidx.compose.runtime.rememberUpdatedState(state)
     var showFilters by remember { mutableStateOf(false) }
     var details by remember { mutableStateOf<PhotoHit?>(null) }
-    // The photo opened full screen, from which the results are swiped through in their own order.
+
     var viewing by remember { mutableStateOf<PhotoHit?>(null) }
     val view = LocalView.current
-    // New photos were given the phone's position by the sync, which runs where Android lets no app
-    // write a file: the question is asked here, once, the next time the photos are on screen
-    // (Cip, 2026-09-19). A no is not asked again this session; Me keeps the button.
+
     val writePlaces = rememberPlaceWriter(viewModel)
-    // Counted again whenever the photos come back on screen: the sync that gave the places may have
-    // run while the app was away.
+
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycle) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
@@ -237,26 +231,17 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     LaunchedEffect(state.placesToWrite, state.placesDeclined) {
         if (state.placesToWrite > 0 && !state.placesDeclined) writePlaces()
     }
-    // Read here, on the screen, where the system bars are reported correctly; the viewer runs in
-    // a dialog window, where some phones report nothing at all.
+
     val systemBars = WindowInsets.systemBars.asPaddingValues()
     val topInset = systemBars.calculateTopPadding()
     val bottomInset = systemBars.calculateBottomPadding()
     var editing by remember { mutableStateOf<PhotoHit?>(null) }
-    // Open while tags are being put on every photo of the view at once.
+
     var bulkTagging by remember { mutableStateOf(false) }
     val gridState = rememberLazyGridState()
-    // Two ways to cut the grid, both from what is already on screen. Browsing, the results come
-    // back newest first, so the cut is the day or the month: "Today", "Yesterday", "September".
-    // On a typed search the order is the score - Fresh only boosts it - so the cut is the biggest
-    // drop in score, where the vector's near misses begin.
-    // Grouped by the search that produced the hits, not by the text being typed: typing alone
-    // never regroups the grid; Enter (a new search) does.
-    // The library's skeleton belongs to plain browsing only: a duplicates stop or the skipped list
-    // with nothing in it showed the whole library under its "nothing here" line (Cip, 2026-09-19).
-    // The headings the grid writes itself, in the app's language; their keys stay in English.
+
     val gridWords = GridWords(stringResource(R.string.best_matches), stringResource(R.string.also_similar), stringResource(R.string.of_the_same))
-    // Read out by the accessibility services for the action that starts picking photos.
+
     val selectLabel = stringResource(R.string.cd_select_photo)
     val rows = remember(state.hits, state.searchedQuery, state.duplicateGroups, state.collapsedHeadings, state.skeleton, state.duplicatesMode, state.skippedMode, state.resultGroups) {
         if (state.resultGroups.isNotEmpty() && (!state.duplicatesMode || state.similarToId != null) && !state.skippedMode) {
@@ -265,24 +250,16 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             buildSkeletonRows(state.skeleton, state.hits, state.collapsedHeadings)
         } else buildRows(state.hits, byDate = state.searchedQuery.isBlank(), groups = state.duplicateGroups, collapsed = state.collapsedHeadings, words = gridWords)
     }
-    // The search box is out of the way until asked for: the magnifier in the header opens it.
-    // Active filters keep it on screen, so the filters button next to it stays reachable.
+
     var searchOpen by remember { mutableStateOf(false) }
-    // Only the magnifier shows and hides the search line (Cip, 2026-09-15): applied filters
-    // stay visible on their own row of pills, so they no longer hold the line open.
-    // A query that is actually in force keeps it on screen too (Cip, 2026-09-16): coming back
-    // from albums, duplicates or the similar view, the words the results answer to must be
-    // visible, not only remembered. Closing with the magnifier clears the query, so the line
-    // still goes away on the second tap.
+
     val searchBarVisible = searchOpen || state.query.isNotBlank()
     val searchFocus = remember { FocusRequester() }
-    // The autocomplete closes on any tap outside the search line and its list, and comes back
-    // with the next keystroke.
+
     var suggestionsHidden by remember { mutableStateOf(false) }
     LaunchedEffect(state.query) { suggestionsHidden = false }
     val outside = com.opensolr.photos.ui.rememberOutsideTap(onOutside = { suggestionsHidden = true })
-    // Deleting is Android's job: from Android 11 the system shows its own confirmation and does
-    // the removing, and only when it comes back OK are the photos dropped from the index too.
+
     var pendingDelete by remember { mutableStateOf(emptySet<String>()) }
     var confirmDelete by remember { mutableStateOf(false) }
     val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
@@ -293,8 +270,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     val deleteSelected = {
         val chosen = viewModel.photosToTag()
         pendingDelete = chosen.map { it.id }.toSet()
-        // Finding the files of a whole selection asks the phone's media store about every one of
-        // them, so it is done off the screen's thread (Cip, 2026-09-18).
+
         deleteScope.launch {
             val sender = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                 Actions.deleteRequest(context, Actions.contentUris(context, chosen))
@@ -302,7 +278,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             if (sender != null) {
                 deleteLauncher.launch(IntentSenderRequest.Builder(sender).build())
             } else {
-                // Below Android 11 nothing asks on the app's behalf, so the app asked first.
+
                 viewModel.removeDeleted(pendingDelete)
                 pendingDelete = emptySet()
             }
@@ -313,39 +289,22 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     val nearEnd by remember(rows) {
         derivedStateOf {
             val last = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            // Halfway through the last page loaded, not at its very end: the next page is on its
-            // way (or already held in the cache) before the owner reaches it (Cip, 2026-09-17).
-            // Only while the last group is open: a folded group at the bottom keeps the list
-            // short whatever arrives, so every page loaded would leave it "near the end" again
-            // and the pages were fetched one after another to the end of the results, a tap
-            // for each (Cip, 2026-09-17). Opening that group resumes the loading.
+
             rows.lastOrNull() is GridRow.Photo && last >= gridState.layoutInfo.totalItemsCount - PREFETCH_REMAINING
         }
     }
-    // The grid is taken where the view model says, once per change it announces: the place this
-    // exact search was last left at, or the top for a search never seen before. A new search, an
-    // album, duplicates and the similar photos each have their own place, so leaving one and
-    // coming back lands where it was, not at the top (Cip, 2026-09-16).
+
     var restored by remember { mutableStateOf(false) }
     LaunchedEffect(state.restoreGeneration) {
         if (rows.isEmpty()) return@LaunchedEffect
-        // By the row that was at the top, not by its number: deleting photos or folding a group
-        // makes the list shorter, and a remembered number then points somewhere else - which is
-        // how a delete used to land the grid in a random place (Cip, 2026-09-16). The number is
-        // only the fallback, for when that row is gone from the list altogether.
+
         val byKey = state.gridKey?.let { key -> rows.indexOfFirst { it.key == key } }?.takeIf { it >= 0 }
-        // The row is gone and the number points past the end of a shorter list: that is not "where
-        // the owner was", it is the bottom of something else, so the grid goes to the top instead
-        // (Cip, 2026-09-18).
+
         val target = byKey ?: state.gridIndex.takeIf { it <= rows.lastIndex } ?: 0
         gridState.scrollToItem(target.coerceAtLeast(0), if (byKey != null) state.gridOffset else 0)
         restored = true
     }
-    // Written back only after the grid has been put where it belongs, so the restore is never
-    // overwritten by the 0 of a grid that has not been placed yet.
-    // The key is read from the rows on screen now, not from the list this effect started with:
-    // it outlives every reload, and the old list's row at the same number is another photo, so
-    // the grid was put back on the wrong one after each sync (Cip, 2026-09-18).
+
     val currentRows by rememberUpdatedState(rows)
     LaunchedEffect(restored) {
         if (!restored) return@LaunchedEffect
@@ -357,10 +316,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             viewModel.search(reset = false)
         }
     }
-    // With the last group folded, the prefetch above stays off (else every page arriving left
-    // the short list at its end again and the pages chained). The owner still gets more by
-    // scrolling against the bottom: one page per scroll that reaches it, never on its own
-    // (Cip, 2026-09-17).
+
     LaunchedEffect(gridState) {
         snapshotFlow { gridState.isScrollInProgress && !gridState.canScrollForward }
             .collect { pushedAtBottom ->
@@ -373,15 +329,12 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
 
     Box(with(outside) { Modifier.fillMaxSize().root() }) {
     Column(Modifier.fillMaxSize()) {
-        // The header is the menu and only the menu (Cip, 2026-09-15): the app's logo first (the
-        // Opensolr dashboard in the default browser), then every screen and action, each a small
-        // bordered button with its label. No title; "15 selected" lives over the photos.
+
         Row(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            // Order, left to right (Cip, 2026-09-21): Me, Sync, Stats, Map, Search. Albums is off
-            // the header; its screen stays, and a filter reaches the same photos.
+
             HeaderItem(stringResource(R.string.nav_me), onClick = { viewModel.open(Screen.Account) }) {
                 Icon(Icons.Filled.AccountCircle, contentDescription = stringResource(R.string.cd_account), tint = p.ink, modifier = Modifier.size(20.dp))
             }
@@ -394,10 +347,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             HeaderItem(stringResource(R.string.nav_map), onClick = { viewModel.openMap() }) {
                 Icon(painterResource(R.drawable.ic_map), contentDescription = stringResource(R.string.nav_map), tint = p.ink, modifier = Modifier.size(20.dp))
             }
-            // Nothing here for picking at all: a long press starts it and unticking the last photo
-            // ends it (Cip, 2026-09-18).
-            // Search: tapping again puts the line away and clears the query. In the accent while
-            // open, and while closed with filters applied: something is narrowing the photos.
+
             HeaderItem(stringResource(R.string.nav_search), active = searchOpen || state.filters.count > 0, onClick = {
                 if (searchOpen) {
                     searchOpen = false
@@ -411,8 +361,6 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             }
         }
 
-        // One compact line: the query on the left, the filters button on the right, like a
-        // search widget. Opened from the header, it takes the keyboard straight away.
         if (searchBarVisible) {
             LaunchedEffect(searchOpen) { if (searchOpen) searchFocus.requestFocus() }
             Row(
@@ -435,8 +383,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                         .weight(1f)
                         .focusRequester(searchFocus)
                         .onPreviewKeyEvent { event ->
-                            // A hardware Enter is consumed here so that its key-up never reaches the
-                            // next focusable control (it used to "click" the Sync button).
+
                             if (event.key != Key.Enter && event.key != Key.NumPadEnter) return@onPreviewKeyEvent false
                             if (event.type == KeyEventType.KeyUp) { keyboard?.hide(); viewModel.search(reset = true) }
                             true
@@ -465,7 +412,6 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             }
         }
 
-        // Autocomplete: labels containing what was typed, shown under the search box.
         if (searchBarVisible && !suggestionsHidden && state.suggestions.isNotEmpty() && state.query.isNotBlank()) {
             Column(
                 with(outside) { Modifier.keep("suggestions") }
@@ -492,7 +438,6 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             Spacer(Modifier.height(8.dp))
         }
 
-        // What is filtered right now, removable; the button itself is on the buttons line.
         if (state.filters.count > 0) {
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
@@ -503,25 +448,23 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         }
 
         Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-            // While selecting, this line says how many are picked: the header stays the menu.
+
             val countText = when {
-                // Compact like the result count, with a tick before it instead of the word (Cip,
-                // 2026-09-17): "34 selected" did not fit beside the buttons.
+
                 state.selecting -> Actions.formatCompact(state.selectedIds.size.toLong())
                 state.searching && state.hits.isEmpty() -> stringResource(R.string.count_searching)
-                // Anchored to one photo: one group, so say what it is like instead of counting groups.
+
                 state.skippedMode ->
                     pluralStringResource(R.plurals.unreadable_count, state.hits.size, Actions.formatCount(state.hits.size.toLong()))
                 state.duplicatesMode && state.similarToId != null ->
                     stringResource(R.string.similar_count, Actions.formatCompact(state.hits.size.toLong()))
                 state.duplicatesMode ->
-                    // Only the photos: how many groups they fall into interests nobody (Cip, 2026-09-17).
+
                     pluralStringResource(R.plurals.photos_count, state.hits.size, Actions.formatCount(state.hits.size.toLong()))
-                // Compact, so it always fits beside the buttons and nothing moves (Cip, 2026-09-17).
+
                 else -> Actions.formatCompact(state.numFound)
             }
-            // While selecting, a tap on the tick and the count ends the selection: every tick goes
-            // and the checkboxes with it (Cip, 2026-09-18). Outside a selection it is only a count.
+
             Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
                 Row(
                     modifier = if (state.selecting) Modifier.combinedClickable(onClick = {
@@ -537,14 +480,9 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                     Text(countText, style = MaterialTheme.typography.bodySmall, color = if (state.selecting) p.accent else p.muted)
                 }
             }
-            // AI: on, the search blends meaning with words; off, it matches words only. The same
-            // switch search.opensolr.com carries, and it only means anything once something is
-            // typed - browsing has no query to search by meaning (Cip, 2026-09-16). No border
-            // around it: a switch already looks like something to touch, and a frame would make
-            // it read as one more of the buttons beside it.
+
             if (state.query.isNotBlank()) {
-                // Greyed out and off where search by meaning cannot run: no vector search on the
-                // plan, or no AI requests left this month (Cip, 2026-09-17).
+
                 val aiUsable = state.account?.let { a -> a.vectorAllowed && (a.maxAiRequests <= 0 || a.aiRequestsUsed < a.maxAiRequests) } == true
                 Text(
                     stringResource(R.string.ai),
@@ -568,11 +506,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 )
                 Spacer(Modifier.width(2.dp))
             }
-            // How the results are laid out: by best match, or in groups by date, place, people or
-            // tags (Cip, 2026-09-19), right after the AI switch, which stays first. Only for a search
-            // or filtered view; browsing is by date.
-            // Everywhere except the duplicates, whose groups are the point, and the photos the
-            // phone could not read. Plain browsing has no "best match": it is by date.
+
             if (!state.skippedMode && (!state.duplicatesMode || state.similarToId != null)) {
                 val browsing = !state.duplicatesMode && state.query.isBlank() && state.filters.count == 0
                 GroupByButton(
@@ -581,8 +515,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                     onPick = { viewModel.setGroupBy(it) },
                 )
             }
-            // Filters, moved here from the search line so they are there without opening the
-            // search (Cip, 2026-09-17); the number of filters in force rides on the button.
+
             IconAction(
                 icon = R.drawable.ic_filters,
                 label = stringResource(R.string.filters),
@@ -590,15 +523,14 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 badge = state.filters.count,
                 onClick = { showFilters = true },
             )
-            // Photos of the same thing, grouped. On when it is what the grid is showing.
+
             IconAction(
                 icon = R.drawable.ic_duplicates,
                 label = if (!state.duplicatesMode) stringResource(R.string.dup_open) else stringResource(R.string.back_all),
                 active = state.duplicatesMode,
                 onClick = { viewModel.showDuplicates() },
             )
-            // The photos the phone could not read, and so never sent to Opensolr: only there
-            // when there are some.
+
             if (state.skippedCount > 0 || state.skippedMode) {
                 IconAction(
                     icon = R.drawable.ic_skipped,
@@ -608,9 +540,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                     onClick = { viewModel.showSkipped() },
                 )
             }
-            // Reloads the results from the index, for photos a sync added in the meantime.
-            // Reload keeps the view: duplicates stay duplicates, on the same slider stop. Pressed
-            // on purpose, so held answers go and the index itself is asked.
+
             IconAction(
                 icon = R.drawable.ic_reload,
                 label = stringResource(R.string.reload),
@@ -618,8 +548,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 enabled = !state.searching,
                 onClick = { viewModel.forceRefresh() },
             )
-            // Every group of the view on screen folded away, or all of them opened again: only
-            // there when the grid has headings to fold (Cip, 2026-09-17).
+
             val headingKeys = remember(rows) { rows.filterIsInstance<GridRow.Heading>().map { it.key }.toSet() }
             if (headingKeys.isNotEmpty()) {
                 val anyCollapsed = state.collapsedHeadings.any { it in headingKeys }
@@ -633,12 +562,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 )
             }
         }
-        // The kind of duplicates (Cip, 2026-09-19): from the loosest (any two words the same)
-        // through all five words to the same photo by its EXIF (green), then the file stops.
-        // Every stop is one facet request, asked a moment after the move.
-        // The way out of the similar view: back to the search that was in force, with its query
-        // and filters intact (Cip, 2026-09-16). Getting back to a photo's details is a long press
-        // on it, so no button spends a row on that.
+
         if (state.duplicatesMode && state.similarToId != null) {
             TextButton(
                 onClick = { viewModel.backToSearch() },
@@ -661,8 +585,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 level = state.duplicateLevel,
                 onLevel = { viewModel.setDuplicateLevel(it) },
                 canSelect = state.duplicateGroups.isNotEmpty(),
-                // "One of each" belongs to the whole index; anchored to one photo there is a
-                // single group and nothing to thin out, so it is not shown at all.
+
                 showSelectOneOfEach = state.similarToId == null,
                 onSelectOneOfEach = { viewModel.selectOneOfEachDuplicate() },
             )
@@ -670,9 +593,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         if (state.searching) {
             LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp), color = p.accent, trackColor = p.chip)
         }
-        // Tagging many photos carries on in the background, so it says so on screen the whole
-        // time: hundreds of photos take a while and the owner is free to go elsewhere meanwhile
-        // (Cip, 2026-09-16).
+
         if (state.bulkTagging) {
             Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp)) {
                 Text(
@@ -694,17 +615,10 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             }
         }
 
-        // What the photos on screen have in common, one tap away from being a filter. Browsing,
-        // these are the index's own counts; on a typed search they come from the words-only
-        // request, so nothing the vector dragged in can suggest a filter.
         if (!state.selecting) {
             SuggestedFacets(state, onPick = { field, value -> viewModel.setFilters(state.filters.toggled(field, value)) })
         }
 
-        // What the photos on screen have in common, straight from the facets the same /select
-        // already returned: one tap narrows to it. Nothing here costs an extra request.
-
-        // "Did you mean": the spellchecker's correction, one tap away.
         state.didYouMean?.takeIf { state.query.isNotBlank() }?.let { corrected ->
             Row(
                 Modifier
@@ -713,16 +627,14 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                     .padding(horizontal = 20.dp, vertical = 6.dp),
             ) {
                 Text(stringResource(R.string.did_you_mean), style = MaterialTheme.typography.bodyMedium, color = p.muted)
-                // The gap is laid out here: a space written at the end of the text itself is
-                // trimmed away before it ever reaches the screen (Cip, 2026-09-20).
+
                 Spacer(Modifier.width(4.dp))
                 Text(corrected, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = p.accent)
                 Text("?", style = MaterialTheme.typography.bodyMedium, color = p.muted)
             }
         }
         state.searchNotice?.let { Notice(it, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
-        // A line that says what just happened and goes by itself: tags saved, the index catching
-        // up in the background. Never a warning - those live in Me (Cip, 2026-09-17).
+
         state.flash?.let {
             Text(
                 it,
@@ -741,21 +653,16 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         }
         state.searchError?.let { Notice(it, title = stringResource(R.string.search_failed_title), modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
 
-        // Nothing on the grid is only "nothing indexed" when the library itself is empty: while
-        // browsing, the photos live inside groups and every group can be folded away
-        // (Cip, 2026-09-18).
         if (!state.searching && state.hits.isEmpty() && state.skeleton.isEmpty() && state.resultGroups.isEmpty() && state.searchError == null) {
             EmptyResults(state)
         }
 
-        // Swipe down on the grid reloads the results, like the reload icon. Asked for by hand,
-        // so it goes to the index and drops what the phone was holding.
         var pulled by remember { mutableStateOf(false) }
         LaunchedEffect(state.searching) { if (!state.searching) pulled = false }
         val pullState = rememberPullToRefreshState()
         PullToRefreshBox(
             isRefreshing = pulled && state.searching,
-            // Felt as well as seen: the pull has taken, and what follows is a reload and a sync.
+
             onRefresh = { Haptics.thud(view); pulled = true; viewModel.forceRefresh(toTop = true); viewModel.syncNow() },
             state = pullState,
             modifier = Modifier.fillMaxSize(),
@@ -779,7 +686,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                     onRange = { ids, felt -> if (felt) Haptics.tick(view, strong = false); viewModel.dragSelectTo(ids) },
                     onEnd = { movedAway -> viewModel.endDragSelect(movedAway) },
                 ),
-                // Room under the last row for the dock, so it never covers a photo.
+
                 contentPadding = PaddingValues(start = 2.dp, end = 2.dp, bottom = if (state.selecting) 96.dp else 24.dp),
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -791,24 +698,20 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 ) { row ->
                     when (row) {
                         is GridRow.Heading -> {
-                            // An open group whose photos are not among the loaded pages asks for
-                            // exactly its own stretch of time, once (Cip, 2026-09-18).
+
                             if (!row.collapsed && row.range != null && row.ids.size < row.count) {
                                 LaunchedEffect(row.key, row.count, row.ids.size) {
                                     viewModel.loadGroupPhotos(row.key, row.range.first, row.range.second, row.ids.size, row.count)
                                 }
                             }
-                            // A group of a grouped search fetches its photos the first time it is
-                            // open on screen, from the phone's own copy of the index.
+
                             if (row.missing) {
                                 LaunchedEffect(row.key) { viewModel.loadResultGroup(row.name, row.ids) }
                             }
-                            // Google Photos style: the tick on a heading takes the whole group.
-                            // A long press on it starts selecting with that group already ticked.
+
                             val allPicked = state.selecting &&
                                 (row.key in state.selectedGroups || (row.ids.isNotEmpty() && state.selectedIds.containsAll(row.ids)))
-                            // A quiet band in the accent, so a heading still reads as something
-                            // to tap without shouting (Cip, 2026-09-17). Shared with the albums.
+
                             val band = headingBand(row.level)
                             val onBand = p.ink
                             Row(
@@ -823,11 +726,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                     .clip(Corner)
                                     .background(band)
                                     .combinedClickable(
-                                        // While selecting, a tap still takes the whole group, as
-                                        // before; otherwise it folds the group away and opens it
-                                        // again (Cip, 2026-09-16). A group whose edge moves with
-                                        // every page that arrives ("Best matches", "Also similar")
-                                        // cannot be taken whole, so there it only folds.
+
                                         onClick = {
                                             if (state.selecting && row.selectable) viewModel.toggleSelectedGroup(row.key, row.ids, row.range)
                                             else viewModel.toggleHeading(row.key)
@@ -839,10 +738,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                             }
                                         },
                                     )
-                                    // Big enough to aim a thumb at: a heading is the tick that
-                                    // takes the whole group and the fold (Cip, 2026-09-16).
-                                    // Every heading is a tap target for folding and for ticking a
-                                    // whole group, so none of them is allowed to get thin.
+
                                     .padding(start = 8.dp, end = 10.dp, top = 9.dp, bottom = 9.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
@@ -861,9 +757,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                     modifier = Modifier.weight(1f),
                                 )
                                 if (state.selecting && row.selectable) {
-                                    // Its own tap target, and kept clear of the right edge: the
-                                    // fast scroller's strip lives there and swallowed every tap
-                                    // that landed on the tick (Cip, 2026-09-18).
+
                                     PickTick(
                                         selected = allPicked,
                                         onClick = { viewModel.toggleSelectedGroup(row.key, row.ids, row.range) },
@@ -876,8 +770,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                         is GridRow.Photo -> {
                             val hit = row.hit
                             val selected = hit.id in state.selectedIds
-                            // The photo "Show similar photos" started from: ringed and named, so
-                            // it is never a guess which one the others are being compared with.
+
                             val anchor = state.duplicatesMode && hit.id == state.similarToId
                             Box(
                                 when {
@@ -888,13 +781,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                             ) {
                                 Thumbnail(
                                     hit = hit,
-                                    // The long press that starts picking photos belongs to the
-                                    // grid itself now (see dragSelect), so the finger can stay
-                                    // down and go on picking as it travels. It must not also sit
-                                    // on the photo: two long presses with the same timeout fired
-                                    // together and the second one untucked what the first ticked.
-                                    // The action is still declared for the accessibility
-                                    // services, which perform it by name rather than by gesture.
+
                                     modifier = Modifier
                                         .combinedClickable(
                                             onClick = { if (state.selecting) viewModel.toggleSelected(hit.id) else viewing = hit },
@@ -907,10 +794,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                             }
                                         },
                                 )
-                                // Photos the owner has tagged, marked in every view (Cip,
-                                // 2026-09-16): a small tag on a translucent dark square, so it
-                                // reads on a bright photo and on a dark one alike. While
-                                // selecting, the corner belongs to the tick instead.
+
                                 if (state.skippedMode && !state.selecting) {
                                     Box(
                                         Modifier
@@ -968,30 +852,24 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 }
             }
 
-            // Over the grid, not inside it: a drag down the right edge crosses months in one
-            // movement, with a tap back at every heading it passes.
             FastScroller(gridState, rows)
         }
     }
 
-    // What to do with the selected photos, floating over the grid instead of pushing it down.
     if (state.selecting) {
         SelectionDock(
             count = state.selectedIds.size,
             modifier = Modifier.align(Alignment.BottomCenter),
             onShare = { Actions.sharePhotos(context, viewModel.photosToTag()) },
-            // The app always asks first (Cip, 2026-09-16); from Android 11 the system's own
-            // confirmation follows.
+
             onDelete = { confirmDelete = true },
             onResync = { viewModel.resyncSelected() },
-            // Only what is ticked, always: nothing else can be tagged by accident
-            // (Cip, 2026-09-18).
+
             onTag = { bulkTagging = true },
         )
     }
     }
 
-    // The app's own warning before anything is removed, on every Android version.
     if (confirmDelete) {
         val chosen = state.selectedIds.size
         AlertDialog(
@@ -1018,18 +896,12 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         )
     }
 
-    // Tags for the whole view at once, over the grid it applies to.
     if (bulkTagging) {
         BulkTagSheet(state = state, viewModel = viewModel, onDismiss = { bulkTagging = false })
     }
-    // Full screen, one photo at a time, swiped through in the order the results came back -
-    // which is the whole point: the gallery cannot swipe through a search of yours, because it
-    // knows nothing about it (Cip, 2026-09-16).
+
     viewing?.let { hit ->
-        // Where the opened photo sits in the results, worked out when it opens and when the
-        // results change - not on every redraw behind it, which on ten thousand photos was a walk
-        // through the whole list each time (Cip, 2026-09-18).
-        // In groups, the photos are swiped through in the order the grid draws them, each once.
+
         val viewerHits = remember(rows, state.hits, state.resultGroups) {
             if (state.resultGroups.isEmpty()) state.hits
             else rows.filterIsInstance<GridRow.Photo>().map { it.hit }.distinctBy { it.id }
@@ -1039,15 +911,14 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             hits = viewerHits,
             start = startAt,
             onClose = { viewing = null },
-            // Anything that leads somewhere else closes the picture first, or the new screen is
-            // built behind a photo still filling the display (Cip, 2026-09-16).
+
             onSheet = { photo, close, openEdit ->
                 DetailsSheet(
                     hit = photo,
                     viewModel = viewModel,
                     onDismiss = close,
                     onLeave = { viewing = null },
-                    // Not a departure: the tags open over the photo and hand it back on Cancel.
+
                     onEdit = { openEdit(it); close() },
                 )
             },
@@ -1078,14 +949,6 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     }
 }
 
-/**
- * The pills above the grid: what the photos matching a typed search have in common, one tap
- * from a filter. Only on a typed search (Cip, 2026-09-15): browsing shows no pills at all.
- *
- * They come from [UiState.queryFacets] - a second, words-only request - because the facets of
- * the hybrid query cover every candidate the vector leg brought along, near misses included.
- * When the words match nothing, there is nothing to suggest and the strip stays away.
- */
 @Composable
 private fun SuggestedFacets(state: UiState, onPick: (String, String) -> Unit) {
     if (state.query.isBlank()) return
@@ -1094,15 +957,14 @@ private fun SuggestedFacets(state: UiState, onPick: (String, String) -> Unit) {
         val lists = STRIP_FIELDS.map { field ->
             (source[field] ?: emptyList())
                 .asSequence()
-                // On the words-only facets the count is over that smaller set, where a value
-                // shared by all still narrows.
+
                 .filter { it.count >= 2 && it.value !in state.filters.values(field) }
                 .sortedByDescending { it.count }
                 .take(PER_FIELD)
                 .map { field to it }
                 .toList()
         }
-        // Round robin, so the first pills are the best value of each field rather than three of one.
+
         (0 until PER_FIELD).flatMap { rank -> lists.mapNotNull { it.getOrNull(rank) } }.take(10)
     }
     if (picks.isEmpty()) return
@@ -1112,7 +974,7 @@ private fun SuggestedFacets(state: UiState, onPick: (String, String) -> Unit) {
         horizontalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         items(picks, key = { (field, value) -> "$field:${value.value}" }) { (field, value) ->
-            // No count: the words-only facets do not count the same photos the grid shows.
+
             Pill(
                 label = facetLabel(LocalContext.current, field, value.value),
                 onClick = { onPick(field, value.value) },
@@ -1121,15 +983,10 @@ private fun SuggestedFacets(state: UiState, onPick: (String, String) -> Unit) {
     }
 }
 
-/** The fields the pills draw from, in the order one of each is offered. */
 private val STRIP_FIELDS = listOf("custom_tags", "labels", "city", "country", "year", "camera_model")
-/** How many values one field may put on the strip. */
+
 private const val PER_FIELD = 3
 
-/**
- * A soft round pill: a suggestion in grey, or an applied filter in the accent with a cross that
- * takes it off. Quieter than the square chips of the filter sheet.
- */
 @Composable
 private fun Pill(label: String, onClick: () -> Unit, accent: Boolean = false, trailingClose: Boolean = false) {
     val p = LocalPalette.current
@@ -1150,11 +1007,6 @@ private fun Pill(label: String, onClick: () -> Unit, accent: Boolean = false, tr
     }
 }
 
-/**
- * The actions for the selected photos: a small bar of icons floating above the grid, each with
- * a word under it. Nothing is explained here; what the actions do is said where it is decided
- * (the system's own delete confirmation, and the Sync screen for a re-sync).
- */
 @Composable
 private fun SelectionDock(
     count: Int,
@@ -1176,20 +1028,15 @@ private fun SelectionDock(
             .padding(horizontal = 6.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // Tag first, on the left, exactly where it is under a single photo, then share, then the
-        // re-sync, and delete last, away from the rest (Cip, 2026-09-20). They act on the photos
-        // that are ticked, and only those.
+
         DockAction(R.drawable.ic_tag, stringResource(R.string.dock_tag_n, Actions.formatCompact(count.toLong())), enabled = count > 0, onClick = onTag)
         DockAction(R.drawable.ic_share, stringResource(R.string.act_share), enabled = count > 0, onClick = onShare)
         DockAction(R.drawable.ic_sync, if (count > 0) stringResource(R.string.dock_resync_n, Actions.formatCompact(count.toLong())) else stringResource(R.string.dock_resync), enabled = count > 0, accent = true, onClick = onResync)
-        // Short word here: four labels with counts in them do not fit a narrow phone (Cip, 2026-09-20).
+
         DockAction(R.drawable.ic_delete, stringResource(R.string.dock_delete), enabled = count > 0, onClick = onDelete)
     }
 }
 
-/**
- * One icon of the dock with its word, greyed out while nothing is selected.
- */
 @Composable
 internal fun DockAction(icon: Int, label: String, enabled: Boolean, accent: Boolean = false, onClick: () -> Unit) {
     val p = LocalPalette.current
@@ -1202,8 +1049,7 @@ internal fun DockAction(icon: Int, label: String, enabled: Boolean, accent: Bool
         Modifier
             .padding(horizontal = 3.dp)
             .clip(Corner)
-            // Each one is drawn as a button of its own, on a shade neither row above it uses, so
-            // it is plain that these are things to press (Cip, 2026-09-20).
+
             .background(p.dockFill)
             .border(1.dp, p.hairline, Corner)
             .then(if (enabled) Modifier.combinedClickableCompat(onClick) else Modifier)
@@ -1216,83 +1062,45 @@ internal fun DockAction(icon: Int, label: String, enabled: Boolean, accent: Bool
     }
 }
 
-/**
- * What the grid lays out: a full-width date heading, or one photo.
- */
 private sealed interface GridRow {
-    /** The key the lazy grid keeps items by; headings carry their own text. */
+
     val key: String
 
-    /**
-     * A full-width heading, with the photos of its group so its tick can take them all, and
-     * whether the group is folded away under it.
-     */
     data class Heading(
-        /** What the heading says, which changes when it is folded ("Friday (42)"). */
+
         val text: String,
         val ids: List<String>,
         val collapsed: Boolean = false,
-        /**
-         * What the heading *is*, which never changes. Kept apart from [text] on purpose: the key
-         * used to be built from the words on screen, so folding a group renamed it, the next tap
-         * toggled a different name, and the group could never be opened again (Cip, 2026-09-16).
-         */
+
         val name: String = text,
-        /**
-         * 0 for a month, 1 for a day inside it. Only the size and the indent of the heading
-         * change with it; everything else (folding, the tick that takes the group) is the same.
-         */
+
         val level: Int = 0,
-        /**
-         * When the group is a stretch of time (a month, a day), the first and last instant of it.
-         * The tick then takes every photo of the view in that stretch, not only the pages the grid
-         * happens to hold. Groups that are not a stretch of time - "Best matches" and "Also
-         * similar", whose boundary moves as more results arrive - have none, and no tick
-         * (Cip, 2026-09-18).
-         */
+
         val range: Pair<Long, Long>? = null,
-        /** How many photos the group holds in all, which is not always how many are loaded. */
+
         val count: Int = ids.size,
-        /** A group of a grouped search: [ids] are every photo in it, so its tick takes exactly those. */
+
         val exact: Boolean = false,
-        /** An open group of a grouped search showing its photos, some of which are not loaded yet. */
+
         val missing: Boolean = false,
     ) : GridRow {
         override val key: String get() = "h:$name"
 
-        /** True when ticking this heading means something exact. */
         val selectable: Boolean get() = exact || range != null || (ids.isNotEmpty() && name.contains(" of the same"))
     }
 
-    /**
-     * A photo. In a grouped search a photo can sit in several groups (two people, two tags), so it
-     * is keyed by its [group] as well: the grid keeps its items by key, and the same key twice
-     * crashes it (Cip, 2026-09-16; 2026-09-19).
-     */
     data class Photo(val hit: PhotoHit, val group: String? = null) : GridRow {
         override val key: String get() = if (group == null) hit.id else "g:$group|${hit.id}"
     }
 }
 
-/**
- * The grid of plain browsing: every year, month and day of the library - as the phone knows them
- * from its own copy of the index - with the photos that have been loaded sitting inside them.
- *
- * Browsing used to show only the groups the loaded pages happened to reach, so with everything
- * folded the first sixty photos hid every year below them (Cip, 2026-09-18). The shape comes from
- * the phone, the photos from the index, and a group opened before its photos have arrived asks
- * for exactly that stretch of time.
- */
 private fun buildSkeletonRows(
     skeleton: List<com.opensolr.photos.ui.DateGroup>,
     hits: List<PhotoHit>,
     collapsed: Set<String>,
 ): List<GridRow> {
     val rows = ArrayList<GridRow>(hits.size + skeleton.size)
-    // Every photo filed under the groups it belongs to, in ONE pass, keyed exactly as the skeleton
-    // names them. Looking for each group's photos by walking the whole list meant the loaded
-    // photos times the groups - a library of ten thousand across two hundred groups was two
-    // million comparisons for every redraw (Cip, 2026-09-18).
+
     val byName = HashMap<String, MutableList<PhotoHit>>()
     hits.forEach { hit ->
         val at = hit.takenMs
@@ -1308,10 +1116,7 @@ private fun buildSkeletonRows(
         byName.getOrPut(Actions.monthKey(at)) { ArrayList() } += hit
         byName.getOrPut(Actions.dayKey(at)) { ArrayList() } += hit
     }
-    // A month is only drawn under its year, and a day under its month, so folding a year folds
-    // everything inside it.
-    // One pass: a group has children when the group before it in the list is its parent, which is
-    // how the skeleton is built - year, then its months, then that month's days.
+
     val withChildren = HashSet<String>()
     for (i in skeleton.indices) {
         val next = skeleton.getOrNull(i + 1) ?: continue
@@ -1336,22 +1141,13 @@ private fun buildSkeletonRows(
             count = group.count,
         )
         if (folded) return@forEach
-        // The photos belong to the deepest open group that holds them: a year with months under
-        // it, or a month with days under it, shows none of its own. Today and the last few days
-        // have nothing under them, so they show theirs. Which groups have children is worked out
-        // once, above, and not by scanning every group for every group (Cip, 2026-09-18).
+
         if (group.name in withChildren) return@forEach
         mine.forEach { rows += GridRow.Photo(it) }
     }
     return rows
 }
 
-/**
- * The grid of a grouped search (Cip, 2026-09-19): every group as a heading, the ones inside it
- * under it, and the photos in the deepest open group that holds them - keyed by group, because a
- * photo can be in more than one. A folded group hides everything inside it. Photos of a group that
- * are not loaded yet are asked for by its heading.
- */
 private fun buildResultGroupRows(
     groups: List<com.opensolr.photos.ui.ResultGroup>,
     hits: List<PhotoHit>,
@@ -1383,17 +1179,8 @@ private fun buildResultGroupRows(
     return rows
 }
 
-/** The headings the grid writes itself, translated; "%1$s of the same" takes the group's size. */
 private data class GridWords(val best: String, val similar: String, val ofTheSame: String)
 
-/**
- * Turns the results into grid rows with headings over their groups.
- *
- * [byDate] cuts on the day or the month, for results that come back in date order; photos with
- * no date land under the last heading seen, or under none at the top. Otherwise the cut is on
- * the score: the hybrid query returns the strong matches first and the vector's near misses
- * after them, so the biggest fall in score is where "Also similar" begins.
- */
 private fun buildRows(
     hits: List<PhotoHit>,
     byDate: Boolean,
@@ -1403,8 +1190,6 @@ private fun buildRows(
 ): List<GridRow> {
     if (hits.isEmpty()) return emptyList()
 
-    // One group: its heading, then its photos - unless it is folded away, in which case the
-    // heading stands alone and says how many are under it (Cip, 2026-09-16).
     fun MutableList<GridRow>.addGroup(
         name: String,
         photos: List<PhotoHit>,
@@ -1413,7 +1198,7 @@ private fun buildRows(
         range: Pair<Long, Long>? = null,
     ): Boolean {
         val folded = "h:$name" in collapsed
-        // The name is what the group is, and never changes; the text is only what it says now.
+
         this += GridRow.Heading(
             text = if (folded) "$text (${Actions.formatCount(photos.size.toLong())})" else text,
             ids = photos.map { it.id },
@@ -1427,14 +1212,13 @@ private fun buildRows(
     }
 
     if (groups.isNotEmpty()) {
-        // Photos of the same thing: the groups come laid out one after another.
+
         val rows = ArrayList<GridRow>(hits.size + groups.size)
         var from = 0
         groups.forEachIndexed { index, size ->
             val group = hits.drop(from).take(size)
             if (group.isEmpty()) return@forEachIndexed
-            // The number stays in the NAME, which is the key and must stay unique, and is kept
-            // off the screen: nobody wants to read which group it is (Cip, 2026-09-16).
+
             rows.addGroup(
                 "${group.size} of the same · ${index + 1}",
                 group,
@@ -1451,15 +1235,11 @@ private fun buildRows(
         rows.addGroup("Also similar", hits.drop(cut), text = words.similar)
         return rows
     }
-    // Three levels: the year, the months in it, and the days in each month. A month of holiday
-    // photos used to be one unbroken run of hundreds of thumbnails with nothing to aim a tap at
-    // (Cip, 2026-09-16), and a library of ten years was one long ladder of months
-    // (Cip, 2026-09-18). Today / Yesterday / a weekday in the last six days are already days, so
-    // they stay flat at the top, outside the years.
+
     val recent = LinkedHashMap<String, MutableList<PhotoHit>>()
     val years = LinkedHashMap<String, LinkedHashMap<String, MutableList<PhotoHit>>>()
     val loose = ArrayList<PhotoHit>()
-    // A photo with no date of its own sits where the one before it sits.
+
     var lastYear: String? = null
     var lastMonth: String? = null
     var lastRecent: String? = null
@@ -1489,7 +1269,7 @@ private fun buildRows(
 
     val rows = ArrayList<GridRow>(hits.size + years.size * 2)
     loose.forEach { rows += GridRow.Photo(it) }
-    // The last few days, by themselves, as they have always been.
+
     recent.forEach { (heading, photos) ->
         val millis = photos.firstNotNullOfOrNull { it.takenMs }
         rows.addGroup(heading, photos, level = 0, range = millis?.let { Actions.daySpan(it) })
@@ -1498,7 +1278,7 @@ private fun buildRows(
         val yearPhotos = months.values.flatten()
         val yearMillis = yearPhotos.firstNotNullOfOrNull { it.takenMs }
         if (rows.addGroup(year, yearPhotos, level = 0, range = yearMillis?.let { Actions.yearSpan(it) })) return@forEach
-        // The year's own photos were written by addGroup; its months replace them.
+
         repeat(yearPhotos.size) { rows.removeAt(rows.size - 1) }
         months.forEach { (monthKey, monthPhotos) ->
             val monthMillis = monthPhotos.firstNotNullOfOrNull { it.takenMs }
@@ -1509,8 +1289,7 @@ private fun buildRows(
                 val key = hit.takenMs?.let { Actions.dayKey(it) } ?: days.keys.lastOrNull()
                 if (key == null) days.getOrPut("") { ArrayList() } += hit else days.getOrPut(key) { ArrayList() } += hit
             }
-            // Every month is spelled out by its days; only photos with no date at all stay
-            // directly under the month (Cip, 2026-09-18).
+
             if (days.keys.any { it.isEmpty() }) return@forEach
             repeat(monthPhotos.size) { rows.removeAt(rows.size - 1) }
             days.forEach { (dayKey, dayPhotos) ->
@@ -1522,12 +1301,6 @@ private fun buildRows(
     return rows
 }
 
-/**
- * Where the strong matches end, or null when there is no honest place to cut: too few results,
- * no scores (an index on the older configuration answers without them), or a list that fades
- * evenly. The cut is the biggest fall between one score and the next, and it only counts when
- * what follows scores below [ALSO_SIMILAR_SHARE] of the best hit.
- */
 private fun scoreCut(hits: List<PhotoHit>): Int? {
     if (hits.size < MIN_HITS_TO_CUT) return null
     val top = hits.first().score
@@ -1544,32 +1317,16 @@ private fun scoreCut(hits: List<PhotoHit>): Int? {
     return cut.takeIf { it > 0 }
 }
 
-/** Fewer results than this are a short enough list to read without a heading. */
 private const val MIN_HITS_TO_CUT = 8
 
-/** Rows below which the fast scroller is not worth showing: a couple of screens. */
-/** How far a finger must travel up the picture before the details open. */
 private const val VIEWER_SWIPE_UP = 90f
 
-/** How much of the screen the picture must be carried down before the viewer closes. */
 private const val VIEWER_DISMISS_SHARE = 0.18f
 
-/** How long the double tap takes to magnify or come back, in milliseconds. */
 private const val VIEWER_DOUBLE_TAP_MS = 260
 
-/** How far a double tap magnifies, as Google Photos does it. */
 private const val VIEWER_DOUBLE_TAP_SCALE = 3f
 
-/**
- * Makes the viewer's dialog window cover the whole screen and returns how far its bottom still
- * reaches past the screen's real bottom edge, so the actions can be lifted by exactly that much.
- *
- * The activity is edge to edge and lays out into the display cutout; a dialog window is not, and
- * on MIUI / HyperOS it is pushed down below the camera cutout while keeping its full height, so
- * its lower part sat outside the screen and the buttons under the photo were cut off whatever
- * padding they had (Cip, 2026-09-17). The window gets the activity's cutout mode and the full
- * size; the measured overflow covers any phone that still places it lower.
- */
 @Composable
 private fun viewerWindowOverflow(): Dp {
     val view = LocalView.current
@@ -1610,34 +1367,24 @@ private fun viewerWindowOverflow(): Dp {
     return with(density) { overflowPx.toDp() }
 }
 
-/** How many rows may still be below the screen when the next page of results is asked for. */
 private val PREFETCH_REMAINING = com.opensolr.photos.search.SearchRepository.PAGE / 2
 
-/** The least room kept under the viewer's actions, whatever a phone says its bars measure. */
 private val VIEWER_MIN_BOTTOM = 28.dp
 
 private const val FAST_SCROLL_MIN_ROWS = 60
 
-/** The grab handle of the fast scroller: tall enough for a thumb to land on. */
 private val FAST_SCROLL_THUMB = 72.dp
 
-/** How far above the thumb the month bubble sits, so a thumb never covers it (Cip, 2026-09-16). */
 private val FAST_SCROLL_LABEL_LIFT = 64.dp
 
-/** How wide the strip on the right edge is: narrow enough to leave a photo tappable. */
 private val FAST_SCROLL_WIDTH = 36.dp
 
-/** Room kept to the left of the bar for the month bubble while a finger is dragging. */
 private val FAST_SCROLL_LABEL_ROOM = 240.dp
-/** "Best matches" is never shorter than this, so a single strong hit does not stand alone. */
+
 private const val MIN_BEST_MATCHES = 3
-/** A photo below this share of the best score is what the vector brought along, not a match. */
+
 private const val ALSO_SIMILAR_SHARE = 0.6
 
-/**
- * One button of the header menu: a small bordered cell with its icon over a short label,
- * sharing the row's width equally with the others. [active] draws it in the accent.
- */
 @Composable
 internal fun RowScope.HeaderItem(label: String, active: Boolean = false, onClick: () -> Unit, icon: @Composable () -> Unit) {
     val p = LocalPalette.current
@@ -1666,9 +1413,6 @@ internal fun RowScope.HeaderItem(label: String, active: Boolean = false, onClick
     }
 }
 
-/**
- * The sync icon of the header: a refresh icon that turns while a sync runs.
- */
 @Composable
 private fun SyncIcon(running: Boolean) {
     val p = LocalPalette.current
@@ -1686,13 +1430,6 @@ private fun SyncIcon(running: Boolean) {
     )
 }
 
-/**
- * The duplicates slider: one stop per SearchRepository.DUPLICATE_FIELDS, the name of the kind
- * under it. Its colour tells where it stands: black at the loosest "first 3 words" stop, turning
- * green by the EXIF stop, then a neutral colour for the file stops, which are not on that scale.
- * The thumb follows the finger at once; the level reaches [onLevel] on every stop crossed, and
- * the view model waits for the finger to settle before asking the index.
- */
 @Composable
 private fun DuplicateLevelSlider(level: Int, onLevel: (Int) -> Unit, canSelect: Boolean, showSelectOneOfEach: Boolean, onSelectOneOfEach: () -> Unit) {
     val view = LocalView.current
@@ -1700,23 +1437,19 @@ private fun DuplicateLevelSlider(level: Int, onLevel: (Int) -> Unit, canSelect: 
     var value by remember { mutableStateOf(level.toFloat()) }
     LaunchedEffect(level) { if (value.roundToInt() != level) value = level.toFloat() }
     val stop = level.coerceIn(0, DUPLICATE_KIND_NAMES.size - 1)
-    // Which set of scale colours reads on the current background: ink is near-black on paper
-    // and near-white on a dark screen, so it says which theme is in force without asking.
+
     val dark = p.ink.red > 0.5f
     val loose = if (dark) DUPLICATE_LOOSE_DARK else DUPLICATE_LOOSE_LIGHT
     val green = if (dark) DUPLICATE_GREEN_DARK else DUPLICATE_GREEN_LIGHT
     val colour = when {
         stop <= DUPLICATE_EXIF_STOP -> lerp(loose, green, stop / DUPLICATE_EXIF_STOP.toFloat())
-        // File name, size and the file itself are not on the words / EXIF scale: a neutral
-        // colour of their own.
+
         else -> if (dark) DUPLICATE_NEUTRAL_DARK else DUPLICATE_NEUTRAL_LIGHT
     }
     Column(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
         Slider(
             value = value,
-            // The thumb glides instead of snapping from notch to notch, and a stop is only left
-            // once the finger is most of the way to the next one (Cip, 2026-09-20): rounding at
-            // the halfway mark made the kinds flick past under a thumb that had barely moved.
+
             onValueChange = {
                 value = it
                 val next = if (kotlin.math.abs(it - level) < STOP_SLOP) level else it.roundToInt()
@@ -1725,12 +1458,10 @@ private fun DuplicateLevelSlider(level: Int, onLevel: (Int) -> Unit, canSelect: 
                     onLevel(next)
                 }
             },
-            // Let go and the thumb settles on the stop it chose, rather than between two of them.
+
             onValueChangeFinished = { value = level.toFloat() },
             valueRange = 0f..(DUPLICATE_KIND_NAMES.size - 1).toFloat(),
-            // No notches for the thumb to jump between: with them the slider moved a whole stop
-            // at a time, which is what made it feel twitchy. The stops are still exactly where
-            // they were - it is only the way the thumb travels between them that changed.
+
             steps = 0,
             colors = SliderDefaults.colors(
                 thumbColor = colour,
@@ -1741,8 +1472,7 @@ private fun DuplicateLevelSlider(level: Int, onLevel: (Int) -> Unit, canSelect: 
             ),
         )
         Text("$stop · ${stringArrayResource(R.array.dup_kinds)[stop]}", style = MaterialTheme.typography.labelMedium, color = colour)
-        // One tap selects one photo of every group (the last of each, the first one stays
-        // unticked), for review; the selection dock then shares, deletes or re-syncs them.
+
         if (showSelectOneOfEach) {
             TextButton(
                 onClick = onSelectOneOfEach,
@@ -1756,28 +1486,16 @@ private fun DuplicateLevelSlider(level: Int, onLevel: (Int) -> Unit, canSelect: 
     }
 }
 
-/** What each stop of the slider groups, in the order of DUPLICATE_FIELDS. */
 private val DUPLICATE_KIND_NAMES = listOf(
     "Same first 3 words", "Any 4 words the same", "All 5 words the same",
     "Same photo (EXIF)",
     "Same file name", "Same file size", "Same file (exact copy)",
 )
 
-/**
- * How far towards the next stop the finger has to travel before the slider takes it: most of the
- * way, not half of it (Cip, 2026-09-20). Halfway meant a thumb that had barely moved flicked
- * through two or three kinds, and every one of them asked the index.
- */
 private const val STOP_SLOP = 0.7f
 
-/** The EXIF stop, where the words-to-EXIF colour scale ends. */
 private const val DUPLICATE_EXIF_STOP = 3
-/**
- * The ends of the duplicates scale, one set per theme (Cip, 2026-09-16). On paper the loosest
- * stop is near-black; on a dark screen that is the colour of the screen itself, so the thumb,
- * the track, the ticks and the name under them all disappeared. The dark set turns that end
- * light and lifts the others off the background as well.
- */
+
 private val DUPLICATE_LOOSE_LIGHT = Color(0xFF111111)
 private val DUPLICATE_NEUTRAL_LIGHT = Color(0xFF495057)
 private val DUPLICATE_GREEN_LIGHT = Color(0xFF2F9E44)
@@ -1786,10 +1504,6 @@ private val DUPLICATE_LOOSE_DARK = Color(0xFFF4F1EC)
 private val DUPLICATE_NEUTRAL_DARK = Color(0xFFADB5BD)
 private val DUPLICATE_GREEN_DARK = Color(0xFF51CF66)
 
-/**
- * Removable chips for the filters currently applied, on ONE row that scrolls sideways, like the
- * suggestion pills of a typed search (Cip, 2026-09-15): many filters never push the grid down.
- */
 @Composable
 private fun ActiveFilterChips(filters: SearchFilters, onRemove: (SearchFilters) -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
@@ -1806,19 +1520,14 @@ private fun ActiveFilterChips(filters: SearchFilters, onRemove: (SearchFilters) 
         filters.hasPeople?.let { add(context.getString(if (it) R.string.chip_has_people else R.string.chip_no_people) to filters.copy(hasPeople = null)) }
     }
     LazyRow(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-        // No key: the same label can be applied in two fields (a city and a word), and a
-        // repeated key would crash the row.
+
         items(chips) { (label, without) ->
-            // Same round pills as the suggestions above the grid, in the accent, with a cross.
+
             Pill(label = label, accent = true, trailingClose = true, onClick = { onRemove(without) })
         }
     }
 }
 
-/**
- * One of the small actions over the grid: a bordered cell, so it reads as a button rather than a
- * mark on the page (Cip, 2026-09-16). [active] draws it in the accent, as the header cells do.
- */
 @Composable
 internal fun IconAction(
     icon: Int,
@@ -1842,8 +1551,7 @@ internal fun IconAction(
             .padding(start = 6.dp)
             .size(36.dp)
             .clip(Corner)
-            // A shade apart from the header row above it, so the two rows do not read as one
-            // long strip of buttons (Cip, 2026-09-20).
+
             .background(p.toolFill)
             .border(1.dp, if (active) (if (danger) SkippedRed else p.accent) else p.hairline, Corner)
             .combinedClickableCompat { if (enabled) onClick() },
@@ -1864,10 +1572,6 @@ internal fun IconAction(
     }
 }
 
-/**
- * The button that picks how the results are laid out, and its short list (Cip, 2026-09-19). It is
- * lit when the results are in groups, so a grouped view never looks like the plain one.
- */
 @Composable
 private fun GroupByButton(
     current: com.opensolr.photos.ui.GroupBy,
@@ -1911,9 +1615,6 @@ private fun GroupByButton(
     }
 }
 
-/**
- * A flat 2px chip.
- */
 @Composable
 private fun Chip(label: String, selected: Boolean, onClick: () -> Unit, trailingClose: Boolean = false) {
     val p = LocalPalette.current
@@ -1934,10 +1635,6 @@ private fun Chip(label: String, selected: Boolean, onClick: () -> Unit, trailing
     }
 }
 
-/**
- * A photo's place as a button: the look of the People and tag chips, with a pin in front and a
- * heavier accent border, so it reads as something to press (Cip, 2026-09-19).
- */
 @Composable
 private fun PlaceButton(label: String, onClick: () -> Unit) {
     val p = LocalPalette.current
@@ -1958,19 +1655,12 @@ private fun PlaceButton(label: String, onClick: () -> Unit) {
     }
 }
 
-/**
- * A square thumbnail loaded from the phone, never from the network.
- */
 @Composable
 private fun Thumbnail(hit: PhotoHit, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
     val context = LocalContext.current
     val uri = remember(hit.mediaId) { ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, hit.mediaId) }
-    // Built once per photo, not once per redraw: a thumbnail is redrawn on every tick of a scroll
-    // through ten thousand of them, and each rebuild was a new request object for the same picture
-    // (Cip, 2026-09-18).
-    // The file's size is part of the cache key: an edit in another app keeps the photo's address
-    // and changes its size, so the edited picture is drawn instead of the one held in memory.
+
     val request = remember(uri, hit.sizeBytes) { ImageRequest.Builder(context).data(uri).size(360).setParameter("bytes", hit.sizeBytes).crossfade(true).build() }
     AsyncImage(
         model = request,
@@ -1982,12 +1672,9 @@ private fun Thumbnail(hit: PhotoHit, modifier: Modifier = Modifier) {
     )
 }
 
-/**
- * What to show when a search has no results.
- */
 @Composable
 private fun EmptyResults(state: UiState) {
-    // Duplicates say it themselves ("No duplicates of this kind"): nothing else to add there.
+
     if (state.duplicatesMode || state.skippedMode) return
     val p = LocalPalette.current
     val text = when {
@@ -1998,11 +1685,6 @@ private fun EmptyResults(state: UiState) {
     Text(text, style = MaterialTheme.typography.bodyLarge, color = p.muted, modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp))
 }
 
-/**
- * The filter sheet's two actions, identical at its top and bottom: small and discreet, each
- * with its icon. Done carries [count], the photos shown with the filters as they are now
- * (every tap applies at once, so the results behind the sheet already are that set).
- */
 @Composable
 private fun FilterActions(count: Long, onClear: () -> Unit, onDone: () -> Unit) {
     val p = LocalPalette.current
@@ -2035,10 +1717,6 @@ private fun FilterActions(count: Long, onClear: () -> Unit, onDone: () -> Unit) 
     }
 }
 
-/**
- * Bottom sheet with every filter, built from the facets of the current results. [count] is
- * the number of photos the current filters show.
- */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun FilterSheet(
@@ -2052,8 +1730,7 @@ private fun FilterSheet(
 ) {
     val p = LocalPalette.current
     val context = LocalContext.current
-    // Every tap applies at once: the results and the counts behind the sheet follow along,
-    // so there is nothing to scroll down to and confirm.
+
     val draft = current
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = p.paper, shape = Corner) {
         Column(
@@ -2064,16 +1741,11 @@ private fun FilterSheet(
                 .navigationBarsPadding()
         ) {
             Text(stringResource(R.string.filters), style = MaterialTheme.typography.headlineSmall, color = p.ink)
-            // The same two actions at the top as at the bottom, small, so a long list of values
-            // never has to be scrolled through to clear or close (Cip, 2026-09-15).
+
             Spacer(Modifier.height(8.dp))
             FilterActions(count, onClear = { onChange(SearchFilters()) }, onDone = onDismiss)
             Spacer(Modifier.height(12.dp))
 
-            // The order people reach for (Cip, 2026-09-17): when; then what the photo has; then
-            // the lists of people, tags and places; everything else after. Every one of them is a
-            // heading exactly like a month on the grid, folded away until it is wanted, and each
-            // says how many of its own filters are on (Cip, 2026-09-18).
             val facetTitles = SearchFilters.FACETS.toMap()
             val facet: @Composable (String) -> Unit = { field ->
                 facetTitles[field]?.let { title ->
@@ -2086,8 +1758,7 @@ private fun FilterSheet(
                     }
                 }
             }
-            // The two ways of filtering by time do not argue with each other: years narrow the
-            // calendar, and a chosen stretch of days puts the years aside (Cip, 2026-09-18).
+
             val years = draft.values("year").mapNotNull { it.toIntOrNull() }
             if (draft.taken == null) {
                 facet("year")
@@ -2101,15 +1772,11 @@ private fun FilterSheet(
                     )
                 }
             }
-            // Under the years, which say which years you actually have photos in, a picker
-            // for anything narrower than a whole year (Cip, 2026-09-16). The years chosen above
-            // bound what the calendar offers.
+
             FilterGroup(stringResource(R.string.taken_between), if (draft.taken != null) 1 else 0, "Taken between" in open, { onToggleSection("Taken between") }) {
                 DateRangeValues(draft.taken, years) { onChange(draft.copy(taken = it, fields = if (it != null) draft.fields - "year" else draft.fields)) }
             }
 
-            // Only the switches of this group count here; the words of "Meaning" carry their own
-            // badge, under their own heading (Cip, 2026-09-18).
             val switchesOn = listOf(draft.hasOcr == true, draft.tagged == true, draft.hasPeople == true, draft.withLocation).count { it }
             FilterGroup(stringResource(R.string.photo_has), switchesOn, "Photo has" in open, { onToggleSection("Photo has") }) {
                 FilterSwitch(stringResource(R.string.sw_ocr), stringResource(R.string.sw_ocr_hint), draft.hasOcr == true) { onChange(draft.copy(hasOcr = if (it) true else null)) }
@@ -2118,16 +1785,14 @@ private fun FilterSheet(
                 FilterSwitch(stringResource(R.string.sw_location), stringResource(R.string.sw_location_hint), draft.withLocation) { onChange(draft.copy(withLocation = it)) }
                 Spacer(Modifier.height(12.dp))
             }
-            // "Meaning": the words Opensolr read the photos into, right under the switches, as
-            // before (Cip, 2026-09-17).
+
             facet("labels")
 
             facet("persons_ss")
             facet("custom_tags")
             facet("city")
             facet("country")
-            // The folders chosen in Sync, named as Sync names them, right after the places
-            // (Cip, 2026-09-19). A folder inside another chosen one is counted by the outer one.
+
             val roots = facets[SearchFilters.FOLDER_ROOTS]
             if (!roots.isNullOrEmpty() || draft.folders.isNotEmpty()) {
                 FilterGroup(stringResource(R.string.folder), draft.folders.size, "Folder" in open, { onToggleSection("Folder") }) {
@@ -2141,7 +1806,7 @@ private fun FilterSheet(
                 .forEach { facet(it) }
 
             draft.near?.let { near ->
-                // Radius of the "near a point" filter set from the map or a photo's details.
+
                 val title = "Distance from " + String.format(java.util.Locale.US, "%.4f, %.4f", near.lat, near.lon)
                 FilterGroup(stringResource(R.string.distance_from, String.format(java.util.Locale.US, "%.4f, %.4f", near.lat, near.lon)), 1, title in open, { onToggleSection(title) }) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -2167,14 +1832,6 @@ private fun FilterSheet(
     }
 }
 
-/**
- * One group of filters under a heading drawn exactly like a month on the grid: the same band, the
- * same type, the same arrow, and the same tap to fold it away (Cip, 2026-09-18).
- *
- * Folded is how they all start, and how each one is found again on the next visit, because the
- * phone remembers which were opened. A folded heading carries a badge with how many of its own
- * filters are on, so nothing applied can hide under it.
- */
 @Composable
 internal fun FilterGroup(title: String, active: Int, open: Boolean, onToggle: () -> Unit, content: @Composable () -> Unit) {
     val p = LocalPalette.current
@@ -2218,17 +1875,6 @@ internal fun FilterGroup(title: String, active: Int, open: Boolean, onToggle: ()
     }
 }
 
-/**
- * The bar down the right edge that a finger can drag to cross months in one movement, instead of
- * flicking through a year of thumbnails (Cip, 2026-09-16).
- *
- * It rides the rows already in the grid - the same list the headings come from - so it needs no
- * request of its own and cannot disagree with what is on screen. Crossing a heading gives a tap
- * back: the heavier one for a month, the lighter one for a day inside it, which is what tells a
- * thumb how far it has travelled without looking.
- *
- * It appears while the grid is moving and fades out when it stops, so it never sits over photos.
- */
 @Composable
 private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>) {
     val p = LocalPalette.current
@@ -2236,46 +1882,22 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
     val scope = rememberCoroutineScope()
     val total = rows.size
     var dragging by remember { mutableStateOf(false) }
-    // The row the finger is over, which is not where the grid is until it has caught up.
+
     var aimed by remember { mutableIntStateOf(-1) }
-    // How far into that row the finger stands, and the one scroll the bar is allowed to have
-    // running at a time.
+
     var lastInto by remember { mutableFloatStateOf(0f) }
     var scrollJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    // The rows as they are now, read by the drag, which outlives any one list: filters, groups
-    // opening and photos loading all change it under a finger. A drag that went on reading the
-    // list it started with walked past the end of a shorter one and crashed the app (Cip, 2026-09-18).
+
     val currentRows by rememberUpdatedState(rows)
-    // Too short to be worth a shortcut: a couple of screens are flicked through faster by hand.
+
     if (total < FAST_SCROLL_MIN_ROWS) return
 
-    // The bar shows itself while the grid moves and fades when it stops, so it never sits over
-    // photos - but the strip stays touchable even when nothing is drawn, otherwise there would be
-    // nothing to take hold of from a standing start.
     val alpha by animateFloatAsState(
         targetValue = if (dragging || gridState.isScrollInProgress) 1f else 0f,
         animationSpec = tween(durationMillis = if (dragging) 0 else 450),
         label = "fastScrollerAlpha",
     )
 
-    // How tall the list is, row by row, as a running total (Cip, 2026-09-20).
-    //
-    // The bar used to map the finger onto the ROW NUMBER, which made every row the same width on
-    // it: a folded group, one row, took as much of the bar as a single photo, so with one group
-    // open and forty folded the forty shared a sliver and the finger could not stop on any of
-    // them. The bar is a map of the scroll itself instead - a folded group is a heading tall, an
-    // open one is as tall as its photos.
-    //
-    // The map is PACKED THE WAY THE GRID PACKS, and this is the whole of it: photos fill a line
-    // of [columns], a heading takes a line of its own and ends the line before it, and a group
-    // whose last line is half empty still costs a whole line. Adding a third of a cell per photo
-    // instead made the map shorter than the grid by one part-line per group - with a hundred
-    // groups the bar and the grid were talking about different places, which is why the thumb
-    // could not be taken hold of once photos were on screen (Cip, 2026-09-20).
-    //
-    // The heights themselves are learned ONCE from the grid, the first time a kind of row is
-    // drawn, and never read again while it moves: reading them every frame changed the map under
-    // the finger and the bar shivered. Until a kind has been seen, the theme's own sizes stand in.
     val density = LocalDensity.current
     val learned = remember { mutableStateMapOf<Int, Float>() }
     LaunchedEffect(gridState) {
@@ -2285,8 +1907,7 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
                     val row = currentRows.getOrNull(item.index) ?: return@forEach
                     val height = item.size.height
                     if (height <= 0) return@forEach
-                    // Photos are kept under -1, whatever their level; headings under their own;
-                    // how many photos stand side by side under -2, counted from photos alone.
+
                     val key = if (row is GridRow.Heading) row.level.coerceIn(0, HEADING_HEIGHTS.lastIndex) else -1
                     if (!learned.containsKey(key)) learned[key] = height.toFloat()
                     if (row !is GridRow.Heading) {
@@ -2298,14 +1919,12 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
     }
     val fallbackCell = with(density) { 114.dp.toPx() }
     val fallbackHeadings = with(density) { HEADING_HEIGHTS.map { it.toPx() } }
-    // What has been learned so far, taken as a set and then held while the finger is on the bar:
-    // meeting a kind of heading for the first time mid-drag would otherwise redraw the map under
-    // the finger, which is the one thing this map must never do.
+
     val heightsKey = learned.entries.sortedBy { it.key }.joinToString { "${it.key}:${it.value}" }
     var heights by remember { mutableStateOf<Map<Int, Float>>(emptyMap()) }
     LaunchedEffect(heightsKey, dragging) { if (!dragging) heights = learned.toMap() }
     val cellPx = heights[-1] ?: fallbackCell
-    // How many photos stand side by side, as counted off the grid itself and then left alone.
+
     val columns = (heights[-2] ?: 3f).toInt().coerceAtLeast(1)
     val tops = remember(rows, columns, heights, cellPx) {
         val out = FloatArray(rows.size + 1)
@@ -2313,14 +1932,13 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
         var inLine = 0
         rows.forEachIndexed { i, row ->
             if (row is GridRow.Heading) {
-                // A heading is a line of its own, and it closes whatever line was being filled.
+
                 if (inLine > 0) { y += cellPx; inLine = 0 }
                 out[i] = y
                 val level = row.level.coerceIn(0, HEADING_HEIGHTS.lastIndex)
                 y += heights[level] ?: fallbackHeadings[level]
             } else {
-                // Every photo of a line stands at the line's own top: aiming inside a line is
-                // then the offset the grid itself is given.
+
                 out[i] = y
                 inLine++
                 if (inLine >= columns) { y += cellPx; inLine = 0 }
@@ -2330,9 +1948,7 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
         out[rows.size] = y
         out
     }
-    // What the grid can actually travel: its content, plus the room it keeps above and below it
-    // (the bottom one grows while photos are being picked, to leave the dock clear), less what
-    // fits on screen. Leaving the padding out left the bar unable to reach the last line.
+
     val info = gridState.layoutInfo
     val viewportPx = info.viewportSize.height.toFloat()
     val paddingPx = (info.beforeContentPadding + info.afterContentPadding).toFloat()
@@ -2343,10 +1959,7 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
     val scrollableNow by rememberUpdatedState(scrollablePx)
     val cellNow by rememberUpdatedState(cellPx)
     val canTravel by rememberUpdatedState(scrollable)
-    // Where the thumb stands, worked out WITHOUT being read here: the grid's first visible row and
-    // its offset change on every frame of a scroll, and reading them in the body of this function
-    // rebuilt the whole bar sixty times a second (Cip, 2026-09-20). Read inside a derived value,
-    // and then only by the offset below - which is laid out, not recomposed.
+
     val fraction = remember(gridState) {
         derivedStateOf {
             val map = topsNow
@@ -2364,8 +1977,7 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
         Modifier
             .align(Alignment.CenterEnd)
             .fillMaxHeight()
-            // Wide enough for the month bubble to be drawn beside the bar; only the narrow strip
-            // inside it takes touches, so the rest of this box is see-through and tappable.
+
             .width(FAST_SCROLL_LABEL_ROOM),
     ) {
         val travel = maxHeight - FAST_SCROLL_THUMB
@@ -2373,14 +1985,13 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
         val travelPx = with(density) { travel.toPx() }
         val halfThumbPx = with(density) { FAST_SCROLL_THUMB.toPx() } / 2f
         val labelLiftPx = with(density) { FAST_SCROLL_LABEL_LIFT.toPx() }
-        // A drag anywhere on the bar takes the thumb, wherever the finger landed.
+
         fun aimAt(y: Float) {
             val now = currentRows
             if (now.isEmpty()) return
             val last = now.lastIndex
             val at = if (travelPx <= 0f) 0f else ((y - halfThumbPx) / travelPx).coerceIn(0f, 1f)
-            // Where in the whole height of the list the finger is standing, and the row that
-            // holds that place - the row numbers are no longer evenly spread along the bar.
+
             val tops = topsNow
             val wanted = at * scrollableNow
             var lo = 0
@@ -2390,27 +2001,17 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
                 if (tops[mid] <= wanted) lo = mid else hi = mid - 1
             }
             var target = lo.coerceIn(0, last)
-            // A heading within reach of where the finger points takes it: what a thumb is aiming
-            // at is a group, not the third photo inside it, and a folded group is too small a
-            // mark to hit otherwise (Cip, 2026-09-20).
-            // Bounded by the map as well as by the list: a group opening under the finger makes
-            // the list longer than the map that was drawn when the drag began.
+
             val mapped = minOf(last, tops.size - 2)
             val near = (target - SNAP_ROWS).coerceAtLeast(0)..(target + SNAP_ROWS).coerceAtMost(mapped)
             near.minByOrNull { i ->
                 if (now.getOrNull(i) !is GridRow.Heading) Float.MAX_VALUE else kotlin.math.abs(tops[i] - wanted)
             }?.let { i -> if (now.getOrNull(i) is GridRow.Heading && kotlin.math.abs(tops[i] - wanted) <= cellNow) target = i }
             val into = (wanted - tops[target]).coerceAtLeast(0f)
-            // The same row, and the finger has barely moved inside it: nothing to do. Without the
-            // second half of this the bar could only move a whole line at a time.
+
             if (target == aimed && kotlin.math.abs(into - lastInto) < 2f) return
             lastInto = into
-            // Every heading between where the finger was and where it is now. Only a year and a
-            // month are felt - a year firmly, a month faintly; days go by in silence, or a long
-            // library would buzz without stopping (Cip, 2026-09-18).
-            // A place aimed at in a longer list is brought inside this one. Only when the row
-            // itself changes: sliding INSIDE a heading's own row would otherwise tap for every
-            // pixel of it (Cip, 2026-09-20).
+
             if (target != aimed) {
                 val from = if (aimed < 0) target else aimed.coerceAtMost(last)
                 var crossedMonth = false
@@ -2423,9 +2024,7 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
                 if (crossedYear || crossedMonth) Haptics.tick(view, crossedYear)
             }
             aimed = target
-            // Onto the row, and into it by however much of it lies above the finger, so the list
-            // follows the finger smoothly instead of hopping a whole row at a time. One scroll at
-            // a time: a coroutine per finger movement left a queue of them fighting over the grid.
+
             scrollJob?.cancel()
             scrollJob = scope.launch { gridState.scrollToItem(target, into.roundToInt()) }
         }
@@ -2444,8 +2043,7 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
                             onVerticalDrag = { change, _ -> aimAt(change.position.y) },
                         )
                     } finally {
-                        // Taken down mid-drag (the bar resized), no end or cancel is reported:
-                        // the drag is over all the same, and its aim must not outlive it.
+
                         dragging = false
                         aimed = -1
                     }
@@ -2454,8 +2052,7 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
 
         Box(
             Modifier
-                // Placed in the layout pass, from the value above: moving the thumb costs no
-                // recomposition of the bar or of anything else on the screen.
+
                 .offset { IntOffset(0, (travelPx * fraction.value).roundToInt()) }
                 .align(Alignment.TopEnd)
                 .padding(end = 4.dp)
@@ -2465,25 +2062,17 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
                 .border(1.dp, if (dragging) p.accentFill else p.paper, Corner),
         )
 
-        // While dragging, what the finger is standing on, so the jump is aimed rather than lucky.
         if (dragging) {
-            // Walked backwards from the finger and stopped as soon as both are found: copying the
-            // list and filtering it again for every frame of a drag was the scroller's own cost
-            // (Cip, 2026-09-18).
+
             var heading: String? = null
             var day: String? = null
             var walk = aimed.coerceAtLeast(0).coerceAtMost(rows.lastIndex)
             while (walk >= 0 && (heading == null || day == null)) {
                 val row = rows[walk]
                 if (row is GridRow.Heading) {
-                    // What the heading SAYS, never what it is called under the hood (Cip,
-                    // 2026-09-20): laid out by place, people, tags, folder or camera, a group is
-                    // named by a key of its own making, and the badge was showing that key.
-                    // The count the heading carries is dropped, whether the group is open
-                    // (" . 120") or folded away (" (120)"); only the name belongs in the badge.
+
                     if (row.level == 0 && heading == null) heading = headingLabel(row)
-                    // The day under the month, so the bar says exactly where the finger is, not
-                    // only which month it is passing (Cip, 2026-09-16).
+
                     if (row.level == 1 && day == null) day = headingLabel(row)
                 }
                 walk--
@@ -2491,8 +2080,7 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
             if (!heading.isNullOrBlank()) {
                 Box(
                     Modifier
-                        // Lifted clear of the thumb: under the finger it could not be read. Laid
-                        // out from the same value as the thumb, so the two never disagree.
+
                         .offset { IntOffset(0, (travelPx * fraction.value - labelLiftPx).roundToInt().coerceAtLeast(0)) }
                         .align(Alignment.TopEnd)
                         .padding(end = FAST_SCROLL_WIDTH + 4.dp)
@@ -2516,11 +2104,6 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
     }
 }
 
-/**
- * "Taken between": the two days are chosen in a calendar, because a list of years cannot say
- * "that week in July". Built on `taken_at`, which every photo already carries, so this asks
- * nothing new of the index.
- */
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 private fun DateRangeValues(current: DateRange?, years: List<Int> = emptyList(), onChange: (DateRange?) -> Unit) {
@@ -2536,7 +2119,7 @@ private fun DateRangeValues(current: DateRange?, years: List<Int> = emptyList(),
     Spacer(Modifier.height(18.dp))
 
     if (picking) {
-        // With years chosen above, the calendar offers those years and nothing else.
+
         val allowed = remember(years) {
             object : androidx.compose.material3.SelectableDates {
                 override fun isSelectableDate(utcTimeMillis: Long): Boolean {
@@ -2549,8 +2132,7 @@ private fun DateRangeValues(current: DateRange?, years: List<Int> = emptyList(),
                 override fun isSelectableYear(year: Int): Boolean = years.isEmpty() || year in years
             }
         }
-        // Opened on the years that are filtered for, not on this month: filtering for 2025 and
-        // then having to scroll a calendar back a year is work for nothing (Cip, 2026-09-18).
+
         val openAt = remember(years, current) {
             current?.fromUtcMillis ?: years.maxOrNull()?.let { year ->
                 java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
@@ -2570,8 +2152,7 @@ private fun DateRangeValues(current: DateRange?, years: List<Int> = emptyList(),
             colors = DatePickerDefaults.colors(containerColor = p.paper),
             confirmButton = {
                 TextButton(
-                    // One day chosen and not the other means that single day, rather than
-                    // nothing at all.
+
                     enabled = state.selectedStartDateMillis != null,
                     onClick = {
                         val from = state.selectedStartDateMillis
@@ -2602,10 +2183,6 @@ private fun DateRangeValues(current: DateRange?, years: List<Int> = emptyList(),
     }
 }
 
-/**
- * One on / off filter of the filter sheet: on keeps only the photos that have the thing, off
- * shows them all (Cip, 2026-09-17: switches, not "has / has not" chips).
- */
 @Composable
 private fun FilterSwitch(title: String, hint: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     val p = LocalPalette.current
@@ -2622,71 +2199,48 @@ private fun FilterSwitch(title: String, hint: String, checked: Boolean, onChange
     }
 }
 
-/**
- * The photo, full screen, at its own size - and the rest of the results either side of it.
- *
- * A tap used to hand the photo straight to the gallery, which left the result set behind: swiping
- * there walked the camera roll, not the photos you had just searched for. Here the swipe follows
- * the order the results came back in, and the gallery is one tap away when you want it.
- *
- * A tap on the picture shows the actions; a swipe up opens the same sheet a long press on the
- * grid opens (Cip, 2026-09-16).
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun PhotoViewer(
     hits: List<PhotoHit>,
     start: Int,
     onClose: () -> Unit,
-    /** The details, given the photo, a way to close them, and a way to open the tags. */
+
     onSheet: @Composable (PhotoHit, () -> Unit, (PhotoHit) -> Unit) -> Unit,
     onEditSheet: @Composable (PhotoHit, () -> Unit) -> Unit,
-    /**
-     * The system bars as the SCREEN sees them, not as the dialog does. Inside a dialog window
-     * some phones report nothing at all, and the labels under the icons ended up below the edge
-     * of the screen - on a Poco they disappeared entirely (Cip, 2026-09-16).
-     */
+
     topInset: Dp,
     bottomInset: Dp,
     onNeedMore: () -> Unit,
     onDelete: (PhotoHit) -> Unit,
-    /** For the actions that lead elsewhere: similar photos, the map, photos nearby. */
+
     viewModel: AppViewModel,
 ) {
     val context = LocalContext.current
     val pager = rememberPagerState(initialPage = start) { hits.size }
     val view = LocalView.current
     var showActions by remember { mutableStateOf(true) }
-    // How far the photo on screen is magnified, and where it is held - kept HERE rather than per
-    // page. Writing it from inside a page meant a state write during composition, which asks for
-    // another composition, on every frame of a drag: moving a magnified photo about crawled
-    // (Cip, 2026-09-16). Swiping to another photo starts it whole again.
+
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var zoomJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     LaunchedEffect(pager.currentPage) { zoomJob?.cancel(); scale = 1f; offset = Offset.Zero }
-    // The details of the photo being looked at, opened over it rather than in its place: a swipe
-    // up must not take the picture away (Cip, 2026-09-16).
+
     var sheetFor by remember { mutableStateOf<PhotoHit?>(null) }
-    // Editing happens over the picture too: closing it puts you back on the photo you were
-    // looking at, not on a sheet halfway there (Cip, 2026-09-16).
+
     var editFor by remember { mutableStateOf<PhotoHit?>(null) }
 
-    // Swiping towards the end asks for the next page, so the viewer runs as far as the results do.
     LaunchedEffect(pager.currentPage, hits.size) {
         if (pager.currentPage >= hits.size - 3) onNeedMore()
     }
-    // Nothing left to show (the last photo was deleted): close rather than stand on an empty page.
+
     LaunchedEffect(hits.size) { if (hits.isEmpty()) onClose() }
 
-    // How far the picture has been dragged down, and how far it must go before it closes.
     val dismiss = remember { Animatable(0f) }
-    // How far the finger has travelled upwards on a picture that is not being carried down.
+
     val upBy = remember { mutableFloatStateOf(0f) }
     val scope = rememberCoroutineScope()
 
-    // decorFitsSystemWindows = false, or the window reports no system bars at all and the
-    // labels under the icons are cut off by its own edge (Cip, 2026-09-16).
     Dialog(
         onDismissRequest = onClose,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
@@ -2694,12 +2248,12 @@ internal fun PhotoViewer(
         val overflow = viewerWindowOverflow()
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val closeAt = with(LocalDensity.current) { maxHeight.toPx() } * VIEWER_DISMISS_SHARE
-            // The ground fades as the picture is carried down, so the grid shows through.
+
             val shade = (1f - (kotlin.math.abs(dismiss.value) / (closeAt * 2f))).coerceIn(0.35f, 1f)
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = shade))) {
             HorizontalPager(
                 state = pager,
-                // While a photo is magnified the finger belongs to it, not to the next photo.
+
                 userScrollEnabled = scale <= 1.01f,
                 modifier = Modifier.fillMaxSize(),
             ) { page ->
@@ -2708,7 +2262,7 @@ internal fun PhotoViewer(
                     ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, hit.mediaId)
                 }
                 AsyncImage(
-                    // No size: the original, not the thumbnail the grid is drawn from.
+
                     model = ImageRequest.Builder(context).data(uri).setParameter("bytes", hit.sizeBytes).crossfade(true).build(),
                     contentDescription = hit.meaning.ifBlank { hit.fileName },
                     contentScale = ContentScale.Fit,
@@ -2720,16 +2274,7 @@ internal fun PhotoViewer(
                                 do {
                                     val event = awaitPointerEvent()
                                     if (event.changes.size > 1) {
-                                        // Magnify about the point BETWEEN the fingers, not about
-                                        // the middle of the picture: whatever is under the hand
-                                        // stays under it, wherever on the photo it is pinched
-                                        // (Cip, 2026-09-16).
-                                        //
-                                        // A point sits at centre + (p - centre) * scale + offset.
-                                        // Holding the point under the centroid still while the
-                                        // scale goes from s to s' (k = s'/s) gives
-                                        // offset' = d * (1 - k) + offset * k, with d the centroid
-                                        // measured from the middle.
+
                                         zoomJob?.cancel()
                                         val next = (scale * event.calculateZoom()).coerceAtLeast(1f)
                                         if (next <= 1.01f) {
@@ -2750,11 +2295,7 @@ internal fun PhotoViewer(
                                         }
                                         event.changes.forEach { it.consume() }
                                     } else if (scale > 1f) {
-                                        // One finger on a magnified photo moves it, handled HERE
-                                        // rather than by a drag detector of its own: a detector
-                                        // waits for its own slop before it starts, so the picture
-                                        // fell behind the finger every time the hand changed
-                                        // direction, and the whole thing felt slow (Cip, 2026-09-16).
+
                                         val pan = event.calculatePan()
                                         if (pan != Offset.Zero) {
                                             val limitX = size.width * (scale - 1f) / 2f
@@ -2771,9 +2312,7 @@ internal fun PhotoViewer(
                         }
                         .pointerInput(hit.id) {
                             detectTapGestures(
-                                // Google Photos' gesture: in on the spot you tapped, out again.
-                                // Animated, the pinch is not (Cip, 2026-09-17): the jump read as
-                                // unpolished, a finger on the glass already moves at its own pace.
+
                                 onDoubleTap = { at ->
                                     val fromScale = scale
                                     val fromOffset = offset
@@ -2807,34 +2346,30 @@ internal fun PhotoViewer(
                                 onTap = { showActions = !showActions },
                             )
                         }
-                        // One finger, and only ONE detector for it, chosen by whether the
-                        // picture is magnified. Two of them competing meant the one that crossed
-                        // its threshold first consumed the drag, and moving about a magnified
-                        // photo up and down was a matter of luck (Cip, 2026-09-16).
+
                         .pointerInput(hit.id, scale > 1f) {
                             if (scale <= 1f) {
-                                // Whole: down carries the picture away to leave, up opens its
-                                // details. Sideways is left alone, so the pager still has it.
+
                                 detectVerticalDragGestures(
                                     onVerticalDrag = { change, amount ->
                                         change.consume()
                                         if (amount < 0 && dismiss.value == 0f) {
-                                            // The first hint that the details are on their way up.
+
                                             if (upBy.value == 0f) Haptics.tick(view, strong = false)
                                             upBy.value -= amount
                                         }
                                         scope.launch { dismiss.snapTo((dismiss.value + amount).coerceAtLeast(0f)) }
                                     },
                                     onDragEnd = {
-                                        // Up, unmagnified: the details, over the picture, which stays.
+
                                         if (dismiss.value == 0f && upBy.value > VIEWER_SWIPE_UP) {
-                                            // It arrived: a second tap, so the hand knows.
+
                                             Haptics.tick(view, strong = false)
                                             sheetFor = hit
                                         }
                                         upBy.value = 0f
                                         if (dismiss.value > closeAt) {
-                                            // Carried away for good: the firmer one.
+
                                             Haptics.tick(view, strong = true)
                                             scope.launch {
                                                 dismiss.animateTo(closeAt * 4f, tween(160))
@@ -2851,10 +2386,7 @@ internal fun PhotoViewer(
                                 )
                             }
                         }
-                        // graphicsLayer LAST, after every gesture: a pointer area placed INSIDE a
-                        // scaled layer is measured in that layer's own coordinates, so a finger
-                        // crossing 300px of screen reported 300/scale, and the more the photo was
-                        // magnified the slower it moved (Cip, 2026-09-16).
+
                         .graphicsLayer {
                             scaleX = scale
                             scaleY = scale
@@ -2865,13 +2397,9 @@ internal fun PhotoViewer(
             }
 
             val hit = hits.getOrNull(pager.currentPage)
-            // Nothing is written over the photo: the counter that used to sit at the top is gone
-            // (Cip, 2026-09-20). A photo shown whole is shown whole.
+
             if (showActions && hit != null) {
-                // A quiet hint that the photo has more to say: three chevrons drifting upwards
-                // over the action bar, faintest at the top (Cip, 2026-09-16).
-                // Only while the photo is whole: magnified, a swipe up moves the picture, so the
-                // hint would be promising something that does not happen (Cip, 2026-09-16).
+
                 if (scale <= 1.01f) {
                 val drift = rememberInfiniteTransition(label = "swipeHint")
                 val rise by drift.animateFloat(
@@ -2908,9 +2436,7 @@ internal fun PhotoViewer(
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .background(Color(0xCC000000))
-                        // The room below is whatever this phone actually reserves, and never
-                        // less than VIEWER_MIN_BOTTOM: a gesture bar, a chin, a cutout - the
-                        // labels have to clear all of them, on any phone (Cip, 2026-09-16).
+
                         .padding(
                             start = 12.dp,
                             end = 12.dp,
@@ -2919,9 +2445,7 @@ internal fun PhotoViewer(
                         ),
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
-                    // Every action of a photo lives here, and only here: the details below the
-                    // photo carry none (Cip, 2026-09-17). Icons without words, a little bigger.
-                    // The ones that lead elsewhere close the photo first.
+
                     ViewerAction(stringResource(R.string.act_tag), R.drawable.ic_tag) { editFor = hit }
                     ViewerAction(stringResource(R.string.act_gallery), R.drawable.ic_open) { Actions.openPhoto(context, hit) }
                     ViewerAction(stringResource(R.string.act_similar), R.drawable.ic_duplicates) { onClose(); viewModel.showSimilar(hit) }
@@ -2933,9 +2457,7 @@ internal fun PhotoViewer(
                     ViewerAction(stringResource(R.string.act_delete), R.drawable.ic_delete) { onDelete(hit) }
                 }
             }
-            // Closing the details is felt too, the firmer one, as opening them was (Cip, 2026-09-16).
-            // Always the photo as it is now in the results, never the copy taken when the sheet was
-            // opened: after a save the old copy lacked the new names (Cip, 2026-09-17).
+
             sheetFor?.let { held ->
                 val photo = hits.firstOrNull { it.id == held.id } ?: held
                 onSheet(
@@ -2944,8 +2466,7 @@ internal fun PhotoViewer(
                     { editFor = it },
                 )
             }
-            // Leaving the tags puts the photo's details back, where they were entered from -
-            // and with whatever was just saved showing on them (Cip, 2026-09-16).
+
             editFor?.let { held ->
                 val photo = hits.firstOrNull { it.id == held.id } ?: held
                 onEditSheet(photo) {
@@ -2958,10 +2479,6 @@ internal fun PhotoViewer(
     }
 }
 
-/**
- * One action under the full screen photo: a framed icon on the dark bar, no word under it (Cip,
- * 2026-09-17); [label] is what a screen reader says.
- */
 @Composable
 private fun RowScope.ViewerAction(label: String, icon: Int, onClick: () -> Unit) {
     ViewerActionFrame(onClick) {
@@ -2969,7 +2486,6 @@ private fun RowScope.ViewerAction(label: String, icon: Int, onClick: () -> Unit)
     }
 }
 
-/** The same action as [ViewerAction], for an icon that is a vector rather than a drawable. */
 @Composable
 private fun RowScope.ViewerIconAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
     ViewerActionFrame(onClick) {
@@ -2977,14 +2493,13 @@ private fun RowScope.ViewerIconAction(label: String, icon: androidx.compose.ui.g
     }
 }
 
-/** The frame every action under the full screen photo sits in. */
 @Composable
 private fun RowScope.ViewerActionFrame(onClick: () -> Unit, content: @Composable () -> Unit) {
     Box(
         Modifier
             .weight(1f)
             .clip(Corner)
-            // Framed like every other action in the app, so they read as buttons on the picture.
+
             .border(1.dp, Color.White.copy(alpha = 0.45f), Corner)
             .combinedClickableCompat(onClick)
             .padding(vertical = 10.dp),
@@ -2992,10 +2507,6 @@ private fun RowScope.ViewerActionFrame(onClick: () -> Unit, content: @Composable
     ) { content() }
 }
 
-/**
- * The values of one filter group: tap a value to select it, tap again to clear it. The heading
- * above it is drawn by FilterGroup, so every group of the sheet looks the same.
- */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FacetValues(
@@ -3011,7 +2522,7 @@ private fun FacetValues(
         FacetSearch(all, selected, label, onToggle)
         return
     }
-    // Long lists (the CLIP words) start with the most frequent values; "Show all" opens the rest.
+
     var expanded by remember(values) { mutableStateOf(false) }
     val shown = if (expanded || all.size <= FACET_PREVIEW) all else all.take(FACET_PREVIEW) + all.drop(FACET_PREVIEW).filter { it.value in selected }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -3032,12 +2543,6 @@ private fun FacetValues(
     Spacer(Modifier.height(18.dp))
 }
 
-/**
- * A filter with too many values to lay out as chips (Cip, 2026-09-18): the values picked so far
- * as chips, to take off with a tap, and under them a small search field. Tapping it lists every
- * value; typing narrows the list; each tap on a value puts it on or takes it off and the list
- * stays open, so several can be picked one after another, as with tags.
- */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun FacetSearch(
@@ -3051,10 +2556,9 @@ private fun FacetSearch(
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
     var text by remember(all) { mutableStateOf("") }
     var open by remember { mutableStateOf(false) }
-    // Folded once per list, not once per keystroke for every value.
+
     val folded = remember(all) { all.map { com.opensolr.photos.data.Words.fold(label(it.value)) } }
-    // Nothing typed: the most frequent values, a short list to start from. Typed: the values
-    // that contain it. Either way no more than FACET_SEARCH_ROWS are drawn (Cip, 2026-09-18).
+
     val matches = remember(all, text) {
         val needle = com.opensolr.photos.data.Words.fold(text)
         if (needle.isEmpty()) all.sortedByDescending { it.count }
@@ -3124,8 +2628,7 @@ private fun FacetSearch(
             if (matches.isEmpty()) {
                 Text(stringResource(R.string.no_value), style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
             }
-            // Never all of them: a list of thousands would be thousands of rows built for a finger
-            // that reads twenty.
+
             matches.take(FACET_SEARCH_ROWS).forEach { facet ->
                 val on = facet.value in selected
                 Row(
@@ -3161,9 +2664,6 @@ private fun FacetSearch(
     Spacer(Modifier.height(18.dp))
 }
 
-/**
- * How a facet value reads on a chip: folders without the trailing slash, orientations capitalised.
- */
 private fun facetLabel(context: android.content.Context, field: String, value: String): String = when (field) {
     "folder" -> value.trimEnd('/')
     "orientation" -> when (value) {
@@ -3175,10 +2675,6 @@ private fun facetLabel(context: android.content.Context, field: String, value: S
     else -> value
 }
 
-/**
- * The title of a facet's group on the filter sheet, in the app's language. The English title in
- * SearchFilters.FACETS stays the key the open groups are remembered by.
- */
 @Composable
 private fun facetTitle(field: String): String = when (field) {
     "year" -> stringResource(R.string.facet_year)
@@ -3192,19 +2688,14 @@ private fun facetTitle(field: String): String = when (field) {
     else -> SearchFilters.FACETS.toMap()[field] ?: field
 }
 
-/**
- * Long-press details: the photo, when and with what it was taken, where, and the words it was
- * read into.
- */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 internal fun DetailsSheet(
-    /** Called by the actions that take the viewer somewhere else, so it can close first. */
+
     onLeave: () -> Unit = {},hit: PhotoHit, viewModel: AppViewModel, onDismiss: () -> Unit, onEdit: (PhotoHit) -> Unit) {
     val p = LocalPalette.current
     val context = LocalContext.current
-    // Putting the photo somewhere else: the map, then Android's permission to write the file, then
-    // the position into the file and everywhere else (Cip, 2026-09-19). Declined, nothing changes.
+
     var picking by remember { mutableStateOf(false) }
     var pendingPlace by remember { mutableStateOf<Pair<Double, Double>?>(null) }
     val placeWriter = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
@@ -3237,9 +2728,7 @@ internal fun DetailsSheet(
         }
     }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = p.paper, shape = Corner) {
-        // The map belongs to the sheet, not beside it: opened as a sibling its window was made
-        // before the sheet's and the sheet could sit over its buttons on some phones, which is
-        // why moving a single photo misbehaved where moving many did not (Cip, 2026-09-20).
+
         if (picking) {
             PlacePickerDialog(start = hit.latLon, viewModel = viewModel, onDismiss = { picking = false }, onPick = { lat, lon -> savePlace(lat, lon) })
         }
@@ -3251,9 +2740,7 @@ internal fun DetailsSheet(
                 .navigationBarsPadding()
         ) {
             val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, hit.mediaId)
-            // A small picture, and beside it the plate a camera shows for a frame: what the
-            // file is, where it sits, when it was taken, on what, how big, and how it was shot.
-            // Nothing below repeats any of it (Cip, 2026-09-16).
+
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 Box(Modifier.size(104.dp).clip(Corner).background(p.chip)) {
                     AsyncImage(
@@ -3302,15 +2789,12 @@ internal fun DetailsSheet(
                 }
             }
             Spacer(Modifier.height(16.dp))
-            // Where it was taken, as a button that opens the map to put it somewhere else
-            // (Cip, 2026-09-19); a photo with no position gets the same button to give it one.
+
             SectionLabel(stringResource(R.string.sec_place))
             Spacer(Modifier.height(10.dp))
             PlaceButton(hit.placeLabel ?: stringResource(R.string.add_place), onClick = { picking = true })
             Spacer(Modifier.height(16.dp))
-            // People first: the names are what most owners look for, and each name reads as its
-            // own thing rather than as one run-on line (Cip, 2026-09-18). Tapping any of them
-            // opens the editor, as a tag does.
+
             val people = hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() }
             if (people.isNotEmpty()) {
                 SectionLabel(stringResource(R.string.sec_people))
@@ -3328,12 +2812,10 @@ internal fun DetailsSheet(
                 }
                 Spacer(Modifier.height(16.dp))
             }
-            // Plain text, not chips: there are a lot of these words, they are edited as one piece
-            // of writing anyway, and as chips they filled the sheet (Cip, 2026-09-18).
+
             SectionLabel(stringResource(R.string.sec_shows))
             Text(hit.meaning.ifBlank { stringResource(R.string.no_words_yet) }, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium), color = p.ink, modifier = Modifier.padding(vertical = 12.dp))
-            // What was read printed IN the photo - a receipt, a label, a screenshot. Shown apart
-            // from the words above, which say what the photo is OF (Cip, 2026-09-16).
+
             if (hit.ocrText.isNotBlank()) {
                 SectionLabel(stringResource(R.string.sec_printed))
                 Text(hit.ocrText, style = MaterialTheme.typography.bodyMedium, color = p.muted, modifier = Modifier.padding(vertical = 12.dp))
@@ -3343,11 +2825,6 @@ internal fun DetailsSheet(
     }
 }
 
-/**
- * The square tick of a heading, a photo or an album: high contrast on both themes (outlined in the
- * theme's own ink, filled with the accent when it is on) and a tap target of its own, wider than
- * the square, so the tick itself answers a finger (Cip, 2026-09-18).
- */
 @Composable
 internal fun PickTick(selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, dense: Boolean = false) {
     val p = LocalPalette.current
@@ -3355,8 +2832,7 @@ internal fun PickTick(selected: Boolean, onClick: () -> Unit, modifier: Modifier
     Box(
         modifier
             .combinedClickableCompat { Haptics.tick(view, strong = !selected); onClick() }
-            // On a heading the tap area grows sideways only: taller and every title would jump
-            // the moment picking started (Cip, 2026-09-18).
+
             .padding(horizontal = if (dense) 10.dp else 6.dp, vertical = if (dense) 0.dp else 6.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -3372,51 +2848,24 @@ internal fun PickTick(selected: Boolean, onClick: () -> Unit, modifier: Modifier
     }
 }
 
-/** Facet values shown before "Show all". */
 private const val FACET_PREVIEW = 10
 
-/** Above this many values a filter is a search field instead of chips (Cip, 2026-09-18). */
 private const val FACET_SEARCH_OVER = 50
 
-/** How many values the search field lists at once. */
 private const val FACET_SEARCH_ROWS = 50
 
-/** Sync phases during which the index is being rebuilt and search is unavailable. */
 private val REBUILD_PHASES = setOf("Resetting your index", "Updating the index configuration", "Rebuilding your index")
 
-/**
- * A plain click without the long-press semantics.
- */
 @OptIn(ExperimentalFoundationApi::class)
 private fun Modifier.combinedClickableCompat(onClick: () -> Unit): Modifier = this.combinedClickable(onClick = onClick)
 
-/**
- * How many rows either side of the finger the bar looks at for a heading to settle on. A group is
- * what a thumb aims for; landing three photos into one is landing nowhere.
- */
 private const val SNAP_ROWS = 4
 
-/**
- * How tall a group heading stands, by its level, as the bar's map of the grid reckons it: the
- * padding and the type of the row as they are laid out above. Worked out rather than measured, so
- * that the map never changes while the finger is on the bar.
- */
 private val HEADING_HEIGHTS = listOf(46.dp, 40.dp, 38.dp)
 
-/**
- * What a group heading says, without the count it carries: the badge on the scroll bar names the
- * group the finger is standing on, and a group laid out by place, people, tags, folder or camera
- * is named under the hood by a key ("folder:Pictures/2019") that nobody should ever read.
- */
 private fun headingLabel(row: GridRow.Heading): String =
     row.text.substringBefore(" \u00b7 ").substringBefore(" (").trim().ifBlank { row.name }
 
-/**
- * The marks in a thumbnail's top-right corner: a person when someone is named on the photo, and a
- * tag when the owner tagged it, the person to the left of the tag. Each sits on its own small
- * translucent square, so it reads on a bright photo and on a dark one alike. Nothing is drawn when
- * the photo carries neither.
- */
 @Composable
 private fun PhotoMarks(hasPeople: Boolean, hasTags: Boolean, modifier: Modifier = Modifier) {
     if (!hasPeople && !hasTags) return
@@ -3434,20 +2883,13 @@ private fun PhotoMarks(hasPeople: Boolean, hasTags: Boolean, modifier: Modifier 
     }
 }
 
-/** One 18dp translucent dark square holding a thumbnail mark. */
 @Composable
 private fun PhotoMark(icon: @Composable () -> Unit) {
     Box(Modifier.size(18.dp).background(Color(0x99000000), Corner), contentAlignment = Alignment.Center) { icon() }
 }
 
-/** The mark of a photo the phone could not read: a red frame and a red "!" (Cip, 2026-09-17). */
 private val SkippedRed = Color(0xFFE53E3E)
 
-/**
- * The band behind a group heading (a month at level 0, a day under it), on the photos grid and in
- * the albums alike: the app's accent, faint, stronger for a month than for a day. The text on it is
- * the theme's own ink, so it reads the same on light and dark (Cip, 2026-09-17).
- */
 @Composable
 internal fun headingBand(level: Int): Color =
     LocalPalette.current.accent.copy(alpha = when (level) {
@@ -3456,39 +2898,15 @@ internal fun headingBand(level: Int): Color =
         else -> 0.06f
     })
 
-/**
- * The type of a group heading: a month (level 0) or a day under it. A touch under the title
- * sizes they had, which read too big (Cip, 2026-09-17). Shared with the album sections.
- */
 @Composable
 internal fun headingStyle(level: Int): androidx.compose.ui.text.TextStyle =
     when (level) {
         0 -> MaterialTheme.typography.titleMedium.copy(fontSize = 19.sp)
         1 -> MaterialTheme.typography.titleMedium.copy(fontSize = 17.sp)
-        // A day is the one a thumb aims at most often, so it stays big enough to hit and to read
-        // (Cip, 2026-09-18).
+
         else -> MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp)
     }
 
-/**
- * Picking photos by dragging, as every gallery does (Cip, 2026-09-20): press and hold a photo,
- * keep the finger down, and everything between that photo and the one under the finger is ticked
- * as it travels. Dragging back up unticks what the drag itself ticked. Near the top or the bottom
- * edge the grid scrolls itself, so a selection can run past what is on screen.
- *
- * The press is taken here, on the grid, rather than on each photo: a photo's own long press ends
- * the moment it fires, and what is wanted is a gesture that goes on while the finger is down. The
- * events are taken in the first pass and consumed from the long press onwards, so neither the
- * grid's own scrolling nor the photo underneath sees them - which is what keeps the list still
- * while the finger picks, and what keeps a lifted finger from also counting as a tap.
- *
- * Nothing is consumed before the press is recognised, so an ordinary tap and an ordinary scroll
- * behave exactly as they did.
- *
- * @param rowsNow the rows the grid is drawing right now, read at the moment they are needed:
- *                the list is rebuilt while a drag is running (every tick changes the state) and
- *                a captured copy would go stale under the finger.
- */
 private fun Modifier.dragSelect(
     gridState: androidx.compose.foundation.lazy.grid.LazyGridState,
     rowsNow: () -> List<GridRow>,
@@ -3497,13 +2915,12 @@ private fun Modifier.dragSelect(
     onEnd: (Boolean) -> Unit,
 ): Modifier = composed {
     val scope = rememberCoroutineScope()
-    // Where the finger is, while it is down: the edge scroller reads it on every frame.
+
     val at = remember { mutableStateOf<Offset?>(null) }
     val anchorIndex = remember { mutableStateOf<Int?>(null) }
     val edgePx = with(LocalDensity.current) { DRAG_EDGE.toPx() }
     val stepPx = with(LocalDensity.current) { DRAG_STEP.toPx() }
 
-    /** The row under [point], or the last one above it when the point is in a gap. */
     fun rowIndexAt(point: Offset): Int? {
         val items = gridState.layoutInfo.visibleItemsInfo
         if (items.isEmpty()) return null
@@ -3512,12 +2929,10 @@ private fun Modifier.dragSelect(
             val withinX = point.x >= item.offset.x && point.x <= item.offset.x + item.size.width
             if (withinY && withinX) return item.index
         }
-        // Between two photos of a row, or out to the side: the last one that starts above the
-        // finger, so the range never stalls while the finger is in a gap.
+
         return items.lastOrNull { it.offset.y <= point.y }?.index ?: items.first().index
     }
 
-    /** Every photo between the row the drag began on and the row under the finger. */
     fun idsTo(point: Offset): List<String>? {
         val anchor = anchorIndex.value ?: return null
         val here = rowIndexAt(point) ?: return null
@@ -3525,15 +2940,14 @@ private fun Modifier.dragSelect(
         val from = minOf(anchor, here).coerceAtLeast(0)
         val to = maxOf(anchor, here).coerceAtMost(rows.lastIndex)
         if (from > to) return null
-        // Headings are skipped: a drag picks photos, and a group is taken whole by its own tick.
+
         return (from..to).mapNotNull { (rows.getOrNull(it) as? GridRow.Photo)?.hit?.id }
     }
 
     this.pointerInput(Unit) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-            // A press that moves, or lets go, before the time is up is a scroll or a tap: left
-            // alone entirely, unconsumed, for the grid and the photo to deal with as always.
+
             val left = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                 var moved = false
                 while (!moved) {
@@ -3551,8 +2965,6 @@ private fun Modifier.dragSelect(
             at.value = down.position
             onStart(startId)
 
-            // The grid scrolls itself while the finger rests near an edge, and the range is
-            // worked out again on every step, since the photos move under the finger.
             var covered = 1
             var movedAway = false
             val scrolling = scope.launch {
@@ -3570,8 +2982,7 @@ private fun Modifier.dragSelect(
                             if (ids.size != covered) {
                                 covered = ids.size
                                 movedAway = true
-                                // Quietly: the finger is standing still, the grid is doing the
-                                // travelling, and a tap per photo at sixty a second is a buzz.
+
                                 onRange(ids, false)
                             }
                         }
@@ -3607,8 +3018,6 @@ private fun Modifier.dragSelect(
     }
 }
 
-/** How close to an edge the finger has to be for the grid to start scrolling under it. */
 private val DRAG_EDGE = 72.dp
 
-/** How far the grid scrolls per frame when the finger sits right at the edge. */
 private val DRAG_STEP = 14.dp

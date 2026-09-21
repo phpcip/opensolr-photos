@@ -12,23 +12,14 @@ import com.opensolr.photos.ui.AppViewModel
 import com.opensolr.photos.ui.Screen
 import com.opensolr.photos.ui.theme.OpensolrPhotosTheme
 
-/**
- * The single activity. Hosts the Compose UI and receives the two kinds of intents that steer it:
- * the end of a browser sign-in (forwarded by AuthCallbackActivity) and taps on notifications
- * that should land on a given screen.
- */
 class MainActivity : ComponentActivity() {
 
     private val viewModel: AppViewModel by viewModels()
 
-    /** The language picked on Me, on Android before 13 (later, Android applies it itself). */
     override fun attachBaseContext(newBase: android.content.Context) {
         super.attachBaseContext(com.opensolr.photos.ui.AppLanguage.wrap(newBase))
     }
 
-    /**
-     * Sets up edge-to-edge drawing and the UI, then handles the launching intent.
-     */
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
@@ -40,26 +31,16 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * Back in front, from the gallery or anywhere else: the view model checks whether the
-     * chosen folders changed meanwhile and syncs only if they did.
-     */
     override fun onResume() {
         super.onResume()
         viewModel.onAppResumed()
     }
 
-    /**
-     * Handles intents delivered while the activity is already open.
-     */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handle(intent)
     }
 
-    /**
-     * Routes a sign-in callback or a notification destination to the view model, once.
-     */
     private fun handle(intent: Intent?) {
         if (intent == null) return
         intent.getStringExtra(EXTRA_AUTH_CALLBACK)?.let {

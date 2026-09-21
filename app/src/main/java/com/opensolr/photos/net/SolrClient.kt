@@ -12,29 +12,12 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 
-/**
- * Talks to the phone's Opensolr Index directly, over HTTPS with its HTTP Basic credentials:
- * /select to search and to list ids, /update to write and delete.
- *
- * Searches are always POSTed as a form, never put in a URL: query vectors are too long for a
- * URL, and a POST body keeps the search terms out of access logs.
- */
 class SolrClient(private val connection: IndexConnection, private val http: OkHttpClient = Http.client) {
 
     private val authorization = Credentials.basic(connection.username, connection.password, Charsets.UTF_8)
 
-    /**
-     * Runs /select with [params] (a name may repeat, e.g. several fq) and returns the parsed answer.
-     */
     suspend fun select(params: List<Pair<String, String>>): JSONObject = JSONObject(selectText(params))
 
-    /**
-     * The same question, with the answer left as the text the index sent.
-     *
-     * The answer is kept on the phone for as long as the owner chose, and keeping it meant writing
-     * the parsed answer back out as text again - a second copy of every document of the page, built
-     * for nothing when the text it came from was still in hand (Cip, 2026-09-18).
-     */
     suspend fun selectText(params: List<Pair<String, String>>): String = withContext(Dispatchers.IO) {
         val form = FormBody.Builder().apply {
             params.forEach { (name, value) -> add(name, value) }
@@ -43,10 +26,6 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
         execute(request("/select").post(form).build())
     }
 
-    /**
-     * Every document id in the index, fetched [pageSize] at a time with start/rows, sorted by id
-     * so that consecutive pages line up. [onPage] reports how many ids arrived so far.
-     */
     suspend fun allIds(pageSize: Int = 1000, query: String = "*:*", onPage: suspend (Int) -> Unit = {}): Set<String> {
         val ids = HashSet<String>()
         var start = 0
@@ -71,12 +50,6 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
         return ids
     }
 
-    /**
-     * Walks every photo in the index, [pageSize] at a time, handing each page of (id, size_bytes
-     * it was indexed with) to [onPage] together with the index's total. Cursor paging, so a deep
-     * page costs the same as the first; the pages arrive in id order. The caller compares each
-     * page with the phone's files as it comes, so the whole index is never held in memory.
-     */
     suspend fun forEachSizePage(pageSize: Int = 1000, onPage: suspend (total: Long, page: List<Triple<String, Long, Long>>) -> Unit) {
         var cursor = "*"
         while (true) {
@@ -91,8 +64,7 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
             )
             val response = json.getJSONObject("response")
             val docs = response.getJSONArray("docs")
-            // Each photo with the size it was indexed with and when it was written (epoch millis,
-            // 0 when unknown): the second is what lets "Re-read all" carry on where it stopped.
+
             val page = ArrayList<Triple<String, Long, Long>>(docs.length())
             for (i in 0 until docs.length()) {
                 val d = docs.getJSONObject(i)
@@ -106,10 +78,6 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
         }
     }
 
-    /**
-     * Walks every document in the index with the stored [fields], [pageSize] at a time, cursor
-     * paging (a deep page costs the same as the first), handing each document to [onDoc].
-     */
     suspend fun forEachDoc(fields: String, pageSize: Int = 1000, filters: List<Pair<String, String>> = emptyList(), onDoc: suspend (JSONObject) -> Unit) {
         var cursor = "*"
         while (true) {
@@ -130,26 +98,6 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
         }
     }
 
-    /**
-     * Groups of alike photos of one kind, in one request: a facet on the duplicate key [field]
-     * (one of SearchRepository.DUPLICATE_FIELDS) keeping values held by two photos or more,
-     * with the ids of each. Biggest group first. An index on a configuration without the
-     * duplicate keys answers 400.
-     *
-     * Bounded on both sides, because a loose key groups half a library into one value (Cip,
-     * 2026-09-20): a value held by more than [maxGroup] photos is a category, not a set of
-     * copies, and is dropped by its count without its ids being looked at; the ids sub-facet
-     * asks for [maxGroup] + 1 of them, so neither the answer nor the parsing of it grows with
-     * the size of such a value. At most [maxGroups] values come back, the biggest first, which
-     * is far more than the grid ever pages through.
-     *
-     * [within] asks for a second thing to be the same as well (Cip, 2026-09-20): the key's value
-     * is split by that field, and a group is one value of the key AND one value of [within] -
-     * the same three words AND the same camera. Still one request, because the split is a
-     * sub-facet; photos where [within] is empty fall out of the answer, having nothing to be
-     * grouped by. With a split the cap is read on the inner group, since a key held by hundreds
-     * of photos can still hold a pair per camera.
-     */
     suspend fun duplicateGroups(field: String, maxGroup: Int, maxGroups: Int, within: String? = null): List<List<String>> {
         fun ids() = JSONObject().put("type", "terms").put("field", "id").put("limit", maxGroup + 1)
         val inner = within?.let {
@@ -173,10 +121,10 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
         )
         val json = select(listOf("q" to "*:*", "rows" to "0", "json.facet" to facet.toString()))
         val buckets = json.optJSONObject("facets")?.optJSONObject("groups")?.optJSONArray("buckets") ?: return emptyList()
-        /** The ids of one bucket, when it holds between two and [maxGroup] photos. */
+
         fun groupOf(bucket: JSONObject?): List<String>? {
             if (bucket == null) return null
-            // The count, not the number of ids returned: the ids are capped just above the cap.
+
             if (bucket.optLong("count") > maxGroup) return null
             val ids = bucket.optJSONObject("ids")?.optJSONArray("buckets") ?: return null
             return (0 until ids.length()).mapNotNull { k -> ids.optJSONObject(k)?.optString("val")?.takeIf { it.isNotEmpty() } }
@@ -192,30 +140,19 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
             val split = bucket.optJSONObject("within")?.optJSONArray("buckets") ?: continue
             for (k in 0 until split.length()) groupOf(split.optJSONObject(k))?.let { out += it }
         }
-        // Biggest first, as the flat answer already comes: a split answer is ordered by its key.
+
         return out.sortedByDescending { it.size }
     }
 
-    /**
-     * How many photos the index wrote before [millis] (epoch), in one request with no rows: what
-     * "Re-read all" still has to do, so its progress has a real total from the start.
-     */
     suspend fun countWrittenBefore(millis: Long): Long {
         val before = java.time.Instant.ofEpochMilli(millis).toString()
         val json = select(listOf("q" to "*:*", "fq" to "indexed_at:[* TO $before}", "rows" to "0"))
         return json.optJSONObject("response")?.optLong("numFound") ?: 0L
     }
 
-    /**
-     * Number of documents in the index.
-     */
     suspend fun count(): Long =
         select(listOf("q" to "*:*", "rows" to "0")).getJSONObject("response").optLong("numFound")
 
-    /**
-     * True when the index carries this app's schema. An index without it answers 400 for the
-     * unknown field.
-     */
     suspend fun hasPhotoSchema(): Boolean = try {
         select(listOf("q" to "*:*", "rows" to "0", "fq" to "meaning:[* TO *]"))
         true
@@ -223,14 +160,10 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
         if (e.message?.contains("HTTP 400") == true) false else throw e
     }
 
-    /**
-     * Autocomplete: labels that contain what the user typed so far, best first.
-     */
     suspend fun suggest(prefix: String, count: Int = 8): List<String> = withContext(Dispatchers.IO) {
         val form = FormBody.Builder()
             .add("suggest.q", prefix)
-            // The suggester returns one entry per photo carrying the label; ask for more and
-            // keep the distinct labels.
+
             .add("suggest.count", (count.coerceIn(1, 20) * 10).toString())
             .add("wt", "json")
             .build()
@@ -242,16 +175,8 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
             .distinctBy { it.lowercase() }.take(count)
     }
 
-    /**
-     * Ids of the photos indexed without CLIP words (the monthly AI allowance was used up when
-     * they were written), to be read once the allowance is back.
-     */
     suspend fun idsWithoutWords(): Set<String> = allIds(query = "*:* AND -clip_model:[* TO *]")
 
-    /**
-     * Every document in the index with the stored [fields], [pageSize] at a time, handed to
-     * [onDoc] one by one. Used to rebuild the phone's cache from the index.
-     */
     suspend fun allDocs(fields: String, pageSize: Int = 200, onDoc: suspend (JSONObject) -> Unit) {
         var start = 0
         while (true) {
@@ -271,11 +196,6 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
         }
     }
 
-    /**
-     * The configuration version the index is running, read from the /opensolr-photos-config
-     * handler. 0 when the index has no such handler (a configuration from before versions
-     * existed), which counts as older than anything.
-     */
     suspend fun configVersion(): Int = withContext(Dispatchers.IO) {
         try {
             val json = JSONObject(execute(request("/opensolr-photos-config?wt=json").get().build()))
@@ -285,22 +205,10 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
         }
     }
 
-    /**
-     * Empties the index: every document goes, the index itself stays. Used only by a rebuild,
-     * after the documents were copied into the phone's cache.
-     */
     suspend fun deleteAll() = withContext(Dispatchers.IO) {
         execute(request("/update?commit=true&wt=json").post("{\"delete\":{\"query\":\"*:*\"}}".toRequestBody(JSON)).build())
     }
 
-    /**
-     * Deletes every document that carries printed text, and says how many went.
-     *
-     * One delete-by-query rather than a walk over the ids: the count is asked for first, so the
-     * screen can say what happened, and the delete itself is a single request whatever the
-     * number. The photos themselves are untouched; the next sync finds them missing from the
-     * index and reads them again.
-     */
     suspend fun deleteWithOcr(): Int = withContext(Dispatchers.IO) {
         val found = select(listOf("q" to "*:*", "fq" to "ocr_t:*", "rows" to "0"))
             .optJSONObject("response")?.optInt("numFound") ?: 0
@@ -310,17 +218,10 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
         found
     }
 
-    /**
-     * Adds or replaces [docs]. They become searchable within ten seconds.
-     */
     suspend fun add(docs: JSONArray) = withContext(Dispatchers.IO) {
         execute(request("/update?commitWithin=10000&wt=json").post(docs.toString().toRequestBody(JSON)).build())
     }
 
-    /**
-     * Deletes the documents with [ids]. [now] commits on the spot instead of within ten
-     * seconds: what a person just deleted must not come back on the next refresh.
-     */
     suspend fun delete(ids: Collection<String>, now: Boolean = false) = withContext(Dispatchers.IO) {
         if (ids.isEmpty()) return@withContext
         val body = JSONObject().put("delete", JSONArray(ids)).toString()
@@ -328,24 +229,13 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
         execute(request(query).post(body.toRequestBody(JSON)).build())
     }
 
-    /**
-     * Hard commit, so everything written so far is durable and visible.
-     */
     suspend fun commit() = withContext(Dispatchers.IO) {
         execute(request("/update?commit=true&wt=json").post("{\"commit\":{}}".toRequestBody(JSON)).build())
     }
 
-    /**
-     * A request to [path] under the index, with its credentials.
-     */
     private fun request(path: String): Request.Builder =
         Request.Builder().url(connection.baseUrl.trimEnd('/') + path).header("Authorization", authorization)
 
-    /**
-     * Runs a request and returns the body, mapping the index's refusals: 401 is a changed
-     * password, 403 is a plan limit (Opensolr closes an index that is over its disk space or
-     * bandwidth), anything else non-2xx is a service error carrying the status.
-     */
     private fun execute(request: Request): String =
         http.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
@@ -360,10 +250,6 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
     companion object {
         private val JSON = "application/json; charset=utf-8".toMediaType()
 
-        /**
-         * Values of the second field a duplicate key is split by, per key value: a library holds
-         * a handful of cameras, so this is a ceiling rather than a limit anyone reaches.
-         */
         private const val WITHIN_LIMIT = 50
     }
 }

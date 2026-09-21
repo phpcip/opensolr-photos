@@ -73,21 +73,6 @@ import kotlinx.coroutines.launch
 
 private val Corner = RoundedCornerShape(2.dp)
 
-/**
- * Tagging every ticked photo at once.
- *
- * People come first: a name is what most people come here to put right (Cip, 2026-09-18). Each of
- * the two fields has its own switch - **Add** puts what is typed on top of what each photo already
- * carries, **Replace** makes it the whole of that field on every ticked photo, so a person renamed
- * overnight is renamed everywhere in one save.
- *
- * Under the form, what the ticked photos already carry is listed, counted by the index over the
- * whole selection - for the owner to read, not to edit.
- *
- * Nothing here waits for the index: the save is written on the phone and the sync that follows
- * carries it up. Only the writing into the photo files themselves happens on the spot, because
- * Android asks the owner to allow it.
- */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit) {
@@ -100,14 +85,13 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
     var tagsReplace by remember { mutableStateOf(false) }
     var suggestions by remember { mutableStateOf(TagSuggestions(emptyList(), emptyList())) }
     var suggestionsLoading by remember { mutableStateOf(false) }
-    // Names of people, with the names already in the index offered as you type.
+
     var persons by remember { mutableStateOf(emptyList<String>()) }
     var newPerson by remember { mutableStateOf("") }
     var personFieldFocused by remember { mutableStateOf(false) }
     var personsReplace by remember { mutableStateOf(false) }
     var personSuggestions by remember { mutableStateOf(emptyList<String>()) }
 
-    // What the ticked photos carry today, read once for the whole selection.
     LaunchedEffect(state.selectedIds) { viewModel.loadSelectionWords() }
 
     LaunchedEffect(newPerson, personFieldFocused, persons) {
@@ -122,8 +106,6 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
         newPerson = ""
     }
 
-    // The same autocomplete as one photo's editor: the owner's own tags first, then words the
-    // photos were read into, asked again a short pause after the last keystroke.
     LaunchedEffect(newTag, tagFieldFocused, tags) {
         if (!tagFieldFocused) { suggestionsLoading = false; return@LaunchedEffect }
         suggestionsLoading = true
@@ -147,8 +129,6 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
         newTag = ""
     }
 
-    // Everything the two fields say, once what is still typed in them is counted in. A field left
-    // untouched stays null, so it is not changed on any photo.
     fun typedTags(): List<String>? {
         val all = (tags + newTag.split(',').map { it.trim() }.filter { it.isNotEmpty() }).distinctWords()
         return if (all.isEmpty() && !tagsReplace) null else all
@@ -158,8 +138,6 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
         return if (all.isEmpty() && !personsReplace) null else all
     }
 
-    // One request from Android for every photo of the batch; on yes the words go into each file
-    // too. The sheet stays until Android answers, so the answer has somewhere to land.
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val writeLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
@@ -168,7 +146,6 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
         viewModel.tagPhotos(typedTags(), tagsReplace, typedPersons(), personsReplace, writeFiles = result.resultCode == android.app.Activity.RESULT_OK)
     }
 
-    // The place for many photos: which of them, the map, and Android's answer about the files.
     var placeOnlyMissing by remember { mutableStateOf(false) }
     var pickingPlace by remember { mutableStateOf(false) }
     var pendingPlace by remember { mutableStateOf<Triple<Double, Double, List<com.opensolr.photos.search.PhotoHit>>?>(null) }
@@ -177,14 +154,13 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
     ) { result ->
         val (lat, lon, chosen) = pendingPlace ?: return@rememberLauncherForActivityResult
         pendingPlace = null
-        // Declined, nothing changes anywhere: the file and the index always say the same.
+
         if (result.resultCode == android.app.Activity.RESULT_OK) {
             viewModel.placePhotos(chosen, lat, lon, writeFiles = true)
             onDismiss()
         }
     }
 
-    // Any tap outside a field and its suggestions closes the suggestions (Cip, 2026-09-17).
     var tagsDismissed by remember { mutableStateOf(false) }
     var peopleDismissed by remember { mutableStateOf(false) }
     val outside = com.opensolr.photos.ui.rememberOutsideTap(
@@ -195,15 +171,12 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
         onOutside = { tagsDismissed = true; peopleDismissed = true },
     )
 
-    // The files are written while the owner waits, so the sheet closes itself when that is done.
     var started by remember { mutableStateOf(false) }
     LaunchedEffect(state.bulkTagging) {
         if (state.bulkTagging) started = true
         else if (started && state.bulkTagError == null) onDismiss()
     }
 
-    // The whole screen, and no drag closes it: pulling down to see the top of the form closed it
-    // by accident (Cip, 2026-09-19). Back, Cancel and Save are the ways out.
     ModalBottomSheet(
         onDismissRequest = { if (!state.bulkTagging) onDismiss() },
         sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
@@ -234,7 +207,6 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
             )
             Spacer(Modifier.height(20.dp))
 
-            // ---- People, first: the field most people come here for.
             ModeHeader(
                 title = stringResource(R.string.tg_people),
                 replace = personsReplace,
@@ -288,7 +260,6 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
 
             Spacer(Modifier.height(24.dp))
 
-            // ---- The owner's tags, which become albums of their own.
             ModeHeader(
                 title = stringResource(R.string.tg_my_tags),
                 replace = tagsReplace,
@@ -322,8 +293,7 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
                 )
                 TextButton(onClick = { addTag() }, enabled = newTag.isNotBlank() && !state.bulkTagging) { Text(stringResource(R.string.tg_add), color = p.accent) }
             }
-            // The same discreet line as the single photo editor: the height is kept when idle,
-            // so nothing below moves.
+
             Box(Modifier.fillMaxWidth().padding(top = 4.dp).height(2.dp)) {
                 if (tagFieldFocused && suggestionsLoading) {
                     LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp), color = p.accent, trackColor = p.chip)
@@ -351,8 +321,6 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
                 }
             }
 
-            // ---- The place, for all the ticked photos at once (Cip, 2026-09-19): one point on the
-            // map, one question from Android for all the files. It goes on its own, not with Save.
             Spacer(Modifier.height(24.dp))
             SectionLabel(stringResource(R.string.tg_place))
             Spacer(Modifier.height(4.dp))
@@ -406,8 +374,6 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
                 Notice(it, title = stringResource(R.string.tg_not_saved))
             }
 
-            // While the files are being written there is nothing to do but wait, so the bar says
-            // how far it has got. Only the files: the index is updated afterwards, by the sync.
             if (state.bulkTagging && state.bulkTagTotal > 0) {
                 Spacer(Modifier.height(16.dp))
                 Text(
@@ -429,10 +395,7 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
                 AccentButton(
                     stringResource(R.string.tg_save),
                     onClick = {
-                        // Looking the files up asks the phone's media store about every ticked
-                        // photo, so it happens off the screen's own thread: on a selection of
-                        // thousands it froze the sheet before anything was written
-                        // (Cip, 2026-09-18).
+
                         scope.launch {
                             val uris = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
                                 Actions.contentUris(context, targets)
@@ -450,8 +413,6 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
                 )
             }
 
-            // ---- What the ticked photos carry today, for the owner to see. Not editable: the
-            // two fields above are where changes are made (Cip, 2026-09-18).
             Spacer(Modifier.height(28.dp))
             HorizontalDivider(color = p.hairline)
             Spacer(Modifier.height(16.dp))
@@ -479,7 +440,6 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
     }
 }
 
-/** One of the two choices of which ticked photos get the place. */
 @Composable
 private fun PlaceModeChip(label: String, selected: Boolean, enabled: Boolean, onClick: () -> Unit) {
     val p = LocalPalette.current
@@ -495,9 +455,6 @@ private fun PlaceModeChip(label: String, selected: Boolean, enabled: Boolean, on
     )
 }
 
-/**
- * A field's title with its Add / Replace switch on the same line.
- */
 @Composable
 private fun ModeHeader(title: String, replace: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
     val p = LocalPalette.current
@@ -524,9 +481,6 @@ private fun ModeHeader(title: String, replace: Boolean, enabled: Boolean, onChan
     }
 }
 
-/**
- * The words typed into a field so far, each removable with a tap.
- */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun WordChips(words: List<String>, enabled: Boolean, onRemove: (String) -> Unit) {
@@ -550,9 +504,6 @@ private fun WordChips(words: List<String>, enabled: Boolean, onRemove: (String) 
     }
 }
 
-/**
- * What the ticked photos already carry, with how many of them carry each word.
- */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun CountedWords(values: List<FacetValue>) {
@@ -580,21 +531,14 @@ private fun CountedWords(values: List<FacetValue>) {
     }
 }
 
-/** How many of the words already on the photos are listed before the rest are summed up. */
 private const val SHOWN_EXISTING = 40
 
-/**
- * The small heading of a group in the tag suggestions.
- */
 @Composable
 private fun BulkSuggestionHeading(text: String) {
     val p = LocalPalette.current
     Text(text.uppercase(), style = MaterialTheme.typography.labelSmall, color = p.muted, modifier = Modifier.padding(start = 14.dp, end = 14.dp, top = 8.dp, bottom = 2.dp))
 }
 
-/**
- * One tag suggestion: tapping it adds the tag to the list that will be written.
- */
 @Composable
 private fun BulkSuggestionRow(text: String, onPick: () -> Unit) {
     val p = LocalPalette.current

@@ -21,51 +21,25 @@ import org.json.JSONObject
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
-/**
- * One CLIP reading of a photo.
- *
- * @property text   the labels joined with ", " (the photo's "meaning")
- * @property labels the labels, best first
- * @property model  the CLIP checkpoint that produced them
- */
 data class ClipResult(val text: String, val labels: List<String>, val model: String)
 
-/**
- * One photo handed to photos_ingest: the copy with its EXIF, and the owner's edits when
- * this phone holds them (null = the server keeps what the index already has).
- */
 data class IngestItem(val photo: com.opensolr.photos.media.LocalPhoto, val jpeg: ByteArray, val tags: List<String>?, val meaning: String?, val fileHash: String? = null, val persons: List<String> = emptyList())
 
-/**
- * One photo whose words changed: what it is to carry from now on. A null field is one the owner
- * did not touch, and it is left exactly as the index has it.
- */
 data class WordsItem(
     val id: String,
     val tags: List<String>?,
     val persons: List<String>?,
     val meaning: String?,
-    /** The md5 of the file as it now stands: writing the words into it made it a different file. */
+
     val fileHash: String? = null,
-    /** A place the owner chose on the map, still to reach the index; null leaves the place alone. */
+
     val location: Pair<Double, Double>? = null,
 )
 
-/**
- * What the server did with one photo: whether it got words (and a vector), a place, and the
- * document it wrote, so the phone can keep its own copy of it and never ask the index again
- * (Cip, 2026-09-18). [doc] is absent only when the photo was refused.
- */
 data class IngestResult(val words: Boolean, val place: Boolean, val doc: JSONObject? = null)
 
-/**
- * One photo read by image_index: what it shows, and the vector of those words.
- */
 data class ImageReading(val clip: ClipResult, val vector: FloatArray, val embedModel: String)
 
-/**
- * Where a GPS position is, in words, from Opensolr's nearby_places.
- */
 data class PlaceInfo(
     val city: String,
     val region: String?,
@@ -75,15 +49,9 @@ data class PlaceInfo(
     val countryCode: String,
 )
 
-/**
- * A place found by name, from Opensolr's place_search: what to show in a list of choices,
- * and where to put the map when one of them is chosen.
- *
- * @property kind "city", "region" or "country", as the gazetteer classes the place
- */
 data class PlaceHit(
     val name: String,
-    /** The division the place sits in below the region - a commune, a district, a borough. */
+
     val province: String?,
     val region: String?,
     val country: String?,
@@ -91,18 +59,14 @@ data class PlaceHit(
     val lat: Double,
     val lon: Double,
     val kind: String,
-    /** How many people live there, 0 when the gazetteer does not say. */
+
     val population: Int = 0,
 ) {
-    /**
-     * The place written the way the app writes places everywhere else, the commune included
-     * (Cip, 2026-09-20): a county holds more than one Valea Mare, and without the commune under
-     * the name the two of them read as the same line twice.
-     */
+
     val label: String get() = listOfNotNull(name, province, region, country).distinct().joinToString(", ")
 
     companion object {
-        /** The list as one JSON text, for the phone's own cache. */
+
         fun listToJson(hits: List<PlaceHit>): String = org.json.JSONArray().apply {
             hits.forEach { h ->
                 val o = JSONObject()
@@ -111,7 +75,7 @@ data class PlaceHit(
                     .put("lat", h.lat)
                     .put("lon", h.lon)
                     .put("kind", h.kind)
-                // A fact the gazetteer does not have is left out, not written as a null.
+
                 h.province?.let { o.put("province", it) }
                 h.region?.let { o.put("region", it) }
                 h.country?.let { o.put("country", it) }
@@ -120,7 +84,6 @@ data class PlaceHit(
             }
         }.toString()
 
-        /** The same list read back, in the shape the answer itself carries. */
         fun listFromJson(text: String): List<PlaceHit> {
             val array = org.json.JSONArray(text)
             return (0 until array.length()).mapNotNull { i ->
@@ -143,36 +106,15 @@ data class PlaceHit(
     }
 }
 
-/**
- * An index of the account, with the phone it belongs to when it is an Opensolr Photos index.
- *
- * @property deviceName  how the phone called itself when the index was created, or null
- * @property numDocs     photos in it, as last counted by the platform
- * @property lastIndex   epoch seconds of the last write the platform recorded, 0 when unknown
- */
 data class AccountIndex(val name: String, val deviceName: String?, val deviceId: String?, val numDocs: Int, val lastIndex: Long, val created: Long) {
-    /** True for an index this app created on some phone. */
+
     val isPhotos: Boolean get() = Regex("^photos_[a-f0-9]{1,32}__dense$").matches(name)
 }
 
-/**
- * An Opensolr environment that runs vector search.
- */
 data class VectorRegion(val environment: String, val country: String, val solrVersion: String)
 
-/**
- * The Opensolr REST API calls the app makes.
- *
- * Two hosts, as the platform splits them: opensolr.com for account and index management, and
- * api.opensolr.com for the AI endpoints (CLIP and embeddings). Credentials always travel in the
- * request body over HTTPS, never in a URL, so they cannot end up in an access log line.
- */
 class OpensolrApi(private val http: OkHttpClient = Http.client) {
 
-    /**
-     * Swaps the one-time sign-in [code] and its PKCE [verifier] for the account email, the API
-     * key and the plan limits.
-     */
     suspend fun exchangeCode(code: String, verifier: String): Pair<Session, AccountLimits> = withContext(Dispatchers.IO) {
         val body = JSONObject()
             .put("grant_type", "authorization_code")
@@ -194,14 +136,8 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         }
     }
 
-    /**
-     * Names of every index in the account.
-     */
     suspend fun indexNames(session: Session): List<String> = indexes(session).map { it.name }
 
-    /**
-     * Every index in the account, with the phone behind the Opensolr Photos ones.
-     */
     suspend fun indexes(session: Session): List<AccountIndex> = withContext(Dispatchers.IO) {
         val text = post(MANAGEMENT + "get_index_list", form(session))
         val trimmed = text.trim()
@@ -221,9 +157,6 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         }
     }
 
-    /**
-     * Environments that run vector search.
-     */
     suspend fun vectorRegions(session: Session): List<VectorRegion> = withContext(Dispatchers.IO) {
         val trimmed = post(MANAGEMENT + "vector_regions", form(session)).trim()
         if (!trimmed.startsWith("[")) throw ServiceException(platformMessage(trimmed))
@@ -235,16 +168,12 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         }.filter { it.environment.isNotBlank() }
     }
 
-    /**
-     * Creates the index [name] in [environment].
-     */
     suspend fun createIndex(session: Session, name: String, environment: String, deviceName: String = "", deviceId: String = "") = withContext(Dispatchers.IO) {
         val url = (MANAGEMENT + "create_index").toHttpUrl().newBuilder()
             .addQueryParameter("core_name", name)
             .addQueryParameter("region", environment)
             .build()
-        // The phone the index is for, kept by the platform so a new phone can be asked
-        // "which one of these is your device?".
+
         val json = parseObject(post(url.toString(), form(session) {
             add("core_name", name)
             if (deviceName.isNotBlank()) add("device_name", deviceName.take(120))
@@ -264,10 +193,6 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         }
     }
 
-    /**
-     * Uploads the app's Solr configuration (schema.xml, solrconfig.xml and the analyzer files,
-     * bundled as a zip) to the index [name]. The platform reloads the index afterwards.
-     */
     suspend fun uploadConfig(session: Session, name: String, zip: ByteArray) = withContext(Dispatchers.IO) {
         val body = MultipartBody.Builder().setType(MultipartBody.FORM)
             .addFormDataPart("email", session.email)
@@ -281,9 +206,6 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         if (!json.optBoolean("status")) throw ServiceException(AppText.s(R.string.err_config_upload, platformMessage(text)))
     }
 
-    /**
-     * Address and HTTP credentials of the index [name].
-     */
     suspend fun connection(session: Session, name: String): IndexConnection = withContext(Dispatchers.IO) {
         val json = parseObject(post(MANAGEMENT + "get_core_info", form(session) { add("core_name", name) }))
         if (!json.optBoolean("status")) {
@@ -302,9 +224,6 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         )
     }
 
-    /**
-     * Plan limits and current usage of the index [name], merged over [previous].
-     */
     suspend fun accountSummary(session: Session, name: String, previous: AccountLimits?): AccountLimits = withContext(Dispatchers.IO) {
         val signature = hmacSha256Hex(session.apiKey, name + session.email)
         val json = parseObject(post(MANAGEMENT + "get_account_summary", form(session) {
@@ -315,12 +234,6 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         AccountLimits.fromJson(json.optJSONObject("msg") ?: JSONObject(), previous)
     }
 
-    /**
-     * The nearest named place of up to 50 GPS positions in one call. The result maps each
-     * position key (as passed in [coords], "lat,lon" with four decimals) to its place, to
-     * null when nothing is known there, and leaves it absent when the server could not
-     * answer for it.
-     */
     suspend fun nearbyPlaces(session: Session, coords: List<String>): Map<String, PlaceInfo?> = withContext(Dispatchers.IO) {
         if (coords.isEmpty()) return@withContext emptyMap()
         val json = parseObject(post(MANAGEMENT + "nearby_places", form(session) {
@@ -350,11 +263,6 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         out
     }
 
-    /**
-     * Places whose name begins with what was typed, biggest first, for the map to fly to
-     * (Cip, 2026-09-20). Empty when nothing is known by that name - which is an answer, not
-     * a failure, so the search box stays quiet instead of showing an error while typing.
-     */
     suspend fun searchPlaces(session: Session, query: String, limit: Int = 10): List<PlaceHit> = withContext(Dispatchers.IO) {
         if (query.isBlank()) return@withContext emptyList()
         val json = parseObject(post(MANAGEMENT + "place_search", form(session) {
@@ -381,9 +289,6 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         }
     }
 
-    /**
-     * Reads a JPEG into words with CLIP (the image_clip endpoint: no OCR, no barcodes).
-     */
     suspend fun imageClip(session: Session, name: String, jpeg: ByteArray): ClipResult = withContext(Dispatchers.IO) {
         val body = JSONObject()
             .put("email", session.email)
@@ -405,12 +310,6 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         }
     }
 
-    /**
-     * What each of up to 5 photos shows AND the vector of those words, in one call
-     * (image_index): one AI request per photo instead of two, and never words without
-     * their vector. The result has one slot per photo, in order: the reading, or null when
-     * that photo was refused or could not be read (the others are unaffected).
-     */
     suspend fun imageIndex(session: Session, name: String, jpegs: List<ByteArray>): List<ImageReading?> = withContext(Dispatchers.IO) {
         val body = JSONObject()
             .put("email", session.email)
@@ -439,13 +338,6 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         }
     }
 
-    /**
-     * Hands up to 5 photos to Opensolr to be indexed completely there (photos_ingest): the
-     * server reads the EXIF from the copy, asks CLIP and the embedder, finds the place, keeps
-     * the owner's tags and words, and writes the document into the index itself. The phone's
-     * part ends with this call. One slot per photo, in order; null when that photo was
-     * refused (the others are unaffected).
-     */
     suspend fun photosIngest(session: Session, name: String, items: List<IngestItem>): List<IngestResult?> = withContext(Dispatchers.IO) {
         val photos = JSONArray()
         items.forEach { item ->
@@ -458,17 +350,15 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
                 put("media_id", p.mediaId)
                 put("mime", p.mime)
                 put("size_bytes", p.sizeBytes)
-                // The md5 of the file itself, so two copies of the same photo can be told from
-                // two photos that merely look alike. Absent when the file could not be read.
+
                 item.fileHash?.let { put("file_hash", it) }
-                // The people in the photo, read from XMP here rather than on the server: the
-                // 640 px copy cannot carry the XMP packet without losing its diacritics.
+
                 if (item.persons.isNotEmpty()) put("persons", JSONArray(item.persons))
                 if (p.modifiedSec > 0) put("modified_at", isoUtc(p.modifiedSec * 1000L))
                 put("width", p.width)
                 put("height", p.height)
                 put("image", Base64.encodeToString(item.jpeg, Base64.NO_WRAP))
-                // Present only when this phone has the owner's edits for the photo: then they win.
+
                 item.tags?.let { put("tags", JSONArray(it)) }
                 item.meaning?.let { put("meaning", it) }
             })
@@ -497,15 +387,6 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         }
     }
 
-    /**
-     * The owner's own words for up to 50 photos already in the index, with no picture attached
-     * (photos_words): tags, the people in them, their own wording. The server reads each document,
-     * puts the words in, makes the vector again and writes it back.
-     *
-     * A photo the index does not have yet answers with no result, and the caller sends it the
-     * ordinary way, picture and all. Returns the written document per photo, in order, for the
-     * phone's own copy.
-     */
     suspend fun photosWords(session: Session, name: String, items: List<WordsItem>): List<JSONObject?> = withContext(Dispatchers.IO) {
         val photos = JSONArray()
         items.forEach { item ->
@@ -541,9 +422,6 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         }
     }
 
-    /**
-     * Search vectors for up to 50 texts at once, in the same order.
-     */
     suspend fun batchEmbed(session: Session, name: String, texts: List<String>): List<FloatArray> = withContext(Dispatchers.IO) {
         val body = JSONObject()
             .put("email", session.email)
@@ -558,9 +436,6 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         (0 until vectors.length()).map { toFloats(vectors.getJSONArray(it)) }
     }
 
-    /**
-     * The search vector of a query typed by the user.
-     */
     suspend fun embedQuery(session: Session, name: String, query: String): FloatArray = withContext(Dispatchers.IO) {
         val body = JSONObject()
             .put("email", session.email)
@@ -575,15 +450,9 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         throw ServiceException(platformMessage(text))
     }
 
-    /**
-     * POSTs a form and returns the body, raising the typed errors.
-     */
     private fun post(url: String, body: FormBody): String =
         execute(Request.Builder().url(url).post(body).build())
 
-    /**
-     * Runs a request and returns its body, raising the typed errors every endpoint shares.
-     */
     private fun execute(request: Request): String =
         http.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
@@ -592,10 +461,6 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
             text
         }
 
-    /**
-     * Turns the platform's shared refusals into exceptions: a bad API key, the monthly AI quota,
-     * the per-minute and per-hour rate limits, and a plan without vector search.
-     */
     private fun classify(code: Int, text: String, retryAfter: String?) {
         if (text.contains("ERROR_AUTHENTICATION_FAILED")) throw SignInRequiredException()
         if (text.contains("VECTOR_NOT_ALLOWED")) throw VectorNotAllowedException()
@@ -607,24 +472,15 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         }
     }
 
-    /**
-     * A form carrying the credentials, plus whatever [extra] adds.
-     */
     private fun form(session: Session, extra: FormBody.Builder.() -> Unit = {}): FormBody =
         FormBody.Builder().add("email", session.email).add("api_key", session.apiKey).apply(extra).build()
 
-    /**
-     * Parses a JSON object, or returns an empty one for anything else.
-     */
     private fun parseObject(text: String): JSONObject = try {
         JSONObject(text.trim())
     } catch (e: Exception) {
         JSONObject()
     }
 
-    /**
-     * The `msg` of a platform answer, or a short excerpt when there is none.
-     */
     private fun platformMessage(text: String): String {
         val json = parseObject(text)
         val msg = json.opt("msg")
@@ -635,18 +491,11 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         }
     }
 
-    /**
-     * JSON number array to floats.
-     */
     private fun toFloats(array: JSONArray): FloatArray = FloatArray(array.length()) { array.getDouble(it).toFloat() }
 
-    /** ISO 8601 UTC of a millisecond time, as the index stores dates. */
     private fun isoUtc(millis: Long): String =
         java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.format(millis)
 
-    /**
-     * Lower-case hex HMAC-SHA256, as get_account_summary expects.
-     */
     private fun hmacSha256Hex(key: String, message: String): String {
         val mac = Mac.getInstance("HmacSHA256")
         mac.init(SecretKeySpec(key.toByteArray(Charsets.UTF_8), "HmacSHA256"))

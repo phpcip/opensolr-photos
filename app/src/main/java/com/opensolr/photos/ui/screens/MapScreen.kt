@@ -84,21 +84,14 @@ import org.osmdroid.views.overlay.TilesOverlay
 import kotlin.math.ceil
 import kotlin.math.max
 
-/**
- * The map: every photo of the current search that has a GPS position, grouped into thumbnail
- * markers. Tapping a group zooms into it, or opens its photos once it is small enough.
- * "Search this area" turns the visible area into a radius filter on the photos.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MapScreen(state: UiState, viewModel: AppViewModel) {
     val p = LocalPalette.current
-    // The photo opened full screen from a group, and the photos waiting on the system's own
-    // confirmation before they are removed.
+
     var viewing by remember { mutableStateOf<com.opensolr.photos.search.PhotoHit?>(null) }
     var pendingDelete by remember { mutableStateOf<Set<String>>(emptySet()) }
-    // Read here, on the screen, where the system bars are reported correctly; the viewer runs in
-    // a dialog window, where some phones report nothing at all.
+
     val systemBars = WindowInsets.systemBars.asPaddingValues()
     val topInset = systemBars.calculateTopPadding()
     val bottomInset = systemBars.calculateBottomPadding()
@@ -115,7 +108,7 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
     val mapView = remember {
         MapView(context).apply {
             setTileSource(TileSourceFactory.MAPNIK)
-            // Pinch and double-tap zoom, plus the +/- buttons that appear on touch.
+
             setMultiTouchControls(true)
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT)
             isTilesScaledToDpi = true
@@ -128,22 +121,17 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
         }
     }
     val onTap by rememberUpdatedState<(PhotoCluster) -> Unit> { cluster ->
-        // A tap on a group opens its photos, whatever its size. It used to zoom in instead, which
-        // meant tapping five or six times on a place where a whole afternoon was photographed -
-        // and the photos never came apart, because they were taken in the same spot
-        // (Cip, 2026-09-18). Zooming is the owner's business: pinch, double tap, the +/- buttons.
+
         group = cluster
     }
     val overlay = remember {
         PhotoClusterOverlay(
             context,
-            // The badge of a group carries its count, so it takes the fill tone and its white:
-            // the bright accent with white on it would be too faint to read on the map.
+
             PhotoClusterOverlay.MarkerColors(p.chip.toArgb(), p.paper.toArgb(), p.hairline.toArgb(), p.accentFill.toArgb(), p.onAccentFill.toArgb()),
         ) { onTap(it) }.also { mapView.overlays.add(it) }
     }
 
-    // Follows the activity: tiles stop loading while paused, and everything is released on leave.
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -159,7 +147,6 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
         }
     }
 
-    // New pins: hand them to the overlay and frame them once (or open on the requested point).
     LaunchedEffect(state.pins, state.pinsLoading) {
         overlay.pins = state.pins
         mapView.invalidate()
@@ -192,9 +179,9 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
                 stringResource(R.string.mp_with_place, Actions.formatCount(state.pins.size.toLong())),
                 style = MaterialTheme.typography.bodySmall, color = p.muted,
             )
-            // Search this area: the visible map becomes a radius filter on the photos.
+
             IconButton(onClick = {
-                // Radius = distance from the centre to the farthest visible corner, rounded up.
+
                 val box = mapView.boundingBox
                 val center = GeoPoint(box.centerLatitude, box.centerLongitude)
                 val corner = GeoPoint(box.latNorth, box.lonEast)
@@ -220,20 +207,16 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
         }
 
         Box(Modifier.fillMaxSize()) {
-            // clipToBounds: osmdroid paints tiles beyond its bounds otherwise, over the header.
+
             AndroidView(factory = { mapView }, modifier = Modifier.fillMaxSize().clipToBounds())
         }
     }
 
-    // A photo of a place opens exactly as a photo of a search does: full screen, in the app,
-    // swiped through the photos of that place (Cip, 2026-09-16). It used to be handed to the
-    // gallery, which knows nothing about the group you tapped.
     group?.let { cluster ->
         GroupSheet(cluster, onDismiss = { group = null }, onShowPhoto = { hit -> viewing = hit })
     }
     viewing?.let { hit ->
-        // The group's photos and where the opened one sits among them, worked out when it opens -
-        // not again on every redraw behind it (Cip, 2026-09-18).
+
         val photos = remember(group, hit.id) { group?.pins?.map { it.hit } ?: listOf(hit) }
         val startAt = remember(photos, hit.id) { photos.indexOfFirst { it.id == hit.id }.coerceAtLeast(0) }
         PhotoViewer(
@@ -263,15 +246,9 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
     }
 }
 
-/**
- * How the map is darkened at night: not turned inside out, but dimmed and drained of some of its
- * colour, the way the night mode of any map app does it (Cip, 2026-09-18). Turning the colours over
- * made the sea orange and the mountains purple; here the sea stays blue and the land stays land.
- */
 private fun darkMapFilter(): android.graphics.ColorMatrixColorFilter {
     val matrix = android.graphics.ColorMatrix().apply { setSaturation(0.85f) }
-    // Down to a little over a third of its brightness, with the blues kept a touch stronger than
-    // the rest so water still reads as water.
+
     matrix.postConcat(
         android.graphics.ColorMatrix(
             floatArrayOf(
@@ -285,16 +262,12 @@ private fun darkMapFilter(): android.graphics.ColorMatrixColorFilter {
     return android.graphics.ColorMatrixColorFilter(matrix)
 }
 
-/**
- * The photos of a tapped group, as a grid of thumbnails. A tap opens the photo in the gallery.
- */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 private fun GroupSheet(cluster: PhotoCluster, onDismiss: () -> Unit, onShowPhoto: (com.opensolr.photos.search.PhotoHit) -> Unit) {
     val p = LocalPalette.current
     val context = LocalContext.current
-    // Dragged up, the sheet grows to the whole screen: a place where a hundred photos were taken
-    // is a grid worth reading, not a peep-hole (Cip, 2026-09-18).
+
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = false),
@@ -303,8 +276,7 @@ private fun GroupSheet(cluster: PhotoCluster, onDismiss: () -> Unit, onShowPhoto
     ) {
         Column(Modifier.fillMaxWidth().fillMaxHeight().padding(horizontal = 20.dp).navigationBarsPadding()) {
             SectionLabel(pluralStringResource(R.plurals.mp_n_here, cluster.pins.size, Actions.formatCount(cluster.pins.size.toLong())))
-            // Where "here" is, in the words the photos themselves carry: the most common city and
-            // country of the group (Cip, 2026-09-18). Silent when none of them knows.
+
             val place = remember(cluster) {
                 fun commonest(of: (com.opensolr.photos.search.PhotoHit) -> String?): String? =
                     cluster.pins.mapNotNull { of(it.hit)?.trim()?.takeIf { v -> v.isNotEmpty() } }

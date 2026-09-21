@@ -42,9 +42,6 @@ import com.opensolr.photos.ui.theme.LocalPalette
 
 private val Corner = RoundedCornerShape(2.dp)
 
-/**
- * Uppercase section label over a hairline, the house style for section headings.
- */
 @Composable
 fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
@@ -55,9 +52,6 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     }
 }
 
-/**
- * The primary action: solid accent, white text, 2px corners.
- */
 @Composable
 fun AccentButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     val p = LocalPalette.current
@@ -74,9 +68,6 @@ fun AccentButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifie
     }
 }
 
-/**
- * The secondary action: transparent with an ink outline.
- */
 @Composable
 fun GhostButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     val p = LocalPalette.current
@@ -93,17 +84,13 @@ fun GhostButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier
     }
 }
 
-/**
- * A notice: white panel, hairline, 3dp accent rule on the left.
- */
 @Composable
 fun Notice(text: String, modifier: Modifier = Modifier, title: String? = null) {
     val p = LocalPalette.current
     Row(
         modifier
             .fillMaxWidth()
-            // As tall as its text, even inside a bounded column: the accent rule matches the
-            // text and never stretches to the bottom of the screen.
+
             .height(IntrinsicSize.Min)
             .background(p.paper, Corner)
             .padding(0.dp)
@@ -129,9 +116,6 @@ fun Notice(text: String, modifier: Modifier = Modifier, title: String? = null) {
     }
 }
 
-/**
- * A "label: value" row with a hairline under it.
- */
 @Composable
 fun InfoRow(label: String, value: String, onOpen: (() -> Unit)? = null) {
     val p = LocalPalette.current
@@ -140,7 +124,7 @@ fun InfoRow(label: String, value: String, onOpen: (() -> Unit)? = null) {
             Text(label, style = MaterialTheme.typography.bodyMedium, color = p.muted, modifier = Modifier.padding(end = 16.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(value, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold), color = p.ink, maxLines = 3, overflow = TextOverflow.Ellipsis)
-                // A small "open" arrow: the row leads somewhere (the account on opensolr.com).
+
                 if (onOpen != null) {
                     IconButton(onClick = onOpen, modifier = Modifier.size(28.dp).padding(start = 6.dp)) {
                         Icon(painterResource(R.drawable.ic_open), contentDescription = stringResource(R.string.cp_open_site), tint = p.accent, modifier = Modifier.size(18.dp))
@@ -152,9 +136,6 @@ fun InfoRow(label: String, value: String, onOpen: (() -> Unit)? = null) {
     }
 }
 
-/**
- * A usage bar: what is used of a limit, with both numbers.
- */
 @Composable
 fun UsageRow(label: String, used: String, limit: String, fraction: Float?) {
     val p = LocalPalette.current
@@ -180,9 +161,6 @@ fun UsageRow(label: String, used: String, limit: String, fraction: Float?) {
     }
 }
 
-/**
- * Title row of a secondary screen, with a back arrow.
- */
 @Composable
 fun ScreenHeader(title: String, onBack: (() -> Unit)?) {
     val p = LocalPalette.current

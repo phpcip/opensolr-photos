@@ -23,10 +23,6 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.opensolr.photos.R
 
-/**
- * The colours the app actually uses, beyond Material's scheme: the Opensolr editorial palette.
- * Flat surfaces, hairlines instead of shadows, one accent.
- */
 @Immutable
 data class Palette(
     val paper: Color,
@@ -37,22 +33,14 @@ data class Palette(
     val hairline: Color,
     val accent: Color,
     val onAccent: Color,
-    /**
-     * The accent as a filled surface behind text or an icon: a deeper tone than [accent], so
-     * white on it clears 4.5:1 in both themes. [accent] itself stays for hairlines, rules,
-     * icons and the slider, where it sits on paper and nothing has to be read out of it.
-     */
+
     val accentFill: Color,
     val onAccentFill: Color,
-    /**
-     * The quiet fill behind the buttons over the grid and in the header (Cip, 2026-09-20): on
-     * paper a bordered cell alone barely read as a button. On the dark theme it is the paper
-     * itself, which already read well.
-     */
+
     val buttonFill: Color,
-    /** The row of tools under the header: a shade apart from it, so the two rows read as two. */
+
     val toolFill: Color,
-    /** The bar that appears when photos are ticked: a shade the other two never use. */
+
     val dockFill: Color,
 )
 
@@ -65,7 +53,7 @@ private val LightPalette = Palette(
     hairline = Color(0xFFD9D4CC),
     accent = Color(0xFFC05520),
     onAccent = Color(0xFFFFFFFF),
-    // White on #A8481B is 5.8:1; the brighter accent would have been 4.6:1, right on the line.
+
     accentFill = Color(0xFFA8481B),
     onAccentFill = Color(0xFFFFFFFF),
     buttonFill = Color(0xFFF3EFE9),
@@ -81,8 +69,7 @@ private val DarkPalette = Palette(
     muted = Color(0xFFB9B3A9),
     hairline = Color(0xFF3A3632),
     accent = Color(0xFFE0703A),
-    // Was near-black on orange: it measured as passing but read badly (Cip, 2026-09-16). White
-    // on the fill is 4.9:1 and looks like a button instead of a warning label.
+
     onAccent = Color(0xFFFFFFFF),
     accentFill = Color(0xFFB4551F),
     onAccentFill = Color(0xFFFFFFFF),
@@ -93,16 +80,9 @@ private val DarkPalette = Palette(
 
 val LocalPalette = staticCompositionLocalOf { LightPalette }
 
-/**
- * Space Grotesk, bundled (SIL Open Font License, see third_party/space-grotesk/OFL.txt), as a
- * variable font driven to each weight.
- */
 @OptIn(ExperimentalTextApi::class)
 private val SpaceGrotesk = FontFamily(
-    // One file per weight, cut from the variable font. Asking one variable file for four
-    // weights works only where the ROM applies the weight axis: on MIUI it does not, and because
-    // the app declared it had the exact face for each weight, nothing was even synthesised - every
-    // title came out at 400 (Cip, on a POCO, 2026-09-20).
+
     Font(R.font.space_grotesk_regular, FontWeight.Normal),
     Font(R.font.space_grotesk_medium, FontWeight.Medium),
     Font(R.font.space_grotesk_semibold, FontWeight.SemiBold),
@@ -124,7 +104,7 @@ private val AppTypography = Typography(
     titleLarge = style(20, FontWeight.Bold, 1.25),
     titleMedium = style(17, FontWeight.Bold, 1.3),
     titleSmall = style(15, FontWeight.Bold, 1.3),
-    // One step heavier than regular (Cip, 2026-09-20): at 400 the text read hairline-thin.
+
     bodyLarge = style(17, FontWeight.Medium, 1.5),
     bodyMedium = style(15, FontWeight.Medium, 1.5),
     bodySmall = style(14, FontWeight.Medium, 1.45),
@@ -141,14 +121,10 @@ private val AppShapes = Shapes(
     extraLarge = RoundedCornerShape(2.dp),
 )
 
-/**
- * Maps the palette onto Material's colour roles so stock components match.
- */
 private fun scheme(p: Palette, dark: Boolean): ColorScheme {
     val base = if (dark) darkColorScheme() else lightColorScheme()
     return base.copy(
-        // Stock components paint primary as a filled surface and write onPrimary on it, so the
-        // pair that is readable in both themes goes here, not the bright accent.
+
         primary = p.accentFill,
         onPrimary = p.onAccentFill,
         primaryContainer = p.chip,
@@ -175,9 +151,6 @@ private fun scheme(p: Palette, dark: Boolean): ColorScheme {
     )
 }
 
-/**
- * The app theme, light or dark following the system.
- */
 @Composable
 fun OpensolrPhotosTheme(content: @Composable () -> Unit) {
     val dark = isSystemInDarkTheme()

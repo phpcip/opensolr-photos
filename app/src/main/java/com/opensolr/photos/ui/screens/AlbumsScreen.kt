@@ -79,11 +79,6 @@ import com.opensolr.photos.ui.theme.LocalPalette
 
 private val Corner = RoundedCornerShape(2.dp)
 
-/**
- * Albums: the library grouped by what the index already knows about each photo - the owner's
- * tags, the words CLIP used most, places, cameras and years - every album with at least one
- * photos. Tapping one opens the photos grid filtered to it.
- */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
@@ -91,11 +86,9 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
     val context = LocalContext.current
     val view = LocalView.current
     val albumScope = rememberCoroutineScope()
-    // Long press on a section title or an album picks it; while anything is picked, a tap picks
-    // or unpicks, and the bar at the bottom deletes or shares their photos (Cip, 2026-09-17).
+
     val selecting = state.selectedAlbums.isNotEmpty() || state.selectedSections.isNotEmpty()
-    // Which sections are folded lives in the app's own settings, so the screen comes back the
-    // way it was left (Cip, 2026-09-18).
+
     val folded = state.foldedAlbumSections
     var pendingDelete by remember { mutableStateOf(emptySet<String>()) }
     var confirmDelete by remember { mutableStateOf(false) }
@@ -120,12 +113,11 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 24.dp),
             )
         }
-        // Every section folded away, or all of them opened again, as on the photos grid
-        // (Cip, 2026-09-17).
+
         if (state.albums.isNotEmpty()) {
             val anyFolded = state.albums.any { it.title in folded }
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp), horizontalArrangement = Arrangement.End) {
-                // Check all / check none: every section picked, or nothing (Cip, 2026-09-17).
+
                 val allPicked = state.albums.all { it.title in state.selectedSections }
                 IconAction(
                     icon = if (allPicked) R.drawable.ic_check_none else R.drawable.ic_check_all,
@@ -146,13 +138,13 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
                 )
             }
         }
-        // Swipe down asks the index again, as on the photos grid (Cip, 2026-09-15).
+
         var pulled by remember { mutableStateOf(false) }
         LaunchedEffect(state.albumsLoading) { if (!state.albumsLoading) pulled = false }
         val pullState = rememberPullToRefreshState()
         PullToRefreshBox(
             isRefreshing = pulled && state.albumsLoading,
-            // Felt as well as seen, as on the photos grid.
+
             onRefresh = { Haptics.thud(view); pulled = true; viewModel.openAlbums(force = true) },
             state = pullState,
             modifier = Modifier.fillMaxSize(),
@@ -214,7 +206,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
         }
     }
     if (selecting) {
-        // Share is for exactly one album: a whole section at once is too much to hand anywhere.
+
         val shareEnabled = state.selectedSections.isEmpty() && state.selectedAlbums.size == 1 && !state.albumsWorking
         Row(
             Modifier
@@ -229,8 +221,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             DockAction(R.drawable.ic_share, stringResource(R.string.al_share), enabled = shareEnabled) {
-                // Whole albums can be thousands of photos, and finding their files asks the phone's
-                // media store about each one: off the screen's thread (Cip, 2026-09-18).
+
                 viewModel.withSelectedAlbumPhotos { photos ->
                     albumScope.launch {
                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Actions.sharePhotos(context, photos) }
@@ -251,8 +242,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
             }
         }
     }
-    // Says exactly what goes before anything does (Cip, 2026-09-17): a section takes every
-    // album under it, an album every photo in it, from the phone and from the index.
+
     if (confirmDelete && selecting) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
@@ -284,10 +274,6 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
     }
 }
 
-/**
- * What a delete of the picked sections and albums does, in words: every album of each picked
- * section, and every photo of each picked album, gone from the phone and from the index.
- */
 private fun deleteWarning(context: android.content.Context, state: UiState): String {
     val sections = state.albums.filter { it.title in state.selectedSections }.map { sectionTitle(context, it.title) }
     val albums = state.albums.filter { it.title !in state.selectedSections }
@@ -306,11 +292,6 @@ private fun deleteWarning(context: android.content.Context, state: UiState): Str
     return parts.joinToString("\n\n")
 }
 
-/**
- * The title of an album section, drawn exactly as the photos grid draws a month: a solid band
- * with a fold arrow (Cip, 2026-09-17). A tap folds the section; while picking, it picks the
- * section, and a long press starts picking with it.
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AlbumSectionHeading(
@@ -321,7 +302,7 @@ private fun AlbumSectionHeading(
     selected: Boolean,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
-    /** The tick itself, which picks the section whether or not the row is in picking mode. */
+
     onTick: () -> Unit,
 ) {
     val p = LocalPalette.current
@@ -355,10 +336,6 @@ private fun AlbumSectionHeading(
     }
 }
 
-/**
- * One album: its newest photos stacked one over the other, slightly turned, the newest on top;
- * the album's name and its number of photos under it.
- */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AlbumCard(album: Album, selecting: Boolean, selected: Boolean, onClick: () -> Unit, onLongClick: () -> Unit, onTick: () -> Unit) {
@@ -370,7 +347,7 @@ private fun AlbumCard(album: Album, selecting: Boolean, selected: Boolean, onCli
             if (covers.isEmpty()) {
                 Box(Modifier.matchParentSize().clip(Corner).background(p.chip))
             }
-            // Drawn back to front, so the newest photo (the first) ends up on top, straight.
+
             covers.indices.reversed().forEach { index ->
                 val uri = remember(covers[index]) { ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, covers[index]) }
                 AsyncImage(
@@ -398,7 +375,6 @@ private fun AlbumCard(album: Album, selecting: Boolean, selected: Boolean, onCli
     }
 }
 
-/** A section's title in the app's language; the English title stays its key. */
 private fun sectionTitle(context: android.content.Context, title: String): String = when (title) {
     "People" -> context.getString(R.string.al_sec_people)
     "My tags (Albums)" -> context.getString(R.string.al_sec_tags)
@@ -409,13 +385,7 @@ private fun sectionTitle(context: android.content.Context, title: String): Strin
     else -> title
 }
 
-/**
- * An album's name as shown (Cip, 2026-09-16): the first letter of every word upper-cased, the
- * rest left as written - "my wife" shows as "My Wife", "iPhone 15" as "IPhone 15". Only the
- * display changes; the album still filters on the value as stored.
- */
 private fun albumTitle(title: String): String =
     title.split(" ").joinToString(" ") { word -> word.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() } }
 
-/** The turn of each photo in a cover stack: the newest straight, the two under it fanned out. */
 private val STACK_ANGLES = listOf(0f, -6f, 5f)

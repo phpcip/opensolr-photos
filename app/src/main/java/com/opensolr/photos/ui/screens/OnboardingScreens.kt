@@ -56,9 +56,6 @@ import com.opensolr.photos.ui.SectionLabel
 import com.opensolr.photos.ui.UiState
 import com.opensolr.photos.ui.theme.LocalPalette
 
-/**
- * First screen: what the app is, and the one button that signs in with Opensolr.
- */
 @Composable
 fun SignInScreen(state: UiState, viewModel: AppViewModel) {
     val p = LocalPalette.current
@@ -117,9 +114,6 @@ fun SignInScreen(state: UiState, viewModel: AppViewModel) {
     }
 }
 
-/**
- * After sign-in: what the plan allows, in plain numbers, and where to upgrade.
- */
 @Composable
 fun WelcomeScreen(state: UiState, viewModel: AppViewModel) {
     val p = LocalPalette.current
@@ -175,17 +169,12 @@ fun WelcomeScreen(state: UiState, viewModel: AppViewModel) {
     }
 }
 
-/**
- * Asks for access to photos (required), their location data and notifications (both optional).
- */
 @Composable
 fun PermissionsScreen(state: UiState, viewModel: AppViewModel) {
     val p = LocalPalette.current
     val context = LocalContext.current
     val photoPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Manifest.permission.READ_MEDIA_IMAGES else Manifest.permission.READ_EXTERNAL_STORAGE
-    // Android 14 and up: "Select photos..." grants this one INSTEAD of the one above. Asked for
-    // alongside it and counted as an answer, or picking a few photos reads as a refusal and the
-    // app never leaves this screen (Cip, 2026-09-20).
+
     val partialPermission = "android.permission.READ_MEDIA_VISUAL_USER_SELECTED"
     fun photosAllowed(): Boolean =
         ContextCompat.checkSelfPermission(context, photoPermission) == PackageManager.PERMISSION_GRANTED ||
@@ -195,7 +184,7 @@ fun PermissionsScreen(state: UiState, viewModel: AppViewModel) {
         if (Build.VERSION.SDK_INT >= 34) add(partialPermission)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) add(Manifest.permission.ACCESS_MEDIA_LOCATION)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
-        // Coarse position only, read once, to create the index on the nearest Opensolr server.
+
         add(Manifest.permission.ACCESS_COARSE_LOCATION)
     }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
@@ -236,16 +225,8 @@ fun PermissionsScreen(state: UiState, viewModel: AppViewModel) {
     }
 }
 
-/**
- * One folder as the browser shows it: where it is, its name, how many photos are in it and
- * everything below it, and whether there is anything below it to open.
- */
 private data class FolderNode(val path: String, val name: String, val count: Int, val hasChildren: Boolean)
 
-/**
- * The folders immediately under [path], with everything deeper counted into each one. Built
- * from the flat list of MediaStore folders, so browsing costs no new query.
- */
 private fun childFolders(all: List<com.opensolr.photos.media.PhotoFolder>, path: String): List<FolderNode> {
     val counts = LinkedHashMap<String, Int>()
     val withChildren = HashSet<String>()
@@ -263,24 +244,13 @@ private fun childFolders(all: List<com.opensolr.photos.media.PhotoFolder>, path:
     }.sortedBy { it.name.lowercase() }
 }
 
-/**
- * The chosen folder that already covers [path], or null when nothing does. A folder inside a
- * chosen one is indexed anyway, so it is shown as included instead of being ticked again.
- */
 private fun coveringFolder(selected: Set<String>, path: String): String? =
     selected.firstOrNull { it.isNotEmpty() && !it.equals(path, ignoreCase = true) && path.startsWith(it, ignoreCase = true) }
 
-/**
- * Picks the folders to index, by walking into them one level at a time (Cip, 2026-09-16): a
- * library kept as year/month/day is thousands of folders, and a flat list of them is unusable.
- *
- * Ticking a folder takes everything below it, which is what the sync already does: it matches a
- * photo's folder against the chosen ones by prefix.
- */
 @Composable
 fun FoldersScreen(state: UiState, viewModel: AppViewModel) {
     val p = LocalPalette.current
-    // Where the browser stands, as a MediaStore relative path; "" is the list of roots.
+
     var path by remember { mutableStateOf("") }
     val children = remember(state.folders, path) { childFolders(state.folders, path) }
 
@@ -292,7 +262,6 @@ fun FoldersScreen(state: UiState, viewModel: AppViewModel) {
         )
         Spacer(Modifier.height(12.dp))
 
-        // Where you are, and a tap on any step to go back up to it.
         val steps = path.trim('/').split('/').filter { it.isNotEmpty() }
         Row(
             Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
@@ -332,8 +301,7 @@ fun FoldersScreen(state: UiState, viewModel: AppViewModel) {
                 Row(
                     Modifier
                         .fillMaxWidth()
-                        // The row opens the folder; the tick chooses it. A folder with nothing
-                        // below it has only the tick.
+
                         .clickable { if (folder.hasChildren) path = folder.path else if (covered == null) viewModel.toggleFolder(folder.path) }
                         .padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -377,9 +345,6 @@ fun FoldersScreen(state: UiState, viewModel: AppViewModel) {
     }
 }
 
-/**
- * Finding or creating the phone's index, step by step.
- */
 @Composable
 fun SetupScreen(state: UiState, viewModel: AppViewModel) {
     val p = LocalPalette.current

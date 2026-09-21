@@ -40,9 +40,6 @@ import com.opensolr.photos.ui.screens.SyncScreen
 import com.opensolr.photos.ui.screens.WelcomeScreen
 import com.opensolr.photos.ui.theme.LocalPalette
 
-/**
- * Draws the current screen and the one app-wide dialog.
- */
 @Composable
 fun AppRoot(viewModel: AppViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -74,13 +71,10 @@ fun AppRoot(viewModel: AppViewModel) {
         }
     }
 
-    // A phone without photos of its own, on an account that has some: which phone is this?
     if (state.deviceChoices.isNotEmpty()) {
         DeviceChoiceDialog(state, viewModel)
     }
 
-    // A new index configuration ships with this version: the owner is told plainly that the
-    // index is reset and fully re-synced, and it happens only with their consent.
     if (state.rebuildRequired) {
         AlertDialog(
             onDismissRequest = { viewModel.postponeRebuild() },
@@ -107,10 +101,6 @@ fun AppRoot(viewModel: AppViewModel) {
     }
 }
 
-/**
- * "Which one of these is your device?": the account's photo indexes by phone name. Picking one
- * carries on with its photos; the discreet last choice starts a new one.
- */
 @Composable
 private fun DeviceChoiceDialog(state: UiState, viewModel: AppViewModel) {
     val p = LocalPalette.current

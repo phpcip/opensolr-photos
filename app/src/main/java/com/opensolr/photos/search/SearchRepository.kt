@@ -22,48 +22,31 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
-/**
- * Filters the user can combine with a search.
- */
 data class SearchFilters(
-    /** Chosen values per Solr field (year, folder, camera_model, ...); several per field are OR-ed. */
+
     val fields: Map<String, Set<String>> = emptyMap(),
     val withLocation: Boolean = false,
-    /**
-     * Photos by whether the owner has tagged them: null is every photo, true only the tagged
-     * ones, false only those with no tags of their own (Cip, 2026-09-16). Three states, so a
-     * switch would not do.
-     */
+
     val tagged: Boolean? = null,
     val near: NearFilter? = null,
-    /** "Taken between these two days", when the year list is not fine enough (Cip, 2026-09-16). */
+
     val taken: DateRange? = null,
-    /** Photos by whether anything was read printed in them; three states, like [tagged]. */
+
     val hasOcr: Boolean? = null,
-    /** Photos by whether anyone is named on them; three states, like [tagged]. */
+
     val hasPeople: Boolean? = null,
-    /**
-     * Photos that look like paperwork. Not "has printed text": a document read badly is still a
-     * document. The test is the one the server uses to decide whether a photo is worth reading
-     * at all, run against the same words - see DOCUMENT_WORDS.
-     */
+
     val documents: Boolean? = null,
-    /**
-     * The scanned folders chosen, as the Sync screen lists them ("DCIM/", "Pictures/"): each takes
-     * in every photo in it or below it (Cip, 2026-09-19). Not the "folder" field's own values,
-     * which are every nested path MediaStore knows.
-     */
+
     val folders: Set<String> = emptySet(),
 ) {
-    /** Number of active filters, for the filter button badge. */
+
     val count: Int get() = fields.values.sumOf { it.size } + folders.size + (if (withLocation) 1 else 0) +
         (if (tagged != null) 1 else 0) + (if (near != null) 1 else 0) + (if (taken != null) 1 else 0) +
         (if (hasOcr != null) 1 else 0) + (if (hasPeople != null) 1 else 0) + (if (documents != null) 1 else 0)
 
-    /** The chosen values of [field]. */
     fun values(field: String): Set<String> = fields[field] ?: emptySet()
 
-    /** The filters with [value] of [field] switched on or off. */
     fun toggled(field: String, value: String): SearchFilters {
         val current = values(field)
         val next = if (value in current) current - value else current + value
@@ -73,65 +56,34 @@ data class SearchFilters(
     }
 
     companion object {
-        /** The facet fields, in the order the filter sheet shows them, with their titles. */
+
         val FACETS = listOf(
-            // No "region": between City and Country it said the same thing a third time
-            // (Cip, 2026-09-15). The field is still indexed and still searched by words.
-            // No "folder" either (Cip, 2026-09-16): MediaStore names a folder by its whole path,
-            // so a library kept in nested folders filled the list with "Documents/photos/..."
-            // lines that all looked alike. The field is still indexed and still searched by
-            // words, and a photo's details still say which folder it is in.
-            // No "camera_make" either (Cip, 2026-09-18): the model already reads as "Nikon Z6",
-            // so the make was the same list said twice.
+
             "year" to "Year", "city" to "City", "country" to "Country",
             "camera_model" to "Camera model", "custom_tags" to "My tags (Albums)",
             "labels" to "Meaning", "orientation" to "Orientation",
-            // The names of the people, each whole (persons_ss), instead of only "has people"
-            // (Cip, 2026-09-17).
+
             "persons_ss" to "People",
         )
-        /** The key the scanned-folder counts are kept under beside the facet fields. */
+
         const val FOLDER_ROOTS = "folder_root"
 
-        /**
-         * A photo's folder as the grid groups by it: its whole path, tidied of the slashes at
-         * either end (Cip, 2026-09-20).
-         *
-         * The last part alone was tried first and thrown out: a library kept as 2019/11, 2019/07,
-         * 2024/02 came out as a flat list of "11", "07" and "02", which names nothing. The grid
-         * builds a tree out of the parts instead, so each name is read under the one above it.
-         */
         fun folderPath(path: String?): String? = path?.trim()?.trim('/')?.ifBlank { null }
 
-        /**
-         * The camera as one name: "Nikon Z6", not a bare "Z6". The make is left off when the model
-         * already begins with it, which most makers write into the model themselves.
-         */
         fun cameraName(make: String?, model: String?): String? {
             val m = model?.trim()?.ifBlank { null } ?: return null
             val brand = make?.trim()?.ifBlank { null } ?: return m
             return if (m.startsWith(brand, ignoreCase = true)) m else "$brand $m"
         }
 
-        /**
-         * The scanned folders of [chosen] as the filter offers them: each ending in "/", and none
-         * that sits inside another, whose photos the outer one already counts.
-         */
         fun folderRoots(chosen: Collection<String>): List<String> {
             val all = chosen.map { it.trim().trimStart('/') }.filter { it.isNotEmpty() }
                 .map { if (it.endsWith("/")) it else "$it/" }.distinct()
             return all.filter { root -> all.none { other -> other != root && root.startsWith(other) } }.sorted()
         }
 
-        /** Facet fields an index on the previous configuration does not have. */
         val NEWER_FACETS = setOf("city", "region", "country", "labels", "custom_tags", "persons_ss")
 
-        /**
-         * What makes a photo paperwork, copied from TEXT_FAMILY_WORDS in stream_server.py -
-         * the same list the server runs over the same words before sending a photo to be read.
-         * Matched against `meaning`, which is those words joined, so the rule is the server's
-         * rule expressed as a query rather than a regex; no field and no reindex for it.
-         */
         val DOCUMENT_WORDS = listOf(
             "text", "label", "labels", "document", "documents", "receipt", "invoice",
             "certificate", "card", "ticket", "menu", "poster", "brochure", "flyer", "leaflet",
@@ -141,52 +93,33 @@ data class SearchFilters(
     }
 }
 
-/**
- * "Taken between these two days", both ends included. Kept as the millis a date picker hands
- * back (UTC midnight of the chosen day) so nothing is lost between the picker and the query;
- * the query is built on `taken_at`, which every photo already has, so this needs no new field
- * and no reindex.
- */
 data class DateRange(val fromUtcMillis: Long, val toUtcMillis: Long) {
 
     private fun day(millis: Long): String = SimpleDateFormat("yyyy-MM-dd", Locale.US)
         .apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(millis))
 
-    /** The first instant of the first day, in the form Solr reads. */
     val fromSolr: String get() = day(fromUtcMillis) + "T00:00:00Z"
 
-    /** The last instant of the last day, so the day chosen as the end is itself included. */
     val toSolr: String get() = day(toUtcMillis) + "T23:59:59Z"
 
-    /** Short wording for a chip: "16 Sep 2025 - 4 Jan 2026". */
     val label: String get() {
-        // Month names in the app's language.
+
         val short = SimpleDateFormat("d MMM yyyy", Locale.getDefault())
             .apply { timeZone = TimeZone.getTimeZone("UTC") }
         return short.format(Date(fromUtcMillis)) + " – " + short.format(Date(toUtcMillis))
     }
 }
 
-/**
- * "Within [radiusKm] of a point": a radius search on the photos' GPS position.
- */
 data class NearFilter(val lat: Double, val lon: Double, val radiusKm: Double) {
 
-    /** The radius for a chip, "5 km"; the words around it come from the app's language. */
     val radiusText: String get() = if (radiusKm < 1) String.format(Locale.US, "%.1f km", radiusKm) else String.format(Locale.US, "%.0f km", radiusKm)
 
     companion object {
-        /** The radius choices offered on the filter sheet, in km. */
+
         val RADII = listOf(0.5, 1.0, 5.0, 25.0, 100.0)
     }
 }
 
-/**
- * One page of alike-photo groups: the photos laid out group after group, the size of each group,
- * how many groups there are in all, how many groups this page took (not a fixed number: a page
- * stops on a budget of photos, so the next one must start where this one really ended), and
- * whether this page was the last.
- */
 data class DuplicatePage(
     val hits: List<PhotoHit>,
     val sizes: List<Int>,
@@ -195,33 +128,16 @@ data class DuplicatePage(
     val endReached: Boolean,
 )
 
-/**
- * A photo with a GPS position, for the map.
- */
 data class PhotoPin(val hit: PhotoHit, val lat: Double, val lon: Double)
 
-/**
- * One album: the photos holding [value] in [field], shown as [title]. [covers] are the media
- * ids of its newest photos, newest first, for the stacked cover.
- */
 data class Album(val field: String, val value: String, val title: String, val count: Int, val covers: List<Long>)
 
-/**
- * What the tag field offers: the owner's own tags ([mine]) and, under them, words CLIP read
- * the photos into ([fromMeanings]).
- */
 data class TagSuggestions(val mine: List<String>, val fromMeanings: List<String>) {
     val isEmpty: Boolean get() = mine.isEmpty() && fromMeanings.isEmpty()
 }
 
-/**
- * A kind of album (tags, things, places, cameras, years) and its albums, biggest first.
- */
 data class AlbumSection(val title: String, val albums: List<Album>)
 
-/**
- * One photo in the results.
- */
 data class PhotoHit(
     val id: String,
     val mediaId: Long,
@@ -239,33 +155,27 @@ data class PhotoHit(
     val focalLength: Double?,
     val width: Int?,
     val height: Int?,
-    /** The file's size on the phone, for the plate of facts in a photo's details. */
+
     val sizeBytes: Long = 0,
     val meaning: String,
-    /** The words printed IN the photo, read on Opensolr's side; empty when it carries none. */
+
     val ocrText: String = "",
-    /** The people named on the photo, as they were written on the file. */
+
     val persons: String = "",
     val location: String?,
     val city: String? = null,
     val region: String? = null,
-    /** The level between the place and the region, where the place itself has no name. */
+
     val province: String? = null,
     val country: String? = null,
     val labels: List<String> = emptyList(),
     val customTags: List<String> = emptyList(),
-    /** The hybrid score, for cutting the strong matches off the vector's near misses; 0 when unsorted by relevance. */
+
     val score: Double = 0.0,
 ) {
-    /** The GPS position parsed from Solr's "lat,lon", or null without one. */
+
     val latLon: Pair<Double, Double>? get() = parseLatLon(location)
 
-    /**
-     * Where the photo was taken, in three levels that read the same the world over: the place
-     * itself (village, town or city), the first division under the country (a Romanian județ, a
-     * state, a province, a Land) and the country (Cip, 2026-09-19). A missing level is left out and
-     * no name is said twice. The position in numbers when no name is known yet; null without one.
-     */
     val placeLabel: String? get() {
         val names = ArrayList<String>(3)
         val seen = HashSet<String>()
@@ -277,21 +187,9 @@ data class PhotoHit(
         return latLon?.let { (lat, lon) -> String.format(Locale.US, "%.5f, %.5f", lat, lon) }
     }
 
-    /**
-     * When the photo was taken, as a number; null when it carries no date of its own.
-     *
-     * Worked out once, here, rather than every time something asks. The grid sorts the whole list
-     * by it and then lays it out in years, months and days, so reading it out of the text again
-     * each time meant hundreds of thousands of dates being read for a single screen of photos -
-     * which is why the headings fell behind a fast scroll through ten thousand photos
-     * (Cip, 2026-09-18).
-     */
     val takenMs: Long? = com.opensolr.photos.ui.Actions.solrDateMillis(takenAt)
 }
 
-/**
- * Parses Solr's "lat,lon" into a pair, or null when the value is missing or malformed.
- */
 fun parseLatLon(value: String?): Pair<Double, Double>? {
     val parts = value?.split(',') ?: return null
     if (parts.size != 2) return null
@@ -301,17 +199,8 @@ fun parseLatLon(value: String?): Pair<Double, Double>? {
     return lat to lon
 }
 
-/**
- * A facet value and how many photos have it.
- */
 data class FacetValue(val value: String, val count: Int)
 
-/**
- * One page of results.
- *
- * @property smart  true when the search used meaning (vectors) as well as words
- * @property notice something the user should know about this search, e.g. the AI allowance ran out
- */
 data class SearchPage(
     val hits: List<PhotoHit>,
     val numFound: Long,
@@ -321,57 +210,29 @@ data class SearchPage(
     val didYouMean: String? = null,
 )
 
-/**
- * Searches the phone's index directly.
- *
- * An empty query lists every photo, newest first. A typed query is matched on the photo's words
- * (CLIP labels, file name, folder, camera) and, when the plan includes vector search, also on
- * meaning: the query is turned into a vector and the nearest photos join the results. What the
- * user typed only ever travels as the bound parameter uq, never spliced into query syntax, and
- * every filter value goes through {!term} with a bound value, so no input can change the query.
- */
 class SearchRepository(private val context: Context) {
 
     private val prefs = AppPrefs(context)
     private val api = OpensolrApi()
 
-    /**
-     * Answers this phone already paid for. Only the reads below go through it; writing,
-     * deleting and the sync's walk over the index never do.
-     */
     private val cache = SearchCache.of(context)
 
-    /**
-     * Forgets every cached answer. Called by the button in the account screen and by anything
-     * in the app that changes the index, so what the owner just did is never missing.
-     */
     fun clearCache() {
         cache.clear()
-        // What is held ready must go with what is stored, or a write would leave the duplicates
-        // saying what they said before it.
+
         synchronized(GROUPED) { GROUPED.clear() }
     }
 
-    /**
-     * How many answers are cached right now, for the account screen.
-     */
     fun cachedCount(): Int = cache.count()
 
-    /**
-     * Runs a search. [start] is the offset of the first result.
-     */
     suspend fun search(query: String, filters: SearchFilters, start: Int, rows: Int = PAGE, freshBias: Boolean = false, wordsOnly: Boolean = false): SearchPage =
         try {
             search(query, filters, start, rows, legacy = false, freshBias = freshBias, wordsOnly = wordsOnly)
         } catch (e: ServiceException) {
-            // An index still on an older configuration (rebuild postponed) lacks the newest
-            // fields and answers 400 to them; search it with what it has.
+
             if (e.message?.contains("HTTP 400") == true) search(query, filters, start, rows, legacy = true, freshBias = freshBias, wordsOnly = wordsOnly) else throw e
         }
 
-    /**
-     * One photo a search found, with only what the grid groups it by.
-     */
     data class GroupedHit(
         val id: String,
         val takenMs: Long?,
@@ -380,18 +241,12 @@ class SearchRepository(private val context: Context) {
         val city: String?,
         val persons: List<String>,
         val tags: List<String>,
-        /** The whole path of the folder the photo is in, see [SearchFilters.folderPath]. */
+
         val folder: String? = null,
-        /** The camera that took it, make and model as one name, see [SearchFilters.cameraName]. */
+
         val camera: String? = null,
     )
 
-    /**
-     * Every photo a search finds, best match first, as its id and the values the grid can group it
-     * by - its date, place, people and tags (Cip, 2026-09-19). One request, a few short fields per
-     * photo, capped at GROUP_TICK_MAX: the groups and their counts are made from this on the phone,
-     * and the photos of a group come from the phone's own copy of the index when it is opened.
-     */
     suspend fun groupedHits(query: String, filters: SearchFilters, freshBias: Boolean = false, wordsOnly: Boolean = false): List<GroupedHit> {
         val (params, _, _) = queryParams(query, filters, legacy = false, wordsOnly = wordsOnly, freshBias = freshBias)
         params += "fl" to "id,taken_at,city,province,region,country,persons_ss,custom_tags,folder,camera_make,camera_model"
@@ -418,10 +273,6 @@ class SearchRepository(private val context: Context) {
         }
     }
 
-    /**
-     * Whole photos by id, straight from the index, for the few a grouped view needs that the
-     * phone's own copy does not hold. A couple of hundred ids per request.
-     */
     suspend fun hitsByIds(ids: Collection<String>): List<PhotoHit> {
         val out = ArrayList<PhotoHit>(ids.size)
         ids.filter { '|' !in it }.chunked(200).forEach { batch ->
@@ -436,12 +287,6 @@ class SearchRepository(private val context: Context) {
         return out
     }
 
-    /**
-     * The facet values of the words alone: the same query run without the vector leg, for its
-     * counts only (rows = 0). What comes back describes the photos whose tags, words, place,
-     * file name or camera really do match what was typed - never what the vector dragged along -
-     * so the suggestions above the grid can be trusted. Empty when the words match nothing.
-     */
     suspend fun queryFacets(query: String, filters: SearchFilters): Map<String, List<FacetValue>> =
         try {
             facetsOnly(query, filters, legacy = false)
@@ -454,25 +299,17 @@ class SearchRepository(private val context: Context) {
                 }
             } else emptyMap()
         } catch (e: Exception) {
-            // Suggestions are a nicety; a search must never fail because of them.
+
             emptyMap()
         }
 
-    /**
-     * The facet lists of the whole library - the years, places, cameras, tags and names the filter
-     * sheet offers - in one request that asks for no documents at all.
-     *
-     * Asked once and then kept on the phone until a sync actually writes something, because that
-     * is the only thing that can change them (Cip, 2026-09-18).
-     */
     suspend fun browseFacets(): Map<String, List<FacetValue>> {
         val params = ArrayList<Pair<String, String>>()
         params += "q" to "*:*"
         params += "rows" to "0"
         params += "facet" to "true"
         params += "facet.mincount" to "1"
-        // Every value, no cap: the lists are in alphabetical order, so a cap cut them off at "B"
-        // and the rest of the library could not be filtered on (Cip, 2026-09-18).
+
         params += "facet.limit" to "-1"
         FACET_FIELDS.forEach { params += "facet.field" to it }
         addFolderFacets(params)
@@ -480,9 +317,6 @@ class SearchRepository(private val context: Context) {
         return parse(select(params), smart = false, notice = null).facets
     }
 
-    /**
-     * One words-only request that asks for no documents, just the facets.
-     */
     private suspend fun facetsOnly(query: String, filters: SearchFilters, legacy: Boolean): Map<String, List<FacetValue>> {
         if (query.isBlank()) return emptyMap()
         val (params, _, _) = queryParams(query, filters, legacy, wordsOnly = true)
@@ -500,11 +334,6 @@ class SearchRepository(private val context: Context) {
         return parse(json, false, null).facets
     }
 
-    /**
-     * One photo, read out of the document the index (or the phone's own copy of it) holds. The
-     * same reading for both, so a photo drawn from the phone is the same photo in every way
-     * (Cip, 2026-09-18).
-     */
     fun hitOf(d: JSONObject): PhotoHit = PhotoHit(
         id = d.optString("id"),
         mediaId = d.optLong("media_id", -1),
@@ -536,14 +365,6 @@ class SearchRepository(private val context: Context) {
         score = d.optDouble("score", 0.0),
     )
 
-    /**
-     * The vector of a typed search, worked out once and then remembered for a while.
-     *
-     * The same words are turned into a vector for the first page, for every page under it, for the
-     * suggestions beside it and for every group of days the owner opens - and each of those was a
-     * request to the AI server, charged against the month's allowance, for an answer that cannot
-     * change: the same words always make the same vector (Cip, 2026-09-18).
-     */
     private suspend fun embedOnce(session: com.opensolr.photos.data.Session, indexName: String, text: String): FloatArray {
         val key = "$indexName|$text"
         val now = System.currentTimeMillis()
@@ -553,41 +374,31 @@ class SearchRepository(private val context: Context) {
         val vector = api.embedQuery(session, indexName, text)
         synchronized(EMBEDDED) {
             EMBEDDED[key] = now to vector
-            // A handful of searches is all that is ever asked for twice; the oldest go.
+
             while (EMBEDDED.size > EMBED_HELD) EMBEDDED.remove(EMBEDDED.keys.first())
         }
         return vector
     }
 
-    /**
-     * One search request; [legacy] leaves out the fields an older configuration lacks.
-     */
     private suspend fun search(query: String, filters: SearchFilters, start: Int, rows: Int, legacy: Boolean, freshBias: Boolean, wordsOnly: Boolean): SearchPage {
         val (params, smart, notice) = queryParams(query, filters, legacy, wordsOnly = wordsOnly, freshBias = freshBias)
         val text = query.trim().take(300)
         if (text.isNotEmpty()) {
-            // Spellcheck the typed words; the collation is offered as "did you mean".
+
             params += "spellcheck" to "true"
             params += "spellcheck.q" to text
         }
         params += "fl" to (if (legacy) LEGACY_FIELDS else FIELDS)
         params += "start" to start.coerceAtLeast(0).toString()
-        // Up to a few hundred: a reload of a view the owner has scrolled through asks for
-        // everything that was on it in one request (Cip, 2026-09-18).
+
         params += "rows" to rows.coerceIn(1, 1000).toString()
-        // The filter counts come with the first page and stand for the whole search: the pages
-        // after it kept asking the index to count every value of eight fields over the whole
-        // result, and the answer was thrown away every time (Cip, 2026-09-18).
+
         if (start <= 0) {
             params += "facet" to "true"
             params += "facet.mincount" to "1"
-            // Every value, no cap - see browseFacets (Cip, 2026-09-18).
+
             params += "facet.limit" to "-1"
-            // The index puts the values in order, in this one request, and they stay in that order
-            // for as long as the answer is held: alphabetically, which is the only order eighty
-            // names, places or cameras can be looked through in (Cip, 2026-09-18). "index" is
-            // Solr's word for the order the values are stored in, which for these fields is the
-            // alphabet; the years come out oldest first, as they always did.
+
             params += "facet.sort" to "index"
             FACET_FIELDS.filter { !legacy || it !in SearchFilters.NEWER_FACETS }
                 .forEach { params += "facet.field" to "{!ex=$it key=$it}$it" }
@@ -597,15 +408,6 @@ class SearchRepository(private val context: Context) {
         return page.copy(didYouMean = collation(page, text))
     }
 
-    /**
-     * Every photo of the current view taken between [from] and [to] (both in milliseconds), which
-     * is exactly one heading on the grid: a month, or a day inside it.
-     *
-     * The same query and the same filters as the results on screen, narrowed by the dates, asked
-     * for ids only - the grid is not touched and its pages are not disturbed. Enough of each photo
-     * comes back to reach the file it reads from, so tagging, sharing and deleting work on photos
-     * the owner never scrolled to.
-     */
     suspend fun photosBetween(
         query: String,
         filters: SearchFilters,
@@ -613,12 +415,12 @@ class SearchRepository(private val context: Context) {
         to: Long,
         freshBias: Boolean = false,
         wordsOnly: Boolean = false,
-        /** Whole documents, for photos that go on the grid; ids only, for ticking a group. */
+
         full: Boolean = false,
     ): List<PhotoHit> {
         val (params, _, _) = queryParams(query, filters, legacy = false, wordsOnly = wordsOnly, freshBias = freshBias)
         val stamp = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
-        // A range is bound whole, as one parameter: {!field} and {!term} do not read ranges.
+
         params += "fq" to "{!lucene v=\$group_q}"
         params += "group_q" to "taken_at:[${stamp.format(Date(from))} TO ${stamp.format(Date(to))}]"
         params += "fl" to (if (full) FIELDS else "id,media_id,path,file_name,folder,mime,custom_tags,persons_t")
@@ -646,13 +448,6 @@ class SearchRepository(private val context: Context) {
         }
     }
 
-    /**
-     * What a set of photos already carries: the names of the people in them and the owner's own
-     * tags, each with how many of those photos have it, most used first.
-     *
-     * Counted by the index over exactly those ids, so the tagging sheet tells the truth about the
-     * whole selection and not only about the photos that happen to be on screen.
-     */
     suspend fun wordsOf(ids: List<String>): Pair<List<FacetValue>, List<FacetValue>> {
         if (ids.isEmpty()) return emptyList<FacetValue>() to emptyList()
         val people = HashMap<String, Int>()
@@ -666,7 +461,7 @@ class SearchRepository(private val context: Context) {
             params += "facet" to "true"
             params += "facet.mincount" to "1"
             params += "facet.sort" to "count"
-            // Every name and tag the batch carries, not the first 200 (Cip, 2026-09-18).
+
             params += "facet.limit" to "-1"
             params += "facet.field" to "persons_ss"
             params += "facet.field" to "custom_tags"
@@ -685,14 +480,6 @@ class SearchRepository(private val context: Context) {
         return sorted(people) to sorted(tags)
     }
 
-    /**
-     * Alike photos of one kind, [level] a stop on the slider (see DUPLICATE_FIELDS): photos that
-     * share the chosen duplicate key, made on the server from CLIP's words and the EXIF. The
-     * groups are known from ONE facet request, never a walk over the index; only the photos
-     * of those groups are then fetched, in ONE request as well, for the grid and the photo sheet.
-     *
-     * Returns the photos laid out group after group, with the size of each group.
-     */
     suspend fun duplicates(level: Int, groupsFrom: Int = 0, groupsLimit: Int = GROUPS_PAGE): DuplicatePage {
         val session = prefs.session ?: throw ServiceException(AppText.s(R.string.err_sign_in_to_search))
         val connection = prefs.connection ?: throw ServiceException(AppText.s(R.string.err_not_set_up))
@@ -704,18 +491,12 @@ class SearchRepository(private val context: Context) {
                 cachedDuplicateGroups(IndexManager(context, prefs, api).refreshConnection(session), field)
             }
         } catch (e: ServiceException) {
-            // An index whose rebuild was postponed has no duplicate keys yet.
+
             if (e.message?.contains("HTTP 400") == true) throw ServiceException(AppText.s(R.string.err_dup_needs_reset))
             throw e
         }
         if (groups.isEmpty()) return DuplicatePage(emptyList(), emptyList(), 0, 0, true)
 
-        // Only the groups this page shows, and only as many photos as ONE request carries
-        // (Cip, 2026-09-20). The whole set of ids arrives in the one facet request above and is
-        // cheap to hold; the documents are not. A page is at most [groupsLimit] groups AND at
-        // most DOCS_PAGE photos, whichever comes first - one group always goes in, so a page is
-        // never empty - so filling a screen is a single request instead of the forty it took
-        // when a group of eight thousand was still called a duplicate.
         val page = ArrayList<List<String>>(groupsLimit.coerceAtLeast(1))
         var budget = 0
         var at = groupsFrom
@@ -729,7 +510,6 @@ class SearchRepository(private val context: Context) {
         val used = at - groupsFrom
         if (page.isEmpty()) return DuplicatePage(emptyList(), emptyList(), groups.size, 0, true)
 
-        // The documents themselves, in one request, then laid out in the order of their group.
         val wanted = page.flatten()
         val params = ArrayList<Pair<String, String>>()
         params += "q" to "*:*"
@@ -751,15 +531,8 @@ class SearchRepository(private val context: Context) {
         return DuplicatePage(hits, sizes, groups.size, used, at >= groups.size)
     }
 
-    /**
-     * The albums, made from what the index already knows, in ONE request: a JSON facet per
-     * kind (the owner's tags, CLIP's twelve most used words, cities, countries, camera models,
-     * years), each value held by at least [ALBUM_MIN] photos, with the three newest photos of
-     * each album (by taken_at) for its cover. Nothing is read by AI, nothing but counts and
-     * ids come back. The current search and filters do not apply: albums are the whole library.
-     */
     suspend fun albums(): List<AlbumSection> {
-        // The cover: the album's photos by media id, newest taken first, three of them.
+
         val cover = JSONObject()
             .put("type", "terms").put("field", "media_id").put("limit", 3).put("sort", "t desc")
             .put("facet", JSONObject().put("t", "max(taken_at)"))
@@ -772,7 +545,7 @@ class SearchRepository(private val context: Context) {
             .put("things", kind("labels", ALBUM_THINGS))
             .put("cities", kind("city", 50))
             .put("countries", kind("country", 50))
-            // The make of each model, for a name like "Nikon Z6" rather than a bare "Z6".
+
             .put("cameras", kind("camera_model", 30) { put("make", JSONObject().put("type", "terms").put("field", "camera_make").put("limit", 1)) })
             .put("years", kind("year", -1, sort = "index desc"))
         val facets = select(listOf("q" to "*:*", "rows" to "0", "json.facet" to facet.toString())).optJSONObject("facets") ?: JSONObject()
@@ -792,8 +565,7 @@ class SearchRepository(private val context: Context) {
             val make = b.optJSONObject("make")?.optJSONArray("buckets")?.optJSONObject(0)?.optString("val").orEmpty().trim()
             if (make.isEmpty() || model.lowercase().startsWith(make.lowercase())) model else "$make $model"
         }
-        // People, the owner's own tags, then Things, then Years, Places and the rest
-        // (Cip, 2026-09-18).
+
         return listOf(
             AlbumSection("People", albumsOf("people", "persons_ss")),
             AlbumSection("My tags (Albums)", albumsOf("tags", "custom_tags")),
@@ -804,11 +576,6 @@ class SearchRepository(private val context: Context) {
         ).filter { it.albums.isNotEmpty() }
     }
 
-    /**
-     * Every photo of [albums] (one album, or all the albums of a section), straight from the
-     * index and never from the cache, for deleting or sharing them all. The values travel as
-     * bound parameters, one terms query per field, joined with OR.
-     */
     suspend fun albumPhotos(albums: List<Album>): List<PhotoHit> {
         if (albums.isEmpty()) return emptyList()
         val connection = prefs.connection ?: throw ServiceException(AppText.s(R.string.err_not_set_up))
@@ -831,11 +598,6 @@ class SearchRepository(private val context: Context) {
         return out
     }
 
-    /**
-     * Names of people already in the index, for the People field of a photo: the most used
-     * with nothing typed, the ones containing [typed] anywhere, any case, while typing. Read from
-     * persons_ss, where every name is kept whole; persons_t is analysed text and gives words.
-     */
     suspend fun personSuggestions(typed: String, exclude: Collection<String>): List<String> {
         val text = typed.trim().take(50)
         val limit = if (text.isEmpty()) 5 else 8
@@ -858,13 +620,6 @@ class SearchRepository(private val context: Context) {
             .take(limit)
     }
 
-    /**
-     * Suggestions while tagging a photo, in ONE request: the owner's own tags first, then words
-     * CLIP read the photos into, each ordered by how many photos carry it. With nothing typed,
-     * the five most used of each; while typing, the ones containing [typed] anywhere, any case
-     * (eight tags, five words). Tags already on the photo ([exclude]) are never offered, and a
-     * word already offered as a tag is not repeated below.
-     */
     suspend fun tagSuggestions(typed: String, exclude: Collection<String>): TagSuggestions {
         val text = typed.trim().take(50)
         val tagLimit = if (text.isEmpty()) 5 else 8
@@ -878,11 +633,11 @@ class SearchRepository(private val context: Context) {
         params += "facet.sort" to "count"
         params += "facet.field" to "{!key=mine}custom_tags"
         params += "facet.field" to "{!key=words}labels"
-        // Room for the values dropped below (already on the photo, already offered as a tag).
+
         params += "f.custom_tags.facet.limit" to (tagLimit + skip.size).toString()
         params += "f.labels.facet.limit" to (wordLimit + tagLimit + skip.size).toString()
         if (text.isNotEmpty()) {
-            // The typed text is a parameter value, never spliced into a query.
+
             params += "facet.contains" to text
             params += "facet.contains.ignoreCase" to "true"
         }
@@ -897,14 +652,11 @@ class SearchRepository(private val context: Context) {
         return TagSuggestions(mine, words)
     }
 
-    /**
-     * Autocomplete for what the user typed so far: labels of the indexed photos.
-     */
     suspend fun suggest(prefix: String): List<String> {
         val text = prefix.trim().take(100)
         if (text.length < 2) return emptyList()
         val connection = prefs.connection ?: return emptyList()
-        // Autocomplete asks for the same prefixes over and over; a held answer saves the request.
+
         val key = SearchCache.key(connection.indexName, "/suggest", listOf("suggest.q" to text.lowercase(Locale.ROOT)))
         cache.get(key, prefs.cacheSeconds)?.let { stored ->
             runCatching {
@@ -919,18 +671,11 @@ class SearchRepository(private val context: Context) {
         }
     }
 
-    /**
-     * The spellchecker's collation when it differs from what was typed, else null.
-     */
     private fun collation(page: SearchPage, typed: String): String? {
         val suggestion = page.didYouMean ?: return null
         return suggestion.takeIf { it.isNotBlank() && !it.equals(typed, ignoreCase = true) }
     }
 
-    /**
-     * The photos with a GPS position that match [query] and [filters], for the map. At most
-     * [MAP_ROWS] are returned, best matches first (newest first for an empty query).
-     */
     suspend fun pins(query: String, filters: SearchFilters): List<PhotoPin> {
         val (params, _, _) = queryParams(query, filters)
         params += "fq" to "has_location:true"
@@ -941,18 +686,9 @@ class SearchRepository(private val context: Context) {
         return page.hits.mapNotNull { hit -> hit.latLon?.let { (lat, lon) -> PhotoPin(hit, lat, lon) } }
     }
 
-    /**
-     * The photos that share one photo's duplicate key at [level]: the same slider as duplicates,
-     * but anchored to this photo instead of the whole index. Two requests, both cacheable: the
-     * photo's own key for that stop, then everything carrying it.
-     *
-     * Returns the photos and one group holding them all, so the grid draws them exactly as it
-     * draws a duplicate group.
-     */
     suspend fun similarTo(photoId: String, level: Int): Pair<List<PhotoHit>, List<Int>> {
         val field = DUPLICATE_FIELDS[level.coerceIn(0, DUPLICATE_FIELDS.size - 1)]
-        // The duplicate keys are docValues without stored values; a schema of version 1.6 hands
-        // them to fl like any stored field.
+
         val keys = try {
             val doc = select(
                 listOf(
@@ -963,7 +699,7 @@ class SearchRepository(private val context: Context) {
                     "rows" to "1",
                 )
             ).getJSONObject("response").optJSONArray("docs")?.optJSONObject(0)
-            // The "any K words" keys are a list per photo; the others one value.
+
             doc?.optJSONArray(field)?.let { a -> (0 until a.length()).map { a.optString(it) } }
                 ?: listOfNotNull(doc?.optString(field))
         } catch (e: ServiceException) {
@@ -972,8 +708,6 @@ class SearchRepository(private val context: Context) {
         }.filter { it.isNotBlank() && '|' !in it }
         if (keys.isEmpty()) return emptyList<PhotoHit>() to emptyList()
 
-        // {!field} instead of {!term}: size_bytes is numeric, and {!field} lets the field type
-        // read the value, which {!term} does not do for a points field. Several keys: any of them.
         val params = ArrayList<Pair<String, String>>()
         params += "q" to "*:*"
         if (keys.size == 1) {
@@ -985,36 +719,25 @@ class SearchRepository(private val context: Context) {
         }
         params += "fl" to FIELDS
         params += "rows" to SIMILAR_ROWS.toString()
-        // With a tiebreaker: photos taken in the same second must come back in one fixed order.
+
         params += "sort" to "taken_at desc, id asc"
-        // The photo everything is being compared with comes first, where it is expected, instead
-        // of sitting somewhere down the list with a label on it (Cip, 2026-09-16). The sort is
-        // stable, so the others keep their own order, newest first.
+
         val hits = parse(select(params), false, null).hits.sortedByDescending { it.id == photoId }
         return hits to if (hits.isEmpty()) emptyList() else listOf(hits.size)
     }
 
-    /**
-     * Runs a /select, re-reading the index password once if it was refused.
-     */
     private suspend fun select(params: List<Pair<String, String>>): JSONObject {
         val session = prefs.session ?: throw ServiceException(AppText.s(R.string.err_sign_in_to_search))
         val connection = prefs.connection ?: throw ServiceException(AppText.s(R.string.err_not_set_up))
-        // The same question asked again inside the owner's chosen seconds costs no bandwidth.
+
         val key = SearchCache.key(connection.indexName, "/select", params)
         val ttl = prefs.cacheSeconds
         cache.get(key, ttl)?.let { stored ->
             runCatching { JSONObject(stored) }.getOrNull()?.let { return it }
         }
-        // The request and the storing of its answer are one uncancellable step. Dragging the
-        // duplicates slider cancels the job for every stop it crosses, and the call itself is
-        // blocking, so the index answers anyway; with a cancellable step the answer was thrown
-        // away on the way out and the next pass asked for it again. Wrapping only the put was
-        // not enough: the cancellation is raised inside the call, before the put is reached
-        // (Cip, 2026-09-16).
+
         return withContext(NonCancellable) {
-            // The answer is kept and parsed from the very text the index sent, so it is never
-            // written back out again to be stored (Cip, 2026-09-18).
+
             val body = try {
                 SolrClient(connection).selectText(params)
             } catch (e: SolrAuthException) {
@@ -1025,25 +748,17 @@ class SearchRepository(private val context: Context) {
         }
     }
 
-    /**
-     * The duplicate groups of [field], from the cache when a recent answer is held: the slider
-     * walks back and forth over the same few kinds, and each walk is otherwise a full request.
-     */
     private suspend fun cachedDuplicateGroups(connection: IndexConnection, field: String): List<List<String>> {
         val cap = maxGroupOf(field)
         val within = withinOf(field)
-        // The cap and the second field are part of the key: a list taken apart under different
-        // rules is a different answer, and must not be handed back from a cache written under the
-        // old ones.
+
         val key = SearchCache.key(
             connection.indexName,
             "/duplicates",
             listOf("field" to field, "cap" to cap.toString(), "within" to (within ?: "")),
         )
         val ttl = prefs.cacheSeconds
-        // Already taken apart once. The slider walks back and forth over the same few kinds and
-        // every page of the grid asks again, and the groups of a big library are tens of thousands
-        // of ids: reading them out of their text each time is the whole cost (Cip, 2026-09-18).
+
         if (ttl > 0) {
             synchronized(GROUPED) {
                 GROUPED[key]?.let { (at, groups) ->
@@ -1060,9 +775,7 @@ class SearchRepository(private val context: Context) {
                 }
             }.getOrNull()?.let { return rememberGroups(key, it) }
         }
-        // One uncancellable step, for the same reason as in select(): the slider cancels this job
-        // on every stop it crosses, and an answer the index has already given must not be lost
-        // between the call and the cache.
+
         return withContext(NonCancellable) {
             val found = SolrClient(connection).duplicateGroups(field, cap, MAX_GROUPS, within)
             val groups = if (field in MULTI_KEY_FIELDS) withoutSharedPhotos(found) else found
@@ -1071,18 +784,6 @@ class SearchRepository(private val context: Context) {
         }
     }
 
-    /**
-     * A photo shown in one group only (Cip, 2026-09-20). With the "any K words" keys a photo
-     * carries several keys, so it turns up in several groups - A with B over four words, B with
-     * C over four others - and "Select 1 of each" would then tick B twice.
-     *
-     * The groups used to be joined into one instead (union-find). That is single-linkage
-     * chaining: A-B and B-C make A, B and C one group, and on a loose key the chain runs through
-     * the whole library - which is how one group came to hold eight thousand of nine thousand
-     * photos. Here each group stays what the index actually found, the biggest first, and a
-     * photo already placed is simply skipped in the groups that follow; a group left with fewer
-     * than two photos of its own is dropped.
-     */
     private fun withoutSharedPhotos(groups: List<List<String>>): List<List<String>> {
         val taken = HashSet<String>()
         val out = ArrayList<List<String>>(groups.size)
@@ -1096,7 +797,6 @@ class SearchRepository(private val context: Context) {
         return out
     }
 
-    /** Keeps [groups] under [key], ready to be handed back without being read again. */
     private fun rememberGroups(key: String, groups: List<List<String>>): List<List<String>> {
         synchronized(GROUPED) {
             GROUPED[key] = System.currentTimeMillis() to groups
@@ -1105,14 +805,8 @@ class SearchRepository(private val context: Context) {
         return groups
     }
 
-    /** The scanned folders the owner chose, as the filter offers them. */
     private fun folderRoots(): List<String> = SearchFilters.folderRoots(prefs.folders)
 
-    /**
-     * How many photos each scanned folder holds, asked with the other filter counts: one prefix
-     * query per folder, the few the owner chose, over the same request (Cip, 2026-09-19). The
-     * paths are the frv_ parameters [queryParams] binds, or bound here for a request without it.
-     */
     private fun addFolderFacets(params: MutableList<Pair<String, String>>) {
         val roots = folderRoots()
         val bound = params.any { it.first == "frv_0" }
@@ -1122,10 +816,6 @@ class SearchRepository(private val context: Context) {
         }
     }
 
-    /**
-     * The query and filter parameters shared by the results grid and the map. Returns the
-     * parameters, whether vectors were used, and a notice for the user when they were not.
-     */
     private suspend fun queryParams(
         query: String,
         filters: SearchFilters,
@@ -1146,12 +836,7 @@ class SearchRepository(private val context: Context) {
             params += "sort" to "taken_at desc, id asc"
         } else {
             params += "uq" to text
-            // The lexical leg: the owner's tags outrank CLIP's words, which outrank the rest.
-            // Same edismax shape and the same mm as Opensolr's own site search ("flexible").
-            // A single character has no meaning to embed, and the embed endpoint refuses it (404),
-            // which used to show "Search by meaning is unavailable" (Cip, 2026-09-17): words only.
-            // No vector search at all on a plan without it, or with the month's AI requests used
-            // up: words only, even though the index still holds vectors (Cip, 2026-09-17).
+
             val aiUsable = prefs.account?.let { a -> a.vectorAllowed && (a.maxAiRequests <= 0 || a.aiRequestsUsed < a.maxAiRequests) } == true
             val vector = if (!wordsOnly && aiUsable && text.trim().length >= 2) {
                 try {
@@ -1168,8 +853,6 @@ class SearchRepository(private val context: Context) {
                 }
             } else null
 
-            // Each kind of search weighs the fields its own way (Cip, 2026-09-17): alone, the words
-            // carry the whole ranking; blended, they only nudge what the vector already found.
             val qf = when {
                 legacy -> LEGACY_QF
                 vector != null -> HYBRID_QF
@@ -1178,44 +861,30 @@ class SearchRepository(private val context: Context) {
             params += "lexicalRaw" to "{!edismax qf=\"$qf\" mm=\"$MM\" v=\$uq}"
             val matched = if (vector != null) {
                 smart = true
-                // Opensolr's {!hybrid} parser, exactly as search.opensolr.com runs it: both legs
-                // scored on their own, normalised per query and blended (alpha = the vector's
-                // share), candidates from either leg (union).
+
                 params += "vectorQuery" to "{!knn f=embeddings topK=$KNN_TOP_K}" + vector.joinToString(",", "[", "]")
                 "{!hybrid lexical=\$lexicalRaw vector=\$vectorQuery mode=union alpha=${String.format(Locale.US, "%.2f", 1f - prefs.lexicalWeight)} topN=$KNN_TOP_K}"
             } else {
                 "{!bool should=\$lexicalRaw}"
             }
             if (freshBias) {
-                // Fresh: recency multiplies the score of the fused query, the way the Fresh toggle
-                // works on search.opensolr.com. It reorders, it never filters, and nothing is lost
-                // the way a sort by date would lose the best matches among the noise. A bf would
-                // reach the lexical leg only, so the boost wraps the whole query instead.
+
                 params += "freshBias" to FRESH_BIAS
                 params += "matchedQuery" to matched
                 params += "q" to "{!boost b=\$freshBias v=\$matchedQuery}"
             } else {
                 params += "q" to matched
             }
-            // Relevance first, then the id: two photos scoring the same must come back in one
-            // fixed order, or consecutive pages of an infinite scroll overlap and the same photo
-            // arrives twice. The grid keys its items by photo id, so a repeat crashed the app as
-            // soon as it was drawn (Cip, 2026-09-16). This only settles ties; the ranking itself
-            // is untouched.
+
             params += "sort" to "score desc, id asc"
         }
 
-        // One fq per field with chosen values, OR-ing the values ({!terms}), tagged with the
-        // field so that field's facet can exclude it (below) and keep offering every value.
-        // Values travel as a bound parameter, separated by "|" (a control character is not
-        // accepted as the separator; no facet value carries a pipe).
         filters.fields.forEach { (field, values) ->
             if (values.isEmpty() || field !in FACET_FIELDS) return@forEach
             params += "fq" to "{!terms f=$field tag=$field separator=| v=\$f_$field}"
             params += "f_$field" to values.filter { '|' !in it }.joinToString("|")
         }
-        // Scanned folders: each a prefix of the stored path, OR-ed, the paths as bound parameters.
-        // Tagged so the folders' own counts leave this choice out and keep offering them all.
+
         val roots = folderRoots()
         val chosenRoots = roots.withIndex().filter { it.value in filters.folders }
         if (chosenRoots.isNotEmpty()) {
@@ -1224,10 +893,7 @@ class SearchRepository(private val context: Context) {
         }
         roots.forEachIndexed { i, root -> params += "frv_$i" to root }
         if (filters.withLocation) params += "fq" to "has_location:true"
-        // Taken between two days. The ends travel as bound parameters, so nothing the picker
-        // produced is ever spliced into the query itself.
-        // Fields the older configuration does not have, so an index still on it is left alone
-        // rather than asked for something it would refuse.
+
         if (!legacy) {
             filters.hasOcr?.let { params += "fq" to if (it) "ocr_t:*" else "-ocr_t:*" }
             filters.hasPeople?.let { params += "fq" to if (it) "persons_t:*" else "-persons_t:*" }
@@ -1237,19 +903,16 @@ class SearchRepository(private val context: Context) {
             }
         }
         filters.taken?.let { range ->
-            // The whole clause travels as one bound parameter: a range cannot be expressed with
-            // {!field} or {!term}, and nothing is spliced into the fq itself. The two ends are
-            // formatted from a Long by a fixed pattern, so they can only ever be timestamps.
+
             params += "fq" to "{!lucene v=\$taken_q}"
             params += "taken_q" to "taken_at:[${range.fromSolr} TO ${range.toSolr}]"
         }
-        // Tagged or untagged: the field is only on the newer configuration, so an index still on
-        // the old one is left alone rather than being asked something it would refuse.
+
         if (!legacy) filters.tagged?.let { wanted ->
             params += "fq" to if (wanted) "custom_tags:[* TO *]" else "-custom_tags:[* TO *]"
         }
         filters.near?.let { near ->
-            // Radius search on the GPS position; point and distance travel as bound parameters.
+
             params += "fq" to "{!geofilt sfield=location pt=\$near_pt d=\$near_d}"
             params += "near_pt" to String.format(Locale.US, "%.6f,%.6f", near.lat, near.lon)
             params += "near_d" to String.format(Locale.US, "%.3f", near.radiusKm.coerceIn(0.01, 20000.0))
@@ -1257,9 +920,6 @@ class SearchRepository(private val context: Context) {
         return Triple(params, smart, notice)
     }
 
-    /**
-     * Turns the Solr answer into a page.
-     */
     private fun parse(json: JSONObject, smart: Boolean, notice: String?): SearchPage {
         val response = json.getJSONObject("response")
         val docs = response.getJSONArray("docs")
@@ -1281,8 +941,6 @@ class SearchRepository(private val context: Context) {
             if (counts.isNotEmpty()) facets[SearchFilters.FOLDER_ROOTS] = counts
         }
 
-        // Spellcheck collation: Solr returns "collations" as [ "collation", "<query>", ... ]
-        // or, with extended results, as objects carrying "collationQuery".
         var collation: String? = null
         json.optJSONObject("spellcheck")?.let { spell ->
             val collations = spell.optJSONArray("collations")
@@ -1299,136 +957,69 @@ class SearchRepository(private val context: Context) {
 
     companion object {
         const val PAGE = 60
-        /** How many of a photo's words have to match, in order, for two photos to be the same shot. */
-        /** Every field the filter sheet facets on. Only these may appear in an fq. */
+
         private val FACET_FIELDS = SearchFilters.FACETS.map { it.first }.toSet()
-        /** Most pins the map asks for at once. */
+
         const val MAP_ROWS = 1000
 
-        /**
-         * Most photos one heading's tick can take in. A month of a big library is thousands of
-         * photos and they are asked for as ids only, so this is generous; it is here so that a
-         * single tap can never ask the index for an unbounded list.
-         */
         const val GROUP_TICK_MAX = 20000
 
-        /** Ids per request when counting what a selection already carries. */
         private const val WORDS_OF_CHUNK = 1000
 
-        /**
-         * The vectors of the last few typed searches, by index and words, with when each was made.
-         * Held for the whole app, not per screen: paging the grid, opening a group of days and the
-         * suggestions beside the box all ask for the same one (Cip, 2026-09-18).
-         */
         private val EMBEDDED = LinkedHashMap<String, Pair<Long, FloatArray>>()
 
-        /** How many searches' vectors are kept. */
         private const val EMBED_HELD = 8
 
-        /** The duplicate groups already taken apart, by index and kind, with when each was read. */
         private val GROUPED = LinkedHashMap<String, Pair<Long, List<List<String>>>>()
 
-        /** How many kinds of duplicate are kept ready; the slider offers eight. */
         private const val GROUPS_HELD = 4
 
-        /** How long one is reused: long enough for a session of scrolling, short enough to be fresh. */
         private const val EMBED_HOLD_MS = 30 * 60 * 1000L
-        /** Candidates of the vector leg and of the fusion, as on search.opensolr.com. */
+
         private const val KNN_TOP_K = 500
-        /**
-         * The vector's share of the blended score. Half and half: a photo that matches the
-         * words (a tag, a name, a place) always ranks above one that only resembles them in
-         * meaning, and among word matches the meaning decides. Opensolr's site search leans
-         * further toward meaning (0.85) because product catalogues have no hand-written tags.
-         */
-        /**
-         * Recency as a multiplier: 1.0 for a photo taken today, 0.5 a year later, 0.33 after two.
-         * 3.16e-11 is 1/(a year in ms); max(0, ...) guards a date in the future, which would make
-         * ms() negative and the reciprocal blow the whole query up.
-         */
+
         private const val FRESH_BIAS = "recip(max(0,ms(NOW,taken_at)),3.16e-11,1,1)"
-        /** Minimum-should-match of the lexical leg: Opensolr's "flexible" setting. */
+
         private const val MM = "2<65% 4<50% 8<40%"
-        // ocr_t sits right under meaning: the words printed IN a photo name it as surely as the
-        // words it was read into, and a receipt is asked for by what is on it (Cip, 2026-09-16).
+
         private const val QF = "custom_tags_text^5 meaning^2 ocr_t^3 persons_t^4 text file_name_text folder_text camera_text place_text^1"
         private const val HYBRID_QF = "custom_tags_text^0.5 meaning^0.2 ocr_t^0.4 persons_t^0.3 file_name_text folder_text camera_text place_text^0.1"
         private const val LEGACY_QF = "meaning^3 text file_name_text folder_text camera_text"
         private const val LEGACY_FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,labels"
-        /**
-         * The keys the slider walks through, loosest first (Cip, 2026-09-20): CLIP's first 3
-         * words, any 4 of its first five, all five, then the EXIF a simple edit keeps. Made on
-         * the server by photos_ingest.
-         *
-         * Nothing looser than three words is offered. "Any 2" and "any 3" went first - two photos
-         * sharing two of five generic CLIP words ("sky", "outdoor") are not alike in any useful
-         * sense, and half a library shares them - and "same first 2 words" went with them for the
-         * same reason: still noise, whatever the order of the words. EXIF-plus-words is gone too:
-         * it never grouped anything the EXIF alone did not.
-         */
+
         val DUPLICATE_FIELDS = listOf(
             "dup_w3_hash", "dup_any4_ss", "dup_w5_hash",
             "dup_exif_hash",
-            // The same file name (without the folder: several folders can be indexed) and the
-            // same size in bytes, straight from the stored fields, which have docValues already.
+
             "file_name", "size_bytes",
-            // The strictest stop of all: the md5 of the file itself, so only true copies group
-            // together (Cip, 2026-09-16). Same size is not the same file - a camera pads its
-            // files to whole blocks, so hundreds of different photos share a size exactly.
+
             "file_hash",
         )
-        /** The duplicate keys a photo carries several of, whose groups can share photos. */
+
         val MULTI_KEY_FIELDS = setOf("dup_any4_ss")
 
-        /**
-         * Most photos a group may hold to still be a group of alike photos (Cip, 2026-09-20).
-         * Above it the key stopped describing a photo and started describing a category - "any
-         * 4 words" on a phone full of holiday snaps - and the view filled with the library
-         * itself. Applied where the facet is read, so such a value costs nothing to skip.
-         */
         const val MAX_GROUP = 50
 
-        /**
-         * The same, for the loosest stop alone (Cip, 2026-09-20). Three CLIP words are still a
-         * subject rather than a photo: at that setting a group of half a dozen is already a shelf
-         * of lookalikes nobody is going to delete, so only small groups are worth drawing there.
-         */
         const val LOOSE_MAX_GROUP = 5
 
-        /** The loosest stop, the only one held to the tighter cap and to a second field. */
         private const val LOOSE_FIELD = "dup_w3_hash"
 
-        /** How big a group may be at [field]: the loosest words stop is held tighter than the rest. */
         fun maxGroupOf(field: String): Int = if (field == LOOSE_FIELD) LOOSE_MAX_GROUP else MAX_GROUP
 
-        /**
-         * A second thing the photos of a group must share at [field], or null where the key is
-         * enough (Cip, 2026-09-20). Three CLIP words alone pair photos by arithmetic rather than
-         * by likeness - the vocabulary the model really uses on a phone's photos is a few hundred
-         * words, so any two photos have a fair chance of landing on the same three - and asking
-         * for the same camera as well is what turns those pairs back into photos taken by one
-         * person, of one thing, with one device. Photos with no camera in their EXIF (screenshots,
-         * downloads, scans) are not grouped at this stop at all.
-         */
         fun withinOf(field: String): String? = if (field == LOOSE_FIELD) "camera_model" else null
 
-        /** Most groups one facet request brings back, biggest first: far more than the grid pages through. */
         const val MAX_GROUPS = 2000
 
-        /** The slider's stop when the view opens: all five words the same. */
         const val DEFAULT_DUPLICATE_LEVEL = 2
 
-        /** Groups fetched at a time; the rest follow as the grid is scrolled. */
         const val GROUPS_PAGE = 20
 
-        /** Most photos one page of groups fetches, so a page is always a single request. */
         const val DOCS_PAGE = 300
 
-        /** Most photos "Show similar photos" brings back for one anchor photo. */
         private const val SIMILAR_ROWS = 200
-        /** Photos an album needs before it is shown (Cip, 2026-09-15). */
+
         private const val ALBUM_MIN = 1
-        /** CLIP words offered as albums: only the most used, never the whole vocabulary. */
+
         private const val ALBUM_THINGS = 12
         private const val FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,size_bytes,meaning,ocr_t,persons_t,location,city,region,province,country,labels,custom_tags"
     }

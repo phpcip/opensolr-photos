@@ -11,15 +11,6 @@ import com.opensolr.photos.data.AppPrefs
 import java.security.MessageDigest
 import java.security.SecureRandom
 
-/**
- * Starts the Opensolr sign-in in the phone's browser.
- *
- * OAuth 2.0 authorization code flow with PKCE, the way RFC 8252 says native apps must do it:
- * the login page opens in a Custom Tab (the real browser, with its own cookies and password
- * manager), never in a WebView, so the app can never read what is typed there. The app keeps a
- * random verifier to itself and sends only its SHA-256 (the challenge); the one-time code that
- * comes back is worthless to anyone who does not also hold the verifier.
- */
 object AuthFlow {
 
     const val CLIENT_ID = "opensolr-photos"
@@ -28,9 +19,6 @@ object AuthFlow {
 
     private val random = SecureRandom()
 
-    /**
-     * Creates a fresh verifier and state, remembers them, and opens the authorize page.
-     */
     fun start(context: Context, prefs: AppPrefs) {
         val verifier = randomToken(48)
         val state = randomToken(24)
@@ -53,26 +41,16 @@ object AuthFlow {
         }
     }
 
-    /**
-     * base64url(SHA-256(verifier)) without padding, the S256 challenge.
-     */
     fun challengeOf(verifier: String): String {
         val digest = MessageDigest.getInstance("SHA-256").digest(verifier.toByteArray(Charsets.US_ASCII))
         return Base64.encodeToString(digest, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
     }
 
-    /**
-     * [bytes] random bytes as unpadded base64url.
-     */
     private fun randomToken(bytes: Int): String {
         val buffer = ByteArray(bytes).also { random.nextBytes(it) }
         return Base64.encodeToString(buffer, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
     }
 
-    /**
-     * "Manufacturer Model", limited to the characters and length the server accepts, shown on
-     * the approval page so the person knows which phone is asking.
-     */
     private fun deviceLabel(): String {
         val raw = if (Build.MODEL.startsWith(Build.MANUFACTURER, ignoreCase = true)) Build.MODEL
         else "${Build.MANUFACTURER} ${Build.MODEL}"

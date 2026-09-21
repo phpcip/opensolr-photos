@@ -26,47 +26,27 @@ import org.osmdroid.views.overlay.Overlay
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-/**
- * A group of photos drawn as one marker: the thumbnail of the first photo and, when there are
- * several, a count badge, the way Google Photos does it.
- */
 class PhotoCluster(val pins: List<PhotoPin>, val centerX: Float, val centerY: Float) {
 
-    /** The geographic centre of the group. */
     val geoCenter: GeoPoint get() = GeoPoint(pins.map { it.lat }.average(), pins.map { it.lon }.average())
 }
 
-/**
- * Draws the photos on the map, grouped by screen distance at the current zoom, and reports taps.
- *
- * Thumbnails come from the phone through Coil, never from the network, and are kept in a small
- * memory cache; a marker is drawn as a plain chip until its thumbnail arrives.
- *
- * @property colors the palette to draw with (chip, paper, hairline, accent, onAccent) as ARGB ints
- * @property onTap  called with the tapped group
- */
 class PhotoClusterOverlay(
     private val context: Context,
     private val colors: MarkerColors,
     private val onTap: (PhotoCluster) -> Unit,
 ) : Overlay() {
 
-    /**
-     * The colours a marker needs, as ARGB ints.
-     */
     data class MarkerColors(val chip: Int, val paper: Int, val hairline: Int, val accent: Int, val onAccent: Int)
 
-    /** The photos to draw. Setting it invalidates the map. */
     var pins: List<PhotoPin> = emptyList()
         set(value) {
             field = value
-            // The position of a photo never changes, so its map point is made once here and not
-            // once per photo on every frame of a pan (Cip, 2026-09-18).
+
             points = value.map { GeoPoint(it.lat, it.lon) }
             clusters = emptyList()
         }
 
-    /** The map point of each pin, in the same order, made once when the pins arrive. */
     private var points: List<GeoPoint> = emptyList()
 
     private val density = context.resources.displayMetrics.density
@@ -99,9 +79,6 @@ class PhotoClusterOverlay(
     private val src = Rect()
     private val dst = RectF()
 
-    /**
-     * Groups the pins for the current view and draws every group.
-     */
     override fun draw(canvas: Canvas, mapView: MapView, shadow: Boolean) {
         if (shadow || pins.isEmpty()) return
         val projection = mapView.projection
@@ -114,17 +91,12 @@ class PhotoClusterOverlay(
         clusters.forEach { drawCluster(canvas, it, mapView) }
     }
 
-    /**
-     * Groups pins that fall into the same screen cell. Pins off screen are skipped.
-     */
     private fun cluster(projection: Projection): List<PhotoCluster> {
         val width = projection.width
         val height = projection.height
         val margin = markerSize
         val cell = cellSize.toInt()
-        // The members of each cell and, beside them, the running sum of their screen positions:
-        // this runs for every frame of a pan, so nothing is built here that can be counted as it
-        // goes (Cip, 2026-09-18).
+
         val cells = LinkedHashMap<Long, ArrayList<PhotoPin>>()
         val sums = HashMap<Long, LongArray>()
         for (i in pins.indices) {
@@ -142,9 +114,6 @@ class PhotoClusterOverlay(
         }
     }
 
-    /**
-     * One marker: thumbnail (or chip colour), paper border, hairline, and a count badge.
-     */
     private fun drawCluster(canvas: Canvas, cluster: PhotoCluster, mapView: MapView) {
         val half = markerSize / 2
         dst.set(cluster.centerX - half, cluster.centerY - half, cluster.centerX + half, cluster.centerY + half)
@@ -157,7 +126,7 @@ class PhotoClusterOverlay(
         clipPath.addRoundRect(dst, corner, corner, Path.Direction.CW)
         canvas.clipPath(clipPath)
         if (thumb != null) {
-            // Centre-crop the thumbnail into the square.
+
             val side = minOf(thumb.width, thumb.height)
             val left = (thumb.width - side) / 2
             val top = (thumb.height - side) / 2
@@ -181,9 +150,6 @@ class PhotoClusterOverlay(
         }
     }
 
-    /**
-     * Asks Coil for a small thumbnail once per photo and redraws the map when it arrives.
-     */
     private fun requestThumb(id: String, mediaId: Long, mapView: MapView) {
         if (mediaId <= 0 || !loading.add(id)) return
         val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, mediaId)
@@ -195,8 +161,7 @@ class PhotoClusterOverlay(
                 onSuccess = { drawable ->
                     (drawable as? BitmapDrawable)?.bitmap?.let {
                         thumbs.put(id, it)
-                        // Once cached the photo may be asked for again: the cache holds 64, and a
-                        // thumbnail it drops must load again instead of staying a blank chip.
+
                         loading.remove(id)
                     }
                     mapView.postInvalidate()
@@ -207,9 +172,6 @@ class PhotoClusterOverlay(
         loader.enqueue(request)
     }
 
-    /**
-     * A tap on a marker reports its group.
-     */
     override fun onSingleTapConfirmed(e: MotionEvent, mapView: MapView): Boolean {
         val half = markerSize / 2
         val hit = clusters.lastOrNull { c ->
@@ -219,9 +181,6 @@ class PhotoClusterOverlay(
         return true
     }
 
-    /**
-     * Frees the thumbnails.
-     */
     override fun onDetach(mapView: MapView?) {
         thumbs.evictAll()
         loading.clear()
