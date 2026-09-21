@@ -70,13 +70,13 @@ class IndexManager(
 
     val ownIndexName: String get() = "photos_${deviceId}__dense"
 
-    suspend fun ensure(session: Session, onStep: suspend (String) -> Unit = {}): Pair<IndexConnection, Outcome> {
+    suspend fun ensure(session: Session, prefetched: OpensolrApi.SyncInfo? = null, onStep: suspend (String) -> Unit = {}): Pair<IndexConnection, Outcome> {
         onStep(AppText.s(R.string.ix_looking))
         val name = indexName
-        val account = api.indexes(session)
+        val account = prefetched?.indexes ?: api.indexes(session)
         if (account.any { it.name == name }) {
             if (prefs.chosenIndexName == null) prefs.chosenIndexName = name
-            val connection = connectionWithRetry(session, name)
+            val connection = prefetched?.connectionFor(name) ?: connectionWithRetry(session, name)
             prefs.connection = connection
 
             val version = SolrClient(connection).configVersion()

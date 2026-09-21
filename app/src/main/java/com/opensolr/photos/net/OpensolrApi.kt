@@ -139,11 +139,41 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
     suspend fun indexNames(session: Session): List<String> = indexes(session).map { it.name }
 
     suspend fun indexes(session: Session): List<AccountIndex> = withContext(Dispatchers.IO) {
-        val text = post(MANAGEMENT + "get_index_list", form(session))
+        indexListFrom(post(MANAGEMENT + "get_index_list", form(session)))
+    }
+
+    /** The account's indexes, get_index_list, index connection and account limits from one photos_sync_info call; null when the server cannot answer it. */
+    class SyncInfo(
+        val indexes: List<AccountIndex>,
+        private val name: String,
+        private val connection: IndexConnection?,
+        private val account: AccountLimits?,
+    ) {
+        fun connectionFor(indexName: String): IndexConnection? = if (indexName == name) connection else null
+        fun accountFor(indexName: String): AccountLimits? = if (indexName == name) account else null
+    }
+
+    suspend fun syncInfo(session: Session, name: String, previous: AccountLimits?): SyncInfo? = withContext(Dispatchers.IO) {
+        val signature = hmacSha256Hex(session.apiKey, name + session.email)
+        val json = parseObject(post(MANAGEMENT + "photos_sync_info", form(session) {
+            add("core_name", name)
+            add("signature", signature)
+        }))
+        if (!json.optBoolean("status")) return@withContext null
+        val list = json.optJSONArray("index_list") ?: return@withContext null
+        SyncInfo(
+            indexes = indexListFrom(list.toString()),
+            name = name,
+            connection = json.optJSONObject("core_info")?.let { runCatching { connectionFrom(name, it) }.getOrNull() },
+            account = json.optJSONObject("account_summary")?.let { runCatching { accountFrom(it, previous) }.getOrNull() },
+        )
+    }
+
+    private fun indexListFrom(text: String): List<AccountIndex> {
         val trimmed = text.trim()
         if (!trimmed.startsWith("[")) throw ServiceException(platformMessage(trimmed))
         val array = JSONArray(trimmed)
-        (0 until array.length()).mapNotNull { i ->
+        return (0 until array.length()).mapNotNull { i ->
             val o = array.optJSONObject(i) ?: return@mapNotNull null
             val name = o.optString("index_name").takeIf { it.isNotBlank() } ?: return@mapNotNull null
             AccountIndex(
@@ -207,7 +237,10 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
     }
 
     suspend fun connection(session: Session, name: String): IndexConnection = withContext(Dispatchers.IO) {
-        val json = parseObject(post(MANAGEMENT + "get_core_info", form(session) { add("core_name", name) }))
+        connectionFrom(name, parseObject(post(MANAGEMENT + "get_core_info", form(session) { add("core_name", name) })))
+    }
+
+    private fun connectionFrom(name: String, json: JSONObject): IndexConnection {
         if (!json.optBoolean("status")) {
             if (json.optString("msg") == "NOT_OWNER_ERROR") throw IndexMissingException()
             throw ServiceException(platformMessage(json.toString()))
@@ -215,7 +248,7 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         val info = json.optJSONObject("msg")?.optJSONObject("info") ?: throw ServiceException("get_core_info returned no connection details")
         val url = info.optString("connection_url")
         if (!url.startsWith("https://")) throw ServiceException("The index does not offer an HTTPS address")
-        IndexConnection(
+        return IndexConnection(
             indexName = name,
             baseUrl = url,
             username = info.optString("auth_username"),
@@ -226,12 +259,15 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
 
     suspend fun accountSummary(session: Session, name: String, previous: AccountLimits?): AccountLimits = withContext(Dispatchers.IO) {
         val signature = hmacSha256Hex(session.apiKey, name + session.email)
-        val json = parseObject(post(MANAGEMENT + "get_account_summary", form(session) {
+        accountFrom(parseObject(post(MANAGEMENT + "get_account_summary", form(session) {
             add("core_name", name)
             add("signature", signature)
-        }))
+        })), previous)
+    }
+
+    private fun accountFrom(json: JSONObject, previous: AccountLimits?): AccountLimits {
         if (!json.optBoolean("status")) throw ServiceException(platformMessage(json.toString()))
-        AccountLimits.fromJson(json.optJSONObject("msg") ?: JSONObject(), previous)
+        return AccountLimits.fromJson(json.optJSONObject("msg") ?: JSONObject(), previous)
     }
 
     suspend fun nearbyPlaces(session: Session, coords: List<String>): Map<String, PlaceInfo?> = withContext(Dispatchers.IO) {

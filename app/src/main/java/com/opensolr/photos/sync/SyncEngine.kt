@@ -117,7 +117,16 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
 
         try {
             onProgress(Progress(AppText.s(R.string.sy_checking), 0, 0))
-            val (initialConnection, outcome) = indexes.ensure(session) { onProgress(Progress(it, 0, 0)) }
+            val prefetched = try {
+                api.syncInfo(session, indexes.indexName, prefs.account)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: SignInRequiredException) {
+                throw e
+            } catch (e: Exception) {
+                null
+            }
+            val (initialConnection, outcome) = indexes.ensure(session, prefetched) { onProgress(Progress(it, 0, 0)) }
             recreated = outcome == IndexManager.Outcome.RECREATED
             if (recreated) Notifier.indexRecreated(context)
             var connection = initialConnection
@@ -140,7 +149,13 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             val local = MediaScanner.scan(context, prefs.folders)
             localCount = local.size
 
-            refreshAccount(session, connection)
+            val prefetchedAccount = prefetched?.accountFor(connection.indexName)
+            if (prefetchedAccount != null) {
+                prefs.account = prefetchedAccount
+                PlanWatch.notifyNew(context, prefs, prefetchedAccount)
+            } else {
+                refreshAccount(session, connection)
+            }
             val limits = prefs.account
             var vectorAllowed = limits?.vectorAllowed ?: false
 
