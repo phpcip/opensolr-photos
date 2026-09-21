@@ -1,0 +1,2 @@
+Stats: every section starts folded, and the ones you open stay open, even after the app is closed.
+Things in Stats lists its 50 biggest and stops there.
