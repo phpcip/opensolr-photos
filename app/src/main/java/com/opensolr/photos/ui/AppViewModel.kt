@@ -183,6 +183,10 @@ data class UiState(
 
     val updateChecking: Boolean = false,
 
+    val updateProgress: Int? = null,
+
+    val updateInstallError: String? = null,
+
     val updateResult: String? = null,
 
     val cacheSeconds: Int = com.opensolr.photos.data.SearchCache.DEFAULT_SECONDS,
@@ -436,6 +440,30 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             prefs.updateCheckedAt = System.currentTimeMillis()
             if (prefs.updateDismissed == update.version) return@launch
             _state.update { it.copy(update = update) }
+        }
+    }
+
+    fun installUpdate(context: android.content.Context) {
+        val newer = _state.value.update ?: return
+        if (_state.value.updateProgress != null) return
+        if (!com.opensolr.photos.net.SelfUpdate.canInstall(context)) {
+            _state.update { it.copy(updateInstallError = AppText.s(R.string.acc_update_allow)) }
+            com.opensolr.photos.net.SelfUpdate.openInstallPermission(context)
+            return
+        }
+        _state.update { it.copy(updateProgress = 0, updateInstallError = null) }
+        viewModelScope.launch {
+            val outcome = com.opensolr.photos.net.SelfUpdate.downloadAndInstall(context.applicationContext, newer.apkUrl) { pct ->
+                _state.update { it.copy(updateProgress = pct) }
+            }
+            _state.update {
+                when (outcome) {
+                    is com.opensolr.photos.net.SelfUpdate.Outcome.Started -> it.copy(updateProgress = null)
+                    is com.opensolr.photos.net.SelfUpdate.Outcome.NeedsPermission -> it.copy(updateProgress = null, updateInstallError = AppText.s(R.string.acc_update_allow))
+                    is com.opensolr.photos.net.SelfUpdate.Outcome.Invalid -> it.copy(updateProgress = null, updateInstallError = AppText.s(R.string.acc_update_invalid))
+                    is com.opensolr.photos.net.SelfUpdate.Outcome.Failed -> it.copy(updateProgress = null, updateInstallError = AppText.s(R.string.acc_update_failed))
+                }
+            }
         }
     }
 

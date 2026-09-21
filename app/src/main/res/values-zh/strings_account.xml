@@ -16,6 +16,11 @@
     <string name="acc_update_notes">请从发布页面下载；它会覆盖安装并保留所有内容。</string>
     <string name="acc_version_available">版本 %1$s 可用</string>
     <string name="acc_download">下载 %1$s</string>
+    <string name="acc_update_now">更新到 %1$s</string>
+    <string name="acc_downloading">正在下载… %1$d%%</string>
+    <string name="acc_update_allow">请允许 Opensolr Photos 安装更新，然后再次点按按钮。</string>
+    <string name="acc_update_invalid">下载的文件不是有效的 Opensolr Photos 更新。</string>
+    <string name="acc_update_failed">无法安装更新。请重试。</string>
     <string name="acc_update_available">有可用更新</string>
     <string name="acc_version">版本</string>
     <string name="acc_limits">限额与用量</string>

@@ -16,6 +16,11 @@
     <string name="acc_update_notes">リリースページからダウンロードしてください。上書きインストールされ、すべて保持されます。</string>
     <string name="acc_version_available">バージョン %1$s があります</string>
     <string name="acc_download">%1$s をダウンロード</string>
+    <string name="acc_update_now">%1$s に更新</string>
+    <string name="acc_downloading">ダウンロード中… %1$d%%</string>
+    <string name="acc_update_allow">Opensolr Photos によるアップデートのインストールを許可し、もう一度ボタンをタップしてください。</string>
+    <string name="acc_update_invalid">ダウンロードしたファイルは有効な Opensolr Photos のアップデートではありません。</string>
+    <string name="acc_update_failed">アップデートをインストールできませんでした。もう一度お試しください。</string>
     <string name="acc_update_available">アップデートがあります</string>
     <string name="acc_version">バージョン</string>
     <string name="acc_limits">上限と使用量</string>

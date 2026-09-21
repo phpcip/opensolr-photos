@@ -16,6 +16,11 @@
     <string name="acc_update_notes">Descárgala desde la página de versiones; se instala sobre esta y conserva todo.</string>
     <string name="acc_version_available">La versión %1$s está disponible</string>
     <string name="acc_download">Descargar %1$s</string>
+    <string name="acc_update_now">Actualizar a %1$s</string>
+    <string name="acc_downloading">Descargando… %1$d%%</string>
+    <string name="acc_update_allow">Permite que Opensolr Photos instale actualizaciones y vuelve a tocar el botón.</string>
+    <string name="acc_update_invalid">La descarga no es una actualización válida de Opensolr Photos.</string>
+    <string name="acc_update_failed">No se pudo instalar la actualización. Inténtalo de nuevo.</string>
     <string name="acc_update_available">Actualización disponible</string>
     <string name="acc_version">Versión</string>
     <string name="acc_limits">Límites y uso</string>

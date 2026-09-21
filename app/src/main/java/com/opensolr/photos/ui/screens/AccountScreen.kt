@@ -88,7 +88,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                         Spacer(Modifier.height(12.dp))
                         Notice(newer.notes.ifBlank { stringResource(R.string.acc_update_notes) }, title = stringResource(R.string.acc_version_available, newer.version))
                         Spacer(Modifier.height(10.dp))
-                        AccentButton(stringResource(R.string.acc_download, newer.version), onClick = { Actions.openUrl(context, newer.pageUrl) }, modifier = Modifier.fillMaxWidth())
+                        UpdateButton(state, newer, viewModel)
                     }
                 }
                 state.updateResult?.let { result ->
@@ -97,7 +97,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
 
                     state.update?.let { newer ->
                         Spacer(Modifier.height(10.dp))
-                        AccentButton(stringResource(R.string.acc_download, newer.version), onClick = { Actions.openUrl(context, newer.pageUrl) }, modifier = Modifier.fillMaxWidth())
+                        UpdateButton(state, newer, viewModel)
                     }
                 }
                 Spacer(Modifier.height(18.dp))
@@ -392,5 +392,25 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
             titleContentColor = p.ink,
             textContentColor = p.muted,
         )
+    }
+}
+
+@Composable
+private fun UpdateButton(state: UiState, newer: com.opensolr.photos.net.UpdateCheck.Update, viewModel: AppViewModel) {
+    val context = LocalContext.current
+    if (com.opensolr.photos.net.SelfUpdate.fromPlay(context)) {
+        AccentButton(stringResource(R.string.acc_update_now, newer.version), onClick = { com.opensolr.photos.net.SelfUpdate.openPlay(context) }, modifier = Modifier.fillMaxWidth())
+        return
+    }
+    val progress = state.updateProgress
+    AccentButton(
+        if (progress != null) stringResource(R.string.acc_downloading, progress) else stringResource(R.string.acc_update_now, newer.version),
+        onClick = { viewModel.installUpdate(context) },
+        enabled = progress == null,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    state.updateInstallError?.let {
+        Spacer(Modifier.height(8.dp))
+        Text(it, style = MaterialTheme.typography.bodySmall, color = LocalPalette.current.muted)
     }
 }

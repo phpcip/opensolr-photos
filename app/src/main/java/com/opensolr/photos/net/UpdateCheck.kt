@@ -10,7 +10,9 @@ import java.io.IOException
 
 object UpdateCheck {
 
-    data class Update(val version: String, val notes: String, val pageUrl: String)
+    data class Update(val version: String, val notes: String, val pageUrl: String, val apkUrl: String = APK_LATEST)
+
+    const val APK_LATEST = "https://github.com/phpcip/opensolr-photos/releases/latest/download/opensolr-photos.apk"
 
     private const val LATEST = "https://api.github.com/repos/phpcip/opensolr-photos/releases/latest"
 
@@ -30,12 +32,23 @@ object UpdateCheck {
                         version = tag,
                         notes = plain(json.optString("body")),
                         pageUrl = json.optString("html_url").ifBlank { "https://github.com/phpcip/opensolr-photos/releases/latest" },
+                        apkUrl = apkOf(json, tag),
                     )
                 )
             }
         } catch (e: Exception) {
             Result.failure(e)
         }
+    }
+
+    private fun apkOf(json: JSONObject, tag: String): String {
+        val assets = json.optJSONArray("assets") ?: return APK_LATEST
+        for (i in 0 until assets.length()) {
+            val a = assets.optJSONObject(i) ?: continue
+            val url = a.optString("browser_download_url")
+            if (a.optString("name") == "opensolr-photos.apk" && url.startsWith("https://github.com/phpcip/opensolr-photos/releases/download/v$tag/")) return url
+        }
+        return APK_LATEST
     }
 
     fun isNewer(candidate: String, current: String): Boolean {
