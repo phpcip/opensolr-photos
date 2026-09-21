@@ -46,6 +46,7 @@ object SelfUpdate {
 
     /** True when Google Play installed this copy: then Play does the updating, not the app. */
     fun fromPlay(context: Context): Boolean {
+        if (com.opensolr.photos.BuildConfig.PLAY_BUILD) return true
         val installer = try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) context.packageManager.getInstallSourceInfo(context.packageName).installingPackageName
             else @Suppress("DEPRECATION") context.packageManager.getInstallerPackageName(context.packageName)
@@ -64,7 +65,7 @@ object SelfUpdate {
         }
     }
 
-    fun canInstall(context: Context): Boolean = context.packageManager.canRequestPackageInstalls()
+    fun canInstall(context: Context): Boolean = !com.opensolr.photos.BuildConfig.PLAY_BUILD && context.packageManager.canRequestPackageInstalls()
 
     fun openInstallPermission(context: Context) {
         val intent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + context.packageName))

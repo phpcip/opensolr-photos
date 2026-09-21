@@ -31,6 +31,18 @@ android {
         versionName = "3.5.4"
     }
 
+    flavorDimensions += "store"
+    productFlavors {
+        create("github") {
+            dimension = "store"
+            buildConfigField("boolean", "PLAY_BUILD", "false")
+        }
+        create("play") {
+            dimension = "store"
+            buildConfigField("boolean", "PLAY_BUILD", "true")
+        }
+    }
+
     signingConfigs {
         if (!signingProperties.isEmpty) {
             create("release") {

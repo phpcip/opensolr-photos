@@ -36,11 +36,17 @@ keyPassword=…
 ```
 
 ```bash
-./gradlew assembleRelease
+./gradlew assembleGithubRelease      # the APK for GitHub and sideloading
+./gradlew bundlePlayRelease          # the app bundle for Google Play
 ```
 
-The APK is in `app/build/outputs/apk/release/app-release.apk`, shrunk with R8 and signed. Without
-`signing.properties` the release APK is built unsigned.
+The APK is in `app/build/outputs/apk/github/release/app-github-release.apk`, the bundle in
+`app/build/outputs/bundle/playRelease/app-play-release.aab`, both shrunk with R8 and signed. Without
+`signing.properties` they are built unsigned.
+
+There are two flavors, `github` and `play`, with the same code and the same version. The `github` build
+updates itself from the latest GitHub release; the `play` build leaves updating to Google Play and does not
+declare `REQUEST_INSTALL_PACKAGES` (`app/src/play/AndroidManifest.xml`).
 
 ## The Solr configuration
 
