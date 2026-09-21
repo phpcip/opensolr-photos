@@ -4,6 +4,7 @@
     <string name="nav_sync">Sync</string>
     <string name="nav_map">Hartă</string>
     <string name="nav_albums">Albume</string>
+    <string name="nav_stats">Statistici</string>
     <string name="nav_search">Caută</string>
     <string name="cd_account">Contul Opensolr</string>
     <string name="cd_close_search">Închide căutarea</string>
@@ -29,6 +30,7 @@
     <string name="open_group">Deschide grupul</string>
     <string name="fold_group">Pliază grupul</string>
     <string name="cd_has_tags">Are etichetele tale</string>
+    <string name="cd_has_people">Are persoane</string>
     <string name="this_one">Aceasta</string>
     <string name="delete_text">Sunt șterse de pe telefon și din index. Nu se poate anula.</string>
     <string name="delete">Șterge</string>

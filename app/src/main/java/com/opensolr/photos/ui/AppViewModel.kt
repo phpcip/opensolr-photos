@@ -49,7 +49,7 @@ import java.security.MessageDigest
 /**
  * The screens of the app.
  */
-enum class Screen { SignIn, Welcome, Permissions, Folders, Setup, Search, Sync, Account, Map, Albums }
+enum class Screen { SignIn, Welcome, Permissions, Folders, Setup, Search, Sync, Account, Map, Albums, Stats }
 
 /**
  * Everything the UI draws, in one immutable value.
@@ -175,6 +175,10 @@ data class UiState(
     val skeleton: List<com.opensolr.photos.ui.DateGroup> = emptyList(),
     /** The zones of Me that are open; all start folded and stay as left while the app runs. */
     val meZonesOpen: Set<String> = emptySet(),
+    /** The sections of Stats that are folded; all start open and stay as left while the app runs. */
+    val statsFolded: Set<String> = emptySet(),
+    /** True while the grid shows a line opened from Stats: Back goes to Stats, where it was. */
+    val returnToStats: Boolean = false,
     /** How a search's results are laid out, as the owner last chose (Cip, 2026-09-19). */
     val groupBy: GroupBy = GroupBy.RELEVANCE,
     /** A search laid out by [groupBy]: every group with all its photos' ids; empty otherwise. */
@@ -219,6 +223,11 @@ data class UiState(
     val cachedCount: Int = 0,
     /** Photo indexes of other phones, offered when this phone has none: "which one is your device?" */
     val deviceChoices: List<AccountIndex> = emptyList(),
+    /** The Stats screen: the library in numbers, null until first worked out. */
+    val stats: com.opensolr.photos.data.LibraryStats? = null,
+    val statsLoading: Boolean = false,
+    /** True while the phone's copy of the index is not fully read, so the numbers are partial. */
+    val statsPartial: Boolean = false,
     /** The albums screen: its sections, whether they are loading, and why they failed. */
     val albums: List<com.opensolr.photos.search.AlbumSection> = emptyList(),
     val albumsLoading: Boolean = false,
@@ -1716,6 +1725,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(meZonesOpen = if (key in it.meZonesOpen) it.meZonesOpen - key else it.meZonesOpen + key) }
     }
 
+    /** Folds or opens one section of Stats, for the rest of the session (Cip, 2026-09-21). */
+    fun toggleStatsSection(key: String) {
+        _state.update { it.copy(statsFolded = if (key in it.statsFolded) it.statsFolded - key else it.statsFolded + key) }
+    }
+
+    /** Folds every section of Stats in [keys] away, or opens them all when [keys] is empty. */
+    fun setStatsFolded(keys: Set<String>) {
+        _state.update { it.copy(statsFolded = keys) }
+    }
+
     /**
      * Lays the results out by [how], and keeps the choice for the next searches (Cip, 2026-09-19).
      */
@@ -2056,12 +2075,26 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
      * Opens one album: the photos grid with that album's filter alone, nothing typed, nothing
      * else filtered. The filter shows as a pill with its cross, like any other.
      */
-    fun openAlbum(album: com.opensolr.photos.search.Album) {
+    fun openAlbum(album: com.opensolr.photos.search.Album) = openFiltered(album.field, album.value)
+
+    /**
+     * Where the Stats list stood, as the first item shown and how far into it: kept outside the
+     * UI state on purpose, since it changes with every frame of a scroll and nothing but the Stats
+     * list itself reads it, when it is put back.
+     */
+    var statsScroll: Pair<Int, Int> = 0 to 0
+
+    /**
+     * Opens the photos grid on [value] of [field] alone, nothing typed, nothing else filtered:
+     * an album, or a line of the Stats screen. The filter shows as a pill with its cross.
+     */
+    fun openFiltered(field: String, value: String, fromStats: Boolean = false) {
         _state.update {
             it.copy(
                 screen = Screen.Search,
+                returnToStats = fromStats,
                 query = "",
-                filters = SearchFilters().toggled(album.field, album.value),
+                filters = SearchFilters().toggled(field, value),
                 selecting = false,
                 selectedIds = emptySet(),
                 duplicateGroups = emptyList(),
@@ -2071,6 +2104,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             )
         }
         search(reset = true)
+    }
+
+    /**
+     * Opens the Stats screen and works the numbers out again from the phone's copy of the index,
+     * every time it opens: a sync may have added photos since. Nothing is asked of Opensolr.
+     */
+    fun openStats() {
+        _state.update { it.copy(screen = Screen.Stats, statsLoading = true, returnToStats = false) }
+        viewModelScope.launch {
+            val stats = withContext(Dispatchers.IO) { photoCache.libraryStats() }
+            _state.update { it.copy(stats = stats, statsLoading = false, statsPartial = !prefs.cloneComplete) }
+        }
     }
 
     /**
@@ -2800,7 +2845,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val current = _state.value
         when (current.screen) {
             // Nothing is reloaded on the way back from these, so the grid is put back by hand.
-            Screen.Map, Screen.Albums -> {
+            Screen.Map, Screen.Albums, Screen.Stats -> {
                 if (current.selectedAlbums.isNotEmpty() || current.selectedSections.isNotEmpty()) {
                     clearAlbumSelection()
                     return
@@ -2814,6 +2859,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 // Duplicates stay duplicates, on the same slider stop.
                 refresh()
             }
+            Screen.Search -> if (current.returnToStats) openStats()
             Screen.Folders -> if (current.foldersReturnTo == Screen.Sync) _state.update { it.copy(screen = Screen.Sync) }
             else -> Unit
         }

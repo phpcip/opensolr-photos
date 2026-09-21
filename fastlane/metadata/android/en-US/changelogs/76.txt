@@ -1,0 +1,3 @@
+New Stats screen: your library in numbers, counted on the phone. Photos per year, month, weekday and hour, plus people, tags, things, countries, cities and cameras, each a chart with its table. Tap a line to open its photos; Back returns to the same spot.
+Thumbnails now carry a person mark next to the tag mark.
+Header: Me, Sync, Stats, Map, Search.

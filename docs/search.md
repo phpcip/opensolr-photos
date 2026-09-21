@@ -33,9 +33,13 @@ The top of the photos screen is one row of small bordered buttons, each an icon 
 | **Opensolr** | The app logo; opens [opensolr.com/admin/solr_manager](https://opensolr.com/admin/solr_manager) in the default browser |
 | **Me** | The account screen |
 | **Sync** | The Sync screen ([sync](sync.md)) |
+| **Stats** | Your library in numbers ([stats](stats.md)) |
 | **Map** | The [map](map.md) of the current search |
-| **Albums** | The [albums](albums.md) |
 | **Search** | Opens the search line |
+
+Each thumbnail can carry two small marks in its top-right corner: a person when someone is named on the
+photo, and a tag when you tagged it, the person to the left of the tag. They step aside while you are
+picking photos.
 
 The search box is not on screen until it is asked for: the magnifier opens one compact line with the
 filters button on it, and tapping the magnifier again puts it away and clears the query. A query that is in

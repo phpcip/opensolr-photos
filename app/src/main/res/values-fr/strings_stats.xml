@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="st_title">Stats</string>
+    <string name="st_empty">La copie de votre index sur ce téléphone n\'a pas encore de photos. Elles apparaissent ici après la première synchro.</string>
+    <string name="st_partial">Ce téléphone lit encore sa copie de votre index. Les chiffres grandissent avec.</string>
+    <string name="st_overview">Aperçu</string>
+    <string name="st_photos">Photos</string>
+    <string name="st_size">Taille sur le téléphone</string>
+    <string name="st_tagged">Étiquetées</string>
+    <string name="st_with_people">Avec des personnes</string>
+    <string name="st_with_place">Avec un lieu</string>
+    <string name="st_with_text">Avec texte lu</string>
+    <string name="st_unread">Pas encore lues</string>
+    <string name="st_undated">Sans date</string>
+    <string name="st_sec_years">Photos par année</string>
+    <string name="st_sec_months">Par mois</string>
+    <string name="st_sec_weekdays">Par jour de la semaine</string>
+    <string name="st_sec_hours">Par heure</string>
+    <string name="st_sec_people">Personnes</string>
+    <string name="st_sec_tags">Mes étiquettes</string>
+    <string name="st_sec_things">Objets</string>
+    <string name="st_sec_countries">Pays</string>
+    <string name="st_sec_cities">Villes</string>
+    <string name="st_sec_cameras">Appareils</string>
+    <string name="st_col_year">Année</string>
+    <string name="st_col_month">Mois</string>
+    <string name="st_col_day">Jour</string>
+    <string name="st_col_hour">Heure</string>
+    <string name="st_col_person">Personne</string>
+    <string name="st_col_tag">Étiquette</string>
+    <string name="st_col_thing">Objet</string>
+    <string name="st_col_country">Pays</string>
+    <string name="st_col_city">Ville</string>
+    <string name="st_col_camera">Appareil</string>
+    <string name="st_col_photos">Photos</string>
+    <string name="st_col_share">Part</string>
+    <string name="st_show_all">Tout afficher (%1$s)</string>
+    <string name="st_show_fewer">Afficher moins</string>
+    <string name="st_open">Ouvrir ces photos</string>
+</resources>

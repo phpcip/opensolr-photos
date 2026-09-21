@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="st_title">Stats</string>
+    <string name="st_empty">No photos on this phone\'s copy of your index yet. They show up here after the first sync.</string>
+    <string name="st_partial">This phone is still reading its copy of your index. The numbers grow as it does.</string>
+    <string name="st_overview">Overview</string>
+    <string name="st_photos">Photos</string>
+    <string name="st_size">Size on phone</string>
+    <string name="st_tagged">Tagged</string>
+    <string name="st_with_people">With people</string>
+    <string name="st_with_place">With a place</string>
+    <string name="st_with_text">With text read</string>
+    <string name="st_unread">Not read yet</string>
+    <string name="st_undated">No date</string>
+    <string name="st_sec_years">Photos per year</string>
+    <string name="st_sec_months">By month</string>
+    <string name="st_sec_weekdays">By day of the week</string>
+    <string name="st_sec_hours">By hour of the day</string>
+    <string name="st_sec_people">People</string>
+    <string name="st_sec_tags">My tags</string>
+    <string name="st_sec_things">Things</string>
+    <string name="st_sec_countries">Countries</string>
+    <string name="st_sec_cities">Cities</string>
+    <string name="st_sec_cameras">Cameras</string>
+    <string name="st_col_year">Year</string>
+    <string name="st_col_month">Month</string>
+    <string name="st_col_day">Day</string>
+    <string name="st_col_hour">Hour</string>
+    <string name="st_col_person">Person</string>
+    <string name="st_col_tag">Tag</string>
+    <string name="st_col_thing">Thing</string>
+    <string name="st_col_country">Country</string>
+    <string name="st_col_city">City</string>
+    <string name="st_col_camera">Camera</string>
+    <string name="st_col_photos">Photos</string>
+    <string name="st_col_share">Share</string>
+    <string name="st_show_all">Show all (%1$s)</string>
+    <string name="st_show_fewer">Show fewer</string>
+    <string name="st_open">Open these photos</string>
+</resources>

@@ -65,6 +65,7 @@ import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
@@ -379,18 +380,19 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            // Order, left to right (Cip, 2026-09-16): Me, Sync, Map, Albums, Select, Search.
+            // Order, left to right (Cip, 2026-09-21): Me, Sync, Stats, Map, Search. Albums is off
+            // the header; its screen stays, and a filter reaches the same photos.
             HeaderItem(stringResource(R.string.nav_me), onClick = { viewModel.open(Screen.Account) }) {
                 Icon(Icons.Filled.AccountCircle, contentDescription = stringResource(R.string.cd_account), tint = p.ink, modifier = Modifier.size(20.dp))
             }
             HeaderItem(stringResource(R.string.nav_sync), active = state.sync.busy, onClick = { viewModel.open(Screen.Sync) }) {
                 SyncIcon(running = state.sync.busy)
             }
+            HeaderItem(stringResource(R.string.nav_stats), onClick = { viewModel.openStats() }) {
+                Icon(painterResource(R.drawable.ic_stats), contentDescription = stringResource(R.string.nav_stats), tint = p.ink, modifier = Modifier.size(20.dp))
+            }
             HeaderItem(stringResource(R.string.nav_map), onClick = { viewModel.openMap() }) {
                 Icon(painterResource(R.drawable.ic_map), contentDescription = stringResource(R.string.nav_map), tint = p.ink, modifier = Modifier.size(20.dp))
-            }
-            HeaderItem(stringResource(R.string.nav_albums), onClick = { viewModel.openAlbums() }) {
-                Icon(painterResource(R.drawable.ic_albums), contentDescription = stringResource(R.string.nav_albums), tint = p.ink, modifier = Modifier.size(20.dp))
             }
             // Nothing here for picking at all: a long press starts it and unticking the last photo
             // ends it (Cip, 2026-09-18).
@@ -933,22 +935,12 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                             .padding(horizontal = 4.dp, vertical = 2.dp),
                                     )
                                 }
-                                if (hit.customTags.isNotEmpty() && !state.selecting && !state.skippedMode) {
-                                    Box(
-                                        Modifier
-                                            .align(Alignment.TopEnd)
-                                            .padding(4.dp)
-                                            .size(18.dp)
-                                            .background(Color(0x99000000), Corner),
-                                        contentAlignment = Alignment.Center,
-                                    ) {
-                                        Icon(
-                                            painterResource(R.drawable.ic_tag),
-                                            contentDescription = stringResource(R.string.cd_has_tags),
-                                            tint = Color.White,
-                                            modifier = Modifier.size(11.dp),
-                                        )
-                                    }
+                                if (!state.selecting && !state.skippedMode) {
+                                    PhotoMarks(
+                                        hasPeople = hit.persons.isNotBlank(),
+                                        hasTags = hit.customTags.isNotEmpty(),
+                                        modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+                                    )
                                 }
                                 if (anchor) {
                                     Text(
@@ -3418,6 +3410,35 @@ private val HEADING_HEIGHTS = listOf(46.dp, 40.dp, 38.dp)
  */
 private fun headingLabel(row: GridRow.Heading): String =
     row.text.substringBefore(" \u00b7 ").substringBefore(" (").trim().ifBlank { row.name }
+
+/**
+ * The marks in a thumbnail's top-right corner: a person when someone is named on the photo, and a
+ * tag when the owner tagged it, the person to the left of the tag. Each sits on its own small
+ * translucent square, so it reads on a bright photo and on a dark one alike. Nothing is drawn when
+ * the photo carries neither.
+ */
+@Composable
+private fun PhotoMarks(hasPeople: Boolean, hasTags: Boolean, modifier: Modifier = Modifier) {
+    if (!hasPeople && !hasTags) return
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        if (hasPeople) {
+            PhotoMark {
+                Icon(Icons.Filled.Person, contentDescription = stringResource(R.string.cd_has_people), tint = Color.White, modifier = Modifier.size(13.dp))
+            }
+        }
+        if (hasTags) {
+            PhotoMark {
+                Icon(painterResource(R.drawable.ic_tag), contentDescription = stringResource(R.string.cd_has_tags), tint = Color.White, modifier = Modifier.size(11.dp))
+            }
+        }
+    }
+}
+
+/** One 18dp translucent dark square holding a thumbnail mark. */
+@Composable
+private fun PhotoMark(icon: @Composable () -> Unit) {
+    Box(Modifier.size(18.dp).background(Color(0x99000000), Corner), contentAlignment = Alignment.Center) { icon() }
+}
 
 /** The mark of a photo the phone could not read: a red frame and a red "!" (Cip, 2026-09-17). */
 private val SkippedRed = Color(0xFFE53E3E)

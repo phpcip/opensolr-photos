@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="st_title">Statistik</string>
+    <string name="st_empty">Die Kopie Ihres Index auf diesem Telefon hat noch keine Fotos. Sie erscheinen hier nach der ersten Synchronisierung.</string>
+    <string name="st_partial">Dieses Telefon liest seine Kopie Ihres Index noch. Die Zahlen wachsen mit.</string>
+    <string name="st_overview">Überblick</string>
+    <string name="st_photos">Fotos</string>
+    <string name="st_size">Größe am Telefon</string>
+    <string name="st_tagged">Getaggt</string>
+    <string name="st_with_people">Mit Personen</string>
+    <string name="st_with_place">Mit Ort</string>
+    <string name="st_with_text">Mit gelesenem Text</string>
+    <string name="st_unread">Noch nicht gelesen</string>
+    <string name="st_undated">Ohne Datum</string>
+    <string name="st_sec_years">Fotos pro Jahr</string>
+    <string name="st_sec_months">Nach Monat</string>
+    <string name="st_sec_weekdays">Nach Wochentag</string>
+    <string name="st_sec_hours">Nach Uhrzeit</string>
+    <string name="st_sec_people">Personen</string>
+    <string name="st_sec_tags">Meine Tags</string>
+    <string name="st_sec_things">Dinge</string>
+    <string name="st_sec_countries">Länder</string>
+    <string name="st_sec_cities">Städte</string>
+    <string name="st_sec_cameras">Kameras</string>
+    <string name="st_col_year">Jahr</string>
+    <string name="st_col_month">Monat</string>
+    <string name="st_col_day">Wochentag</string>
+    <string name="st_col_hour">Stunde</string>
+    <string name="st_col_person">Person</string>
+    <string name="st_col_tag">Tag</string>
+    <string name="st_col_thing">Ding</string>
+    <string name="st_col_country">Land</string>
+    <string name="st_col_city">Stadt</string>
+    <string name="st_col_camera">Kamera</string>
+    <string name="st_col_photos">Fotos</string>
+    <string name="st_col_share">Anteil</string>
+    <string name="st_show_all">Alle zeigen (%1$s)</string>
+    <string name="st_show_fewer">Weniger zeigen</string>
+    <string name="st_open">Diese Fotos öffnen</string>
+</resources>

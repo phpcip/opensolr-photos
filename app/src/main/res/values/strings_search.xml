@@ -4,6 +4,7 @@
     <string name="nav_sync">Sync</string>
     <string name="nav_map">Map</string>
     <string name="nav_albums">Albums</string>
+    <string name="nav_stats">Stats</string>
     <string name="nav_search">Search</string>
     <string name="cd_account">Opensolr account</string>
     <string name="cd_close_search">Close search</string>
@@ -29,6 +30,7 @@
     <string name="open_group">Open this group</string>
     <string name="fold_group">Fold this group away</string>
     <string name="cd_has_tags">Has your tags</string>
+    <string name="cd_has_people">Has people</string>
     <string name="this_one">This one</string>
     <string name="delete_text">They are removed from this phone and from your index. This cannot be undone.</string>
     <string name="delete">Delete</string>

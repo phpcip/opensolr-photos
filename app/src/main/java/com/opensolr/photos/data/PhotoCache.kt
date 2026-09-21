@@ -58,6 +58,8 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         db.execSQL(DOCS_INDEXED_INDEX)
         db.execSQL(DOCS_STAMP_INDEX)
         db.execSQL(DOCS_WORDLESS_INDEX)
+        db.execSQL(DOCS_CAMERA_INDEX)
+        db.execSQL(DOCS_PLACE_INDEX)
         db.execSQL(WORDS_TABLE)
         db.execSQL(WORDS_INDEX)
         db.execSQL(ACTIONS_TABLE)
@@ -160,6 +162,42 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
             // The folder column held the last part of the path only; it holds the whole of it
             // now, so the grid can lay the folders out as the tree they are (Cip, 2026-09-20).
             backfillFolderAndCamera(db)
+        }
+        if (oldVersion < 19) {
+            addColumnIfMissing(db, "docs", "camera_model", "TEXT")
+            db.execSQL(DOCS_CAMERA_INDEX)
+            db.execSQL(DOCS_PLACE_INDEX)
+            backfillLabelsAndModel(db)
+        }
+    }
+
+    /**
+     * Fills what the Stats screen counts and the stored documents already hold: CLIP's words of
+     * every photo into [WORD_LABEL] rows and the bare camera model into its column. One pass over
+     * the copy, a page at a time; nothing is asked of the index.
+     */
+    private fun backfillLabelsAndModel(db: SQLiteDatabase) {
+        db.compileStatement("INSERT OR IGNORE INTO doc_words (id, kind, word) VALUES (?, '$WORD_LABEL', ?)").use { insert ->
+            db.compileStatement("UPDATE docs SET camera_model = ? WHERE id = ?").use { update ->
+                forEachPage(db, "docs", arrayOf("id", "json"), "json IS NOT NULL") { id, row ->
+                    val doc = try {
+                        org.json.JSONObject(row[1] ?: return@forEachPage)
+                    } catch (e: Exception) {
+                        return@forEachPage
+                    }
+                    labelsOf(doc).forEach { word ->
+                        insert.clearBindings()
+                        insert.bindString(1, id)
+                        insert.bindString(2, word)
+                        insert.executeInsert()
+                    }
+                    val model = doc.optString("camera_model").trim().ifBlank { null } ?: return@forEachPage
+                    update.clearBindings()
+                    update.bindString(1, model)
+                    update.bindString(2, id)
+                    update.executeUpdateDelete()
+                }
+            }
         }
     }
 
@@ -343,10 +381,15 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
     }
 
     /**
-     * Replaces the words stored for one photo.
+     * Replaces the words stored for one photo. [labels] null keeps the CLIP words already stored:
+     * an edit of the owner's words never carries them.
      */
-    private fun writeWords(db: SQLiteDatabase, id: String, tags: List<String>, persons: List<String>, meaning: String?) {
-        db.delete("doc_words", "id = ?", arrayOf(id))
+    private fun writeWords(db: SQLiteDatabase, id: String, tags: List<String>, persons: List<String>, meaning: String?, labels: List<String>?) {
+        if (labels == null) {
+            db.delete("doc_words", "id = ? AND kind != ?", arrayOf(id, WORD_LABEL))
+        } else {
+            db.delete("doc_words", "id = ?", arrayOf(id))
+        }
         // Named for what it does and NOT "put": inside ContentValues.apply, a local put(String,
         // String) shadows ContentValues.put and the row-writer calls itself for ever
         // (Cip, 2026-09-18: the app died with a StackOverflowError on start).
@@ -362,6 +405,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         tags.forEach { writeWord(WORD_TAG, it) }
         persons.forEach { writeWord(WORD_PERSON, it) }
         meaning?.split(',')?.forEach { writeWord(WORD_MEANING, it) }
+        labels?.forEach { writeWord(WORD_LABEL, it) }
     }
 
     /**
@@ -558,6 +602,13 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         val folder: String? = null,
         /** The camera that took it, make and model as one name, for grouping by camera. */
         val camera: String? = null,
+        /** The camera's model alone, as the index's `camera_model` filter takes it. */
+        val cameraModel: String? = null,
+        /**
+         * CLIP's words for the photo (the index's `labels`); null leaves the stored ones as they
+         * are, which is what every edit of the owner's own words does.
+         */
+        val labels: List<String>? = null,
     )
 
     /**
@@ -578,6 +629,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
             if (doc.region == null) putNull("region") else put("region", doc.region)
             if (doc.folder == null) putNull("folder") else put("folder", doc.folder)
             if (doc.camera == null) putNull("camera") else put("camera", doc.camera)
+            if (doc.cameraModel == null) putNull("camera_model") else put("camera_model", doc.cameraModel)
             if (doc.json == null) putNull("json") else put("json", doc.json)
             put("modified", doc.modified)
             put("taken_ms", com.opensolr.photos.ui.Actions.solrDateMillis(doc.takenAt) ?: 0L)
@@ -590,7 +642,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         writableDatabase.beginTransaction()
         try {
             writableDatabase.insertWithOnConflict("docs", null, values, SQLiteDatabase.CONFLICT_REPLACE)
-            writeWords(writableDatabase, doc.id, doc.tags, doc.persons, doc.meaning)
+            writeWords(writableDatabase, doc.id, doc.tags, doc.persons, doc.meaning, doc.labels)
             writableDatabase.setTransactionSuccessful()
         } finally {
             writableDatabase.endTransaction()
@@ -922,7 +974,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         val tags = HashMap<String, Int>()
         val persons = HashMap<String, Int>()
         val meanings = HashMap<String, Int>()
-        readableDatabase.rawQuery("SELECT kind, word, COUNT(*) FROM doc_words GROUP BY kind, word", null).use { c ->
+        readableDatabase.rawQuery("SELECT kind, word, COUNT(*) FROM doc_words WHERE kind IN ('$WORD_TAG','$WORD_PERSON','$WORD_MEANING') GROUP BY kind, word", null).use { c ->
             while (c.moveToNext()) {
                 val into = when (c.getString(0)) {
                     WORD_TAG -> tags
@@ -933,6 +985,135 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
             }
         }
         return Triple(tags, persons, meanings)
+    }
+
+    /**
+     * The whole library in numbers, for the Stats screen: six grouped queries, five of them read
+     * off an index alone (the date, the place, the camera and the three kinds of word) and one
+     * pass over the rows for the overview. Nothing is held per photo; only the groups come back.
+     *
+     * The year is counted in UTC, as the index's own `year` field is, so a year opens the grid on
+     * exactly the photos it counted. Month, weekday and hour are the phone's local time, as the
+     * grid's own headings are.
+     */
+    fun libraryStats(): LibraryStats {
+        val db = readableDatabase
+        var total = 0
+        var bytes = 0L
+        var tagged = 0
+        var withPeople = 0
+        var withPlace = 0
+        var withText = 0
+        db.rawQuery(
+            "SELECT COUNT(*), COALESCE(SUM(size_bytes), 0), " +
+                "COALESCE(SUM(tags_json IS NOT NULL AND tags_json NOT IN ('', '[]')), 0), " +
+                "COALESCE(SUM(persons_json IS NOT NULL AND persons_json NOT IN ('', '[]')), 0), " +
+                "COALESCE(SUM(COALESCE(city, '') != '' OR COALESCE(country, '') != ''), 0), " +
+                "COALESCE(SUM(COALESCE(ocr, '') != ''), 0) FROM docs",
+            null,
+        ).use { c ->
+            if (c.moveToFirst()) {
+                total = c.getInt(0)
+                bytes = c.getLong(1)
+                tagged = c.getInt(2)
+                withPeople = c.getInt(3)
+                withPlace = c.getInt(4)
+                withText = c.getInt(5)
+            }
+        }
+        val unread = db.rawQuery(
+            "SELECT COUNT(*) FROM docs WHERE meaning IS NULL OR meaning = '' OR embed_model IS NULL OR embed_model = ''",
+            null,
+        ).use { c -> if (c.moveToFirst()) c.getInt(0) else 0 }
+
+        val years = HashMap<String, Int>()
+        val months = IntArray(12)
+        val weekdays = IntArray(7)
+        val hours = IntArray(24)
+        var dated = 0
+        db.rawQuery(
+            "SELECT strftime('%Y', taken_ms / 1000, 'unixepoch'), " +
+                "strftime('%m', taken_ms / 1000, 'unixepoch', 'localtime'), " +
+                "strftime('%w', taken_ms / 1000, 'unixepoch', 'localtime'), " +
+                "strftime('%H', taken_ms / 1000, 'unixepoch', 'localtime'), COUNT(*) " +
+                "FROM docs WHERE taken_ms != 0 GROUP BY 1, 2, 3, 4",
+            null,
+        ).use { c ->
+            while (c.moveToNext()) {
+                val n = c.getInt(4)
+                dated += n
+                c.getString(0)?.let { years[it] = (years[it] ?: 0) + n }
+                c.getString(1)?.toIntOrNull()?.takeIf { it in 1..12 }?.let { months[it - 1] += n }
+                c.getString(2)?.toIntOrNull()?.takeIf { it in 0..6 }?.let { weekdays[it] += n }
+                c.getString(3)?.toIntOrNull()?.takeIf { it in 0..23 }?.let { hours[it] += n }
+            }
+        }
+
+        val people = ArrayList<StatRow>()
+        val tags = ArrayList<StatRow>()
+        val things = ArrayList<StatRow>()
+        db.rawQuery(
+            "SELECT kind, word, COUNT(*) FROM doc_words WHERE kind IN ('$WORD_TAG', '$WORD_PERSON', '$WORD_LABEL') GROUP BY kind, word",
+            null,
+        ).use { c ->
+            while (c.moveToNext()) {
+                val word = c.getString(1)
+                val n = c.getInt(2)
+                when (c.getString(0)) {
+                    WORD_PERSON -> people += StatRow(word, n, "persons_ss", word)
+                    WORD_TAG -> tags += StatRow(word, n, "custom_tags", word)
+                    WORD_LABEL -> things += StatRow(word, n, "labels", word)
+                }
+            }
+        }
+
+        val countries = HashMap<String, Int>()
+        val cities = ArrayList<StatRow>()
+        db.rawQuery(
+            "SELECT country, city, COUNT(*) FROM docs WHERE COALESCE(country, '') != '' OR COALESCE(city, '') != '' GROUP BY country, city",
+            null,
+        ).use { c ->
+            while (c.moveToNext()) {
+                val country = c.getString(0)?.trim()?.ifBlank { null }
+                val city = c.getString(1)?.trim()?.ifBlank { null }
+                val n = c.getInt(2)
+                if (country != null) countries[country] = (countries[country] ?: 0) + n
+                if (city != null) cities += StatRow(if (country != null) "$city, $country" else city, n, "city", city)
+            }
+        }
+
+        val cameras = ArrayList<StatRow>()
+        db.rawQuery(
+            "SELECT camera_model, camera, COUNT(*) FROM docs WHERE COALESCE(camera_model, '') != '' GROUP BY camera_model, camera",
+            null,
+        ).use { c ->
+            while (c.moveToNext()) {
+                val model = c.getString(0)
+                cameras += StatRow(c.getString(1)?.ifBlank { null } ?: model, c.getInt(2), "camera_model", model)
+            }
+        }
+
+        val byCount = compareByDescending<StatRow> { it.count }.thenBy { it.label.lowercase() }
+        return LibraryStats(
+            total = total,
+            bytes = bytes,
+            tagged = tagged,
+            withPeople = withPeople,
+            withPlace = withPlace,
+            withText = withText,
+            unread = unread,
+            undated = (total - dated).coerceAtLeast(0),
+            years = years.entries.sortedByDescending { it.key }.map { StatRow(it.key, it.value, "year", it.key) },
+            months = months,
+            weekdays = weekdays,
+            hours = hours,
+            people = people.sortedWith(byCount),
+            tags = tags.sortedWith(byCount),
+            things = things.sortedWith(byCount),
+            countries = countries.entries.map { StatRow(it.key, it.value, "country", it.key) }.sortedWith(byCount),
+            cities = cities.sortedWith(byCount),
+            cameras = cameras.sortedWith(byCount),
+        )
     }
 
     /**
@@ -1059,6 +1240,10 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         deleteByIds("actions", ids)
     }
 
+    /** CLIP's words in a stored or answered document, blank ones left out. */
+    private fun labelsOf(doc: org.json.JSONObject): List<String> =
+        doc.optJSONArray("labels")?.let { a -> (0 until a.length()).map { a.optString(it).trim() } }?.filter { it.isNotEmpty() }?.distinct() ?: emptyList()
+
     /** The words of a stored JSON array. */
     private fun jsonWords(json: String?): List<String> {
         if (json.isNullOrEmpty()) return emptyList()
@@ -1085,6 +1270,10 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         modified = c.getLong(11),
         embedModel = if (c.isNull(12)) null else c.getString(12),
         fileHash = if (c.isNull(13)) null else c.getString(13),
+        region = if (c.isNull(14)) null else c.getString(14),
+        folder = if (c.isNull(15)) null else c.getString(15),
+        camera = if (c.isNull(16)) null else c.getString(16),
+        cameraModel = if (c.isNull(17)) null else c.getString(17),
     )
 
     /**
@@ -1296,7 +1485,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
     companion object {
         private const val NAME = "photo_cache.db"
-        private const val VERSION = 18
+        private const val VERSION = 19
 
         /**
          * The one handle on this database for the whole app.
@@ -1319,7 +1508,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         /** The names the server gives a position; they belong to that position only. */
         private val PLACE_NAME_FIELDS = listOf("city", "region", "province", "community", "country", "country_code")
 
-        private const val DOCS_TABLE = "CREATE TABLE IF NOT EXISTS docs (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, indexed_at INTEGER NOT NULL, taken_at TEXT, tags_json TEXT, persons_json TEXT, meaning TEXT, ocr TEXT, city TEXT, country TEXT, json TEXT, modified INTEGER NOT NULL DEFAULT 0, taken_ms INTEGER NOT NULL DEFAULT 0, embed_model TEXT, file_hash TEXT, region TEXT, folder TEXT, camera TEXT)"
+        private const val DOCS_TABLE = "CREATE TABLE IF NOT EXISTS docs (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, indexed_at INTEGER NOT NULL, taken_at TEXT, tags_json TEXT, persons_json TEXT, meaning TEXT, ocr TEXT, city TEXT, country TEXT, json TEXT, modified INTEGER NOT NULL DEFAULT 0, taken_ms INTEGER NOT NULL DEFAULT 0, embed_model TEXT, file_hash TEXT, region TEXT, folder TEXT, camera TEXT, camera_model TEXT)"
         /** When each photo was taken, as a number: the grid asks for a stretch of time constantly. */
         private const val DOCS_TAKEN_INDEX = "CREATE INDEX IF NOT EXISTS docs_taken_ms ON docs (taken_ms)"
 
@@ -1361,6 +1550,15 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         const val WORD_PERSON = "person"
         const val WORD_MEANING = "meaning"
 
+        /** The words CLIP read a photo into (the index's `labels`), counted by the Stats screen. */
+        const val WORD_LABEL = "label"
+
+        /** Photos per camera, for the Stats screen: the model first, as the filter asks for it. */
+        private const val DOCS_CAMERA_INDEX = "CREATE INDEX IF NOT EXISTS docs_camera ON docs (camera_model, camera)"
+
+        /** Photos per place, for the Stats screen. */
+        private const val DOCS_PLACE_INDEX = "CREATE INDEX IF NOT EXISTS docs_place ON docs (country, city)"
+
         private const val ACTIONS_TABLE = "CREATE TABLE IF NOT EXISTS actions (id TEXT PRIMARY KEY NOT NULL, kind TEXT NOT NULL, at INTEGER NOT NULL)"
 
         /** A photo whose picture has to be read again: new, or its file changed. */
@@ -1372,7 +1570,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         /** The photo is gone from the phone, so it goes from the index. */
         const val ACTION_DELETE = "delete"
 
-        private val DOC_COLUMNS = arrayOf("id", "size_bytes", "indexed_at", "taken_at", "tags_json", "persons_json", "meaning", "ocr", "city", "country", "json", "modified", "embed_model", "file_hash")
+        private val DOC_COLUMNS = arrayOf("id", "size_bytes", "indexed_at", "taken_at", "tags_json", "persons_json", "meaning", "ocr", "city", "country", "json", "modified", "embed_model", "file_hash", "region", "folder", "camera", "camera_model")
 
         /** How many rows an update converts at once, so no library is ever held in memory whole. */
         private const val MIGRATION_PAGE = 500

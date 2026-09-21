@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="st_title">Statistici</string>
+    <string name="st_empty">Copia indexului tău de pe acest telefon nu are încă poze. Apar aici după prima sincronizare.</string>
+    <string name="st_partial">Telefonul încă citește copia indexului tău. Cifrele cresc odată cu ea.</string>
+    <string name="st_overview">Pe scurt</string>
+    <string name="st_photos">Poze</string>
+    <string name="st_size">Mărime pe telefon</string>
+    <string name="st_tagged">Etichetate</string>
+    <string name="st_with_people">Cu persoane</string>
+    <string name="st_with_place">Cu loc</string>
+    <string name="st_with_text">Cu text citit</string>
+    <string name="st_unread">Necitite încă</string>
+    <string name="st_undated">Fără dată</string>
+    <string name="st_sec_years">Poze pe an</string>
+    <string name="st_sec_months">Pe luni</string>
+    <string name="st_sec_weekdays">Pe zile ale săptămânii</string>
+    <string name="st_sec_hours">Pe ore</string>
+    <string name="st_sec_people">Persoane</string>
+    <string name="st_sec_tags">Etichetele mele</string>
+    <string name="st_sec_things">Lucruri</string>
+    <string name="st_sec_countries">Țări</string>
+    <string name="st_sec_cities">Orașe</string>
+    <string name="st_sec_cameras">Camere foto</string>
+    <string name="st_col_year">An</string>
+    <string name="st_col_month">Lună</string>
+    <string name="st_col_day">Zi</string>
+    <string name="st_col_hour">Oră</string>
+    <string name="st_col_person">Persoană</string>
+    <string name="st_col_tag">Etichetă</string>
+    <string name="st_col_thing">Lucru</string>
+    <string name="st_col_country">Țară</string>
+    <string name="st_col_city">Oraș</string>
+    <string name="st_col_camera">Cameră foto</string>
+    <string name="st_col_photos">Poze</string>
+    <string name="st_col_share">Procent</string>
+    <string name="st_show_all">Arată tot (%1$s)</string>
+    <string name="st_show_fewer">Arată mai puțin</string>
+    <string name="st_open">Deschide pozele</string>
+</resources>

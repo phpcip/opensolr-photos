@@ -1,6 +1,9 @@
 # Albums
 
-**Albums** in the header of the photos screen opens your photos gathered by what they have in common. No
+> Since 3.5 the header carries [Stats](stats.md) instead of Albums. Every album was one filter value, so
+> the same photos are one filter, or one line of Stats, away.
+
+**Albums** opens your photos gathered by what they have in common. No
 album object is created or stored anywhere: every album is a value that already sits in your index (and in
 the phone's copy of it).
 

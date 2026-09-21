@@ -4,6 +4,7 @@
     <string name="nav_sync">同步</string>
     <string name="nav_map">地图</string>
     <string name="nav_albums">相册</string>
+    <string name="nav_stats">统计</string>
     <string name="nav_search">搜索</string>
     <string name="cd_account">Opensolr 账户</string>
     <string name="cd_close_search">关闭搜索</string>
@@ -29,6 +30,7 @@
     <string name="open_group">展开此分组</string>
     <string name="fold_group">折叠此分组</string>
     <string name="cd_has_tags">有你的标签</string>
+    <string name="cd_has_people">有人物</string>
     <string name="this_one">这张</string>
     <string name="delete_text">将从本手机和你的索引中删除，且无法撤销。</string>
     <string name="delete">删除</string>

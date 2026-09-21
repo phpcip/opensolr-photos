@@ -4,6 +4,7 @@
     <string name="nav_sync">Sync</string>
     <string name="nav_map">Karte</string>
     <string name="nav_albums">Alben</string>
+    <string name="nav_stats">Statistik</string>
     <string name="nav_search">Suche</string>
     <string name="cd_account">Opensolr-Konto</string>
     <string name="cd_close_search">Suche schließen</string>
@@ -29,6 +30,7 @@
     <string name="open_group">Gruppe öffnen</string>
     <string name="fold_group">Gruppe zuklappen</string>
     <string name="cd_has_tags">Hat Ihre Tags</string>
+    <string name="cd_has_people">Mit Personen</string>
     <string name="this_one">Dieses</string>
     <string name="delete_text">Sie werden von diesem Telefon und aus Ihrem Index entfernt. Das lässt sich nicht rückgängig machen.</string>
     <string name="delete">Löschen</string>

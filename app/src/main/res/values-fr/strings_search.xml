@@ -4,6 +4,7 @@
     <string name="nav_sync">Synchro</string>
     <string name="nav_map">Carte</string>
     <string name="nav_albums">Albums</string>
+    <string name="nav_stats">Stats</string>
     <string name="nav_search">Chercher</string>
     <string name="cd_account">Compte Opensolr</string>
     <string name="cd_close_search">Fermer la recherche</string>
@@ -29,6 +30,7 @@
     <string name="open_group">Ouvrir ce groupe</string>
     <string name="fold_group">Replier ce groupe</string>
     <string name="cd_has_tags">A vos étiquettes</string>
+    <string name="cd_has_people">Avec des personnes</string>
     <string name="this_one">Celle-ci</string>
     <string name="delete_text">Elles sont supprimées de ce téléphone et de votre index. Action irréversible.</string>
     <string name="delete">Supprimer</string>

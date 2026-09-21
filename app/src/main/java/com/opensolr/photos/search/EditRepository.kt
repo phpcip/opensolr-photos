@@ -230,6 +230,8 @@ class EditRepository(private val context: Context) {
                 // folder or by camera is a query on columns (Cip, 2026-09-20).
                 folder = SearchFilters.folderPath(answer.optString("folder")),
                 camera = SearchFilters.cameraName(answer.optString("camera_make"), answer.optString("camera_model")),
+                cameraModel = answer.optString("camera_model").trim().ifBlank { null },
+                labels = words("labels").map { it.trim() }.distinct(),
                 json = answer.toString(),
                 modified = modified ?: had?.modified ?: 0L,
                 embedModel = answer.optString("embed_model").ifBlank { null },

@@ -4,6 +4,7 @@
     <string name="nav_sync">同期</string>
     <string name="nav_map">地図</string>
     <string name="nav_albums">アルバム</string>
+    <string name="nav_stats">統計</string>
     <string name="nav_search">検索</string>
     <string name="cd_account">Opensolrアカウント</string>
     <string name="cd_close_search">検索を閉じる</string>
@@ -29,6 +30,7 @@
     <string name="open_group">グループを開く</string>
     <string name="fold_group">グループを閉じる</string>
     <string name="cd_has_tags">タグあり</string>
+    <string name="cd_has_people">人物あり</string>
     <string name="this_one">この写真</string>
     <string name="delete_text">この端末とインデックスから削除されます。元に戻せません。</string>
     <string name="delete">削除</string>

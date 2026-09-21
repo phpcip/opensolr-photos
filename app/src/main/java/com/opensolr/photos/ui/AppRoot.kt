@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.opensolr.photos.ui.screens.AccountScreen
 import com.opensolr.photos.ui.screens.AlbumsScreen
+import com.opensolr.photos.ui.screens.StatsScreen
 import com.opensolr.photos.ui.screens.FoldersScreen
 import com.opensolr.photos.ui.screens.MapScreen
 import com.opensolr.photos.ui.screens.PermissionsScreen
@@ -47,7 +48,7 @@ fun AppRoot(viewModel: AppViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val p = LocalPalette.current
 
-    BackHandler(enabled = state.screen == Screen.Sync || state.screen == Screen.Account || state.screen == Screen.Map || state.screen == Screen.Albums ||
+    BackHandler(enabled = state.screen == Screen.Sync || state.screen == Screen.Account || state.screen == Screen.Map || state.screen == Screen.Albums || state.screen == Screen.Stats || (state.screen == Screen.Search && state.returnToStats) ||
         (state.screen == Screen.Folders && state.foldersReturnTo == Screen.Sync)) {
         viewModel.back()
     }
@@ -69,6 +70,7 @@ fun AppRoot(viewModel: AppViewModel) {
             Screen.Account -> AccountScreen(state, viewModel)
             Screen.Map -> MapScreen(state, viewModel)
             Screen.Albums -> AlbumsScreen(state, viewModel)
+            Screen.Stats -> StatsScreen(state, viewModel)
         }
     }
 
