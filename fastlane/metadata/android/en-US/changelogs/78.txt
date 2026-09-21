@@ -1,0 +1,2 @@
+Thumbnails show a small pin when a photo has a location, next to the people and tag marks.
+Long press and drag over photos already ticked now unticks them; starting on an unticked photo still ticks.
