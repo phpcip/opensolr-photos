@@ -198,15 +198,6 @@ solr/conf/  schema.xml, solrconfig.xml and analyzer files uploaded to the index
 docs/       documentation and diagrams
 ```
 
-## Tools used
-
-Claude (Anthropic) was used while building this app, in three ways: automation testing (building the APK,
-installing it in the Android emulator over adb, driving the screens and taking screenshots so results could
-be checked), very little of the actual code, and a lot of the documentation, generated from the developer's
-notes. The product, the architecture, the sync algorithm, the Solr configset and the Opensolr server side
-are the developer's own work, and every build is tested on real phones. The tool gets no credit lines in
-commits or source: a tool is not a contributor.
-
 ## License
 
 [MIT](LICENSE) © Opensolr SRL. Space Grotesk font: SIL Open Font License, see
