@@ -31,6 +31,7 @@
     <string name="fold_group">グループを閉じる</string>
     <string name="cd_has_tags">タグあり</string>
     <string name="cd_has_people">人物あり</string>
+    <string name="cd_has_location">場所あり</string>
     <string name="this_one">この写真</string>
     <string name="delete_text">この端末とインデックスから削除されます。元に戻せません。</string>
     <string name="delete">削除</string>

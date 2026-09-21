@@ -821,6 +821,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                 }
                                 if (!state.selecting && !state.skippedMode) {
                                     PhotoMarks(
+                                        hasPlace = !hit.location.isNullOrBlank(),
                                         hasPeople = hit.persons.isNotBlank(),
                                         hasTags = hit.customTags.isNotEmpty(),
                                         modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
@@ -2867,9 +2868,14 @@ private fun headingLabel(row: GridRow.Heading): String =
     row.text.substringBefore(" \u00b7 ").substringBefore(" (").trim().ifBlank { row.name }
 
 @Composable
-private fun PhotoMarks(hasPeople: Boolean, hasTags: Boolean, modifier: Modifier = Modifier) {
-    if (!hasPeople && !hasTags) return
+private fun PhotoMarks(hasPlace: Boolean, hasPeople: Boolean, hasTags: Boolean, modifier: Modifier = Modifier) {
+    if (!hasPlace && !hasPeople && !hasTags) return
     Row(modifier, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+        if (hasPlace) {
+            PhotoMark {
+                Icon(painterResource(R.drawable.ic_map), contentDescription = stringResource(R.string.cd_has_location), tint = Color.White, modifier = Modifier.size(12.dp))
+            }
+        }
         if (hasPeople) {
             PhotoMark {
                 Icon(Icons.Filled.Person, contentDescription = stringResource(R.string.cd_has_people), tint = Color.White, modifier = Modifier.size(13.dp))

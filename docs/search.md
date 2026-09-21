@@ -37,8 +37,8 @@ The top of the photos screen is one row of small bordered buttons, each an icon 
 | **Map** | The [map](map.md) of the current search |
 | **Search** | Opens the search line |
 
-Each thumbnail can carry two small marks in its top-right corner: a person when someone is named on the
-photo, and a tag when you tagged it, the person to the left of the tag. They step aside while you are
+Each thumbnail can carry up to three small marks in its top-right corner, left to right: a pin when the photo
+has a location, a person when someone is named on it, and a tag when you tagged it. They step aside while you are
 picking photos.
 
 The search box is not on screen until it is asked for: the magnifier opens one compact line with the
@@ -342,7 +342,8 @@ downloaded to draw the grid.
 - **Selecting photos**: there is no *Select* button and no *Check all*. A long press on a photo starts
   selection, as every gallery does, and it ends by itself when the last tick goes, or at once with a tap on the ✓ count above the grid, which clears every tick.
   **Keep the finger down after the long press and drag**: every photo between the one it started on and the
-  one under the finger is ticked as it travels, dragging back unticks what the drag itself ticked, and near
+  one under the finger is ticked as it travels, dragging back unticks what the drag itself ticked. A drag that
+  starts on a photo already ticked works the other way round and unticks the run instead. Near
   the top or bottom edge the grid scrolls itself so the run can pass what is on screen. Headings are skipped
   — a group is taken whole by its own tick. The press is taken by the grid rather than by each photo (a
   photo's own long press ends the instant it fires), in the first pointer pass and consumed from the press

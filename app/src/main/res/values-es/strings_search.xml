@@ -31,6 +31,7 @@
     <string name="fold_group">Plegar este grupo</string>
     <string name="cd_has_tags">Tiene tus etiquetas</string>
     <string name="cd_has_people">Con personas</string>
+    <string name="cd_has_location">Con lugar</string>
     <string name="this_one">Esta</string>
     <string name="delete_text">Se eliminan de este teléfono y de tu índice. No se puede deshacer.</string>
     <string name="delete">Eliminar</string>

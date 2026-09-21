@@ -31,6 +31,7 @@
     <string name="fold_group">Fold this group away</string>
     <string name="cd_has_tags">Has your tags</string>
     <string name="cd_has_people">Has people</string>
+    <string name="cd_has_location">Has a location</string>
     <string name="this_one">This one</string>
     <string name="delete_text">They are removed from this phone and from your index. This cannot be undone.</string>
     <string name="delete">Delete</string>

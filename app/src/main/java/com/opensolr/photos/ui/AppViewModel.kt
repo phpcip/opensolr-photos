@@ -1765,26 +1765,29 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun beginDragSelect(id: String) {
         val current = _state.value
         val base = if (current.selecting) current.selectedIds else emptySet()
+        val unselecting = id in base
         dragBase = base
-        dragAnchor = id to (id in base)
-        _state.update { it.copy(selecting = true, selectedIds = base + id) }
+        dragAnchor = id to unselecting
+        applyDragSelection(base, listOf(id), unselecting)
     }
 
     fun dragSelectTo(ids: Collection<String>) {
         val base = dragBase ?: return
-        _state.update { it.copy(selecting = true, selectedIds = base + ids) }
+        applyDragSelection(base, ids, dragAnchor?.second == true)
     }
 
     fun endDragSelect(movedAway: Boolean) {
-        val anchor = dragAnchor
         dragBase = null
         dragAnchor = null
-        if (movedAway || anchor == null || !anchor.second) return
         _state.update {
-            val next = it.selectedIds - anchor.first
-            if (next.isEmpty()) it.copy(selecting = false, selectedIds = emptySet(), selectedOffscreen = emptyMap(), selectedGroups = emptyMap())
-            else it.copy(selectedIds = next)
+            if (it.selectedIds.isEmpty()) it.copy(selecting = false, selectedOffscreen = emptyMap(), selectedGroups = emptyMap()) else it
         }
+    }
+
+    // A drag that starts on a ticked photo unticks the range it covers; on an unticked one it ticks it.
+    private fun applyDragSelection(base: Set<String>, ids: Collection<String>, unselecting: Boolean) {
+        val next = if (unselecting) base - ids.toSet() else base + ids
+        _state.update { it.copy(selecting = true, selectedIds = next) }
     }
 
     fun setSelecting(on: Boolean) {
