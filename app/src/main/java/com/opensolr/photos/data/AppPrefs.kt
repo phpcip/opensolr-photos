@@ -156,6 +156,10 @@ class AppPrefs(context: Context) {
         get() = prefs.getStringSet(KEY_OPEN_FILTERS, emptySet()).orEmpty()
         set(value) = prefs.edit().putStringSet(KEY_OPEN_FILTERS, value).apply()
 
+    var statsOpen: Set<String>
+        get() = prefs.getStringSet(KEY_STATS_OPEN, emptySet()).orEmpty()
+        set(value) = prefs.edit().putStringSet(KEY_STATS_OPEN, value).apply()
+
     var foldedAlbumSections: Set<String>
         get() = prefs.getStringSet(KEY_FOLDED_ALBUMS, emptySet()).orEmpty()
         set(value) = prefs.edit().putStringSet(KEY_FOLDED_ALBUMS, value).apply()
@@ -269,6 +273,7 @@ class AppPrefs(context: Context) {
 
         private const val CLONE_FORMAT = 2
         private const val KEY_FOLDED_ALBUMS = "folded_album_sections"
+        private const val KEY_STATS_OPEN = "stats_open_sections"
         private const val KEY_HAPTICS = "haptics_enabled"
         private const val KEY_LEXICAL_WEIGHT = "lexical_weight"
         const val DEFAULT_LEXICAL_WEIGHT = 0.2f

@@ -76,6 +76,8 @@ private class Folds(val keys: Set<String>, val toggle: (String) -> Unit)
 
 private const val TABLE_ROWS = 10
 
+private const val THINGS_ROWS = 50
+
 private val COUNT_WIDTH = 72.dp
 
 private val SHARE_WIDTH = 76.dp
@@ -87,7 +89,7 @@ fun StatsScreen(state: UiState, viewModel: AppViewModel) {
     val p = LocalPalette.current
     val view = LocalView.current
     val locale = LocalConfiguration.current.locales[0] ?: Locale.getDefault()
-    val folded = Folds(state.statsFolded) { viewModel.toggleStatsSection(it) }
+    val folded = Folds(STAT_SECTIONS.toSet() - state.statsOpen) { viewModel.toggleStatsSection(it) }
     val expanded = remember { mutableStateMapOf<String, Boolean>() }
     val open: (StatRow) -> Unit = { row ->
         val field = row.field
@@ -114,14 +116,14 @@ fun StatsScreen(state: UiState, viewModel: AppViewModel) {
             }
             return@Column
         }
-        val anyFolded = STAT_SECTIONS.any { it in state.statsFolded }
+        val anyFolded = STAT_SECTIONS.any { it !in state.statsOpen }
         Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp), horizontalArrangement = Arrangement.End) {
             IconAction(
                 icon = if (anyFolded) R.drawable.ic_expand_all else R.drawable.ic_collapse_all,
                 label = if (anyFolded) stringResource(R.string.al_expand_all) else stringResource(R.string.al_collapse_all),
                 onClick = {
                     Haptics.tick(view, strong = false)
-                    viewModel.setStatsFolded(if (anyFolded) emptySet() else STAT_SECTIONS.toSet())
+                    viewModel.setStatsOpen(if (anyFolded) STAT_SECTIONS.toSet() else emptySet())
                 },
             )
         }
@@ -145,7 +147,7 @@ fun StatsScreen(state: UiState, viewModel: AppViewModel) {
             timeSections(stats, locale, folded, expanded, open)
             ranked("people", R.string.st_sec_people, R.string.st_col_person, stats.people, stats.total, locale, folded, expanded, open)
             ranked("tags", R.string.st_sec_tags, R.string.st_col_tag, stats.tags, stats.total, locale, folded, expanded, open)
-            ranked("things", R.string.st_sec_things, R.string.st_col_thing, stats.things, stats.total, locale, folded, expanded, open)
+            ranked("things", R.string.st_sec_things, R.string.st_col_thing, stats.things.take(THINGS_ROWS), stats.total, locale, folded, expanded, open, all = true)
             ranked("countries", R.string.st_sec_countries, R.string.st_col_country, stats.countries, stats.total, locale, folded, expanded, open)
             ranked("cities", R.string.st_sec_cities, R.string.st_col_city, stats.cities, stats.total, locale, folded, expanded, open)
             ranked("cameras", R.string.st_sec_cameras, R.string.st_col_camera, stats.cameras, stats.total, locale, folded, expanded, open)
@@ -227,12 +229,13 @@ private fun LazyListScope.ranked(
     folded: Folds,
     expanded: MutableMap<String, Boolean>,
     open: (StatRow) -> Unit,
+    all: Boolean = false,
 ) {
     if (rows.isEmpty()) return
     section(key, titleRes, folded)
     if (key in folded.keys) return
     item(key = "c:$key") { BarChart(rows.take(CHART_BARS), locale, open) }
-    table(key, column, rows, total, locale, expanded, open)
+    table(key, column, rows, total, locale, expanded, open, all)
 }
 
 private fun LazyListScope.table(

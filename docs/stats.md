@@ -32,7 +32,7 @@ top says the numbers are still growing.
 Years, months, days and hours are column charts; a label under a column is drawn only where it fits, so
 none ever runs into another. People, tags, things, places and cameras are bar charts of the ten biggest.
 Under every chart is a table with the name, the number of photos and their share of the library. Long
-tables show ten lines and a **Show all**.
+tables show ten lines and a **Show all**; Things lists its 50 biggest and stops there.
 
 ## Every line opens its photos
 
@@ -43,8 +43,9 @@ count.
 
 ## Folding
 
-Every section folds away with a tap on its heading, and the button at the top folds all of them or opens
-all of them. Which sections are folded, and where you were in the list, last for as long as the app runs.
+Every section starts folded. A tap on its heading opens or folds it, and the button at the top opens all of
+them or folds them all. Which sections are open is remembered for good; where you were in the list lasts for
+as long as the app runs.
 
 ## What changed in the phone's copy for it
 

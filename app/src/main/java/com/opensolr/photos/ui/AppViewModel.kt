@@ -147,7 +147,7 @@ data class UiState(
 
     val meZonesOpen: Set<String> = emptySet(),
 
-    val statsFolded: Set<String> = emptySet(),
+    val statsOpen: Set<String> = emptySet(),
 
     val returnToStats: Boolean = false,
 
@@ -1035,6 +1035,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             environment = prefs.connection?.environment,
             openFilterSections = prefs.openFilterSections,
             foldedAlbumSections = prefs.foldedAlbumSections,
+            statsOpen = prefs.statsOpen,
             groupBy = GroupBy.of(prefs.groupBy),
         )
     }
@@ -1307,11 +1308,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleStatsSection(key: String) {
-        _state.update { it.copy(statsFolded = if (key in it.statsFolded) it.statsFolded - key else it.statsFolded + key) }
+        val next = _state.value.statsOpen.let { if (key in it) it - key else it + key }
+        prefs.statsOpen = next
+        _state.update { it.copy(statsOpen = next) }
     }
 
-    fun setStatsFolded(keys: Set<String>) {
-        _state.update { it.copy(statsFolded = keys) }
+    fun setStatsOpen(keys: Set<String>) {
+        prefs.statsOpen = keys
+        _state.update { it.copy(statsOpen = keys) }
     }
 
     fun setGroupBy(how: GroupBy) {
