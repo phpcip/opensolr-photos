@@ -44,7 +44,7 @@ picking photos.
 The search box is not on screen until it is asked for: the magnifier opens one compact line with the
 filters button on it, and tapping the magnifier again puts it away and clears the query. A query that is in
 force keeps the line on screen by itself (`searchOpen || state.query.isNotBlank()`), so coming back from
-albums, duplicates or similar photos shows the words the results answer to instead of only remembering them.
+Stats, duplicates or similar photos shows the words the results answer to instead of only remembering them.
 
 ## Empty search box
 
@@ -209,7 +209,7 @@ answer straight away.
 
 On a plan with vector search, only photos that carry text are read at all. CLIP sees the photo first, and
 unless one of its top 50 labels belongs to the text family (label, document, receipt, invoice, card, ticket,
-menu, poster, screenshot, number…) the photo is never sent for reading. A holiday album costs nothing and
+menu, poster, screenshot, number…) the photo is never sent for reading. A holiday photo costs nothing and
 the wedding photos are not shipped anywhere. On a plan without vector search nothing is sent to be read in
 the first place: no CLIP, no OCR, and `ocr_t` stays empty.
 
@@ -420,7 +420,7 @@ answer is stored as the text the index sent, never written out again from the pa
 
 | Cached | Never cached |
 |---|---|
-| `/select` through `SearchRepository.select`: typed searches and their pages, the facets behind the filters, albums, the documents of duplicate groups, map photos | Writing and deleting (`/update`), the words a sync carries up (`photos_words`), the one-time pull of the phone's copy after an install, and `IndexManager.configVersion`/`hasPhotoSchema` |
+| `/select` through `SearchRepository.select`: typed searches and their pages, the facets behind the filters, the documents of duplicate groups, map photos | Writing and deleting (`/update`), the words a sync carries up (`photos_words`), the one-time pull of the phone's copy after an install, and `IndexManager.configVersion`/`hasPhotoSchema` |
 | `/suggest`: autocomplete, keyed on the lowercased prefix | |
 | The duplicate-group facet, per slider stop (`cachedDuplicateGroups`); the last 4 stops are also held already parsed in memory, so moving the slider back and forth does not read them again | |
 | The vector of a typed search, in memory, 30 minutes, the last 8 searches (`SearchRepository.embedOnce`) | |
@@ -430,8 +430,7 @@ the phone's copy has to be the index's own truth, not an answer held from before
 
 Everything the app writes clears the cache at once, whatever the seconds say: saving tags
 (`saveEdits`), deleting photos, `resetIndex`, and every finished sync (`onSyncFinished`). The deliberate
-gestures clear it too: `forceRefresh` (swipe down on the grid, the reload icon) and `openAlbums(force =
-true)` (swipe down in Albums).
+gestures clear it too: `forceRefresh` (swipe down on the grid, the reload icon).
 
 ## Why the request is a POST
 

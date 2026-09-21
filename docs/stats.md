@@ -51,6 +51,3 @@ all of them. Which sections are folded, and where you were in the list, last for
 To count the things in your photos on the phone, the copy keeps the words each photo was read into beside
 its tags and names, and the camera model in a column of its own. An update fills both once from what the
 phone already stores, a page at a time, without asking the index anything.
-
-Albums, which Stats replaced in the header, are still reached through the filters: every album was one
-filter value, and so is every line of Stats.

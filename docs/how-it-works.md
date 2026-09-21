@@ -143,7 +143,7 @@ reinstalled and differs on every other phone. So:
 | opensolr.com | `POST /solr_manager/api/image_ocr` | Server to server, for photos that carry text — the phone never calls it |
 | api.opensolr.com | `POST /solr_manager/api/photos_words` | A sync that carries up words you edited: 50 photos per call, no pictures |
 | api.opensolr.com | `POST /solr_manager/api/embed` | Once per typed search (vector search plans only); the same words reuse their vector for 30 minutes, across pages and groups |
-| your index | `POST /select` | Typed search (with spellcheck), the filter lists, map pins, albums (one JSON facet), duplicates (one facet per slider stop), and the one full read at install or reinstall |
+| your index | `POST /select` | Typed search (with spellcheck), the filter lists, map pins, duplicates (one facet per slider stop), and the one full read at install or reinstall |
 | your index | `GET /opensolr-photos-config` | Start of a sync: the index's configuration version |
 | your index | `POST /suggest` | Autocomplete |
 | tile.openstreetmap.org | `GET` tiles | Only while the map is open |
@@ -160,7 +160,7 @@ Where the boundary now runs:
 - **Goes out once and is held:** the one full read of the index at install or reinstall, and the filter
   lists, which are fetched once and kept until a sync actually writes something.
 - **Goes out every time:** a typed search and the `embed` call behind it, `photos_ingest`, `photos_words`,
-  the duplicate, album and map facets, `/suggest`, every `/update`, and the short checks a sync opens with
+  the duplicate and map facets, `/suggest`, every `/update`, and the short checks a sync opens with
   (the index is in your account, its configuration is the one this version expects, the plan as it stands
   now).
 
@@ -177,7 +177,7 @@ and the install-time full read are never cached.
 | `index` | `IndexManager`: index name, find, create, upload config, refresh credentials |
 | `media` | `MediaScanner` (folders, photos, the id function), `PhotoReader` (EXIF, the 640 px copy) |
 | `net` | `OpensolrApi` (REST API), `SolrClient` (direct Solr), typed errors |
-| `search` | `SearchRepository`: query, filters, facets, suggest, spellcheck, map pins, albums, duplicates, parsing; `EditRepository`: saving tags and words on the phone first, queueing them for the next sync, reading the index once into the phone's copy (`readIndexIntoCache`, `CLONE_FIELDS`) and keeping that copy in step (`storeDoc`). Tag and name suggestions are worked out in `AppViewModel` from the phone's copy |
+| `search` | `SearchRepository`: query, filters, facets, suggest, spellcheck, map pins, duplicates, parsing; `EditRepository`: saving tags and words on the phone first, queueing them for the next sync, reading the index once into the phone's copy (`readIndexIntoCache`, `CLONE_FIELDS`) and keeping that copy in step (`storeDoc`). Tag and name suggestions are worked out in `AppViewModel` from the phone's copy |
 | `ui/map` | `PhotoClusterOverlay`: grouping and drawing the markers on the osmdroid map |
 | `sync` | `SyncEngine` (the algorithm: your folders compared with the phone's copy of the index, then the photos to be read and the queued word changes carried up), `SyncWorker`, `SyncScheduler`, `PlanWatch`, `Notifier` |
-| `ui` | Compose screens (photos, albums, map, sync, account, edit sheet), `AppViewModel`, theme |
+| `ui` | Compose screens (photos, stats, map, sync, account, edit sheet), `AppViewModel`, theme |

@@ -98,8 +98,8 @@ Six problems, in the order they mattered. Everything in the feature table below 
    there; the same sync carries them to the `photos_words` endpoint, 50 photos per call, with no pictures
    attached, because only the words changed.
 7. **Search.** A typed query or a filtered view goes to the index through Opensolr's `{!hybrid}` parser:
-   words and meaning blended, filters, spelling, the map, albums and duplicates ([search](docs/search.md),
-   [map](docs/map.md), [albums](docs/albums.md), [duplicates](docs/duplicates.md)). Plain browsing, and the
+   words and meaning blended, filters, spelling, the map and duplicates ([search](docs/search.md),
+   [map](docs/map.md), [duplicates](docs/duplicates.md)). Plain browsing, [Stats](docs/stats.md), and the
    tags and names offered while tagging, never leave the phone.
 
 ## Requirements
@@ -161,7 +161,6 @@ Full account: [privacy and security](docs/privacy-and-security.md).
 | [Search](docs/search.md) | The header, how a query is built, grouping, filters, autocomplete, spelling, deleting, editing tags |
 | [Map](docs/map.md) | Markers, groups, Search this area, what the map sends |
 | [Stats](docs/stats.md) | Your library in numbers, counted on the phone, and how every line opens its photos |
-| [Albums](docs/albums.md) | The sections, the one facet request, covers and names (off the header since 3.5) |
 | [Duplicates](docs/duplicates.md) | The 13 slider stops, the keys behind them, Select 1 of each duplicate |
 | [Index schema](docs/index-schema.md) | Every field, the analyzers, the vector field, the duplicate keys, the configset |
 | [Plan limits](docs/plan-limits.md) | What counts against your plan and what the app does at a limit |

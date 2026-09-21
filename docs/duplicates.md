@@ -95,7 +95,7 @@ reads *N like IMG_1234.jpg*, and *Select 1 of each group* is not drawn at all, s
 group. A stop where nothing else carries the key says *Nothing else in your index is like this photo at this
 setting.*
 
-Leaving the view — a typed search, a filter, an album, the similar-photos icon, an index reset — drops the
+Leaving the view — a typed search, a filter, the similar-photos icon, an index reset — drops the
 anchor with it, so neither the count line nor the way back can outlive it.
 
 ## Staying and leaving
@@ -103,4 +103,4 @@ anchor with it, so neither the count line nor the way back can outlive it.
 The view stays on the same stop after pull to refresh, the reload button, coming back from the
 Sync or account screen, a delete, and a sync.
 
-It is left with the icon again, a typed search, a filter, or opening an [album](albums.md).
+It is left with the icon again, a typed search, or a filter.

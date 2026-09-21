@@ -12,7 +12,6 @@
 | [Search](search.md) | The header, query building, grouping, filters, autocomplete, deleting, editing tags, the search cache |
 | [Map](map.md) | Markers, groups, Search this area, what the map sends |
 | [Stats](stats.md) | Your library in numbers, counted on the phone: years, months, days, hours, people, tags, things, places, cameras |
-| [Albums](albums.md) | The sections, the one facet request, covers and names (off the header since 3.5) |
 | [Similar photos](duplicates.md) | The 7 slider stops, the keys behind them, the caps on a group, Select 1 of each group |
 | [Index schema](index-schema.md) | Every field of the index, the analyzers, the vector field, the duplicate keys |
 | [Plan limits](plan-limits.md) | AI requests, disk space, bandwidth, indexes, and what happens at a limit |

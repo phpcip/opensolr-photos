@@ -34,7 +34,7 @@ APK, so the app always uploads exactly what is in the repository.
 | `labels` | string, multi | The CLIP labels one by one |
 | `custom_tags` | string, multi | The owner's tags; `custom_tags_text` is their tokenised copy for search |
 | `persons_t` | text | The names of the people in the photo, as one line, read from the XMP property `PersonInImage` that whatever recognised the faces wrote on the file. No declared field of its own: it matches the `*_t` dynamic field |
-| `persons_ss` | string, multi | The same names, each kept whole. No declared field of its own: it matches the `*_ss` dynamic field. The People filter, the People albums and the phone's copy read it; `persons_t` is analysed text and gives words |
+| `persons_ss` | string, multi | The same names, each kept whole. No declared field of its own: it matches the `*_ss` dynamic field. The People filter, the People section of Stats and the phone's copy read it; `persons_t` is analysed text and gives words |
 | `embeddings` | dense vector, 1024, cosine | Vector of `meaning`. On a plan without vector search nothing is sent to be read at all, so `meaning`, `labels`, `ocr_t` and `embeddings` all stay empty: the document is date, camera, place, file name and the owner's own words, and search is lexical |
 | `clip_model`, `embed_model` | string | What produced the labels and the vector |
 | `dup_w2_hash` … `dup_w5_hash`, `dup_any4_ss`, `dup_exif_hash` | string (`*_hash`, `*_ss`) | The keys groups of alike photos are made of, written by the server ([similar photos](duplicates.md)) |
@@ -80,7 +80,7 @@ labels,meaning,ocr_t,persons_t,persons_ss,custom_tags,clip_model,embed_model
 
 From then on syncing and browsing never walk the index again: every write keeps the copy in step with what
 the server says it wrote. Only two paths still read it whole, and neither is an ordinary sync — the
-rescue of the owner's tags and wording before a reset, and taking every photo of an album at once.
+rescue of the owner's tags and wording before a reset, and taking every photo of a picked group at once.
 
 The schema is what makes the copy possible. Every field in that list is `stored="true"`, so it can be read
 back. The two exclusions are schema facts, not a product choice: `embeddings` is `stored="false"` and could

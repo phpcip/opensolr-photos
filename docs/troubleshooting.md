@@ -173,7 +173,7 @@ index; they go up with the next sync that does run.
 Writing your words into the photo files themselves is a separate step from the index, and it happens on the
 spot: Android asks you to allow the change and a progress bar follows it. If you refuse the dialog or the
 write is interrupted, the tags are still saved on the phone and still go to the index; only the files are
-left as they were. Tag the photos again to be asked again. See [albums and tags](albums.md).
+left as they were. Tag the photos again to be asked again. See [search](search.md).
 
 **Replace wiped tags I wanted to keep.**
 In the sheet for several photos at once, People and **My tags (Albums)** each have an **Add** or **Replace**
