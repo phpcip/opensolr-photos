@@ -28,6 +28,20 @@ object SelfUpdate {
     }
 
     private const val MAX_BYTES = 80L * 1024 * 1024
+
+    // GitHub answers the download with a redirect to its asset host; only those two hosts, over https, are followed.
+    private val downloadClient by lazy {
+        Http.client.newBuilder()
+            .followRedirects(true)
+            .followSslRedirects(false)
+            .addNetworkInterceptor { chain ->
+                val url = chain.request().url
+                val host = url.host
+                if (!url.isHttps || !(host == "github.com" || host.endsWith(".githubusercontent.com"))) throw IOException("unexpected update host")
+                chain.proceed(chain.request())
+            }
+            .build()
+    }
     private const val ACTION_RESULT = "com.opensolr.photos.SELF_UPDATE_RESULT"
 
     /** True when Google Play installed this copy: then Play does the updating, not the app. */
@@ -82,7 +96,7 @@ object SelfUpdate {
         val dir = File(context.cacheDir, "update").apply { mkdirs() }
         dir.listFiles()?.forEach { it.delete() }
         val out = File(dir, "opensolr-photos.apk")
-        Http.client.newCall(Request.Builder().url(url).build()).execute().use { response ->
+        downloadClient.newCall(Request.Builder().url(url).build()).execute().use { response ->
             if (!response.isSuccessful) throw IOException("GitHub answered ${response.code}")
             val body = response.body ?: throw IOException("GitHub answered with nothing")
             val total = body.contentLength()

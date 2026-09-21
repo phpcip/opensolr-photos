@@ -1,0 +1,1 @@
+Updating from inside the app now reaches the download: 3.5.3 stopped at GitHub's redirect. Update to X in Me downloads, checks and installs the new version.
