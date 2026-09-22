@@ -10,7 +10,7 @@ calls a group a duplicate, because only the last stop can prove one.
 
 | Stop | Name | Photos are grouped when… | Field |
 |---|---|---|---|
-| 0 | *Same first 2 words* | the image model's first 2 labels match, in any order, and the camera model is the same; groups over 5 photos dropped | `dup_w2_hash` |
+| 0 | *Same first 2 words* | the image model's first 2 labels match, in any order | `dup_w2_hash` |
 | 1 | *Same first 3 words* | the first 3 labels match | `dup_w3_hash` |
 | 2 | *Same first 4 words* | the first 4 labels match | `dup_w4_hash` |
 | 3 | *All 5 words the same* | all 5 labels match | `dup_w5_hash` |
@@ -35,7 +35,12 @@ fields with docValues, not stored ([index schema](index-schema.md)).
 
 The server writes only these keys (`Api_lib::_photos_duplicate_hashes`): `dup_w2_hash` … `dup_w5_hash`, the
 labels lowercased, repeats dropped, sorted, md5; `dup_desc_hash`, the sentence; and `dup_exif_hash`. The
-labels are only the object names the image model finds, as many as it finds, never a sentence.
+labels are only the object names the image model finds, as many as it finds, never a sentence, and a key
+exists only when the photo really has that many labels: a photo with two labels has no *first 3*.
+
+The library-wide view answers **inside what is on screen**: the typed words (as words, without the vector)
+and every active filter narrow the groups. *Similar to this photo* does not, since its question is one
+photo.
 
 Each stop is **one facet request** on its field, sent 300 ms after the slider settles; values seen more than
 once are the groups, biggest first. The answer is held for the cache's lifetime, so walking the slider back
