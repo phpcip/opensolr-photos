@@ -1,0 +1,3 @@
+Search operators: +word, -word, +"phrase" and -"phrase" now work with AI on too, and the ? at the end of the search bar explains them.
+Similar photos by meaning (three levels) and by pixels. Photos join the groups as they are read again.
+Photos go to Opensolr as a 1024 px copy, ten at a time: better descriptions, better text reading, faster sync.
