@@ -1,0 +1,3 @@
+Group headings say what the photos have in common: the description they share, or the words they all carry.
+Everything in the details sheet can be selected and copied.
+What is on screen is refreshed after a sync, and panels fade in instead of jumping.
