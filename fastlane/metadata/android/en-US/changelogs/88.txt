@@ -1,0 +1,3 @@
+Every tap is visible: buttons shrink and light up while your finger is down.
+A tag you remove is removed from your index too.
+While a sync is running, a photo you just edited goes up first instead of waiting for it to finish.
