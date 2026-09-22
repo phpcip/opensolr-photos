@@ -51,7 +51,10 @@ private val Corner = RoundedCornerShape(2.dp)
 
 // Every tap has to be seen: the control shrinks a little while the finger is down and the
 // press ripple keeps its own colour. PRESS_SCALE is the whole effect, in one place.
-private const val PRESS_SCALE = 0.94f
+private const val PRESS_SCALE = 0.90f
+
+/** How much of the accent washes over a control while it is held. */
+private const val PRESS_TINT = 0.28f
 
 /** A press source and the scale it drives: pass the source to the control, the modifier to its layout. */
 @Composable
@@ -61,12 +64,25 @@ fun pressedScale(source: MutableInteractionSource): Float {
     return scale
 }
 
+/** The accent wash a control carries while it is held, transparent otherwise. */
+@Composable
+fun pressedTint(source: MutableInteractionSource): androidx.compose.ui.graphics.Color {
+    val p = LocalPalette.current
+    val pressed by source.collectIsPressedAsState()
+    val colour by androidx.compose.animation.animateColorAsState(
+        if (pressed) p.accent.copy(alpha = PRESS_TINT) else androidx.compose.ui.graphics.Color.Transparent,
+        label = "presstint",
+    )
+    return colour
+}
+
 /** clickable with the press effect, for anything that is not a Material button. */
 @Composable
 fun Modifier.tapClickable(enabled: Boolean = true, onClick: () -> Unit): Modifier {
     val source = remember { MutableInteractionSource() }
     return this
         .scale(if (enabled) pressedScale(source) else 1f)
+        .background(if (enabled) pressedTint(source) else androidx.compose.ui.graphics.Color.Transparent, Corner)
         .clickable(enabled = enabled, interactionSource = source, indication = androidx.compose.material3.ripple()) { onClick() }
 }
 
@@ -84,13 +100,15 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier) {
 fun AccentButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     val p = LocalPalette.current
     val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
+    val fill by androidx.compose.animation.animateColorAsState(if (pressed) p.ink else p.accentFill, label = "accentfill")
     Button(
         onClick = onClick,
         enabled = enabled,
         interactionSource = source,
         modifier = modifier.height(52.dp).scale(pressedScale(source)),
         shape = Corner,
-        colors = ButtonDefaults.buttonColors(containerColor = p.accentFill, contentColor = p.onAccentFill, disabledContainerColor = p.chip, disabledContentColor = p.muted),
+        colors = ButtonDefaults.buttonColors(containerColor = fill, contentColor = p.onAccentFill, disabledContainerColor = p.chip, disabledContentColor = p.muted),
         contentPadding = PaddingValues(horizontal = 24.dp),
         elevation = null,
     ) {
@@ -102,14 +120,15 @@ fun AccentButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifie
 fun GhostButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     val p = LocalPalette.current
     val source = remember { MutableInteractionSource() }
+    val pressed by source.collectIsPressedAsState()
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
         interactionSource = source,
         modifier = modifier.height(52.dp).scale(pressedScale(source)),
         shape = Corner,
-        border = BorderStroke(1.dp, if (enabled) p.ink else p.hairline),
-        colors = ButtonDefaults.outlinedButtonColors(contentColor = p.ink),
+        border = BorderStroke(if (pressed) 2.dp else 1.dp, if (!enabled) p.hairline else if (pressed) p.accent else p.ink),
+        colors = ButtonDefaults.outlinedButtonColors(contentColor = p.ink, containerColor = pressedTint(source)),
         contentPadding = PaddingValues(horizontal = 24.dp),
     ) {
         Text(text, style = MaterialTheme.typography.labelLarge)

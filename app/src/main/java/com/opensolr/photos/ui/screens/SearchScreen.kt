@@ -2964,6 +2964,7 @@ private fun Modifier.combinedClickableCompat(onClick: () -> Unit): Modifier {
     val source = remember { MutableInteractionSource() }
     return this
         .scale(com.opensolr.photos.ui.pressedScale(source))
+        .background(com.opensolr.photos.ui.pressedTint(source), Corner)
         .combinedClickable(interactionSource = source, indication = androidx.compose.material3.ripple(), onClick = onClick)
 }
 

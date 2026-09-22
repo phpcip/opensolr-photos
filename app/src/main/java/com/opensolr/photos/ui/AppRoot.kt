@@ -38,6 +38,7 @@ import com.opensolr.photos.ui.screens.SetupScreen
 import com.opensolr.photos.ui.screens.SignInScreen
 import com.opensolr.photos.ui.screens.SyncScreen
 import com.opensolr.photos.ui.screens.WelcomeScreen
+import androidx.compose.animation.togetherWith
 import com.opensolr.photos.ui.theme.LocalPalette
 
 @Composable
@@ -56,18 +57,29 @@ fun AppRoot(viewModel: AppViewModel) {
             .background(p.paper)
             .safeDrawingPadding()
     ) {
-        when (state.screen) {
-            Screen.SignIn -> SignInScreen(state, viewModel)
-            Screen.Welcome -> WelcomeScreen(state, viewModel)
-            Screen.Permissions -> PermissionsScreen(state, viewModel)
-            Screen.Folders -> FoldersScreen(state, viewModel)
-            Screen.Setup -> SetupScreen(state, viewModel)
-            Screen.Search -> SearchScreen(state, viewModel)
-            Screen.Sync -> SyncScreen(state, viewModel)
-            Screen.Account -> AccountScreen(state, viewModel)
-            Screen.Map -> MapScreen(state, viewModel)
-            Screen.Albums -> AlbumsScreen(state, viewModel)
-            Screen.Stats -> StatsScreen(state, viewModel)
+        // Screens fade and lift into place instead of snapping: short enough to stay out of the way
+        androidx.compose.animation.AnimatedContent(
+            targetState = state.screen,
+            transitionSpec = {
+                (androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(SCREEN_FADE_MS)) +
+                    androidx.compose.animation.slideInVertically(androidx.compose.animation.core.tween(SCREEN_FADE_MS)) { it / 24 })
+                    .togetherWith(androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(SCREEN_FADE_MS / 2)))
+            },
+            label = "screen",
+        ) { screen ->
+            when (screen) {
+                Screen.SignIn -> SignInScreen(state, viewModel)
+                Screen.Welcome -> WelcomeScreen(state, viewModel)
+                Screen.Permissions -> PermissionsScreen(state, viewModel)
+                Screen.Folders -> FoldersScreen(state, viewModel)
+                Screen.Setup -> SetupScreen(state, viewModel)
+                Screen.Search -> SearchScreen(state, viewModel)
+                Screen.Sync -> SyncScreen(state, viewModel)
+                Screen.Account -> AccountScreen(state, viewModel)
+                Screen.Map -> MapScreen(state, viewModel)
+                Screen.Albums -> AlbumsScreen(state, viewModel)
+                Screen.Stats -> StatsScreen(state, viewModel)
+            }
         }
     }
 
@@ -143,3 +155,5 @@ private fun DeviceChoiceDialog(state: UiState, viewModel: AppViewModel) {
         textContentColor = p.muted,
     )
 }
+
+private const val SCREEN_FADE_MS = 180
