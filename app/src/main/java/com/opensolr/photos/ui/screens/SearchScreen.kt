@@ -1332,15 +1332,16 @@ private fun buildRows(
             val group = hits.drop(from).take(size)
             if (group.isEmpty()) return@forEachIndexed
 
-            // The heading says what these photos have in common, not only how many: the words they
-            // all carry, or the reading they all share when the group was made on something else
-            // (the same file, the same camera details). A group with neither falls back to the count.
+            // The heading says what these photos have in common, not only how many: the reading they
+            // all share, or the words they all carry. A group with neither falls back to the count.
             val shared = group.map { photo -> photo.labels.map { it.trim() }.filter { it.isNotEmpty() } }
                 .reduce { a, b -> a.filter { word -> b.any { it.equals(word, ignoreCase = true) } } }
                 .take(GROUP_WORDS)
             val reading = group.first().meaning.trim().trimEnd('.')
                 .takeIf { it.isNotBlank() && group.all { photo -> photo.meaning.trim().trimEnd('.') == it } }
-            val what = shared.joinToString(", ").ifBlank { reading.orEmpty() }
+            // One reading shared by the whole group says the most, so it wins; otherwise the words
+            // they all carry.
+            val what = reading ?: shared.joinToString(", ")
             rows.addGroup(
                 "${group.size} of the same · ${index + 1}",
                 group,
