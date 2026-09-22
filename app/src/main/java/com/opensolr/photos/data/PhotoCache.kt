@@ -722,7 +722,8 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         val tags = HashMap<String, Int>()
         val persons = HashMap<String, Int>()
         val meanings = HashMap<String, Int>()
-        readableDatabase.rawQuery("SELECT kind, word, COUNT(*) FROM doc_words WHERE kind IN ('$WORD_TAG','$WORD_PERSON','$WORD_MEANING') GROUP BY kind, word", null).use { c ->
+        // the third kind is the model's labels: meaning is one sentence now, never a list of words
+        readableDatabase.rawQuery("SELECT kind, word, COUNT(*) FROM doc_words WHERE kind IN ('$WORD_TAG','$WORD_PERSON','$WORD_LABEL') GROUP BY kind, word", null).use { c ->
             while (c.moveToNext()) {
                 val into = when (c.getString(0)) {
                     WORD_TAG -> tags
