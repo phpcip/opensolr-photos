@@ -1058,7 +1058,6 @@ class SearchRepository(private val context: Context) {
         // (MEANING_FLOORS), so they exist only in "Similar to this photo"; the rest are stored keys.
         val DUPLICATE_FIELDS = listOf(
             "knn_0.94", "knn_0.96", "knn_0.98",
-            "dup_px_hash",
             "dup_exif_hash",
 
             "file_name", "size_bytes",

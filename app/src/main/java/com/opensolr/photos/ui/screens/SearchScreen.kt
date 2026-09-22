@@ -1538,7 +1538,8 @@ private fun DuplicateLevelSlider(level: Int, firstStop: Int, onLevel: (Int) -> U
     val loose = if (dark) DUPLICATE_LOOSE_DARK else DUPLICATE_LOOSE_LIGHT
     val green = if (dark) DUPLICATE_GREEN_DARK else DUPLICATE_GREEN_LIGHT
     val colour = when {
-        stop <= DUPLICATE_EXIF_STOP -> lerp(loose, green, (stop - firstStop) / (DUPLICATE_EXIF_STOP - firstStop).coerceAtLeast(1).toFloat())
+        stop == DUPLICATE_EXIF_STOP -> green
+        stop < DUPLICATE_EXIF_STOP -> lerp(loose, green, (stop - firstStop) / (DUPLICATE_EXIF_STOP - firstStop).coerceAtLeast(1).toFloat())
 
         else -> if (dark) DUPLICATE_NEUTRAL_DARK else DUPLICATE_NEUTRAL_LIGHT
     }
@@ -1583,14 +1584,14 @@ private fun DuplicateLevelSlider(level: Int, firstStop: Int, onLevel: (Int) -> U
 }
 
 private val DUPLICATE_KIND_NAMES = listOf(
-    "Similar meaning", "Very similar", "Almost the same", "Looks the same",
+    "Similar meaning", "Very similar", "Almost the same",
     "Same photo (EXIF)",
     "Same file name", "Same file size", "Same file (exact copy)",
 )
 
 private const val STOP_SLOP = 0.7f
 
-private const val DUPLICATE_EXIF_STOP = 4
+private const val DUPLICATE_EXIF_STOP = 3
 
 private val DUPLICATE_LOOSE_LIGHT = Color(0xFF111111)
 private val DUPLICATE_NEUTRAL_LIGHT = Color(0xFF495057)
