@@ -596,7 +596,12 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 )
             }
         }
-        if (state.duplicatesMode) {
+        // What comes and goes inside the screen slides in and fades, the same 180 ms as a screen change
+        androidx.compose.animation.AnimatedVisibility(
+            visible = state.duplicatesMode,
+            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(PANEL_MS)) + androidx.compose.animation.expandVertically(androidx.compose.animation.core.tween(PANEL_MS)),
+            exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(PANEL_MS)) + androidx.compose.animation.shrinkVertically(androidx.compose.animation.core.tween(PANEL_MS)),
+        ) {
             DuplicateLevelSlider(
                 level = state.duplicateLevel,
                 firstStop = com.opensolr.photos.search.SearchRepository.FIRST_LIBRARY_LEVEL,
@@ -607,7 +612,11 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 onSelectOneOfEach = { viewModel.selectOneOfEachDuplicate() },
             )
         }
-        if (state.searching) {
+        androidx.compose.animation.AnimatedVisibility(
+            visible = state.searching,
+            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(PANEL_MS)),
+            exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(PANEL_MS)),
+        ) {
             LinearProgressIndicator(Modifier.fillMaxWidth().height(2.dp), color = p.accent, trackColor = p.chip)
         }
 
@@ -650,7 +659,13 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 Text("?", style = MaterialTheme.typography.bodyMedium, color = p.muted)
             }
         }
-        state.searchNotice?.let { Notice(it, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = state.searchNotice != null,
+            enter = androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(PANEL_MS)) + androidx.compose.animation.expandVertically(androidx.compose.animation.core.tween(PANEL_MS)),
+            exit = androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(PANEL_MS)) + androidx.compose.animation.shrinkVertically(androidx.compose.animation.core.tween(PANEL_MS)),
+        ) {
+            state.searchNotice?.let { Notice(it, modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)) }
+        }
 
         state.flash?.let {
             Text(
@@ -2978,6 +2993,8 @@ private fun Modifier.combinedClickableCompat(onClick: () -> Unit): Modifier {
         .background(com.opensolr.photos.ui.pressedTint(source), Corner)
         .combinedClickable(interactionSource = source, indication = androidx.compose.material3.ripple(), onClick = onClick)
 }
+
+private const val PANEL_MS = 180
 
 private const val SNAP_ROWS = 4
 
