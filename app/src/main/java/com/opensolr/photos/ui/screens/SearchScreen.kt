@@ -144,6 +144,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -2795,6 +2796,11 @@ private fun facetTitle(field: String): String = when (field) {
 internal fun DetailsSheet(
 
     onLeave: () -> Unit = {},hit: PhotoHit, viewModel: AppViewModel, onDismiss: () -> Unit, onEdit: (PhotoHit) -> Unit) {
+    // the photo as it is NOW: a sync that read it again while this sheet is open replaces the copy
+    // behind it, and the sheet has to show the new reading rather than the one it opened with
+    @Suppress("NAME_SHADOWING")
+    val fresh by viewModel.state.collectAsState()
+    val hit = fresh.hits.firstOrNull { photo -> photo.id == hit.id } ?: hit
     val p = LocalPalette.current
     val context = LocalContext.current
 

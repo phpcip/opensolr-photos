@@ -2243,7 +2243,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val wrote = report == null || report.added > 0 || report.deleted > 0
 
         if (wrote) prefs.facetsJson = null
+        // a sync that wrote anything means what is on screen is now behind: read it again
         if (wrote && _state.value.screen == Screen.Search) refresh()
+        else if (report != null && report.added > 0 && _state.value.screen == Screen.Search) refresh()
     }
 
     private fun signedOut(message: String? = null) {
