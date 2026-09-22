@@ -531,7 +531,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
 
         private const val DEVICE_WINDOW_MS = 2 * 60 * 60 * 1000L
 
-        private const val READ_BATCH = 5
+        private const val READ_BATCH = 10
 
         private const val BATTERY_PAUSE_PERCENT = 20
 

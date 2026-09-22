@@ -70,7 +70,7 @@ Account and index management:
 
 The AI endpoints:
 
-- `photos_ingest` takes up to five photos at once and indexes them completely on the server: EXIF from
+- `photos_ingest` takes up to ten photos at once and indexes them completely on the server: EXIF from
   the copy, the words CLIP sees (`openai/clip-vit-large-patch14` against a vocabulary of about 51,000
   labels, with the ImageNet-21k and iNaturalist 2021 parts left out, a stoplist, and a small scene
   vocabulary), the search vector of those words, the place of the GPS position, your tags and words kept
