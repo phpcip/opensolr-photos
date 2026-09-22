@@ -98,6 +98,7 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
     var tags by remember(hit.id) { mutableStateOf(hit.customTags) }
     var newTag by remember(hit.id) { mutableStateOf("") }
     var meaning by remember(hit.id) { mutableStateOf(hit.meaning) }
+    var resetWording by remember(hit.id) { mutableStateOf(false) }
 
     val context = LocalContext.current
     val originalPersons = remember(hit.id) { hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() } }
@@ -149,7 +150,7 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
 
     fun finishSave(changedPersons: List<String>?) {
         val wording = ownWording()
-        viewModel.saveEdits(hit, tags, wording, changedPersons, onDone = onDismiss)
+        viewModel.saveEdits(hit, tags, wording, changedPersons, resetWording = resetWording && wording == null, onDone = onDismiss)
     }
 
     val originalTags = remember(hit.id) { hit.customTags }
@@ -373,7 +374,7 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
             )
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text(stringResource(R.string.tg_words_hint), style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.weight(1f).padding(top = 6.dp, end = 8.dp))
-                TextButton(onClick = { meaning = clipWords }, enabled = clipWords.isNotBlank() && meaning != clipWords) { Text(stringResource(R.string.tg_reset), color = p.accent) }
+                TextButton(onClick = { meaning = ""; resetWording = true }, enabled = meaning.isNotBlank()) { Text(stringResource(R.string.tg_reset), color = p.accent) }
             }
             state.editError?.let {
                 Spacer(Modifier.height(12.dp))

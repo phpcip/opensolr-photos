@@ -23,7 +23,7 @@ import javax.crypto.spec.SecretKeySpec
 
 data class ClipResult(val text: String, val labels: List<String>, val model: String)
 
-data class IngestItem(val photo: com.opensolr.photos.media.LocalPhoto, val jpeg: ByteArray, val tags: List<String>?, val meaning: String?, val fileHash: String? = null, val persons: List<String> = emptyList())
+data class IngestItem(val photo: com.opensolr.photos.media.LocalPhoto, val jpeg: ByteArray, val tags: List<String>?, val meaning: String?, val fileHash: String? = null, val persons: List<String> = emptyList(), val resetWording: Boolean = false)
 
 data class WordsItem(
     val id: String,
@@ -397,6 +397,7 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
 
                 item.tags?.let { put("tags", JSONArray(it)) }
                 item.meaning?.let { put("meaning", it) }
+                if (item.resetWording) put("meaning_reset", true)
             })
         }
         val body = JSONObject()

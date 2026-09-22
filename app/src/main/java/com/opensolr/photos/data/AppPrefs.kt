@@ -101,6 +101,13 @@ class AppPrefs(context: Context) {
             prefs.edit().putStringSet(KEY_RESYNC_IDS, value.toSet()).commit()
         }
 
+    // Photos whose owner reset their wording: read again, and the server drops the stored wording
+    var wordingResetIds: Set<String>
+        get() = prefs.getStringSet(KEY_WORDING_RESET_IDS, emptySet())?.toSet() ?: emptySet()
+        set(value) {
+            prefs.edit().putStringSet(KEY_WORDING_RESET_IDS, value.toSet()).commit()
+        }
+
     var chosenIndexName: String?
         get() = prefs.getString(KEY_CHOSEN_INDEX, null)
         set(value) {
@@ -255,6 +262,7 @@ class AppPrefs(context: Context) {
         private const val KEY_REPORT = "last_report"
         private const val KEY_REBUILD = "rebuild_approved"
         private const val KEY_RESYNC_IDS = "resync_ids"
+        private const val KEY_WORDING_RESET_IDS = "wording_reset_ids"
         private const val KEY_REREAD_ALL_SINCE = "reread_all_since"
         private const val KEY_WARNED = "warned_keys"
         private const val KEY_CHOSEN_INDEX = "chosen_index"

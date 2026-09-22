@@ -635,13 +635,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(rebuildRequired = false) }
     }
 
-    fun saveEdits(hit: PhotoHit, tags: List<String>, meaning: String?, persons: List<String>? = null, onDone: () -> Unit) {
+    fun saveEdits(hit: PhotoHit, tags: List<String>, meaning: String?, persons: List<String>? = null, resetWording: Boolean = false, onDone: () -> Unit) {
         _state.update { it.copy(editSaving = true, editError = null) }
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) {
                     edits.saveLocal(hit.id, tags, meaning, persons)
                     prefs.facetsJson = null
+                    if (resetWording) {
+                        prefs.wordingResetIds = prefs.wordingResetIds + hit.id
+                        prefs.resyncIds = prefs.resyncIds + hit.id
+                    }
 
                     Actions.contentUris(context, listOf(hit)).firstOrNull()?.let { uri ->
                         val (size, modified) = fileStampOf(uri)

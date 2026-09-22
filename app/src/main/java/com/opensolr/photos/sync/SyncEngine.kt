@@ -173,6 +173,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             }
 
             val forced = prefs.resyncIds
+            val wordingReset = prefs.wordingResetIds
             forced.forEach { cache.clearWordRetry(it); cache.clearSkipped(it) }
             val skippedSizes = cache.skippedSizes()
             val rereadSince = prefs.rereadAllSince
@@ -218,7 +219,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
 
                     val meaning = edits?.meaning ?: xmp?.meaning
                     val names = edits?.persons ?: xmp?.persons ?: emptyList()
-                    items += IngestItem(photo, jpeg, tags, meaning, weighed[photo.id] ?: PhotoReader.fileMd5(context, photo), names)
+                    items += IngestItem(photo, jpeg, tags, meaning, weighed[photo.id] ?: PhotoReader.fileMd5(context, photo), names, resetWording = photo.id in wordingReset)
                 }
                 if (items.isNotEmpty()) {
                     val results = try {
@@ -358,6 +359,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             }
             if (rebuild) prefs.rebuildApproved = false
             if (forced.isNotEmpty()) prefs.resyncIds = emptySet()
+            if (wordingReset.isNotEmpty()) prefs.wordingResetIds = prefs.wordingResetIds - wordingReset
             if (rereadSince > 0) prefs.rereadAllSince = 0L
             cache.removeAllExcept(local.keys)
             cache.keepSkippedOnly(local.keys)

@@ -395,7 +395,8 @@ them back. If that delete fails, the next sync removes them anyway.
   index, so no request leaves and the list is there as fast as you type. Tags already on the
   photo are not offered, and a word already offered as a tag is not repeated. Tapping a suggestion adds it;
   tapping outside the field and its list closes the list, and tapping the field again reopens it.
-- **What the photo shows**: `meaning` as free text; *Reset* restores CLIP's labels.
+- **What the photo shows**: `meaning` as free text; *Reset* empties it, and on *Save* the photo is read again
+  (`meaning_reset` on `photos_ingest`): your wording is dropped and the image model's sentence comes back.
 - **Save**: the save is local first and finishes on the phone. The edit goes into the cache's `edits` table
   (id → tags, wording) and into the phone's copy of the index, the grid shows it at once, and the sync that
   starts straight afterwards carries it up — 50 photos per call, with no pictures attached, since only the
