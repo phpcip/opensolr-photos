@@ -151,6 +151,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.draw.clip
@@ -2833,6 +2834,10 @@ internal fun DetailsSheet(
         if (picking) {
             PlacePickerDialog(start = hit.latLon, viewModel = viewModel, onDismiss = { picking = false }, onPick = { lat, lon -> savePlace(lat, lon) })
         }
+        // Everything in the sheet can be selected and copied: the file name, the folder, the date,
+        // the camera line, the people, the tags, the reading and the printed text. A long press
+        // starts the selection; the buttons in here still answer a plain tap.
+        SelectionContainer {
         Column(
             Modifier
                 .fillMaxWidth()
@@ -2923,6 +2928,7 @@ internal fun DetailsSheet(
             }
             Spacer(Modifier.height(24.dp))
         }
+    }
     }
 }
 
