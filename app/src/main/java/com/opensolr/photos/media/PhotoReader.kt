@@ -270,10 +270,46 @@ object PhotoReader {
                 }
                 exif.setAttribute(ExifInterface.TAG_XMP, packet)
                 exif.saveAttributes()
+                if (mime == "image/jpeg" && packet != null) syncJpegXmpSegment(pfd.fileDescriptor, packet)
                 true
             } ?: false
         } catch (e: Exception) {
             false
+        }
+    }
+
+    // ExifInterface reads a JPEG's standalone XMP segment but writes only the EXIF copy: the standalone one gets the same packet
+    private fun syncJpegXmpSegment(fd: java.io.FileDescriptor, packet: String) {
+        val input = java.io.FileInputStream(fd).channel
+        input.position(0)
+        val bytes = ByteArray(input.size().toInt())
+        val buffer = java.nio.ByteBuffer.wrap(bytes)
+        while (buffer.hasRemaining() && input.read(buffer) >= 0) { }
+        if (bytes.size < 4 || bytes[0] != 0xFF.toByte() || bytes[1] != 0xD8.toByte()) return
+        val header = "http://ns.adobe.com/xap/1.0/\u0000".toByteArray(Charsets.ISO_8859_1)
+        var at = 2
+        while (at + 4 <= bytes.size && bytes[at] == 0xFF.toByte()) {
+            val marker = bytes[at + 1].toInt() and 0xFF
+            if (marker == 0xDA || marker == 0xD9) return
+            val length = ((bytes[at + 2].toInt() and 0xFF) shl 8) or (bytes[at + 3].toInt() and 0xFF)
+            val end = at + 2 + length
+            if (length < 2 || end > bytes.size) return
+            val isXmp = marker == 0xE1 && length - 2 >= header.size &&
+                header.indices.all { bytes[at + 4 + it] == header[it] }
+            if (isXmp) {
+                val payload = header + packet.toByteArray(Charsets.UTF_8)
+                if (payload.size + 2 > 0xFFFF) return
+                val segment = byteArrayOf(0xFF.toByte(), 0xE1.toByte(), ((payload.size + 2) shr 8).toByte(), ((payload.size + 2) and 0xFF).toByte()) + payload
+                val rewritten = bytes.copyOfRange(0, at) + segment + bytes.copyOfRange(end, bytes.size)
+                val output = java.io.FileOutputStream(fd).channel
+                output.truncate(0)
+                output.position(0)
+                val out = java.nio.ByteBuffer.wrap(rewritten)
+                while (out.hasRemaining()) output.write(out)
+                output.force(true)
+                return
+            }
+            at = end
         }
     }
 
