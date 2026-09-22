@@ -1,0 +1,1 @@
+Similar photos: the slider goes Same first 2 words, first 3, first 4, all 5, then Same photo (EXIF), file name, file size and exact copy, the same in the library view and in Similar to this photo.
