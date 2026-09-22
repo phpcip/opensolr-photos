@@ -1,0 +1,2 @@
+Similar photos: the word stops end at three words, where the reading of a photo ends too.
+The count above the groups is how many photos they hold, instead of growing as you scroll.
