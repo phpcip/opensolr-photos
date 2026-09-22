@@ -134,9 +134,10 @@
         <item quantity="other">%1$s Fotos löschen?</item>
     </plurals>
     <string-array name="dup_kinds">
-        <item>Erste 3 Wörter gleich</item>
-        <item>4 beliebige Wörter gleich</item>
-        <item>Alle 5 Wörter gleich</item>
+        <item>Ähnliche Bedeutung</item>
+        <item>Sehr ähnlich</item>
+        <item>Fast gleich</item>
+        <item>Sieht gleich aus (Pixel)</item>
         <item>Gleiches Foto (EXIF)</item>
         <item>Gleicher Dateiname</item>
         <item>Gleiche Dateigröße</item>

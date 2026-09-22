@@ -1581,14 +1581,14 @@ private fun DuplicateLevelSlider(level: Int, onLevel: (Int) -> Unit, canSelect: 
 }
 
 private val DUPLICATE_KIND_NAMES = listOf(
-    "Same first 3 words", "Any 4 words the same", "All 5 words the same",
+    "Similar meaning", "Very similar", "Almost the same", "Looks the same",
     "Same photo (EXIF)",
     "Same file name", "Same file size", "Same file (exact copy)",
 )
 
 private const val STOP_SLOP = 0.7f
 
-private const val DUPLICATE_EXIF_STOP = 3
+private const val DUPLICATE_EXIF_STOP = 4
 
 private val DUPLICATE_LOOSE_LIGHT = Color(0xFF111111)
 private val DUPLICATE_NEUTRAL_LIGHT = Color(0xFF495057)

@@ -1005,8 +1005,10 @@ class SearchRepository(private val context: Context) {
         private const val LEGACY_QF = "meaning^3 text file_name_text folder_text camera_text"
         private const val LEGACY_FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,labels"
 
+        // Meaning tiers (cosine 0.94 / 0.96 / 0.98 to the nearest neighbour, set on the server), then pixels
         val DUPLICATE_FIELDS = listOf(
-            "dup_w3_hash", "dup_any4_ss", "dup_w5_hash",
+            "dup_m94_hash", "dup_m96_hash", "dup_m98_hash",
+            "dup_px_hash",
             "dup_exif_hash",
 
             "file_name", "size_bytes",
@@ -1014,7 +1016,7 @@ class SearchRepository(private val context: Context) {
             "file_hash",
         )
 
-        val MULTI_KEY_FIELDS = setOf("dup_any4_ss")
+        val MULTI_KEY_FIELDS = emptySet<String>()
 
         const val MAX_GROUP = 50
 
@@ -1028,7 +1030,7 @@ class SearchRepository(private val context: Context) {
 
         const val MAX_GROUPS = 2000
 
-        const val DEFAULT_DUPLICATE_LEVEL = 2
+        const val DEFAULT_DUPLICATE_LEVEL = 1
 
         const val GROUPS_PAGE = 20
 

@@ -137,9 +137,10 @@
         <item quantity="other">Ștergi %1$s de poze?</item>
     </plurals>
     <string-array name="dup_kinds">
-        <item>Primele 3 cuvinte la fel</item>
-        <item>Oricare 4 cuvinte la fel</item>
-        <item>Toate cele 5 cuvinte la fel</item>
+        <item>Sens asemănător</item>
+        <item>Foarte asemănătoare</item>
+        <item>Aproape la fel</item>
+        <item>Arată la fel (pixeli)</item>
         <item>Aceeași poză (EXIF)</item>
         <item>Același nume de fișier</item>
         <item>Aceeași mărime de fișier</item>

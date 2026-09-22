@@ -137,9 +137,10 @@
         <item quantity="other">¿Eliminar %1$s fotos?</item>
     </plurals>
     <string-array name="dup_kinds">
-        <item>Mismas 3 primeras palabras</item>
-        <item>4 palabras cualesquiera iguales</item>
-        <item>Las 5 palabras iguales</item>
+        <item>Significado parecido</item>
+        <item>Muy parecido</item>
+        <item>Casi igual</item>
+        <item>Se ve igual (píxeles)</item>
         <item>Misma foto (EXIF)</item>
         <item>Mismo nombre de archivo</item>
         <item>Mismo tamaño de archivo</item>

@@ -131,9 +131,10 @@
         <item quantity="other">%1$s 枚の写真を削除しますか？</item>
     </plurals>
     <string-array name="dup_kinds">
-        <item>最初の3語が一致</item>
-        <item>任意の4語が一致</item>
-        <item>5語すべて一致</item>
+        <item>意味が近い</item>
+        <item>とても近い</item>
+        <item>ほぼ同じ</item>
+        <item>見た目が同じ(ピクセル)</item>
         <item>同じ写真（EXIF）</item>
         <item>同じファイル名</item>
         <item>同じファイルサイズ</item>
