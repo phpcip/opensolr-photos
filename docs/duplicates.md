@@ -6,12 +6,22 @@ calls a group a duplicate, because only the last stop can prove one.
 
 ## The slider
 
-23 stops, from 0 to 22, with the name of the kind under it, the same in the library-wide view and in *Similar to this photo*. Both open at stop 0.
+9 stops, from 0 to 8, with the name of the kind under it, the same in the library-wide view and in *Similar to this photo*. Both open at stop 0.
 
-- **Stops 0 to 17: the words.** Same first 2 words, then the same 2 words and the same camera, then the same for 3, 4, … up to 10. A key exists only when the photo really has that many labels, so the wider stops answer only for photos the model had a lot to say about. The twin asks for the same `camera_model`; in *Similar to this photo* that means the anchor's own camera.
-- **Stop 18, *Full description match*:** the whole reading of the photo, lowercased, split on commas, repeats dropped, sorted (`dup_desc_hash`). With a model that only names things, this is all its labels, however many.
-- **Stop 19, *Same photo (EXIF)*:** time taken, camera make and model, lens, ISO, exposure, f-number, focal length, GPS position and altitude (`dup_exif_hash`).
-- **Stops 20 to 22:** the same file name, the same size in bytes, and the md5 of the original file — the strictest of all, worked out on the phone, since the server only ever sees the 1024 px copy.
+| Stop | Name | Photos are grouped when… | Field |
+|---|---|---|---|
+| 0 | *Same first 2 words* | the image model's first 2 labels match, in any order | `dup_w2_hash` |
+| 1 | *Same first 2 words, same camera* | as above, and `camera_model` is the same | `dup_w2_hash` + `camera_model` |
+| 2 | *Same first 3 words* | the first 3 labels match | `dup_w3_hash` |
+| 3 | *Same first 3 words, same camera* | as above, and the camera is the same | `dup_w3_hash` + `camera_model` |
+| 4 | *Full description match* | the whole reading of the photo is the same: lowercased, split on commas, repeats dropped, sorted; never your own wording | `dup_desc_hash` |
+| 5 | *Same photo (EXIF)* | EXIF: time taken, camera make, camera model, lens, ISO, exposure, f-number, focal length, GPS position, altitude | `dup_exif_hash` |
+| 6 | *Same file name* | file name only, without the folder, since several folders can be indexed | `file_name` |
+| 7 | *Same file size* | size in bytes. Not the same as the same file: a camera pads its files to whole blocks, so unrelated photos share a size exactly | `size_bytes` |
+| 8 | *Same file (exact copy)* | the md5 of the original file, worked out on the phone — the server only ever sees the 1024 px copy | `file_hash` |
+
+There are no stops past three words: an image model that names two or three things has nothing to say at
+"first 4", and the server writes no key for them.
 
 The EXIF key leaves out file size, pixel size, orientation and modification time, so a photo that went
 through a simple edit keeps it.
@@ -26,8 +36,8 @@ The keys are written by the server when a photo is indexed (`photos_ingest`) or 
 (`photos_words`), never from your own tags or wording alone. The schema stores them as `*_hash` string
 fields with docValues, not stored ([index schema](index-schema.md)).
 
-The server writes only these keys (`Api_lib::_photos_duplicate_hashes`): `dup_w2_hash` … `dup_w5_hash`, the
-labels lowercased, repeats dropped, sorted, md5; `dup_desc_hash`, the sentence; and `dup_exif_hash`. The
+The server writes only these keys (`Api_lib::_photos_duplicate_hashes`): `dup_w2_hash` and `dup_w3_hash`, the
+labels lowercased, repeats dropped, sorted, md5; `dup_desc_hash`, the whole reading; and `dup_exif_hash`. The
 labels are only the object names the image model finds, as many as it finds, never a sentence, and a key
 exists only when the photo really has that many labels: a photo with two labels has no *first 3*.
 

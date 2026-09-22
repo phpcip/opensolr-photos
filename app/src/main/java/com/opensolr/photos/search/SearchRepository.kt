@@ -1025,8 +1025,9 @@ class SearchRepository(private val context: Context) {
         private const val LEGACY_QF = "meaning^3 text file_name_text folder_text camera_text"
         private const val LEGACY_FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,labels"
 
-        /** The widest number of labels a stop groups on: the server writes a key for 2..this many. */
-        const val WORD_STOPS_MAX = 10
+        /** The widest number of labels a stop groups on: the server writes a key for 2..this many.
+         *  Three, because an image model that names two or three things has nothing to say past that. */
+        const val WORD_STOPS_MAX = 3
 
         /** One stop of the slider: the key photos are grouped on, and the field they must also share. */
         data class DuplicateStop(val field: String, val within: String? = null)
