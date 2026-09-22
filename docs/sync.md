@@ -33,15 +33,15 @@ that copy, on the phone, and a first sync compares against an empty copy, so eve
    kept in the `word_retries` table of `PhotoCache`, cleared by *Re-sync selected*), so it can never keep
    the sync busy. A missing place never sends a photo again: the place is looked up once, when the photo is
    handed over, and a photo whose position has no known place is simply indexed without one. Five per call:
-   - make the 640 px copy carrying the original's EXIF, and add the md5 of the original file, and your
+   - make the 1024 px copy carrying the original's EXIF, and add the md5 of the original file, and your
      tags, your wording and the people you named on that photo from the phone's edits when there are any;
-   - one `photos_ingest` call: the server reads the EXIF, asks CLIP and the embedder, finds the place,
+   - one `photos_ingest` call: the server reads the EXIF, asks the image model and the embedder, finds the place,
      keeps the tags and words already in the index for photos the phone did not speak for, builds the
      complete document and writes it into your index. A photo the allowance cannot cover is indexed
      without words and read again at a later sync; the printed text and the words it was read into earlier
      are kept, not blanked, as long as it is the same file — the md5 says so.
 
-   On a plan without vector search nothing is sent to be read at all: no 640 px copy is made and no picture
+   On a plan without vector search nothing is sent to be read at all: no 1024 px copy is made and no picture
    leaves the phone. Those photos are indexed by date, camera, place, file name and your own words, and
    search is lexical.
 6. **Carry up the words** you changed since the last sync — tags, people, wording — through `photos_words`,
@@ -173,9 +173,9 @@ grid shows a turning sync icon; tapping it opens the Sync screen with the phase 
 | The phone cannot open or decode a photo | Skips it, remembers it with its file size (`PhotoCache.skipped`) and does not try it again until the file changes or it is picked for *Re-sync*; the Photos screen lists it under the red *could not be read* icon |
 | The server refuses a photo | Skips that photo, counts it as skipped, continues; tried again at the next sync |
 | Rate limit (per minute or per hour) | Waits as long as the server says, retries up to six times |
-| Monthly AI requests used up | Carries on: from the first refused request, photos are written without CLIP words and without vectors (`quotaHit`) and so without `clip_model`; the phone finds them again in its own copy of the index (`PhotoCache.docsWithoutWords`) and puts them into the first sync after the allowance is back. A photo that had already been read keeps its printed text and its words, matched to the file by md5. The report says how many, with a notification |
+| Monthly AI requests used up | Carries on: from the first refused request, photos are written without the model's words and without vectors (`quotaHit`) and so without `clip_model`; the phone finds them again in its own copy of the index (`PhotoCache.docsWithoutWords`) and puts them into the first sync after the allowance is back. A photo that had already been read keeps its printed text and its words, matched to the file by md5. The report says how many, with a notification |
 | Index over its disk space or bandwidth (HTTP 403) | Stops, notification with a link to pricing |
-| No vector search on the plan | Nothing is sent to be read: no 640 px copy is made and no picture leaves the phone. Photos are indexed by date, camera, place, file name and your own words, and search is lexical. A photo read on an earlier plan keeps its printed text and its words, matched to the file by md5 |
+| No vector search on the plan | Nothing is sent to be read: no 1024 px copy is made and no picture leaves the phone. Photos are indexed by date, camera, place, file name and your own words, and search is lexical. A photo read on an earlier plan keeps its printed text and its words, matched to the file by md5 |
 | Index password changed | Reads the new one from the account, retries once |
 | API key refused | Stops, asks you to sign in again |
 | Anything else | Commits what was written, stops; the next sync continues from where this one got to |

@@ -38,7 +38,7 @@ APK, so the app always uploads exactly what is in the repository.
 | `persons_ss` | string, multi | The same names, each kept whole. No declared field of its own: it matches the `*_ss` dynamic field. The People filter and the phone's copy read it; `persons_t` is analysed text and gives words |
 | `embeddings` | dense vector, 1024, cosine | Vector of `meaning`. On a plan without vector search nothing is sent to be read at all, so `meaning`, `labels`, `ocr_t` and `embeddings` all stay empty: the document is date, camera, place, file name and the owner's own words, and search is lexical |
 | `clip_model`, `embed_model` | string | What produced the labels and the vector |
-| `dup_w2_hash` … `dup_w5_hash`, `dup_desc_hash`, `dup_exif_hash` | string (`*_hash`) | The keys groups of alike photos are made of, written by the server ([similar photos](duplicates.md)) |
+| `dup_w2_hash`, `dup_w3_hash`, `dup_desc_hash`, `dup_exif_hash` | string (`*_hash`) | The keys groups of alike photos are made of, written by the server ([similar photos](duplicates.md)) |
 | `file_hash` | string (`*_hash`) | md5 of the original file, from the phone; the strictest duplicates stop. It is also the identity check on every sync: a photo whose size or modification time changed is weighed against the md5 the index already holds, and if it matches the picture is not read again. It is the key by which the words already in the document (`meaning`, `labels`, `ocr_t`) survive a pass that cannot read the photo |
 | `indexed_at` | date | When the document was written |
 
@@ -132,7 +132,7 @@ every 10 seconds, hard commit every 60 without opening a searcher, `/select` (JS
 and off unless asked), `/suggest` (`AnalyzingInfixLookupFactory` over `suggest`, `buildOnCommit`) and
 `/update`. Two server endpoints write through `/update`, both with `commitWithin=10000`, so search sees a
 change within about 10 seconds, even while a large library is still syncing: `photos_ingest`, which posts a
-document with the 640 px copy of the picture, and `photos_words`, which posts up to 50 photos per call with
+document with the 1024 px copy of the picture, and `photos_words`, which posts up to 50 photos per call with
 no picture at all. A `photos_words` call carries `id`, the tags, the names, `meaning` and `file_hash`; the
 server reads the document, puts the words in, remakes the vector, writes it back and answers with what it
 wrote. That is the read-back-and-rewrite the stored `ocr_t` and the docValues `*_hash` fields above exist

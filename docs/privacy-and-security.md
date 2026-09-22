@@ -8,15 +8,15 @@
 
 | Data | Goes to | Kept there? |
 |---|---|---|
-| A 640 px JPEG copy of each new photo, re-encoded from pixels and carrying the original's EXIF, with the file's name, folder and size, the names of any people already written on the file, and your tags and words for it when this phone has them, five per call — vector search plans only | api.opensolr.com `photos_ingest` | No: processed in memory, the document it produces goes into your index |
-| The same 640 px copy again, for photos CLIP says carry text, so the printed words can be read — vector search plans only | opensolr.com `image_ocr`, then one Opensolr Solr server for the reading itself | No: read in memory on a temporary file that is deleted immediately; the text it produces goes into your index. The reading is cached against the picture's md5 so the same photo is never sent twice |
+| A 1024 px JPEG copy of each new photo, re-encoded from pixels and carrying the original's EXIF, with the file's name, folder and size, the names of any people already written on the file, and your tags and words for it when this phone has them, five per call — vector search plans only | api.opensolr.com `photos_ingest` | No: processed in memory, the document it produces goes into your index |
+| The same 1024 px copy is also read for printed words — vector search plans only | opensolr.com `image_ocr`, then one Opensolr Solr server for the reading itself | No: read in memory on a temporary file that is deleted immediately; the text it produces goes into your index. The reading is cached against the picture's md5 so the same photo is never sent twice |
 | The words you saved on up to 50 photos at a time — their id, tags, people, wording and the file's md5, as text, with no picture attached | api.opensolr.com `photos_words` | No: the server reads each document, puts the words in, makes the vector again and writes it back to your index |
 | Your typed searches | api.opensolr.com `embed` (vector search plans), then your index `/select` | Not by the app; the query goes to your own index like any search on it |
 | Labels, vector, the text printed in the photo, the people, your own tags and wording, the place, EXIF fields, path, folder, file name, size, the file's md5, duplicate keys | Your Opensolr Index | Yes, until the photo leaves the phone or you empty the index |
 | Account email and API key | opensolr.com, with each API call | It is your account |
 
 On a plan without vector search no picture is ever sent to be read: neither `photos_ingest` nor `image_ocr`
-receives a 640 px copy, and the photo is indexed from its date, camera, place, file name and your own words.
+receives a 1024 px copy, and the photo is indexed from its date, camera, place, file name and your own words.
 Search is then lexical.
 
 A saved tag, name or wording is written on the phone first and is finished there. The sync that starts

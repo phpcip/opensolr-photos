@@ -14,7 +14,7 @@ nothing else.
 
 - Finds photos through Android's MediaStore, in the folders you chose (DCIM by default).
 - Reads each photo's EXIF metadata itself: date, camera, lens, exposure, place.
-- Makes a small upright JPEG copy (640 px on the long edge) for the reader. The copy is re-encoded from
+- Makes a small upright JPEG copy (1024 px on the long edge) for the reader. The copy is re-encoded from
   pixels, so it carries no metadata. Without vector search on the plan nothing is read from it.
 - Reads the photo's own facts from the file: its EXIF, and the names of the people in it when something has
   already written them there (`PersonInImage` in XMP).
@@ -71,21 +71,20 @@ Account and index management:
 The AI endpoints:
 
 - `photos_ingest` takes up to ten photos at once and indexes them completely on the server: EXIF from
-  the copy, the words CLIP sees (`openai/clip-vit-large-patch14` against a vocabulary of about 51,000
-  labels, with the ImageNet-21k and iNaturalist 2021 parts left out, a stoplist, and a small scene
-  vocabulary), the search vector of those words, the place of the GPS position, your tags and words kept
-  from the index, the [duplicate keys](duplicates.md) (from CLIP's labels and the EXIF, never from your
-  tags or wording), and the write into your index with `commitWithin=10000`. A tenth of an AI request per
+  the copy, what the image model reads in the photo (one sentence describing it, plus the objects it
+  names), the search vector of that text, the place of the GPS position, your tags and words kept
+  from the index, the [duplicate keys](duplicates.md) (from the model's reading and the EXIF, never from
+  your tags or wording), and the write into your index with `commitWithin=10000`. A tenth of an AI request per
   photo that needed the models. The copies are not stored.
   What the index already held is kept rather than blanked when a later pass cannot produce it — the printed
   text and the words the photo was read into survive a pass made without vector search on the plan, or with
   the month's AI allowance spent, as long as it is the same file, which the md5 sent with it proves. The
   date is kept the same way, so a photo with no date of its own does not jump to today when your tags are
   written into the file.
-- The **text printed in the photo** is read in the same pass, when there is any: CLIP decides first (a
-  photo has to carry a text-family label among its top 50 for the reading to be worth it, so a wedding
-  photo is never sent), and the reading itself happens on Opensolr's OCR servers — Solr machines that run
-  nothing else — through `POST /solr_manager/api/image_ocr` on opensolr.com. It lands in the `ocr_t` field
+- The **text printed in the photo** is read in the same pass, on every photo: tesseract reads it on
+  Opensolr's side, at the same time as the image model works, and the photo counts as carrying text only
+  when the reading holds at least four real words. The same reading is offered to anyone through
+  `POST /solr_manager/api/image_ocr`. It lands in the `ocr_t` field
   and is searchable with no change on the phone. It costs nothing extra: the photo is still a tenth of a
   request, whether the words, the vector or the printed text was the work.
 - `photos_words` takes up to 50 photos already in the index, **with no picture attached**: your tags, the
@@ -175,7 +174,7 @@ and the install-time full read are never cached.
 | `auth` | `AuthFlow` builds the PKCE request and opens the Custom Tab; `AuthCallbackActivity` receives the App Link |
 | `data` | `AppPrefs` (settings, session, cache seconds, the held filter lists), `SecureStore` (Keystore AES-GCM), `PhotoCache` (SQLite: the phone's copy of the index in `docs`, your unsent edits, the queue of what still has to go up, the retry pauses, the skipped photos), `SearchCache` (the answers the index gave), `Words`, models |
 | `index` | `IndexManager`: index name, find, create, upload config, refresh credentials |
-| `media` | `MediaScanner` (folders, photos, the id function), `PhotoReader` (EXIF, the 640 px copy) |
+| `media` | `MediaScanner` (folders, photos, the id function), `PhotoReader` (EXIF, the 1024 px copy) |
 | `net` | `OpensolrApi` (REST API), `SolrClient` (direct Solr), typed errors |
 | `search` | `SearchRepository`: query, filters, facets, suggest, spellcheck, map pins, duplicates, parsing; `EditRepository`: saving tags and words on the phone first, queueing them for the next sync, reading the index once into the phone's copy (`readIndexIntoCache`, `CLONE_FIELDS`) and keeping that copy in step (`storeDoc`). Tag and name suggestions are worked out in `AppViewModel` from the phone's copy |
 | `ui/map` | `PhotoClusterOverlay`: grouping and drawing the markers on the osmdroid map |

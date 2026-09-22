@@ -27,7 +27,7 @@ Six problems, in the order they mattered. Everything in the feature table below 
 
 1. **The pictures were going to Google.** Family, holidays, documents, everything, into someone else's
    cloud to be read by someone else's models. Here your library never leaves your folders: no photo
-   backup, no Google account, no ads, no analytics. To read a photo the app sends a 640 px copy that is
+   backup, no Google account, no ads, no analytics. To read a photo the app sends a 1024 px copy that is
    described and thrown away; the originals stay where they are.
 2. **Twenty thousand photos, and no way to find one.** Type what you remember — *dog on the beach*,
    *my passport*, a friend's name — and the photo is on screen. A real search engine, not a grid you
@@ -87,10 +87,10 @@ Six problems, in the order they mattered. Everything in the feature table below 
    and the duplicate keys. From then on the copy is kept in step by every write, and the index is not
    read whole again.
 5. **Sync.** The app compares the folders you chose with its own copy, on the phone, without asking the
-   index anything. For every photo the copy does not have, it makes a 640 px copy carrying the original's
+   index anything. For every photo the copy does not have, it makes a 1024 px copy carrying the original's
    EXIF and hands it, five at a time, to Opensolr's `photos_ingest` endpoint, together with the names of
-   any people already written on the file, and your tags and words for it when this phone has them. The server does the rest: reads the EXIF, asks CLIP what the
-   photo shows, turns those words into a search vector, reads the text printed in the photo when CLIP says
+   any people already written on the file, and your tags and words for it when this phone has them. The server does the rest: reads the EXIF, asks the image model what the
+   photo shows, turns that reading into a search vector, reads the text printed in the photo when there is
    there is any, turns the GPS position into a place, keeps the tags and words already in the index, and
    writes the complete document into your index itself. The phone's part ends with the upload
    ([sync](docs/sync.md)).
@@ -135,7 +135,7 @@ The APK is signed with the Opensolr Photos release key. SHA-256 of the signing c
   <img src="docs/images/data-boundaries.svg" alt="Where each piece of data lives" width="100%">
 </p>
 
-- **Originals never leave the phone.** Only a 640 px re-encoded copy is sent to be indexed, carrying the
+- **Originals never leave the phone.** Only a 1024 px re-encoded copy is sent to be indexed, carrying the
   original's EXIF (time, camera, position) and the names of any people already written on the file; the copy is processed in memory and
   not stored. The position, rounded, is turned into a place name on the server.
 - **The map** draws OpenStreetMap tiles, requested only while the map screen is open. That is the only
@@ -188,7 +188,7 @@ app/src/main/java/com/opensolr/photos/
   auth/     browser sign-in (PKCE) and the callback activity
   data/     preferences, Keystore encryption, the phone's copy of the index, models
   index/    finding, creating and setting up the phone's index
-  media/    MediaStore scanning, EXIF, the 640 px copy
+  media/    MediaStore scanning, EXIF, the 1024 px copy
   net/      Opensolr REST API and direct Solr client
   search/   query building, albums, duplicates, tag edits and result parsing
   sync/     the sync engine, WorkManager worker, schedule, notifications

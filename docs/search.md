@@ -136,10 +136,10 @@ An index still on an older configuration (reset postponed) answers 400 to the ne
 then retries once without them.
 
 Without vector search on the plan, nothing is sent to be read at all: no photo goes up to be looked at, so
-there are no CLIP words and no printed text. The photo is indexed by its date, its camera, its place, its
+there is nothing the image model read and no printed text. The photo is indexed by its date, its camera, its place, its
 file name and the owner's own words, and search is lexical over those.
 
-`meaning` holds the labels CLIP gave the photo. `text` also collects the file name, the folder, the camera,
+`meaning` holds what the image model read in the photo: its sentence, or its labels joined when it only names things. `text` also collects the file name, the folder, the camera,
 the place and your tags, so *pixel* or *screenshots* find what you would expect.
 
 ## The people in a photo
@@ -164,7 +164,7 @@ any other app sees them too, and into `persons_t` in the index at once. Names ou
 as XML character references, which every XMP reader turns back into letters. They are in the phone's copy
 of the index as well, so a later read of the photo sends them again.
 
-The names are read on the phone rather than carried on the 640 px copy: `ExifInterface` converts the XMP
+The names are read on the phone rather than carried on the 1024 px copy: `ExifInterface` converts the XMP
 packet to a `String` as ASCII, which turns a name with diacritics into question marks. `PhotoReader
 .personsIn` decodes the raw bytes as UTF-8 and the names travel to `photos_ingest` as JSON, in the `persons`
 field of the photo.
@@ -193,10 +193,10 @@ phone's copy of the index and costs no request.
 
 The owner's own wording of what a photo shows goes into the file too, as `opensolr:Meaning`, capped at
 `PhotoReader.MEANING_MAX_CHARS` (2,000, the same ceiling `photos_ingest` applies). Only a wording the owner
-changed is written; CLIP's words are not, since the server can always produce them again, and *Reset* in
+changed is written; what the model read is not, since the server can always produce it again, and *Reset* in
 the editor removes the property. Tag on a selection has no wording field: it writes the wording this phone
 keeps for a photo, if any, and otherwise leaves the property alone. At indexing the phone's own copy wins,
-then `opensolr:Meaning` from the file (`PhotoReader.opensolrMeaningIn`), then CLIP.
+then `opensolr:Meaning` from the file (`PhotoReader.opensolrMeaningIn`), then the image model.
 
 ## The AI switch
 
@@ -215,11 +215,11 @@ screenshot by what it says, a business card by the person's name. Nothing new to
 on: the words go into the same field the search already reads, so *chevron*, *invoice 4417* or *oak door*
 answer straight away.
 
-On a plan with vector search, only photos that carry text are read at all. CLIP sees the photo first, and
+On a plan with vector search, every photo is read for printed text, and
 unless one of its top 50 labels belongs to the text family (label, document, receipt, invoice, card, ticket,
 menu, poster, screenshot, number…) the photo is never sent for reading. A holiday photo costs nothing and
 the wedding photos are not shipped anywhere. On a plan without vector search nothing is sent to be read in
-the first place: no CLIP, no OCR, and `ocr_t` stays empty.
+the first place: the photo is never read, and `ocr_t` stays empty.
 
 The reading itself happens on Opensolr's OCR servers — Solr machines that do nothing else, never on your
 phone — and it does not cost extra: a photo is a tenth of an AI request whether the work was the words, the
@@ -309,7 +309,7 @@ writes something, so opening and closing the sheet costs nothing. The radius fil
 
 From the second character, after a 200 ms pause in typing, the app POSTs `suggest.q` to the index's
 `/suggest` handler and shows up to eight distinct entries under the search box. The suggester
-(`AnalyzingInfixLookupFactory`, dictionary = the stored `suggest` field: your tags, CLIP labels, camera
+(`AnalyzingInfixLookupFactory`, dictionary = the stored `suggest` field: your tags, the model's labels, camera
 make and model, city, region, province, country) matches anywhere in a term and is rebuilt at every commit.
 Tapping a suggestion searches for it.
 
@@ -359,7 +359,7 @@ downloaded to draw the grid.
   before the press is recognised, so an ordinary tap and an ordinary scroll are untouched. The action is
   still declared in the photo's semantics, for the accessibility services. The bar at the bottom
   works on the ticked photos: **Tag**, **Share**, **Delete**, and **Re-sync N** to have them read again by
-  CLIP (each counts as new AI requests).
+  the image model (each counts as new AI requests).
 - **A tap you can feel** answers picking photos, crossing a year or a month on the scroll bar, a filter going
   on (firmer) or off (lighter), *Done*, and the next page arriving. `Haptics.tick` plays it through the view
   (`performHapticFeedback`), so it needs no VIBRATE permission and obeys the phone's own setting; one switch
@@ -390,7 +390,7 @@ them back. If that delete fails, the next sync removes them anyway.
 - **My tags**: one per entry (commas split), removed with a tap. Stored in `custom_tags`; `custom_tags_text`
   is its tokenised copy, first in `qf` with boost 5.
 - **Tag suggestions**: focusing the tag field lists suggestions under it. With nothing typed, the 5 most
-  used of your tags and the 5 most used CLIP words; while typing (after a 250 ms pause), up to 8 tags and 5
+  used of your tags and the 5 most used of the model's labels; while typing (after a 250 ms pause), up to 8 tags and 5
   words that contain the text anywhere, in any case. They are counted on the phone, from its copy of the
   index, so no request leaves and the list is there as fast as you type. Tags already on the
   photo are not offered, and a word already offered as a tag is not repeated. Tapping a suggestion adds it;
@@ -406,7 +406,7 @@ them back. If that delete fails, the next sync removes them anyway.
 Writing the words into the photo files themselves is the one part that still happens on the spot: Android
 asks for permission to change the files and a progress bar counts them through.
 
-`SyncEngine.applyEdits` puts the edits over CLIP's words every time a photo is written again, so the owner's
+`SyncEngine.applyEdits` puts the edits over what the model read every time a photo is written again, so the owner's
 words always win. After a reinstall the whole copy is pulled down once from the index, so the tags and names
 the photos carried are back before anything is edited.
 

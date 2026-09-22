@@ -70,7 +70,7 @@ Everything below lives under `app/src/main/java/com/opensolr/photos/`. The packa
 ### `media/` — photos on the phone
 
 - `MediaScanner.kt` — lists folders, scans the chosen ones, and holds `photoId()`, the one place a photo's id is computed.
-- `PhotoReader.kt` — reads EXIF metadata and makes the upright 640 px copy sent to be read.
+- `PhotoReader.kt` — reads EXIF metadata and makes the upright 1024 px copy sent to be read.
 
 ### `index/` — the phone's index
 
