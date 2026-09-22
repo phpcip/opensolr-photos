@@ -489,14 +489,14 @@ class SearchRepository(private val context: Context) {
     suspend fun duplicates(level: Int, groupsFrom: Int = 0, groupsLimit: Int = GROUPS_PAGE, query: String = "", filters: SearchFilters = SearchFilters()): DuplicatePage {
         val session = prefs.session ?: throw ServiceException(AppText.s(R.string.err_sign_in_to_search))
         val connection = prefs.connection ?: throw ServiceException(AppText.s(R.string.err_not_set_up))
-        val field = DUPLICATE_FIELDS[level.coerceIn(FIRST_LIBRARY_LEVEL, DUPLICATE_FIELDS.size - 1)]
+        val stop = stopOf(level.coerceAtLeast(FIRST_LIBRARY_LEVEL))
         val (asked, _, _) = queryParams(query, filters, legacy = false, wordsOnly = true)
         val base = asked.filter { it.first != "sort" && it.first != "fl" && it.first != "rows" && it.first != "start" }
         val groups = try {
             try {
-                cachedDuplicateGroups(connection, field, base)
+                cachedDuplicateGroups(connection, stop, base)
             } catch (e: SolrAuthException) {
-                cachedDuplicateGroups(IndexManager(context, prefs, api).refreshConnection(session), field, base)
+                cachedDuplicateGroups(IndexManager(context, prefs, api).refreshConnection(session), stop, base)
             }
         } catch (e: ServiceException) {
 
@@ -695,7 +695,9 @@ class SearchRepository(private val context: Context) {
     }
 
     suspend fun similarTo(photoId: String, level: Int): Pair<List<PhotoHit>, List<Int>> {
-        val field = DUPLICATE_FIELDS[level.coerceIn(0, DUPLICATE_FIELDS.size - 1)]
+        val stop = stopOf(level)
+        val field = stop.field
+        var anchorCamera: String? = null
 
         val keys = try {
             val doc = select(
@@ -703,10 +705,11 @@ class SearchRepository(private val context: Context) {
                     "q" to "*:*",
                     "fq" to "{!term f=id v=\$anchorId}",
                     "anchorId" to photoId,
-                    "fl" to field,
+                    "fl" to (if (stop.within != null) "$field,${stop.within}" else field),
                     "rows" to "1",
                 )
             ).getJSONObject("response").optJSONArray("docs")?.optJSONObject(0)
+            anchorCamera = stop.within?.let { doc?.optString(it)?.trim()?.ifBlank { null } }
 
             doc?.optJSONArray(field)?.let { a -> (0 until a.length()).map { a.optString(it) } }
                 ?: listOfNotNull(doc?.optString(field))
@@ -724,6 +727,12 @@ class SearchRepository(private val context: Context) {
         } else {
             params += "fq" to "{!terms f=$field separator=| v=\$anchorKeys}"
             params += "anchorKeys" to keys.joinToString("|")
+        }
+        // a stop that asks for the same camera answers only with photos taken by the anchor's own
+        if (stop.within != null) {
+            if (anchorCamera == null) return emptyList<PhotoHit>() to emptyList()
+            params += "fq" to "{!field f=${stop.within} v=\$anchorCamera}"
+            params += "anchorCamera" to anchorCamera
         }
         params += "fl" to FIELDS
         params += "rows" to SIMILAR_ROWS.toString()
@@ -756,9 +765,10 @@ class SearchRepository(private val context: Context) {
         }
     }
 
-    private suspend fun cachedDuplicateGroups(connection: IndexConnection, field: String, base: List<Pair<String, String>>): List<List<String>> {
-        val cap = maxGroupOf(field)
-        val within = withinOf(field)
+    private suspend fun cachedDuplicateGroups(connection: IndexConnection, stop: DuplicateStop, base: List<Pair<String, String>>): List<List<String>> {
+        val cap = MAX_GROUP
+        val field = stop.field
+        val within = stop.within
 
         val key = SearchCache.key(
             connection.indexName,
@@ -1012,24 +1022,32 @@ class SearchRepository(private val context: Context) {
         private const val LEGACY_QF = "meaning^3 text file_name_text folder_text camera_text"
         private const val LEGACY_FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,labels"
 
-        // The slider's stops, in both views: the model's first 2..5 labels, its whole sentence, then EXIF and the file keys
-        val DUPLICATE_FIELDS = listOf(
-            "dup_w2_hash", "dup_w3_hash", "dup_w4_hash", "dup_w5_hash",
-            "dup_desc_hash",
-            "dup_exif_hash",
+        /** One stop of the slider: the key photos are grouped on, and the field they must also share. */
+        data class DuplicateStop(val field: String, val within: String? = null)
 
-            "file_name", "size_bytes",
+        // The stops, in both views, from loose to strict: each words stop has its own "and the same
+        // camera" twin (Cip, 09/22/2026 - two labels alone pair photos by arithmetic; the camera turns
+        // those pairs back into one person photographing one thing), then the sentence, the EXIF and
+        // the three file keys.
+        val DUPLICATE_STOPS = listOf(
+            DuplicateStop("dup_w2_hash"), DuplicateStop("dup_w2_hash", "camera_model"),
+            DuplicateStop("dup_w3_hash"), DuplicateStop("dup_w3_hash", "camera_model"),
+            DuplicateStop("dup_w4_hash"), DuplicateStop("dup_w4_hash", "camera_model"),
+            DuplicateStop("dup_w5_hash"), DuplicateStop("dup_w5_hash", "camera_model"),
+            DuplicateStop("dup_desc_hash"),
+            DuplicateStop("dup_exif_hash"),
 
-            "file_hash",
+            DuplicateStop("file_name"), DuplicateStop("size_bytes"),
+
+            DuplicateStop("file_hash"),
         )
+
+        fun stopOf(level: Int): DuplicateStop = DUPLICATE_STOPS[level.coerceIn(0, DUPLICATE_STOPS.size - 1)]
 
         val MULTI_KEY_FIELDS = emptySet<String>()
 
         const val MAX_GROUP = 50
 
-        fun maxGroupOf(field: String): Int = MAX_GROUP
-
-        fun withinOf(field: String): String? = null
 
         const val MAX_GROUPS = 2000
 

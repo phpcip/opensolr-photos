@@ -138,9 +138,13 @@
     </plurals>
     <string-array name="dup_kinds">
         <item>Mismas 2 primeras palabras</item>
+        <item>Mismas 2 primeras palabras, misma cámara</item>
         <item>Mismas 3 primeras palabras</item>
+        <item>Mismas 3 primeras palabras, misma cámara</item>
         <item>Mismas 4 primeras palabras</item>
+        <item>Mismas 4 primeras palabras, misma cámara</item>
         <item>Las 5 palabras iguales</item>
+        <item>Las 5 palabras, misma cámara</item>
         <item>Misma descripción completa</item>
         <item>Misma foto (EXIF)</item>
         <item>Mismo nombre de archivo</item>
