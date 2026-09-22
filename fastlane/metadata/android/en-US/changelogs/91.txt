@@ -1,0 +1,2 @@
+Tagging many photos at once shows how far it has got, and the sync starts visibly right after.
+A pressed button is now clearly marked, and screens fade into place instead of snapping.
