@@ -688,7 +688,6 @@ class SearchRepository(private val context: Context) {
     }
 
     suspend fun similarTo(photoId: String, level: Int): Pair<List<PhotoHit>, List<Int>> {
-        if (level in MEANING_FLOORS.indices) return similarByMeaning(photoId, MEANING_FLOORS[level])
         val field = DUPLICATE_FIELDS[level.coerceIn(0, DUPLICATE_FIELDS.size - 1)]
 
         val keys = try {
@@ -726,54 +725,6 @@ class SearchRepository(private val context: Context) {
 
         val hits = parse(select(params), false, null).hits.sortedByDescending { it.id == photoId }
         return hits to if (hits.isEmpty()) emptyList() else listOf(hits.size)
-    }
-
-    /**
-     * Photos whose vector is at least [floor] alike (cosine) to [photoId]'s: the anchor's own
-     * embedding text (SyncEngine.embeddingText, what the server embedded it from) embedded as a
-     * document, then one kNN search. DenseVectorField cosine scores are (1 + cos) / 2.
-     */
-    private suspend fun similarByMeaning(photoId: String, floor: Double): Pair<List<PhotoHit>, List<Int>> {
-        val session = prefs.session ?: throw ServiceException(AppText.s(R.string.err_sign_in_to_search))
-        val connection = prefs.connection ?: throw ServiceException(AppText.s(R.string.err_not_set_up))
-        val anchor = select(
-            listOf(
-                "q" to "*:*",
-                "fq" to "{!term f=id v=\$anchorId}",
-                "anchorId" to photoId,
-                "fl" to "id,meaning,file_name,persons_ss,persons_t,custom_tags,country,city,region",
-                "rows" to "1",
-            )
-        ).getJSONObject("response").optJSONArray("docs")?.optJSONObject(0) ?: return emptyList<PhotoHit>() to emptyList()
-        val text = com.opensolr.photos.sync.SyncEngine.embeddingText(anchor)
-        if (text.isBlank()) return emptyList<PhotoHit>() to emptyList()
-        val vector = embedDocOnce(session, connection.indexName, text)
-        val json = select(
-            listOf(
-                "q" to "{!knn f=embeddings topK=$SIMILAR_ROWS}" + vector.joinToString(",", "[", "]"),
-                "fl" to FIELDS,
-                "rows" to SIMILAR_ROWS.toString(),
-            )
-        )
-        val minScore = (1.0 + floor) / 2.0
-        val hits = parse(json, false, null).hits
-            .filter { it.id == photoId || it.score >= minScore }
-            .sortedByDescending { it.id == photoId }
-        return hits to if (hits.size < 2) emptyList() else listOf(hits.size)
-    }
-
-    private suspend fun embedDocOnce(session: com.opensolr.photos.data.Session, indexName: String, text: String): FloatArray {
-        val key = "doc|$indexName|$text"
-        val now = System.currentTimeMillis()
-        synchronized(EMBEDDED) {
-            EMBEDDED[key]?.let { (at, vector) -> if (now - at < EMBED_HOLD_MS) return vector }
-        }
-        val vector = api.batchEmbed(session, indexName, listOf(text)).first()
-        synchronized(EMBEDDED) {
-            EMBEDDED[key] = now to vector
-            while (EMBEDDED.size > EMBED_HELD) EMBEDDED.remove(EMBEDDED.keys.first())
-        }
-        return vector
     }
 
     private suspend fun select(params: List<Pair<String, String>>): JSONObject {
@@ -1054,10 +1005,9 @@ class SearchRepository(private val context: Context) {
         private const val LEGACY_QF = "meaning^3 text file_name_text folder_text camera_text"
         private const val LEGACY_FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,labels"
 
-        // Stops 0-2 are "similar meaning": a kNN search at view time around one photo's vector
-        // (MEANING_FLOORS), so they exist only in "Similar to this photo"; the rest are stored keys.
+        // The slider's stops, in both views: the model's first 2..5 labels, then EXIF and the file keys
         val DUPLICATE_FIELDS = listOf(
-            "knn_0.94", "knn_0.96", "knn_0.98",
+            "dup_w2_hash", "dup_w3_hash", "dup_w4_hash", "dup_w5_hash",
             "dup_exif_hash",
 
             "file_name", "size_bytes",
@@ -1071,7 +1021,7 @@ class SearchRepository(private val context: Context) {
 
         const val LOOSE_MAX_GROUP = 5
 
-        private const val LOOSE_FIELD = "dup_w3_hash"
+        private const val LOOSE_FIELD = "dup_w2_hash"
 
         fun maxGroupOf(field: String): Int = if (field == LOOSE_FIELD) LOOSE_MAX_GROUP else MAX_GROUP
 
@@ -1079,10 +1029,7 @@ class SearchRepository(private val context: Context) {
 
         const val MAX_GROUPS = 2000
 
-        val MEANING_FLOORS = listOf(0.94, 0.96, 0.98)
-
-        // First stop of the library-wide view: the meaning stops need one photo to be around
-        const val FIRST_LIBRARY_LEVEL = 3
+        const val FIRST_LIBRARY_LEVEL = 0
 
         const val DEFAULT_DUPLICATE_LEVEL = FIRST_LIBRARY_LEVEL
 

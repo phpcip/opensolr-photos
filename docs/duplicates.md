@@ -6,27 +6,21 @@ calls a group a duplicate, because only the last stop can prove one.
 
 ## The slider
 
-7 stops, from 0 to 6, with the name of the kind under it. *Similar to this photo* opens at stop 0; the library-wide view has stops 3 to 6 (shown as 0 to 3) and opens at *Same photo (EXIF)*.
+8 stops, from 0 to 7, with the name of the kind under it, the same in the library-wide view and in *Similar to this photo*. Both open at stop 0.
 
 | Stop | Name | Photos are grouped when… | Field |
 |---|---|---|---|
-| 0 | *Similar meaning* | their vectors are at least 0.94 alike (cosine) — only in *Similar to this photo* | kNN at view time |
-| 1 | *Very similar* | at least 0.96 — same | kNN at view time |
-| 2 | *Almost the same* | at least 0.98 — same | kNN at view time |
-| 3 | *Same photo (EXIF)* | EXIF: time taken, camera make, camera model, lens, ISO, exposure, f-number, focal length, GPS position, altitude | `dup_exif_hash` |
-| 4 | *Same file name* | file name only, without the folder, since several folders can be indexed | `file_name` |
-| 5 | *Same file size* | size in bytes. Not the same as the same file: a camera pads its files to whole blocks, so unrelated photos share a size exactly | `size_bytes` |
-| 6 | *Same file (exact copy)* | the md5 of the original file, worked out on the phone — the server only ever sees the 640 px copy | `file_hash` |
+| 0 | *Same first 2 words* | the image model's first 2 labels match, in any order, and the camera model is the same; groups over 5 photos dropped | `dup_w2_hash` |
+| 1 | *Same first 3 words* | the first 3 labels match | `dup_w3_hash` |
+| 2 | *Same first 4 words* | the first 4 labels match | `dup_w4_hash` |
+| 3 | *All 5 words the same* | all 5 labels match | `dup_w5_hash` |
+| 4 | *Same photo (EXIF)* | EXIF: time taken, camera make, camera model, lens, ISO, exposure, f-number, focal length, GPS position, altitude | `dup_exif_hash` |
+| 5 | *Same file name* | file name only, without the folder, since several folders can be indexed | `file_name` |
+| 6 | *Same file size* | size in bytes. Not the same as the same file: a camera pads its files to whole blocks, so unrelated photos share a size exactly | `size_bytes` |
+| 7 | *Same file (exact copy)* | the md5 of the original file, worked out on the phone — the server only ever sees the 1024 px copy | `file_hash` |
 
-The vector is the one the photo is searched with: its sentence, people, your tags and its place. The three
-thresholds were measured on a real library of 9,664 photos (09/22/2026): two unrelated photos sit around
-0.82, a photo's nearest neighbour around 0.96; 0.98 is practically the same scene, 0.96 the same kind of
-scene, 0.94 the same subject with some noise, and below that different scenes mix. The EXIF key leaves out
-file size, pixel size, orientation and modification time, so a photo that went through a simple edit keeps
-it.
-
-The words stops (*first 3 / any 4 / all 5 words*) are gone with CLIP: the image model now gives two to five
-labels per photo, so a key made of them grouped every receipt with every other receipt.
+The EXIF key leaves out file size, pixel size, orientation and modification time, so a photo that went
+through a simple edit keeps it.
 
 The slider's colour follows the stop: the loosest tone at 0, through green at the EXIF stop; the three file
 stops are neutral, being on a scale of their own. The scale has one set of colours for the light theme and
@@ -38,12 +32,8 @@ The keys are written by the server when a photo is indexed (`photos_ingest`) or 
 (`photos_words`), never from your own tags or wording alone. The schema stores them as `*_hash` string
 fields with docValues, not stored ([index schema](index-schema.md)).
 
-- **Meaning stops** are not keys: in *Similar to this photo* the app embeds the photo's own text
-  (`SyncEngine.embeddingText`, what the server embedded it from) with `batch_embed`, runs one
-  `{!knn f=embeddings topK=200}` search and keeps the photos whose score reaches the stop's floor
-  (`MEANING_FLOORS`; a cosine score is (1 + cos) / 2). Nothing depends on the order photos were indexed
-  in. The library-wide view starts at stop 3 (`FIRST_LIBRARY_LEVEL`), since those stops need one photo
-  to search around.
+The server writes only these keys (`Api_lib::_photos_duplicate_hashes`): `dup_w2_hash` … `dup_w5_hash`, the
+labels lowercased, repeats dropped, sorted, md5; and `dup_exif_hash`.
 
 Each stop is **one facet request** on its field, sent 300 ms after the slider settles; values seen more than
 once are the groups, biggest first. The answer is held for the cache's lifetime, so walking the slider back

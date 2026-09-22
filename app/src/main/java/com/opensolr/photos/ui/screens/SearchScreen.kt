@@ -596,8 +596,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         if (state.duplicatesMode) {
             DuplicateLevelSlider(
                 level = state.duplicateLevel,
-                // the meaning stops (0-2) search around one photo, so the library-wide view starts after them
-                firstStop = if (state.similarToId != null) 0 else com.opensolr.photos.search.SearchRepository.FIRST_LIBRARY_LEVEL,
+                firstStop = com.opensolr.photos.search.SearchRepository.FIRST_LIBRARY_LEVEL,
                 onLevel = { viewModel.setDuplicateLevel(it) },
                 canSelect = state.duplicateGroups.isNotEmpty(),
 
@@ -1584,14 +1583,14 @@ private fun DuplicateLevelSlider(level: Int, firstStop: Int, onLevel: (Int) -> U
 }
 
 private val DUPLICATE_KIND_NAMES = listOf(
-    "Similar meaning", "Very similar", "Almost the same",
+    "Same first 2 words", "Same first 3 words", "Same first 4 words", "All 5 words the same",
     "Same photo (EXIF)",
     "Same file name", "Same file size", "Same file (exact copy)",
 )
 
 private const val STOP_SLOP = 0.7f
 
-private const val DUPLICATE_EXIF_STOP = 3
+private const val DUPLICATE_EXIF_STOP = 4
 
 private val DUPLICATE_LOOSE_LIGHT = Color(0xFF111111)
 private val DUPLICATE_NEUTRAL_LIGHT = Color(0xFF495057)

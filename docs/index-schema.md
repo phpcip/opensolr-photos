@@ -30,14 +30,14 @@ APK, so the app always uploads exactly what is in the repository.
 | `city`, `region`, `province`, `community`, `country`, `country_code` | string | The nearest named place, from `nearby_places` |
 | `altitude` | float | EXIF, metres |
 | `meaning` | text | The CLIP labels joined with commas |
-| `ocr_t` | text | The text printed **in** the photo, read with tesseract on Opensolr's OCR servers: a petrol receipt, an invoice, a shelf label, a screenshot. Separate from `meaning`, which is what the photo *shows* |
+| `ocr_t` | text | The text printed **in** the photo, read with tesseract on Opensolr's OCR servers: a gas receipt, an invoice, a shelf label, a screenshot. Separate from `meaning`, which is what the photo *shows* |
 | `labels` | string, multi | The CLIP labels one by one |
 | `custom_tags` | string, multi | The owner's tags; `custom_tags_text` is their tokenised copy for search |
 | `persons_t` | text | The names of the people in the photo, as one line, read from the XMP property `PersonInImage` that whatever recognised the faces wrote on the file. No declared field of its own: it matches the `*_t` dynamic field |
 | `persons_ss` | string, multi | The same names, each kept whole. No declared field of its own: it matches the `*_ss` dynamic field. The People filter and the phone's copy read it; `persons_t` is analysed text and gives words |
 | `embeddings` | dense vector, 1024, cosine | Vector of `meaning`. On a plan without vector search nothing is sent to be read at all, so `meaning`, `labels`, `ocr_t` and `embeddings` all stay empty: the document is date, camera, place, file name and the owner's own words, and search is lexical |
 | `clip_model`, `embed_model` | string | What produced the labels and the vector |
-| `dup_w2_hash` … `dup_w5_hash`, `dup_any4_ss`, `dup_exif_hash` | string (`*_hash`, `*_ss`) | The keys groups of alike photos are made of, written by the server ([similar photos](duplicates.md)) |
+| `dup_w2_hash` … `dup_w5_hash`, `dup_exif_hash` | string (`*_hash`) | The keys groups of alike photos are made of, written by the server ([similar photos](duplicates.md)) |
 | `file_hash` | string (`*_hash`) | md5 of the original file, from the phone; the strictest duplicates stop. It is also the identity check on every sync: a photo whose size or modification time changed is weighed against the md5 the index already holds, and if it matches the picture is not read again. It is the key by which the words already in the document (`meaning`, `labels`, `ocr_t`) survive a pass that cannot read the photo |
 | `indexed_at` | date | When the document was written |
 
