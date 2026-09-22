@@ -18,7 +18,7 @@ calls a group a duplicate, because only the last stop can prove one.
 | 5 | *Same first 4 words, same camera* | as above, and the camera is the same | `dup_w4_hash` + `camera_model` |
 | 6 | *All 5 words the same* | all 5 labels match | `dup_w5_hash` |
 | 7 | *All 5 words, same camera* | as above, and the camera is the same | `dup_w5_hash` + `camera_model` |
-| 8 | *Full description match* | the image model's whole sentence is the same, word for word (lowercased, closing period dropped); never your own wording | `dup_desc_hash` |
+| 8 | *Full description match* | the whole reading of the photo is the same, word for word (lowercased, closing period dropped); never your own wording. With a model that only names things, that reading is its labels joined | `dup_desc_hash` |
 | 9 | *Same photo (EXIF)* | EXIF: time taken, camera make, camera model, lens, ISO, exposure, f-number, focal length, GPS position, altitude | `dup_exif_hash` |
 | 10 | *Same file name* | file name only, without the folder, since several folders can be indexed | `file_name` |
 | 11 | *Same file size* | size in bytes. Not the same as the same file: a camera pads its files to whole blocks, so unrelated photos share a size exactly | `size_bytes` |

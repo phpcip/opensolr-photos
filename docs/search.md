@@ -127,8 +127,8 @@ A together with B, C and D, <sentence without its closing period>, label1, label
 ```
 
 One person is just the name; two are `A together with B`; three `A together with B and C`. The sentence is
-the image model's, or your own wording when you wrote one; the labels always follow it. With no sentence the
-labels stand alone, with no labels the sentence does.
+the image model's reading of the photo, or your own wording when you wrote one. Labels the sentence already
+names are not repeated after it, so a model that only names things does not say everything twice.
 
 Without vector search, or when the month's AI requests are used up, or when the vector service does not
 answer, the same request runs with `q={!bool should=$lexicalRaw}` and the app says so above the results.
