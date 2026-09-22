@@ -40,7 +40,7 @@ data class PhotoMetadata(
 
 object PhotoReader {
 
-    private const val CLIP_EDGE_PX = 640
+    private const val CLIP_EDGE_PX = 1024
     private const val JPEG_QUALITY = 85
 
     fun shrinkForClip(context: Context, uri: Uri, rotationDegrees: Int): ByteArray? {
