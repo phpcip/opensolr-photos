@@ -262,6 +262,16 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                 }
                 progress(phase)
             }
+            suspend fun sendPendingEdits() {
+                if (edits.pendingCount() == 0) return
+                try {
+                    edits.sendWords()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                }
+            }
+
             suspend fun queue(photo: LocalPhoto) {
                 if (skippedSizes[photo.id] == photo.sizeBytes) return
                 if (!sent.add(photo.id)) return
@@ -271,6 +281,9 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                     val batch = pending.toList()
                     pending.clear()
                     ingest(batch)
+                    // A photo the owner just edited does not wait behind thousands of unread ones:
+                    // between batches, anything they changed goes up first.
+                    sendPendingEdits()
                 }
             }
 

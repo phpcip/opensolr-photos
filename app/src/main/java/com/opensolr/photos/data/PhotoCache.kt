@@ -1001,10 +1001,9 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
     }
 
     fun putEdits(id: String, edits: Edits) {
-        if (edits.tags.isEmpty() && edits.meaning == null && edits.persons == null) {
-            writableDatabase.delete("edits", "id = ?", arrayOf(id))
-            return
-        }
+        // The row is kept even when everything in it is empty: an empty tag list is the owner
+        // saying the photo has no tags, and dropping the row would let the old ones come back
+        // from the index at the next write.
         val values = ContentValues().apply {
             put("id", id)
             put("tags_json", org.json.JSONArray(edits.tags).toString())

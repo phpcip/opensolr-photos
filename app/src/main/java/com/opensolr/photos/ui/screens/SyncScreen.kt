@@ -1,5 +1,6 @@
 package com.opensolr.photos.ui.screens
 
+import com.opensolr.photos.ui.tapClickable
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
@@ -216,7 +217,7 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
 private fun ScheduleOption(label: String, selected: Boolean, onSelect: () -> Unit) {
     val p = LocalPalette.current
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onSelect).padding(vertical = 4.dp),
+        Modifier.fillMaxWidth().tapClickable(onClick = onSelect).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         RadioButton(selected = selected, onClick = onSelect, colors = RadioButtonDefaults.colors(selectedColor = p.accent, unselectedColor = p.muted))

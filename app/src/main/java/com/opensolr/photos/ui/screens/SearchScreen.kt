@@ -152,6 +152,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
@@ -2954,7 +2955,13 @@ private const val FACET_SEARCH_ROWS = 50
 private val REBUILD_PHASES = setOf("Resetting your index", "Updating the index configuration", "Rebuilding your index")
 
 @OptIn(ExperimentalFoundationApi::class)
-private fun Modifier.combinedClickableCompat(onClick: () -> Unit): Modifier = this.combinedClickable(onClick = onClick)
+@Composable
+private fun Modifier.combinedClickableCompat(onClick: () -> Unit): Modifier {
+    val source = remember { MutableInteractionSource() }
+    return this
+        .scale(com.opensolr.photos.ui.pressedScale(source))
+        .combinedClickable(interactionSource = source, indication = androidx.compose.material3.ripple(), onClick = onClick)
+}
 
 private const val SNAP_ROWS = 4
 

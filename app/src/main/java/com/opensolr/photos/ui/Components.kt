@@ -2,6 +2,13 @@ package com.opensolr.photos.ui
 
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.draw.scale
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -42,6 +49,27 @@ import com.opensolr.photos.ui.theme.LocalPalette
 
 private val Corner = RoundedCornerShape(2.dp)
 
+// Every tap has to be seen: the control shrinks a little while the finger is down and the
+// press ripple keeps its own colour. PRESS_SCALE is the whole effect, in one place.
+private const val PRESS_SCALE = 0.94f
+
+/** A press source and the scale it drives: pass the source to the control, the modifier to its layout. */
+@Composable
+fun pressedScale(source: MutableInteractionSource): Float {
+    val pressed by source.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) PRESS_SCALE else 1f, label = "press")
+    return scale
+}
+
+/** clickable with the press effect, for anything that is not a Material button. */
+@Composable
+fun Modifier.tapClickable(enabled: Boolean = true, onClick: () -> Unit): Modifier {
+    val source = remember { MutableInteractionSource() }
+    return this
+        .scale(if (enabled) pressedScale(source) else 1f)
+        .clickable(enabled = enabled, interactionSource = source, indication = androidx.compose.material3.ripple()) { onClick() }
+}
+
 @Composable
 fun SectionLabel(text: String, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
@@ -55,10 +83,12 @@ fun SectionLabel(text: String, modifier: Modifier = Modifier) {
 @Composable
 fun AccentButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     val p = LocalPalette.current
+    val source = remember { MutableInteractionSource() }
     Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.height(52.dp),
+        interactionSource = source,
+        modifier = modifier.height(52.dp).scale(pressedScale(source)),
         shape = Corner,
         colors = ButtonDefaults.buttonColors(containerColor = p.accentFill, contentColor = p.onAccentFill, disabledContainerColor = p.chip, disabledContentColor = p.muted),
         contentPadding = PaddingValues(horizontal = 24.dp),
@@ -71,10 +101,12 @@ fun AccentButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifie
 @Composable
 fun GhostButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true) {
     val p = LocalPalette.current
+    val source = remember { MutableInteractionSource() }
     OutlinedButton(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.height(52.dp),
+        interactionSource = source,
+        modifier = modifier.height(52.dp).scale(pressedScale(source)),
         shape = Corner,
         border = BorderStroke(1.dp, if (enabled) p.ink else p.hairline),
         colors = ButtonDefaults.outlinedButtonColors(contentColor = p.ink),

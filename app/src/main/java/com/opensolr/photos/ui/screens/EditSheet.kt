@@ -1,5 +1,6 @@
 package com.opensolr.photos.ui.screens
 
+import com.opensolr.photos.ui.tapClickable
 import com.opensolr.photos.R
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -433,6 +434,6 @@ private fun SuggestionRow(text: String, onPick: () -> Unit) {
         color = p.ink,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onPick).padding(horizontal = 14.dp, vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth().tapClickable(onClick = onPick).padding(horizontal = 14.dp, vertical = 10.dp),
     )
 }

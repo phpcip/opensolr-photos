@@ -1,5 +1,6 @@
 package com.opensolr.photos.ui.screens
 
+import com.opensolr.photos.ui.tapClickable
 import com.opensolr.photos.R
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -450,7 +451,7 @@ private fun PlaceModeChip(label: String, selected: Boolean, enabled: Boolean, on
         modifier = Modifier
             .border(if (selected) 1.5.dp else 1.dp, if (selected) p.accent else p.hairline, Corner)
             .background(if (selected) p.paper else p.chip, Corner)
-            .clickable(enabled = enabled, onClick = onClick)
+            .tapClickable(enabled = enabled, onClick = onClick)
             .padding(horizontal = 10.dp, vertical = 7.dp),
     )
 }
@@ -492,7 +493,7 @@ private fun WordChips(words: List<String>, enabled: Boolean, onRemove: (String) 
                     .clip(Corner)
                     .background(p.paper)
                     .border(1.dp, p.accent, Corner)
-                    .clickable(enabled = enabled) { onRemove(word) }
+                    .tapClickable(enabled = enabled) { onRemove(word) }
                     .padding(horizontal = 10.dp, vertical = 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -547,6 +548,6 @@ private fun BulkSuggestionRow(text: String, onPick: () -> Unit) {
         style = MaterialTheme.typography.bodyMedium,
         color = p.ink,
         maxLines = 1,
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onPick).padding(horizontal = 14.dp, vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth().tapClickable(onClick = onPick).padding(horizontal = 14.dp, vertical = 10.dp),
     )
 }

@@ -1,5 +1,6 @@
 package com.opensolr.photos.ui.screens
 
+import com.opensolr.photos.ui.tapClickable
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -381,7 +382,7 @@ private fun BarChart(rows: List<StatRow>, locale: Locale, open: (StatRow) -> Uni
                 Modifier
                     .fillMaxWidth()
                     .clip(Corner)
-                    .clickable(enabled = row.field != null) { open(row) }
+                    .tapClickable(enabled = row.field != null) { open(row) }
                     .padding(vertical = 3.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -448,7 +449,7 @@ private fun TableRow(row: StatRow, total: Int, locale: Locale, open: (StatRow) -
             Modifier
                 .fillMaxWidth()
                 .heightIn(min = 44.dp)
-                .clickable(enabled = tappable) { open(row) }
+                .tapClickable(enabled = tappable) { open(row) }
                 .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
