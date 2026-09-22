@@ -1273,6 +1273,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val current = _state.value
 
         if (!reset && current.duplicatesMode) { loadMoreDuplicates(); return }
+        // A search typed while the groups are on screen narrows the groups; it does not throw the
+        // owner out of the view. Only "Similar to this photo" keeps its own single question.
+        if (reset && current.duplicatesMode && current.similarToId == null) {
+            _state.update { it.copy(searchedQuery = current.query, duplicateGroupsLoaded = 0) }
+            loadDuplicates(debounceMs = 0)
+            return
+        }
         if (!reset && current.skippedMode) return
         if (!reset && (current.searching || current.endReached)) return
         searchJob?.cancel()
@@ -1769,7 +1776,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(searching = true) }
         searchJob = viewModelScope.launch {
             try {
-                val page = searches.duplicates(level, groupsFrom = from, query = current.searchedQuery, filters = current.filters)
+                val page = searches.duplicates(level, groupsFrom = from, query = current.query, filters = current.filters)
                 _state.update {
                     if (!it.duplicatesMode || it.duplicateLevel != level || it.duplicateGroupsLoaded != from) it
                     else it.copy(
@@ -1956,7 +1963,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     // the groups answer about what is on screen: the typed words and the active filters
                     val asked = _state.value
-                    val first = searches.duplicates(level, groupsFrom = 0, query = asked.searchedQuery, filters = asked.filters)
+                    val first = searches.duplicates(level, groupsFrom = 0, query = asked.query, filters = asked.filters)
                     val allHits = ArrayList(first.hits)
                     val allSizes = ArrayList(first.sizes)
 
@@ -1966,7 +1973,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     var pages = 1
                     while (keepPages && !end && used < hadGroups && pages < REPAGE_MAX) {
                         pages++
-                        val next = searches.duplicates(level, groupsFrom = used, query = asked.searchedQuery, filters = asked.filters)
+                        val next = searches.duplicates(level, groupsFrom = used, query = asked.query, filters = asked.filters)
                         if (next.groupsUsed == 0) break
                         allHits += next.hits
                         allSizes += next.sizes
