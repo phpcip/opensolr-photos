@@ -1,0 +1,3 @@
+Similar photos: every stop of the slider now has a twin that also asks for the same camera, and the stops are marked on the bar again.
+The view answers inside what is on screen: what you typed and the filters you have on narrow the groups.
+A stop exists only when the photo really has that many words.
