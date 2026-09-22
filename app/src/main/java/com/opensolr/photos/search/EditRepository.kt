@@ -15,11 +15,13 @@ class EditRepository(private val context: Context) {
     private val api = OpensolrApi()
     private val cache = PhotoCache.of(context)
 
-    fun saveLocal(id: String, tags: List<String>, meaning: String?, persons: List<String>?) {
+    fun saveLocal(id: String, tags: List<String>, meaning: String?, persons: List<String>?, resetWording: Boolean = false) {
         val clean = tags.distinctWords()
         val names = persons?.distinctWords()
         val wording = meaning?.trim()?.take(com.opensolr.photos.media.PhotoReader.MEANING_MAX_CHARS)?.takeIf { it.isNotEmpty() }
-        cache.putEdits(id, PhotoCache.Edits(clean, wording, names))
+        // no new wording: the owner's earlier one stays, unless they reset it
+        val kept = wording ?: if (resetWording) null else cache.getEdits(id)?.meaning
+        cache.putEdits(id, PhotoCache.Edits(clean, kept, names))
         cache.doc(id)?.let { doc ->
             val finalNames = names ?: doc.persons
             val finalMeaning = wording ?: doc.meaning

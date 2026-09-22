@@ -640,7 +640,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    edits.saveLocal(hit.id, tags, meaning, persons)
+                    edits.saveLocal(hit.id, tags, meaning, persons, resetWording)
                     prefs.facetsJson = null
                     if (resetWording) {
                         prefs.wordingResetIds = prefs.wordingResetIds + hit.id

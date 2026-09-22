@@ -94,7 +94,7 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
     val p = LocalPalette.current
 
     val focusManager = LocalFocusManager.current
-    val clipWords = remember(hit.id) { hit.labels.filter { it.isNotBlank() }.joinToString(", ") }
+    val originalMeaning = remember(hit.id) { hit.meaning.trim() }
     var tags by remember(hit.id) { mutableStateOf(hit.customTags) }
     var newTag by remember(hit.id) { mutableStateOf("") }
     var meaning by remember(hit.id) { mutableStateOf(hit.meaning) }
@@ -146,11 +146,13 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
         newPerson = ""
     }
 
-    fun ownWording(): String? = meaning.trim().takeIf { it.isNotEmpty() && it != clipWords }
+    // New wording only when the owner changed the text; untouched text is never sent as theirs
+    fun ownWording(): String? = meaning.trim().takeIf { it.isNotEmpty() && it != originalMeaning }
+    fun wordingCleared(): Boolean = resetWording && meaning.isBlank()
 
     fun finishSave(changedPersons: List<String>?) {
         val wording = ownWording()
-        viewModel.saveEdits(hit, tags, wording, changedPersons, resetWording = resetWording && wording == null, onDone = onDismiss)
+        viewModel.saveEdits(hit, tags, wording, changedPersons, resetWording = wordingCleared(), onDone = onDismiss)
     }
 
     val originalTags = remember(hit.id) { hit.customTags }
@@ -165,7 +167,7 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
         val namesChanged = persons != originalPersons
         if (result.resultCode == Activity.RESULT_OK) {
             Actions.contentUris(context, listOf(hit)).firstOrNull()?.let {
-                PhotoReader.writeXmp(context, it, hit.mime, if (namesChanged) persons else null, tags, ownWording(), clearMeaning = ownWording() == null)
+                PhotoReader.writeXmp(context, it, hit.mime, if (namesChanged) persons else null, tags, ownWording(), clearMeaning = wordingCleared())
             }
         }
         finishSave(if (namesChanged) persons else null)
@@ -401,7 +403,7 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                                     writeLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
                                 }
                                 else -> {
-                                    PhotoReader.writeXmp(context, uri, hit.mime, if (namesChanged) names else null, tags, ownWording(), clearMeaning = ownWording() == null)
+                                    PhotoReader.writeXmp(context, uri, hit.mime, if (namesChanged) names else null, tags, ownWording(), clearMeaning = wordingCleared())
                                     finishSave(if (namesChanged) names else null)
                                 }
                             }
