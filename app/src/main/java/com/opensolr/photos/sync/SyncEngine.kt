@@ -272,6 +272,17 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                 }
             }
 
+            // A photo the owner asked to be read again while this sync is running does not wait for
+            // the next one, nor behind the thousands still queued: it goes up with the next batch.
+            suspend fun readNow() {
+                val waiting = (prefs.resyncIds - sent).mapNotNull { local[it] }
+                if (waiting.isEmpty()) return
+                waiting.chunked(READ_BATCH).forEach { batch ->
+                    batch.forEach { sent += it.id; total++ }
+                    ingest(batch)
+                }
+            }
+
             suspend fun queue(photo: LocalPhoto) {
                 if (skippedSizes[photo.id] == photo.sizeBytes) return
                 if (!sent.add(photo.id)) return
@@ -281,9 +292,10 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                     val batch = pending.toList()
                     pending.clear()
                     ingest(batch)
-                    // A photo the owner just edited does not wait behind thousands of unread ones:
-                    // between batches, anything they changed goes up first.
+                    // Between batches, whatever the owner touched goes up first: their edits, and
+                    // the photos they asked to have read again.
                     sendPendingEdits()
+                    readNow()
                 }
             }
 
@@ -373,7 +385,8 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
 
             }
             if (rebuild) prefs.rebuildApproved = false
-            if (forced.isNotEmpty()) prefs.resyncIds = emptySet()
+            // only what this run actually sent: anything asked for in the meantime stays queued
+            if (forced.isNotEmpty() || sent.isNotEmpty()) prefs.resyncIds = prefs.resyncIds - sent
             if (wordingReset.isNotEmpty()) prefs.wordingResetIds = prefs.wordingResetIds - wordingReset
             if (rereadSince > 0) prefs.rereadAllSince = 0L
             cache.removeAllExcept(local.keys)
