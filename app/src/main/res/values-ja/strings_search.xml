@@ -130,15 +130,9 @@
     <plurals name="delete_title">
         <item quantity="other">%1$s 枚の写真を削除しますか？</item>
     </plurals>
+    <string name="dup_kind_words">最初の%1$s語が一致</string>
+    <string name="dup_kind_words_camera">最初の%1$s語が一致、同じカメラ</string>
     <string-array name="dup_kinds">
-        <item>最初の2語が一致</item>
-        <item>最初の2語が一致、同じカメラ</item>
-        <item>最初の3語が一致</item>
-        <item>最初の3語が一致、同じカメラ</item>
-        <item>最初の4語が一致</item>
-        <item>最初の4語が一致、同じカメラ</item>
-        <item>5語すべて一致</item>
-        <item>5語すべて一致、同じカメラ</item>
         <item>説明が完全に一致</item>
         <item>同じ写真（EXIF）</item>
         <item>同じファイル名</item>

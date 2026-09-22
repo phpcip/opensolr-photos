@@ -130,15 +130,9 @@
     <plurals name="delete_title">
         <item quantity="other">删除 %1$s 张照片？</item>
     </plurals>
+    <string name="dup_kind_words">前 %1$s 个词相同</string>
+    <string name="dup_kind_words_camera">前 %1$s 个词相同，同一相机</string>
     <string-array name="dup_kinds">
-        <item>前 2 个词相同</item>
-        <item>前 2 个词相同，同一相机</item>
-        <item>前 3 个词相同</item>
-        <item>前 3 个词相同，同一相机</item>
-        <item>前 4 个词相同</item>
-        <item>前 4 个词相同，同一相机</item>
-        <item>5 个词全部相同</item>
-        <item>5 个词全部相同，同一相机</item>
         <item>描述完全相同</item>
         <item>同一张照片（EXIF）</item>
         <item>文件名相同</item>

@@ -133,15 +133,9 @@
         <item quantity="one">%1$s Foto löschen?</item>
         <item quantity="other">%1$s Fotos löschen?</item>
     </plurals>
+    <string name="dup_kind_words">Erste %1$s Wörter gleich</string>
+    <string name="dup_kind_words_camera">Erste %1$s Wörter gleich, gleiche Kamera</string>
     <string-array name="dup_kinds">
-        <item>Erste 2 Wörter gleich</item>
-        <item>Erste 2 Wörter gleich, gleiche Kamera</item>
-        <item>Erste 3 Wörter gleich</item>
-        <item>Erste 3 Wörter gleich, gleiche Kamera</item>
-        <item>Erste 4 Wörter gleich</item>
-        <item>Erste 4 Wörter gleich, gleiche Kamera</item>
-        <item>Alle 5 Wörter gleich</item>
-        <item>Alle 5 Wörter, gleiche Kamera</item>
         <item>Gleiche Beschreibung</item>
         <item>Gleiches Foto (EXIF)</item>
         <item>Gleicher Dateiname</item>

@@ -6,23 +6,12 @@ calls a group a duplicate, because only the last stop can prove one.
 
 ## The slider
 
-13 stops, from 0 to 12, with the name of the kind under it, the same in the library-wide view and in *Similar to this photo*. Both open at stop 0. Every words stop has its own twin that also asks for the same camera model: two labels alone pair photos by arithmetic, and the camera turns those pairs back into one person photographing one thing. In *Similar to this photo* the twin means the anchor's own camera.
+23 stops, from 0 to 22, with the name of the kind under it, the same in the library-wide view and in *Similar to this photo*. Both open at stop 0.
 
-| Stop | Name | Photos are grouped when… | Field |
-|---|---|---|---|
-| 0 | *Same first 2 words* | the image model's first 2 labels match, in any order | `dup_w2_hash` |
-| 1 | *Same first 2 words, same camera* | as above, and `camera_model` is the same | `dup_w2_hash` + `camera_model` |
-| 2 | *Same first 3 words* | the first 3 labels match | `dup_w3_hash` |
-| 3 | *Same first 3 words, same camera* | as above, and the camera is the same | `dup_w3_hash` + `camera_model` |
-| 4 | *Same first 4 words* | the first 4 labels match | `dup_w4_hash` |
-| 5 | *Same first 4 words, same camera* | as above, and the camera is the same | `dup_w4_hash` + `camera_model` |
-| 6 | *All 5 words the same* | all 5 labels match | `dup_w5_hash` |
-| 7 | *All 5 words, same camera* | as above, and the camera is the same | `dup_w5_hash` + `camera_model` |
-| 8 | *Full description match* | the whole reading of the photo is the same, word for word (lowercased, closing period dropped); never your own wording. With a model that only names things, that reading is its labels joined | `dup_desc_hash` |
-| 9 | *Same photo (EXIF)* | EXIF: time taken, camera make, camera model, lens, ISO, exposure, f-number, focal length, GPS position, altitude | `dup_exif_hash` |
-| 10 | *Same file name* | file name only, without the folder, since several folders can be indexed | `file_name` |
-| 11 | *Same file size* | size in bytes. Not the same as the same file: a camera pads its files to whole blocks, so unrelated photos share a size exactly | `size_bytes` |
-| 12 | *Same file (exact copy)* | the md5 of the original file, worked out on the phone — the server only ever sees the 1024 px copy | `file_hash` |
+- **Stops 0 to 17: the words.** Same first 2 words, then the same 2 words and the same camera, then the same for 3, 4, … up to 10. A key exists only when the photo really has that many labels, so the wider stops answer only for photos the model had a lot to say about. The twin asks for the same `camera_model`; in *Similar to this photo* that means the anchor's own camera.
+- **Stop 18, *Full description match*:** the whole reading of the photo, lowercased, split on commas, repeats dropped, sorted (`dup_desc_hash`). With a model that only names things, this is all its labels, however many.
+- **Stop 19, *Same photo (EXIF)*:** time taken, camera make and model, lens, ISO, exposure, f-number, focal length, GPS position and altitude (`dup_exif_hash`).
+- **Stops 20 to 22:** the same file name, the same size in bytes, and the md5 of the original file — the strictest of all, worked out on the phone, since the server only ever sees the 1024 px copy.
 
 The EXIF key leaves out file size, pixel size, orientation and modification time, so a photo that went
 through a simple edit keeps it.

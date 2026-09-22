@@ -1532,7 +1532,7 @@ private fun DuplicateLevelSlider(level: Int, firstStop: Int, onLevel: (Int) -> U
     val p = LocalPalette.current
     var value by remember { mutableStateOf(level.toFloat()) }
     LaunchedEffect(level) { if (value.roundToInt() != level) value = level.toFloat() }
-    val stop = level.coerceIn(firstStop, DUPLICATE_KIND_NAMES.size - 1)
+    val stop = level.coerceIn(firstStop, com.opensolr.photos.search.SearchRepository.DUPLICATE_STOPS.size - 1)
 
     val dark = p.ink.red > 0.5f
     val loose = if (dark) DUPLICATE_LOOSE_DARK else DUPLICATE_LOOSE_LIGHT
@@ -1557,10 +1557,10 @@ private fun DuplicateLevelSlider(level: Int, firstStop: Int, onLevel: (Int) -> U
             },
 
             onValueChangeFinished = { value = level.toFloat() },
-            valueRange = firstStop.toFloat()..(DUPLICATE_KIND_NAMES.size - 1).toFloat(),
+            valueRange = firstStop.toFloat()..(com.opensolr.photos.search.SearchRepository.DUPLICATE_STOPS.size - 1).toFloat(),
 
             // one tick per stop between the ends, so the stops are visible on the bar
-            steps = (DUPLICATE_KIND_NAMES.size - 1 - firstStop - 1).coerceAtLeast(0),
+            steps = (com.opensolr.photos.search.SearchRepository.DUPLICATE_STOPS.size - 1 - firstStop - 1).coerceAtLeast(0),
             colors = SliderDefaults.colors(
                 thumbColor = colour,
                 activeTrackColor = colour,
@@ -1569,7 +1569,7 @@ private fun DuplicateLevelSlider(level: Int, firstStop: Int, onLevel: (Int) -> U
                 inactiveTickColor = p.hairline,
             ),
         )
-        Text("${stop - firstStop} · ${stringArrayResource(R.array.dup_kinds)[stop]}", style = MaterialTheme.typography.labelMedium, color = colour)
+        Text("${stop - firstStop} · ${duplicateKindName(stop)}", style = MaterialTheme.typography.labelMedium, color = colour)
 
         if (showSelectOneOfEach) {
             TextButton(
@@ -1584,19 +1584,18 @@ private fun DuplicateLevelSlider(level: Int, firstStop: Int, onLevel: (Int) -> U
     }
 }
 
-private val DUPLICATE_KIND_NAMES = listOf(
-    "Same first 2 words", "Same first 2 words, same camera",
-    "Same first 3 words", "Same first 3 words, same camera",
-    "Same first 4 words", "Same first 4 words, same camera",
-    "All 5 words the same", "All 5 words, same camera",
-    "Full description match",
-    "Same photo (EXIF)",
-    "Same file name", "Same file size", "Same file (exact copy)",
-)
+// The words stops are named from the number itself; the five after them come from the array.
+@Composable
+private fun duplicateKindName(stop: Int): String {
+    val words = (com.opensolr.photos.search.SearchRepository.WORD_STOPS_MAX - 1) * 2
+    if (stop >= words) return stringArrayResource(R.array.dup_kinds)[(stop - words).coerceIn(0, 4)]
+    val count = com.opensolr.photos.ui.Actions.formatCount((stop / 2 + 2).toLong())
+    return stringResource(if (stop % 2 == 0) R.string.dup_kind_words else R.string.dup_kind_words_camera, count)
+}
 
 private const val STOP_SLOP = 0.7f
 
-private const val DUPLICATE_EXIF_STOP = 9
+private val DUPLICATE_EXIF_STOP = (com.opensolr.photos.search.SearchRepository.WORD_STOPS_MAX - 1) * 2 + 1
 
 private val DUPLICATE_LOOSE_LIGHT = Color(0xFF111111)
 private val DUPLICATE_NEUTRAL_LIGHT = Color(0xFF495057)

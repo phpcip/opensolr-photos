@@ -1022,6 +1022,9 @@ class SearchRepository(private val context: Context) {
         private const val LEGACY_QF = "meaning^3 text file_name_text folder_text camera_text"
         private const val LEGACY_FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,labels"
 
+        /** The widest number of labels a stop groups on: the server writes a key for 2..this many. */
+        const val WORD_STOPS_MAX = 10
+
         /** One stop of the slider: the key photos are grouped on, and the field they must also share. */
         data class DuplicateStop(val field: String, val within: String? = null)
 
@@ -1029,11 +1032,9 @@ class SearchRepository(private val context: Context) {
         // camera" twin (Cip, 09/22/2026 - two labels alone pair photos by arithmetic; the camera turns
         // those pairs back into one person photographing one thing), then the sentence, the EXIF and
         // the three file keys.
-        val DUPLICATE_STOPS = listOf(
-            DuplicateStop("dup_w2_hash"), DuplicateStop("dup_w2_hash", "camera_model"),
-            DuplicateStop("dup_w3_hash"), DuplicateStop("dup_w3_hash", "camera_model"),
-            DuplicateStop("dup_w4_hash"), DuplicateStop("dup_w4_hash", "camera_model"),
-            DuplicateStop("dup_w5_hash"), DuplicateStop("dup_w5_hash", "camera_model"),
+        val DUPLICATE_STOPS = (2..WORD_STOPS_MAX).flatMap { k ->
+            listOf(DuplicateStop("dup_w${k}_hash"), DuplicateStop("dup_w${k}_hash", "camera_model"))
+        } + listOf(
             DuplicateStop("dup_desc_hash"),
             DuplicateStop("dup_exif_hash"),
 
