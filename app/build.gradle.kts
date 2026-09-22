@@ -27,8 +27,8 @@ android {
         applicationId = "com.opensolr.photos"
         minSdk = 26
         targetSdk = 36
-        versionCode = 86
-        versionName = "3.7.0"
+        versionCode = 87
+        versionName = "3.7.1"
     }
 
     flavorDimensions += "store"

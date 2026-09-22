@@ -1,0 +1,3 @@
+A tag you remove stays removed: it was written back into the photo in one place and read from another.
+Your own wording is saved only when you write it. Reset empties it and the photo is read again.
+Tag suggestions offer labels again, not whole sentences.
