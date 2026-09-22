@@ -1,0 +1,1 @@
+A photo you ask to be read again during a sync goes up with the next batch, instead of waiting for the sync to end.
