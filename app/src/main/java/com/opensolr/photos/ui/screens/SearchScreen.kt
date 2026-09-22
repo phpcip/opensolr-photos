@@ -1332,10 +1332,20 @@ private fun buildRows(
             val group = hits.drop(from).take(size)
             if (group.isEmpty()) return@forEachIndexed
 
+            // The heading says what these photos have in common, not only how many: the words they
+            // all carry, or the reading they all share when the group was made on something else
+            // (the same file, the same camera details). A group with neither falls back to the count.
+            val shared = group.map { photo -> photo.labels.map { it.trim() }.filter { it.isNotEmpty() } }
+                .reduce { a, b -> a.filter { word -> b.any { it.equals(word, ignoreCase = true) } } }
+                .take(GROUP_WORDS)
+            val reading = group.first().meaning.trim().trimEnd('.')
+                .takeIf { it.isNotBlank() && group.all { photo -> photo.meaning.trim().trimEnd('.') == it } }
+            val what = shared.joinToString(", ").ifBlank { reading.orEmpty() }
             rows.addGroup(
                 "${group.size} of the same · ${index + 1}",
                 group,
-                text = String.format(words.ofTheSame, Actions.formatCount(group.size.toLong())),
+                text = if (what.isBlank()) String.format(words.ofTheSame, Actions.formatCount(group.size.toLong()))
+                       else "$what · ${Actions.formatCount(group.size.toLong())}",
             )
             from += size
         }
@@ -2993,6 +3003,8 @@ private fun Modifier.combinedClickableCompat(onClick: () -> Unit): Modifier {
         .background(com.opensolr.photos.ui.pressedTint(source), Corner)
         .combinedClickable(interactionSource = source, indication = androidx.compose.material3.ripple(), onClick = onClick)
 }
+
+private const val GROUP_WORDS = 6
 
 private const val PANEL_MS = 180
 
