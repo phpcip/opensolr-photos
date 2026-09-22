@@ -1769,7 +1769,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(searching = true) }
         searchJob = viewModelScope.launch {
             try {
-                val page = searches.duplicates(level, groupsFrom = from)
+                val page = searches.duplicates(level, groupsFrom = from, query = current.searchedQuery, filters = current.filters)
                 _state.update {
                     if (!it.duplicatesMode || it.duplicateLevel != level || it.duplicateGroupsLoaded != from) it
                     else it.copy(
@@ -1954,7 +1954,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         }, how)
                     }
                 } else {
-                    val first = searches.duplicates(level, groupsFrom = 0)
+                    // the groups answer about what is on screen: the typed words and the active filters
+                    val asked = _state.value
+                    val first = searches.duplicates(level, groupsFrom = 0, query = asked.searchedQuery, filters = asked.filters)
                     val allHits = ArrayList(first.hits)
                     val allSizes = ArrayList(first.sizes)
 
@@ -1964,7 +1966,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     var pages = 1
                     while (keepPages && !end && used < hadGroups && pages < REPAGE_MAX) {
                         pages++
-                        val next = searches.duplicates(level, groupsFrom = used)
+                        val next = searches.duplicates(level, groupsFrom = used, query = asked.searchedQuery, filters = asked.filters)
                         if (next.groupsUsed == 0) break
                         allHits += next.hits
                         allSizes += next.sizes

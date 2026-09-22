@@ -481,15 +481,22 @@ class SearchRepository(private val context: Context) {
         return sorted(people) to sorted(tags)
     }
 
-    suspend fun duplicates(level: Int, groupsFrom: Int = 0, groupsLimit: Int = GROUPS_PAGE): DuplicatePage {
+    /**
+     * Groups of alike photos, inside what the owner is looking at: the typed words (as words, no
+     * vector) and every active filter narrow the groups, so "duplicates" answers about this
+     * result set and not about the whole library.
+     */
+    suspend fun duplicates(level: Int, groupsFrom: Int = 0, groupsLimit: Int = GROUPS_PAGE, query: String = "", filters: SearchFilters = SearchFilters()): DuplicatePage {
         val session = prefs.session ?: throw ServiceException(AppText.s(R.string.err_sign_in_to_search))
         val connection = prefs.connection ?: throw ServiceException(AppText.s(R.string.err_not_set_up))
         val field = DUPLICATE_FIELDS[level.coerceIn(FIRST_LIBRARY_LEVEL, DUPLICATE_FIELDS.size - 1)]
+        val (asked, _, _) = queryParams(query, filters, legacy = false, wordsOnly = true)
+        val base = asked.filter { it.first != "sort" && it.first != "fl" && it.first != "rows" && it.first != "start" }
         val groups = try {
             try {
-                cachedDuplicateGroups(connection, field)
+                cachedDuplicateGroups(connection, field, base)
             } catch (e: SolrAuthException) {
-                cachedDuplicateGroups(IndexManager(context, prefs, api).refreshConnection(session), field)
+                cachedDuplicateGroups(IndexManager(context, prefs, api).refreshConnection(session), field, base)
             }
         } catch (e: ServiceException) {
 
@@ -749,14 +756,14 @@ class SearchRepository(private val context: Context) {
         }
     }
 
-    private suspend fun cachedDuplicateGroups(connection: IndexConnection, field: String): List<List<String>> {
+    private suspend fun cachedDuplicateGroups(connection: IndexConnection, field: String, base: List<Pair<String, String>>): List<List<String>> {
         val cap = maxGroupOf(field)
         val within = withinOf(field)
 
         val key = SearchCache.key(
             connection.indexName,
             "/duplicates",
-            listOf("field" to field, "cap" to cap.toString(), "within" to (within ?: "")),
+            listOf("field" to field, "cap" to cap.toString(), "within" to (within ?: "")) + base,
         )
         val ttl = prefs.cacheSeconds
 
@@ -778,7 +785,7 @@ class SearchRepository(private val context: Context) {
         }
 
         return withContext(NonCancellable) {
-            val found = SolrClient(connection).duplicateGroups(field, cap, MAX_GROUPS, within)
+            val found = SolrClient(connection).duplicateGroups(field, cap, MAX_GROUPS, within, base)
             val groups = if (field in MULTI_KEY_FIELDS) withoutSharedPhotos(found) else found
             cache.put(key, JSONArray(groups.map { JSONArray(it) }).toString())
             rememberGroups(key, groups)
@@ -1020,13 +1027,9 @@ class SearchRepository(private val context: Context) {
 
         const val MAX_GROUP = 50
 
-        const val LOOSE_MAX_GROUP = 5
+        fun maxGroupOf(field: String): Int = MAX_GROUP
 
-        private const val LOOSE_FIELD = "dup_w2_hash"
-
-        fun maxGroupOf(field: String): Int = if (field == LOOSE_FIELD) LOOSE_MAX_GROUP else MAX_GROUP
-
-        fun withinOf(field: String): String? = if (field == LOOSE_FIELD) "camera_model" else null
+        fun withinOf(field: String): String? = null
 
         const val MAX_GROUPS = 2000
 

@@ -98,7 +98,7 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
         }
     }
 
-    suspend fun duplicateGroups(field: String, maxGroup: Int, maxGroups: Int, within: String? = null): List<List<String>> {
+    suspend fun duplicateGroups(field: String, maxGroup: Int, maxGroups: Int, within: String? = null, base: List<Pair<String, String>> = listOf("q" to "*:*")): List<List<String>> {
         fun ids() = JSONObject().put("type", "terms").put("field", "id").put("limit", maxGroup + 1)
         val inner = within?.let {
             JSONObject()
@@ -119,7 +119,7 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
                 .put("sort", "count desc")
                 .put("facet", if (inner != null) JSONObject().put("within", inner) else JSONObject().put("ids", ids())),
         )
-        val json = select(listOf("q" to "*:*", "rows" to "0", "json.facet" to facet.toString()))
+        val json = select(base + listOf("rows" to "0", "json.facet" to facet.toString()))
         val buckets = json.optJSONObject("facets")?.optJSONObject("groups")?.optJSONArray("buckets") ?: return emptyList()
 
         fun groupOf(bucket: JSONObject?): List<String>? {

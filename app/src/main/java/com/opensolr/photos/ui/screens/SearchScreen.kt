@@ -1559,7 +1559,8 @@ private fun DuplicateLevelSlider(level: Int, firstStop: Int, onLevel: (Int) -> U
             onValueChangeFinished = { value = level.toFloat() },
             valueRange = firstStop.toFloat()..(DUPLICATE_KIND_NAMES.size - 1).toFloat(),
 
-            steps = 0,
+            // one tick per stop between the ends, so the stops are visible on the bar
+            steps = (DUPLICATE_KIND_NAMES.size - 1 - firstStop - 1).coerceAtLeast(0),
             colors = SliderDefaults.colors(
                 thumbColor = colour,
                 activeTrackColor = colour,
