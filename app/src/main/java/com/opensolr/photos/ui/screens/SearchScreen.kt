@@ -170,6 +170,10 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -211,6 +215,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     val p = LocalPalette.current
     val context = LocalContext.current
     val keyboard = LocalSoftwareKeyboardController.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
     val latestState by androidx.compose.runtime.rememberUpdatedState(state)
     var showFilters by remember { mutableStateOf(false) }
     var details by remember { mutableStateOf<PhotoHit?>(null) }
@@ -262,6 +267,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
 
     var pendingDelete by remember { mutableStateOf(emptySet<String>()) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var showOperators by remember { mutableStateOf(false) }
     val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) viewModel.removeDeleted(pendingDelete)
         pendingDelete = emptySet()
@@ -409,6 +415,13 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                             .padding(6.dp),
                     )
                 }
+                Icon(
+                    painterResource(R.drawable.ic_help), contentDescription = stringResource(R.string.cd_search_help), tint = p.muted,
+                    modifier = Modifier
+                        .size(34.dp)
+                        .combinedClickableCompat { focusManager.clearFocus(); keyboard?.hide(); showOperators = true }
+                        .padding(8.dp),
+                )
             }
         }
 
@@ -871,6 +884,10 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     }
     }
 
+    if (showOperators) {
+        SearchOperatorsDialog(onDismiss = { showOperators = false })
+    }
+
     if (confirmDelete) {
         val chosen = state.selectedIds.size
         AlertDialog(
@@ -948,6 +965,82 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     editing?.let { hit ->
         EditSheet(hit = hit, state = state, viewModel = viewModel, onDismiss = { editing = null })
     }
+}
+
+/** The same Search Operators help as on search.opensolr.com; the syntax itself is untranslated. */
+@Composable
+private fun SearchOperatorsDialog(onDismiss: () -> Unit) {
+    val p = LocalPalette.current
+    val code = SpanStyle(fontFamily = FontFamily.Monospace, color = p.accent, fontWeight = FontWeight.SemiBold)
+
+    @Composable
+    fun Heading(label: String, syntax: String?) {
+        Text(
+            buildAnnotatedString {
+                append(label)
+                if (syntax != null) { append("  "); withStyle(code) { append(syntax) } }
+            },
+            style = MaterialTheme.typography.labelLarge, color = p.ink,
+        )
+    }
+
+    @Composable
+    fun Line(lead: String?, syntax: String, rest: String) {
+        Text(
+            buildAnnotatedString {
+                if (lead != null) { append(lead); append(" ") }
+                withStyle(code) { append(syntax) }
+                append("  ")
+                append(rest)
+            },
+            style = MaterialTheme.typography.bodyMedium, color = p.muted,
+        )
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column {
+                Text(stringResource(R.string.ops_title))
+                Text(stringResource(R.string.ops_sub), style = MaterialTheme.typography.bodyMedium, color = p.muted)
+            }
+        },
+        text = {
+            val example = stringResource(R.string.ops_example)
+            val phraseToo = stringResource(R.string.ops_phrase_too)
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Heading(stringResource(R.string.ops_phrase_h), "\"word1 word2\"")
+                Text(stringResource(R.string.ops_phrase_b), style = MaterialTheme.typography.bodyMedium, color = p.ink)
+                Line(example, "\"machine learning\"", stringResource(R.string.ops_phrase_ex))
+                Text(stringResource(R.string.ops_phrase_ai), style = MaterialTheme.typography.bodyMedium, color = p.muted)
+
+                Spacer(Modifier.height(8.dp))
+                Heading(stringResource(R.string.ops_req_h), "+word")
+                Text(stringResource(R.string.ops_req_b), style = MaterialTheme.typography.bodyMedium, color = p.ink)
+                Line(example, "+laptop 15 inch gaming", stringResource(R.string.ops_req_ex))
+                Line(phraseToo, "+\"13 inch\"", stringResource(R.string.ops_req_phrase))
+
+                Spacer(Modifier.height(8.dp))
+                Heading(stringResource(R.string.ops_exc_h), "-word")
+                Text(stringResource(R.string.ops_exc_b), style = MaterialTheme.typography.bodyMedium, color = p.ink)
+                Line(example, "laptop -refurbished", stringResource(R.string.ops_exc_ex))
+                Line(phraseToo, "-\"open box\"", stringResource(R.string.ops_exc_phrase))
+
+                Spacer(Modifier.height(8.dp))
+                Heading(stringResource(R.string.ops_comb_h), null)
+                Text(stringResource(R.string.ops_comb_b), style = MaterialTheme.typography.bodyMedium, color = p.ink)
+                Line(example, "+laptop +\"13 inch\" -refurbished", stringResource(R.string.ops_comb_ex))
+
+                Spacer(Modifier.height(8.dp))
+                Heading(stringResource(R.string.ops_why_h), null)
+                Text(stringResource(R.string.ops_why_b), style = MaterialTheme.typography.bodyMedium, color = p.ink)
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.ops_close), color = p.accent) } },
+        containerColor = p.paper,
+        titleContentColor = p.ink,
+        textContentColor = p.ink,
+    )
 }
 
 @Composable

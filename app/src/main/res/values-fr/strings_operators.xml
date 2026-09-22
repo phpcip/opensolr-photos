@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cd_search_help">Opérateurs de recherche</string>
+    <string name="ops_title">Opérateurs de recherche</string>
+    <string name="ops_sub">Affinez la recherche avec des phrases, des termes obligatoires et exclus.</string>
+    <string name="ops_example">Exemple :</string>
+    <string name="ops_phrase_too">Marche aussi avec une phrase :</string>
+    <string name="ops_close">Fermer</string>
+    <string name="ops_phrase_h">Phrase exacte</string>
+    <string name="ops_phrase_b">Mettez des mots entre guillemets pour les trouver côte à côte, dans cet ordre.</string>
+    <string name="ops_phrase_ex">ne trouve que les photos où ces deux mots se suivent dans cet ordre.</string>
+    <string name="ops_phrase_ai">Seule, une phrase agit sur la partie mots-clés. Coupez AI pour qu\'elle filtre. Avec + ou - devant, une phrase filtre toujours.</string>
+    <string name="ops_req_h">Terme obligatoire</string>
+    <string name="ops_req_b">Un + devant un mot l\'impose dans chaque résultat. Les autres mots ne font que changer l\'ordre.</string>
+    <string name="ops_req_ex">chaque résultat doit contenir \"laptop\" ; la taille et \"gaming\" ne font que remonter les photos qui les ont.</string>
+    <string name="ops_req_phrase">chaque résultat doit contenir ces deux mots ensemble, dans cet ordre.</string>
+    <string name="ops_exc_h">Terme exclu</string>
+    <string name="ops_exc_b">Un - devant retire toute photo contenant ce mot.</string>
+    <string name="ops_exc_ex">masque tous les portables reconditionnés.</string>
+    <string name="ops_exc_phrase">retire toute photo contenant exactement cette phrase.</string>
+    <string name="ops_comb_h">Les combiner</string>
+    <string name="ops_comb_b">Les trois opérateurs se combinent librement dans une recherche.</string>
+    <string name="ops_comb_ex">doit contenir \"laptop\" et exactement \"13 inch\", sans reconditionnés.</string>
+    <string name="ops_why_h">Pourquoi c\'est utile avec AI</string>
+    <string name="ops_why_b">La recherche AI peut ramener des photos proches qui ne sont pas ce que vous voulez : laptop 1000 GB peut aussi trouver des disques durs externes aux specs proches. Avec +laptop, le mot-clé compte et ils disparaissent.</string>
+</resources>

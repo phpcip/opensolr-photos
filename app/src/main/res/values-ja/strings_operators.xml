@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cd_search_help">検索演算子</string>
+    <string name="ops_title">検索演算子</string>
+    <string name="ops_sub">フレーズ・必須語・除外語で検索を絞り込めます。</string>
+    <string name="ops_example">例:</string>
+    <string name="ops_phrase_too">フレーズにも使えます:</string>
+    <string name="ops_close">閉じる</string>
+    <string name="ops_phrase_h">フレーズ一致</string>
+    <string name="ops_phrase_b">単語を二重引用符で囲むと、その順番で並んだものだけに一致します。</string>
+    <string name="ops_phrase_ex">2つの単語がこの順番で並ぶ写真だけに一致します。</string>
+    <string name="ops_phrase_ai">フレーズ単体はキーワード検索側だけに効きます。絞り込むには AI をオフに。前に + か - を付けたフレーズは常に絞り込みます。</string>
+    <string name="ops_req_h">必須語</string>
+    <string name="ops_req_b">単語の前に + を付けると、すべての結果に必須になります。他の単語は順位に影響するだけです。</string>
+    <string name="ops_req_ex">すべての結果に \"laptop\" が必要。サイズと \"gaming\" は一致する写真を上げるだけ。</string>
+    <string name="ops_req_phrase">すべての結果に2つの単語がこの順番で並んでいる必要があります。</string>
+    <string name="ops_exc_h">除外語</string>
+    <string name="ops_exc_b">前に - を付けると、その単語を含む写真を除外します。</string>
+    <string name="ops_exc_ex">整備済みのノートPCをすべて除外します。</string>
+    <string name="ops_exc_phrase">このフレーズを含む写真をすべて除外します。</string>
+    <string name="ops_comb_h">組み合わせ</string>
+    <string name="ops_comb_b">3つの演算子は1つの検索で自由に組み合わせられます。</string>
+    <string name="ops_comb_ex">\"laptop\" と \"13 inch\" を必須にし、整備済みを除外します。</string>
+    <string name="ops_why_h">AI がオンのときに役立つ理由</string>
+    <string name="ops_why_b">AI 検索は、似ているけれど求めていない写真も出すことがあります。laptop 1000 GB では似た仕様の外付けHDDも出ます。+laptop でキーワード一致を必須にすれば、すぐ消えます。</string>
+</resources>

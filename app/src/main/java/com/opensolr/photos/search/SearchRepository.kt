@@ -383,7 +383,8 @@ class SearchRepository(private val context: Context) {
     private suspend fun search(query: String, filters: SearchFilters, start: Int, rows: Int, legacy: Boolean, freshBias: Boolean, wordsOnly: Boolean): SearchPage {
         val (params, smart, notice) = queryParams(query, filters, legacy, wordsOnly = wordsOnly, freshBias = freshBias)
         val text = query.trim().take(300)
-        if (text.isNotEmpty()) {
+        // no "did you mean" over deliberate operators: the suggestion would drop them
+        if (text.isNotEmpty() && !SearchOperators.parse(text).hasOps) {
 
             params += "spellcheck" to "true"
             params += "spellcheck.q" to text
@@ -835,12 +836,15 @@ class SearchRepository(private val context: Context) {
             params += "q" to "*:*"
             params += "sort" to "taken_at desc, id asc"
         } else {
-            params += "uq" to text
+            // +word / -word / +"phrase" / -"phrase": with AI they leave the text and become
+            // filters (both legs obey an fq); with nothing left to embed, words only, as typed.
+            val ops = SearchOperators.parse(text)
+            val embedText = if (ops.hasOps) ops.base else text
 
             val aiUsable = prefs.account?.let { a -> a.vectorAllowed && (a.maxAiRequests <= 0 || a.aiRequestsUsed < a.maxAiRequests) } == true
-            val vector = if (!wordsOnly && aiUsable && text.trim().length >= 2) {
+            val vector = if (!wordsOnly && aiUsable && embedText.trim().length >= 2) {
                 try {
-                    embedOnce(session, connection.indexName, text)
+                    embedOnce(session, connection.indexName, embedText)
                 } catch (e: QuotaExceededException) {
                     notice = null
                     null
@@ -857,6 +861,20 @@ class SearchRepository(private val context: Context) {
                 legacy -> LEGACY_QF
                 vector != null -> HYBRID_QF
                 else -> QF
+            }
+            if (vector != null && ops.hasOps) {
+                params += "uq" to ops.base
+                val fields = qf.split(' ').filter { it.isNotBlank() }.joinToString(" ") { it.substringBefore('^') }
+                ops.required.forEachIndexed { n, term ->
+                    params += "reqQ$n" to term
+                    params += "fq" to "{!edismax qf=\"$fields\" mm=\"100%\" v=\$reqQ$n}"
+                }
+                ops.excluded.forEachIndexed { n, term ->
+                    params += "negQ$n" to term
+                    params += "fq" to "-{!edismax qf=\"$fields\" mm=\"100%\" v=\$negQ$n}"
+                }
+            } else {
+                params += "uq" to text
             }
             params += "lexicalRaw" to "{!edismax qf=\"$qf\" mm=\"$MM\" v=\$uq}"
             val matched = if (vector != null) {

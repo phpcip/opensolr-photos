@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cd_search_help">Search operators</string>
+    <string name="ops_title">Search operators</string>
+    <string name="ops_sub">Refine your query with phrase, required and excluded terms.</string>
+    <string name="ops_example">Example:</string>
+    <string name="ops_phrase_too">Works on a phrase too:</string>
+    <string name="ops_close">Close</string>
+    <string name="ops_phrase_h">Phrase match</string>
+    <string name="ops_phrase_b">Wrap words in double quotes to match them in that exact order, next to each other.</string>
+    <string name="ops_phrase_ex">matches only photos where those two words appear together in that order.</string>
+    <string name="ops_phrase_ai">On its own, a phrase applies to the keyword side of the search. Turn AI off for it to filter results. With + or - in front, a phrase always filters.</string>
+    <string name="ops_req_h">Required term</string>
+    <string name="ops_req_b">Prefix a word with + to force it into every result. Other (unprefixed) words still influence ranking but aren\'t mandatory.</string>
+    <string name="ops_req_ex">every result must contain \"laptop\"; size and \"gaming\" just boost matching photos.</string>
+    <string name="ops_req_phrase">every result must contain those two words together, in that order.</string>
+    <string name="ops_exc_h">Exclude term</string>
+    <string name="ops_exc_b">Prefix with - to drop any photo containing that word.</string>
+    <string name="ops_exc_ex">hides all refurbished laptops from the results.</string>
+    <string name="ops_exc_phrase">drops every photo containing that exact phrase.</string>
+    <string name="ops_comb_h">Combine them</string>
+    <string name="ops_comb_b">All three operators compose freely in one query.</string>
+    <string name="ops_comb_ex">must contain \"laptop\" and the exact phrase \"13 inch\", excludes anything refurbished.</string>
+    <string name="ops_why_h">Why this matters with AI on</string>
+    <string name="ops_why_b">AI search can bring up similar photos that aren\'t what you wanted: searching laptop 1000 GB may also pull in external hard drives with similar specs. Using +laptop forces the keyword match and cleans those out instantly.</string>
+</resources>

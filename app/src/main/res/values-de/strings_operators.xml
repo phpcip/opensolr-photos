@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cd_search_help">Suchoperatoren</string>
+    <string name="ops_title">Suchoperatoren</string>
+    <string name="ops_sub">Verfeinere die Suche mit Phrasen, Pflicht- und Ausschlussbegriffen.</string>
+    <string name="ops_example">Beispiel:</string>
+    <string name="ops_phrase_too">Geht auch mit einer Phrase:</string>
+    <string name="ops_close">Schließen</string>
+    <string name="ops_phrase_h">Phrase</string>
+    <string name="ops_phrase_b">Setze Wörter in Anführungszeichen, damit sie genau in dieser Reihenfolge nebeneinander stehen.</string>
+    <string name="ops_phrase_ex">findet nur Fotos, in denen beide Wörter zusammen in dieser Reihenfolge vorkommen.</string>
+    <string name="ops_phrase_ai">Allein wirkt eine Phrase nur auf die Stichwortsuche. Schalte AI aus, damit sie filtert. Mit + oder - davor filtert eine Phrase immer.</string>
+    <string name="ops_req_h">Pflichtbegriff</string>
+    <string name="ops_req_b">Ein + vor einem Wort erzwingt es in jedem Ergebnis. Andere Wörter beeinflussen nur die Reihenfolge.</string>
+    <string name="ops_req_ex">jedes Ergebnis muss \"laptop\" enthalten; Größe und \"gaming\" heben passende Fotos nur nach oben.</string>
+    <string name="ops_req_phrase">jedes Ergebnis muss beide Wörter zusammen in dieser Reihenfolge enthalten.</string>
+    <string name="ops_exc_h">Ausschluss</string>
+    <string name="ops_exc_b">Ein - davor entfernt jedes Foto mit diesem Wort.</string>
+    <string name="ops_exc_ex">blendet alle generalüberholten Laptops aus.</string>
+    <string name="ops_exc_phrase">entfernt jedes Foto mit genau dieser Phrase.</string>
+    <string name="ops_comb_h">Kombinieren</string>
+    <string name="ops_comb_b">Alle drei Operatoren lassen sich in einer Suche frei kombinieren.</string>
+    <string name="ops_comb_ex">muss \"laptop\" und genau \"13 inch\" enthalten, ohne generalüberholte.</string>
+    <string name="ops_why_h">Warum das mit AI wichtig ist</string>
+    <string name="ops_why_b">Die AI-Suche kann ähnliche Fotos bringen, die du nicht wolltest: laptop 1000 GB findet auch externe Festplatten mit ähnlichen Daten. Mit +laptop zählt das Stichwort, und die verschwinden sofort.</string>
+</resources>

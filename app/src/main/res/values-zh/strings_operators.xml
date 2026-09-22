@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cd_search_help">搜索运算符</string>
+    <string name="ops_title">搜索运算符</string>
+    <string name="ops_sub">用短语、必含词和排除词细化搜索。</string>
+    <string name="ops_example">示例:</string>
+    <string name="ops_phrase_too">也可用于短语:</string>
+    <string name="ops_close">关闭</string>
+    <string name="ops_phrase_h">短语匹配</string>
+    <string name="ops_phrase_b">用双引号括住词语，只匹配按此顺序相邻出现的内容。</string>
+    <string name="ops_phrase_ex">只匹配这两个词按此顺序连在一起的照片。</string>
+    <string name="ops_phrase_ai">单独的短语只作用于关键词部分。关闭 AI 才会过滤结果。前面加 + 或 - 的短语始终过滤。</string>
+    <string name="ops_req_h">必含词</string>
+    <string name="ops_req_b">在词前加 + 表示每个结果都必须包含。其他词只影响排序。</string>
+    <string name="ops_req_ex">每个结果都必须包含 \"laptop\"；尺寸和 \"gaming\" 只会让相符的照片靠前。</string>
+    <string name="ops_req_phrase">每个结果都必须按此顺序包含这两个词。</string>
+    <string name="ops_exc_h">排除词</string>
+    <string name="ops_exc_b">在词前加 - 会去掉包含该词的所有照片。</string>
+    <string name="ops_exc_ex">隐藏所有翻新笔记本。</string>
+    <string name="ops_exc_phrase">去掉包含这个短语的所有照片。</string>
+    <string name="ops_comb_h">组合使用</string>
+    <string name="ops_comb_b">三种运算符可在一次搜索中自由组合。</string>
+    <string name="ops_comb_ex">必须包含 \"laptop\" 和 \"13 inch\"，排除翻新的。</string>
+    <string name="ops_why_h">为什么开启 AI 时有用</string>
+    <string name="ops_why_b">AI 搜索可能带出相似但不是你想要的照片：搜索 laptop 1000 GB 也可能出现规格相近的移动硬盘。用 +laptop 强制关键词匹配，它们会立刻消失。</string>
+</resources>

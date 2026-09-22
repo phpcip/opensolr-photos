@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cd_search_help">Operadores de búsqueda</string>
+    <string name="ops_title">Operadores de búsqueda</string>
+    <string name="ops_sub">Afina la búsqueda con frases, términos obligatorios y excluidos.</string>
+    <string name="ops_example">Ejemplo:</string>
+    <string name="ops_phrase_too">También con una frase:</string>
+    <string name="ops_close">Cerrar</string>
+    <string name="ops_phrase_h">Frase exacta</string>
+    <string name="ops_phrase_b">Pon palabras entre comillas para encontrarlas juntas, en ese orden.</string>
+    <string name="ops_phrase_ex">solo encuentra fotos donde esas dos palabras aparecen juntas en ese orden.</string>
+    <string name="ops_phrase_ai">Sola, una frase actúa en la parte de palabras clave. Apaga AI para que filtre. Con + o - delante, una frase siempre filtra.</string>
+    <string name="ops_req_h">Término obligatorio</string>
+    <string name="ops_req_b">Un + delante de una palabra la exige en cada resultado. Las demás palabras solo cambian el orden.</string>
+    <string name="ops_req_ex">cada resultado debe contener \"laptop\"; el tamaño y \"gaming\" solo suben las fotos que los tienen.</string>
+    <string name="ops_req_phrase">cada resultado debe contener esas dos palabras juntas, en ese orden.</string>
+    <string name="ops_exc_h">Término excluido</string>
+    <string name="ops_exc_b">Un - delante quita cualquier foto con esa palabra.</string>
+    <string name="ops_exc_ex">oculta todos los portátiles reacondicionados.</string>
+    <string name="ops_exc_phrase">quita cualquier foto con esa frase exacta.</string>
+    <string name="ops_comb_h">Combínalos</string>
+    <string name="ops_comb_b">Los tres operadores se combinan libremente en una búsqueda.</string>
+    <string name="ops_comb_ex">debe contener \"laptop\" y exactamente \"13 inch\", sin reacondicionados.</string>
+    <string name="ops_why_h">Por qué importa con AI</string>
+    <string name="ops_why_b">La búsqueda AI puede traer fotos parecidas que no querías: laptop 1000 GB también puede traer discos duros externos parecidos. Con +laptop manda la palabra clave y desaparecen al instante.</string>
+</resources>

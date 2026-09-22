@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="cd_search_help">Operatori de căutare</string>
+    <string name="ops_title">Operatori de căutare</string>
+    <string name="ops_sub">Rafinează căutarea cu fraze, termeni obligatorii și excluși.</string>
+    <string name="ops_example">Exemplu:</string>
+    <string name="ops_phrase_too">Merge și pe o frază:</string>
+    <string name="ops_close">Închide</string>
+    <string name="ops_phrase_h">Frază exactă</string>
+    <string name="ops_phrase_b">Pune cuvintele între ghilimele ca să fie găsite unul lângă altul, în ordinea asta.</string>
+    <string name="ops_phrase_ex">găsește doar pozele în care cele două cuvinte apar împreună, în ordinea asta.</string>
+    <string name="ops_phrase_ai">Singură, o frază contează doar la partea de cuvinte. Oprește AI ca să filtreze. Cu + sau - în față, o frază filtrează mereu.</string>
+    <string name="ops_req_h">Termen obligatoriu</string>
+    <string name="ops_req_b">Un + în fața unui cuvânt îl cere în fiecare rezultat. Celelalte cuvinte schimbă doar ordinea.</string>
+    <string name="ops_req_ex">fiecare rezultat trebuie să conțină \"laptop\"; mărimea și \"gaming\" doar urcă pozele care le au.</string>
+    <string name="ops_req_phrase">fiecare rezultat trebuie să conțină cele două cuvinte împreună, în ordinea asta.</string>
+    <string name="ops_exc_h">Termen exclus</string>
+    <string name="ops_exc_b">Un - în față scoate orice poză care conține cuvântul.</string>
+    <string name="ops_exc_ex">ascunde toate laptopurile recondiționate.</string>
+    <string name="ops_exc_phrase">scoate orice poză care conține exact fraza asta.</string>
+    <string name="ops_comb_h">Combină-i</string>
+    <string name="ops_comb_b">Toți trei operatorii se combină liber într-o căutare.</string>
+    <string name="ops_comb_ex">trebuie să conțină \"laptop\" și exact \"13 inch\", fără recondiționate.</string>
+    <string name="ops_why_h">De ce contează cu AI</string>
+    <string name="ops_why_b">Căutarea AI poate aduce poze asemănătoare care nu sunt ce voiai: laptop 1000 GB poate aduce și hard diskuri externe cu specificații apropiate. Cu +laptop contează cuvântul și dispar imediat.</string>
+</resources>
