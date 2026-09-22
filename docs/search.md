@@ -123,7 +123,7 @@ The photo's own vector is made of one text, built on the server (`Api_lib::_phot
 indexing and after an edit), each part only when the photo has it:
 
 ```
-A together with B, C and D, <sentence without its closing period>, label1, label2, at <country>, <city>, <region>, labeled this as: tag1, tag2
+A together with B, C and D, <sentence without its closing period>, label1, label2, at <town>, <commune>, <province>, <county>, <country>, labeled this as: tag1, tag2
 ```
 
 One person is just the name; two are `A together with B`; three `A together with B and C`. The sentence is
