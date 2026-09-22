@@ -1,0 +1,1 @@
+Searching while the similar photos view is open now narrows the groups instead of closing the view.
