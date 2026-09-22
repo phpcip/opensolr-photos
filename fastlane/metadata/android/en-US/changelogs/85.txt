@@ -1,0 +1,2 @@
+Similar to this photo finds photos with the same meaning straight away, around the photo you are looking at, without waiting for the library to be read again.
+Photos go to Opensolr five at a time.

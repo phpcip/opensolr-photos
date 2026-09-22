@@ -1930,9 +1930,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val total: Int
                 var similarGroups = emptyList<ResultGroup>()
                 if (anchor != null) {
-                    val tSim = System.currentTimeMillis()
                     val (h, g) = searches.similarTo(anchor, level)
-                    android.util.Log.i("OsTiming", "similarTo level=$level total=${System.currentTimeMillis() - tSim}ms hits=${h.size}")
                     hits = h; groups = g; loaded = g.size; done = true; total = g.size
 
                     val how = _state.value.groupBy
