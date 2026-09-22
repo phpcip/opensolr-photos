@@ -378,7 +378,7 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
             if (state.bulkTagging && state.bulkTagTotal > 0) {
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    stringResource(R.string.tg_writing, Actions.formatCount(state.bulkTagDone.toLong()), Actions.formatCount(state.bulkTagTotal.toLong())),
+                    stringResource(if (state.bulkTagWriting) R.string.tg_writing else R.string.tg_saving, Actions.formatCount(state.bulkTagDone.toLong()), Actions.formatCount(state.bulkTagTotal.toLong())),
                     style = MaterialTheme.typography.bodySmall, color = p.muted,
                 )
                 Spacer(Modifier.height(6.dp))

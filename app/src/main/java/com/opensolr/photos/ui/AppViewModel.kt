@@ -169,6 +169,7 @@ data class UiState(
 
     val bulkTagDone: Int = 0,
     val bulkTagTotal: Int = 0,
+    val bulkTagWriting: Boolean = false,
 
     val selectionPersons: List<FacetValue> = emptyList(),
     val selectionTags: List<FacetValue> = emptyList(),
@@ -743,10 +744,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val clean = tags?.distinctWords()
         val names = persons?.distinctWords()
         if (ids.isEmpty() || (clean == null && names == null)) return
-        _state.update { it.copy(bulkTagging = true, bulkTagError = null, bulkTagDone = 0, bulkTagTotal = if (writeFiles) ids.size else 0) }
+        // the count is shown either way: saving the words alone takes long enough on hundreds of photos
+        _state.update { it.copy(bulkTagging = true, bulkTagError = null, bulkTagDone = 0, bulkTagTotal = ids.size, bulkTagWriting = writeFiles) }
         viewModelScope.launch {
             try {
-                withContext(Dispatchers.IO) { edits.queueForAll(ids, clean, tagsReplace, names, personsReplace) }
+                withContext(Dispatchers.IO) {
+                    edits.queueForAll(ids, clean, tagsReplace, names, personsReplace) { done ->
+                        _state.update { it.copy(bulkTagDone = done) }
+                    }
+                }
+                if (writeFiles) _state.update { it.copy(bulkTagDone = 0) }
                 prefs.facetsJson = null
 
                 searches.clearCache()
@@ -811,6 +818,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
                 flash(AppText.p(R.plurals.vm_saved_n, ids.size, Actions.formatCount(ids.size.toLong())))
+                // the sync shows as started straight away; the real status replaces this in a moment
+                _state.update { it.copy(sync = it.sync.copy(queued = true)) }
                 SyncScheduler.runNow(context)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e

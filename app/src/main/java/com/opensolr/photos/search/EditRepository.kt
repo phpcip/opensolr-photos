@@ -11,6 +11,9 @@ import org.json.JSONObject
 
 class EditRepository(private val context: Context) {
 
+    // how often the bulk edit tells the screen where it is
+    private val PROGRESS_EVERY = 25
+
     private val prefs = AppPrefs(context)
     private val api = OpensolrApi()
     private val cache = PhotoCache.of(context)
@@ -54,11 +57,12 @@ class EditRepository(private val context: Context) {
         }
     }
 
-    fun queueForAll(ids: Collection<String>, tags: List<String>?, tagsReplace: Boolean, persons: List<String>?, personsReplace: Boolean) {
+    fun queueForAll(ids: Collection<String>, tags: List<String>?, tagsReplace: Boolean, persons: List<String>?, personsReplace: Boolean, onProgress: (Int) -> Unit = {}) {
         if (tags == null && persons == null) return
         val addTags = tags?.distinctWords()
         val addNames = persons?.distinctWords()
         cache.inTransaction {
+            var done = 0
             ids.forEach { id ->
                 val doc = cache.doc(id)
                 val edits = cache.getEdits(id)
@@ -78,13 +82,17 @@ class EditRepository(private val context: Context) {
                 doc?.let {
                     cache.putDoc(it.copy(tags = finalTags, persons = finalNames, json = withWords(it.json, finalTags, finalNames, it.meaning)))
                 }
+                done++
+                if (done % PROGRESS_EVERY == 0) onProgress(done)
             }
+            onProgress(ids.size)
 
             cache.queueActions(ids, PhotoCache.ACTION_WORDS)
         }
     }
 
     fun pendingCount(): Int = cache.actionCount()
+
 
     suspend fun sendWords(onProgress: suspend (Int, Int) -> Unit = { _, _ -> }): Int {
         val waiting = cache.actions(PhotoCache.ACTION_WORDS)
