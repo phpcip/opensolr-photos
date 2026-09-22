@@ -60,4 +60,5 @@
     <string name="rs_charger">Așteaptă încărcătorul</string>
     <string name="rs_retry">Continuă în curând</string>
     <string name="rs_failed">Nu s-a terminat</string>
+    <string name="vm_resync_now">Se citesc acum: %1$s</string>
 </resources>

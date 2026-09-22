@@ -60,4 +60,5 @@
     <string name="rs_charger">等待充电</string>
     <string name="rs_retry">稍后继续</string>
     <string name="rs_failed">未完成</string>
+    <string name="vm_resync_now">正在立即读取 %1$s 张</string>
 </resources>

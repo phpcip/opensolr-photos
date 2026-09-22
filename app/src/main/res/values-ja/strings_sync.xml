@@ -60,4 +60,5 @@
     <string name="rs_charger">充電待ち</string>
     <string name="rs_retry">まもなく再開</string>
     <string name="rs_failed">未完了</string>
+    <string name="vm_resync_now">%1$s枚を今すぐ読み込みます</string>
 </resources>

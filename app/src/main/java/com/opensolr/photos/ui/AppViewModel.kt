@@ -2120,10 +2120,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         prefs.resyncIds = prefs.resyncIds + ids
         _state.update { it.copy(selecting = false, selectedIds = emptySet()) }
 
-        if (_state.value.sync.running || com.opensolr.photos.sync.SyncWorker.running.get()) {
-            _state.update { it.copy(showBusyDialog = true) }
-            return
-        }
+        // A sync already running is no reason to refuse: the photos asked for here are read with
+        // the next batch of that sync (SyncEngine.readNow), ahead of everything still queued.
+        flash(AppText.s(R.string.vm_resync_now, Actions.formatCount(ids.size.toLong())))
+        if (_state.value.sync.running || com.opensolr.photos.sync.SyncWorker.running.get()) return
         SyncScheduler.restartNow(context)
     }
 

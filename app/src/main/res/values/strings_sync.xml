@@ -60,4 +60,5 @@
     <string name="rs_charger">Waiting for the charger</string>
     <string name="rs_retry">Continues shortly</string>
     <string name="rs_failed">Did not finish</string>
+    <string name="vm_resync_now">Reading %1$s now</string>
 </resources>
