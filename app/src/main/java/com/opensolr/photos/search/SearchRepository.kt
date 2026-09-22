@@ -736,6 +736,8 @@ class SearchRepository(private val context: Context) {
     private suspend fun similarByMeaning(photoId: String, floor: Double): Pair<List<PhotoHit>, List<Int>> {
         val session = prefs.session ?: throw ServiceException(AppText.s(R.string.err_sign_in_to_search))
         val connection = prefs.connection ?: throw ServiceException(AppText.s(R.string.err_not_set_up))
+        var tl = System.currentTimeMillis(); val lap = LinkedHashMap<String, Long>()
+        fun mark(name: String) { val now = System.currentTimeMillis(); lap[name] = now - tl; tl = now }
         val anchor = select(
             listOf(
                 "q" to "*:*",
@@ -745,9 +747,11 @@ class SearchRepository(private val context: Context) {
                 "rows" to "1",
             )
         ).getJSONObject("response").optJSONArray("docs")?.optJSONObject(0) ?: return emptyList<PhotoHit>() to emptyList()
+        mark("anchor")
         val text = com.opensolr.photos.sync.SyncEngine.embeddingText(anchor)
         if (text.isBlank()) return emptyList<PhotoHit>() to emptyList()
         val vector = embedDocOnce(session, connection.indexName, text)
+        mark("embed")
         val json = select(
             listOf(
                 "q" to "{!knn f=embeddings topK=$SIMILAR_ROWS}" + vector.joinToString(",", "[", "]"),
@@ -755,10 +759,13 @@ class SearchRepository(private val context: Context) {
                 "rows" to SIMILAR_ROWS.toString(),
             )
         )
+        mark("knn")
         val minScore = (1.0 + floor) / 2.0
         val hits = parse(json, false, null).hits
             .filter { it.id == photoId || it.score >= minScore }
             .sortedByDescending { it.id == photoId }
+        mark("parse")
+        android.util.Log.i("OsTiming", "similarByMeaning floor=$floor kept=${hits.size} ms=$lap")
         return hits to if (hits.size < 2) emptyList() else listOf(hits.size)
     }
 
@@ -787,14 +794,17 @@ class SearchRepository(private val context: Context) {
         }
 
         return withContext(NonCancellable) {
-
+            val t0 = System.currentTimeMillis()
             val body = try {
                 SolrClient(connection).selectText(params)
             } catch (e: SolrAuthException) {
                 SolrClient(IndexManager(context, prefs, api).refreshConnection(session)).selectText(params)
             }
+            val t1 = System.currentTimeMillis()
             cache.put(key, body)
-            JSONObject(body)
+            val parsed = JSONObject(body)
+            android.util.Log.i("OsTiming", "select http=${t1 - t0}ms cachePut+json=${System.currentTimeMillis() - t1}ms bytes=${body.length} q=${params.firstOrNull { it.first == "q" }?.second?.take(40)}")
+            parsed
         }
     }
 
