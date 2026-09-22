@@ -19,8 +19,9 @@ class EditRepository(private val context: Context) {
         val clean = tags.distinctWords()
         val names = persons?.distinctWords()
         val wording = meaning?.trim()?.take(com.opensolr.photos.media.PhotoReader.MEANING_MAX_CHARS)?.takeIf { it.isNotEmpty() }
-        // no new wording: the owner's earlier one stays, unless they reset it
-        val kept = wording ?: if (resetWording) null else cache.getEdits(id)?.meaning
+        // no new wording: the owner's earlier one stays. A reset stores "" - the mark that the photo
+        // takes no wording from the file either, until the owner writes one again
+        val kept = wording ?: if (resetWording) "" else cache.getEdits(id)?.meaning
         cache.putEdits(id, PhotoCache.Edits(clean, kept, names))
         cache.doc(id)?.let { doc ->
             val finalNames = names ?: doc.persons
@@ -34,7 +35,9 @@ class EditRepository(private val context: Context) {
                 )
             )
         }
-        cache.queueAction(id, PhotoCache.ACTION_WORDS)
+        // after a reset the photo is read again, which carries the tags and the names too: a words call
+        // on top of it would only write the old wording back over what the read produced
+        if (resetWording) cache.clearActions(listOf(id)) else cache.queueAction(id, PhotoCache.ACTION_WORDS)
     }
 
     private fun withWords(json: String?, tags: List<String>, persons: List<String>, meaning: String?): String? {

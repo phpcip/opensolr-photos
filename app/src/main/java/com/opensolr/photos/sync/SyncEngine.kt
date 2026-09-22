@@ -217,9 +217,11 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                         else PhotoReader.xmpWordsIn(context, photo)
                     val tags = edits?.tags ?: xmp?.tags
 
-                    val meaning = edits?.meaning ?: xmp?.meaning
+                    // "" = the owner reset their wording: neither theirs nor the file's is sent any more
+                    val cleared = edits?.meaning == ""
+                    val meaning = if (cleared) null else edits?.meaning ?: xmp?.meaning
                     val names = edits?.persons ?: xmp?.persons ?: emptyList()
-                    items += IngestItem(photo, jpeg, tags, meaning, weighed[photo.id] ?: PhotoReader.fileMd5(context, photo), names, resetWording = photo.id in wordingReset)
+                    items += IngestItem(photo, jpeg, tags, meaning, weighed[photo.id] ?: PhotoReader.fileMd5(context, photo), names, resetWording = cleared || photo.id in wordingReset)
                 }
                 if (items.isNotEmpty()) {
                     val results = try {
