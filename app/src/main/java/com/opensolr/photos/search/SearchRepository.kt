@@ -126,6 +126,8 @@ data class DuplicatePage(
     val totalGroups: Int,
     val groupsUsed: Int,
     val endReached: Boolean,
+    /** Photos in ALL the groups, not only in this page: the count on screen must not grow as you scroll. */
+    val totalPhotos: Int = 0,
 )
 
 data class PhotoPin(val hit: PhotoHit, val lat: Double, val lon: Double)
@@ -504,6 +506,7 @@ class SearchRepository(private val context: Context) {
             throw e
         }
         if (groups.isEmpty()) return DuplicatePage(emptyList(), emptyList(), 0, 0, true)
+        val totalPhotos = groups.sumOf { it.size }
 
         val page = ArrayList<List<String>>(groupsLimit.coerceAtLeast(1))
         var budget = 0
@@ -516,7 +519,7 @@ class SearchRepository(private val context: Context) {
             at++
         }
         val used = at - groupsFrom
-        if (page.isEmpty()) return DuplicatePage(emptyList(), emptyList(), groups.size, 0, true)
+        if (page.isEmpty()) return DuplicatePage(emptyList(), emptyList(), groups.size, 0, true, totalPhotos)
 
         val wanted = page.flatten()
         val params = ArrayList<Pair<String, String>>()
@@ -536,7 +539,7 @@ class SearchRepository(private val context: Context) {
                 sizes += present.size
             }
         }
-        return DuplicatePage(hits, sizes, groups.size, used, at >= groups.size)
+        return DuplicatePage(hits, sizes, groups.size, used, at >= groups.size, totalPhotos)
     }
 
     suspend fun albums(): List<AlbumSection> {

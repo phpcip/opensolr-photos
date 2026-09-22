@@ -1794,7 +1794,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         duplicateGroups = it.duplicateGroups + page.sizes,
 
                         duplicateGroupsLoaded = from + page.groupsUsed,
-                        numFound = (it.hits.size + page.hits.size).toLong(),
+                        numFound = if (page.totalPhotos > 0) page.totalPhotos.toLong() else (it.hits.size + page.hits.size).toLong(),
                         endReached = page.endReached,
                     )
                 }
@@ -1949,9 +1949,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val done: Boolean
                 val total: Int
                 var similarGroups = emptyList<ResultGroup>()
+                var photosTotal = 0
                 if (anchor != null) {
                     val (h, g) = searches.similarTo(anchor, level)
-                    hits = h; groups = g; loaded = g.size; done = true; total = g.size
+                    hits = h; groups = g; loaded = g.size; done = true; total = g.size; photosTotal = h.size
 
                     val how = _state.value.groupBy
                     if (how != GroupBy.RELEVANCE) similarGroups = withContext(Dispatchers.Default) {
@@ -1991,7 +1992,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                     hits = allHits; groups = allSizes
                     loaded = used
-                    done = end; total = first.totalGroups
+                    done = end; total = first.totalGroups; photosTotal = first.totalPhotos
                 }
                 _state.update {
                     if (!it.duplicatesMode || it.duplicateLevel != level || it.similarToId != anchor) it
@@ -2002,7 +2003,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         resultGroups = similarGroups,
                         duplicateGroupsLoaded = loaded,
                         duplicateGroupsTotal = total,
-                        numFound = hits.size.toLong(),
+                        // how many photos the groups hold altogether, so scrolling does not change the count
+                        numFound = photosTotal.coerceAtLeast(hits.size).toLong(),
                         endReached = done,
                         searchNotice = when {
                             hits.isNotEmpty() -> null
