@@ -484,7 +484,7 @@ class SearchRepository(private val context: Context) {
     suspend fun duplicates(level: Int, groupsFrom: Int = 0, groupsLimit: Int = GROUPS_PAGE): DuplicatePage {
         val session = prefs.session ?: throw ServiceException(AppText.s(R.string.err_sign_in_to_search))
         val connection = prefs.connection ?: throw ServiceException(AppText.s(R.string.err_not_set_up))
-        val field = DUPLICATE_FIELDS[level.coerceIn(0, DUPLICATE_FIELDS.size - 1)]
+        val field = DUPLICATE_FIELDS[level.coerceIn(FIRST_LIBRARY_LEVEL, DUPLICATE_FIELDS.size - 1)]
         val groups = try {
             try {
                 cachedDuplicateGroups(connection, field)
@@ -688,6 +688,7 @@ class SearchRepository(private val context: Context) {
     }
 
     suspend fun similarTo(photoId: String, level: Int): Pair<List<PhotoHit>, List<Int>> {
+        if (level in MEANING_FLOORS.indices) return similarByMeaning(photoId, MEANING_FLOORS[level])
         val field = DUPLICATE_FIELDS[level.coerceIn(0, DUPLICATE_FIELDS.size - 1)]
 
         val keys = try {
@@ -725,6 +726,54 @@ class SearchRepository(private val context: Context) {
 
         val hits = parse(select(params), false, null).hits.sortedByDescending { it.id == photoId }
         return hits to if (hits.isEmpty()) emptyList() else listOf(hits.size)
+    }
+
+    /**
+     * Photos whose vector is at least [floor] alike (cosine) to [photoId]'s: the anchor's own
+     * embedding text (SyncEngine.embeddingText, what the server embedded it from) embedded as a
+     * document, then one kNN search. DenseVectorField cosine scores are (1 + cos) / 2.
+     */
+    private suspend fun similarByMeaning(photoId: String, floor: Double): Pair<List<PhotoHit>, List<Int>> {
+        val session = prefs.session ?: throw ServiceException(AppText.s(R.string.err_sign_in_to_search))
+        val connection = prefs.connection ?: throw ServiceException(AppText.s(R.string.err_not_set_up))
+        val anchor = select(
+            listOf(
+                "q" to "*:*",
+                "fq" to "{!term f=id v=\$anchorId}",
+                "anchorId" to photoId,
+                "fl" to "id,meaning,file_name,persons_ss,persons_t,custom_tags,country,city,region",
+                "rows" to "1",
+            )
+        ).getJSONObject("response").optJSONArray("docs")?.optJSONObject(0) ?: return emptyList<PhotoHit>() to emptyList()
+        val text = com.opensolr.photos.sync.SyncEngine.embeddingText(anchor)
+        if (text.isBlank()) return emptyList<PhotoHit>() to emptyList()
+        val vector = embedDocOnce(session, connection.indexName, text)
+        val json = select(
+            listOf(
+                "q" to "{!knn f=embeddings topK=$SIMILAR_ROWS}" + vector.joinToString(",", "[", "]"),
+                "fl" to FIELDS,
+                "rows" to SIMILAR_ROWS.toString(),
+            )
+        )
+        val minScore = (1.0 + floor) / 2.0
+        val hits = parse(json, false, null).hits
+            .filter { it.id == photoId || it.score >= minScore }
+            .sortedByDescending { it.id == photoId }
+        return hits to if (hits.size < 2) emptyList() else listOf(hits.size)
+    }
+
+    private suspend fun embedDocOnce(session: com.opensolr.photos.data.Session, indexName: String, text: String): FloatArray {
+        val key = "doc|$indexName|$text"
+        val now = System.currentTimeMillis()
+        synchronized(EMBEDDED) {
+            EMBEDDED[key]?.let { (at, vector) -> if (now - at < EMBED_HOLD_MS) return vector }
+        }
+        val vector = api.batchEmbed(session, indexName, listOf(text)).first()
+        synchronized(EMBEDDED) {
+            EMBEDDED[key] = now to vector
+            while (EMBEDDED.size > EMBED_HELD) EMBEDDED.remove(EMBEDDED.keys.first())
+        }
+        return vector
     }
 
     private suspend fun select(params: List<Pair<String, String>>): JSONObject {
@@ -1005,9 +1054,10 @@ class SearchRepository(private val context: Context) {
         private const val LEGACY_QF = "meaning^3 text file_name_text folder_text camera_text"
         private const val LEGACY_FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,labels"
 
-        // Meaning tiers (cosine 0.94 / 0.96 / 0.98 to the nearest neighbour, set on the server), then pixels
+        // Stops 0-2 are "similar meaning": a kNN search at view time around one photo's vector
+        // (MEANING_FLOORS), so they exist only in "Similar to this photo"; the rest are stored keys.
         val DUPLICATE_FIELDS = listOf(
-            "dup_m94_hash", "dup_m96_hash", "dup_m98_hash",
+            "knn_0.94", "knn_0.96", "knn_0.98",
             "dup_px_hash",
             "dup_exif_hash",
 
@@ -1030,7 +1080,12 @@ class SearchRepository(private val context: Context) {
 
         const val MAX_GROUPS = 2000
 
-        const val DEFAULT_DUPLICATE_LEVEL = 1
+        val MEANING_FLOORS = listOf(0.94, 0.96, 0.98)
+
+        // First stop of the library-wide view: the meaning stops need one photo to be around
+        const val FIRST_LIBRARY_LEVEL = 3
+
+        const val DEFAULT_DUPLICATE_LEVEL = FIRST_LIBRARY_LEVEL
 
         const val GROUPS_PAGE = 20
 

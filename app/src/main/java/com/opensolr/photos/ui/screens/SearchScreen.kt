@@ -596,6 +596,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         if (state.duplicatesMode) {
             DuplicateLevelSlider(
                 level = state.duplicateLevel,
+                // the meaning stops (0-2) search around one photo, so the library-wide view starts after them
+                firstStop = if (state.similarToId != null) 0 else com.opensolr.photos.search.SearchRepository.FIRST_LIBRARY_LEVEL,
                 onLevel = { viewModel.setDuplicateLevel(it) },
                 canSelect = state.duplicateGroups.isNotEmpty(),
 
@@ -1525,18 +1527,18 @@ private fun SyncIcon(running: Boolean) {
 }
 
 @Composable
-private fun DuplicateLevelSlider(level: Int, onLevel: (Int) -> Unit, canSelect: Boolean, showSelectOneOfEach: Boolean, onSelectOneOfEach: () -> Unit) {
+private fun DuplicateLevelSlider(level: Int, firstStop: Int, onLevel: (Int) -> Unit, canSelect: Boolean, showSelectOneOfEach: Boolean, onSelectOneOfEach: () -> Unit) {
     val view = LocalView.current
     val p = LocalPalette.current
     var value by remember { mutableStateOf(level.toFloat()) }
     LaunchedEffect(level) { if (value.roundToInt() != level) value = level.toFloat() }
-    val stop = level.coerceIn(0, DUPLICATE_KIND_NAMES.size - 1)
+    val stop = level.coerceIn(firstStop, DUPLICATE_KIND_NAMES.size - 1)
 
     val dark = p.ink.red > 0.5f
     val loose = if (dark) DUPLICATE_LOOSE_DARK else DUPLICATE_LOOSE_LIGHT
     val green = if (dark) DUPLICATE_GREEN_DARK else DUPLICATE_GREEN_LIGHT
     val colour = when {
-        stop <= DUPLICATE_EXIF_STOP -> lerp(loose, green, stop / DUPLICATE_EXIF_STOP.toFloat())
+        stop <= DUPLICATE_EXIF_STOP -> lerp(loose, green, (stop - firstStop) / (DUPLICATE_EXIF_STOP - firstStop).coerceAtLeast(1).toFloat())
 
         else -> if (dark) DUPLICATE_NEUTRAL_DARK else DUPLICATE_NEUTRAL_LIGHT
     }
@@ -1554,7 +1556,7 @@ private fun DuplicateLevelSlider(level: Int, onLevel: (Int) -> Unit, canSelect: 
             },
 
             onValueChangeFinished = { value = level.toFloat() },
-            valueRange = 0f..(DUPLICATE_KIND_NAMES.size - 1).toFloat(),
+            valueRange = firstStop.toFloat()..(DUPLICATE_KIND_NAMES.size - 1).toFloat(),
 
             steps = 0,
             colors = SliderDefaults.colors(
@@ -1565,7 +1567,7 @@ private fun DuplicateLevelSlider(level: Int, onLevel: (Int) -> Unit, canSelect: 
                 inactiveTickColor = p.hairline,
             ),
         )
-        Text("$stop · ${stringArrayResource(R.array.dup_kinds)[stop]}", style = MaterialTheme.typography.labelMedium, color = colour)
+        Text("${stop - firstStop} · ${stringArrayResource(R.array.dup_kinds)[stop]}", style = MaterialTheme.typography.labelMedium, color = colour)
 
         if (showSelectOneOfEach) {
             TextButton(

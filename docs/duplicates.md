@@ -6,13 +6,13 @@ calls a group a duplicate, because only the last stop can prove one.
 
 ## The slider
 
-8 stops, from 0 to 7, with the name of the kind under it. The default is stop 1.
+8 stops, from 0 to 7, with the name of the kind under it. *Similar to this photo* opens at stop 0; the library-wide view has stops 3 to 7 (shown as 0 to 4) and opens at *Looks the same*.
 
 | Stop | Name | Photos are grouped when… | Field |
 |---|---|---|---|
-| 0 | *Similar meaning* | their vectors are at least 0.94 alike (cosine) | `dup_m94_hash` |
-| 1 | *Very similar* | at least 0.96 | `dup_m96_hash` |
-| 2 | *Almost the same* | at least 0.98 | `dup_m98_hash` |
+| 0 | *Similar meaning* | their vectors are at least 0.94 alike (cosine) — only in *Similar to this photo* | kNN at view time |
+| 1 | *Very similar* | at least 0.96 — same | kNN at view time |
+| 2 | *Almost the same* | at least 0.98 — same | kNN at view time |
 | 3 | *Looks the same (pixels)* | the pictures have the same 64-bit difference hash (dHash): a resized or recompressed copy keeps it | `dup_px_hash` |
 | 4 | *Same photo (EXIF)* | EXIF: time taken, camera make, camera model, lens, ISO, exposure, f-number, focal length, GPS position, altitude | `dup_exif_hash` |
 | 5 | *Same file name* | file name only, without the folder, since several folders can be indexed | `file_name` |
@@ -39,11 +39,12 @@ The keys are written by the server when a photo is indexed (`photos_ingest`) or 
 (`photos_words`), never from your own tags or wording alone. The schema stores them as `*_hash` string
 fields with docValues, not stored ([index schema](index-schema.md)).
 
-- **Meaning keys** (`Api_lib::_photos_meaning_keys`): after the photo's vector is made, one kNN request asks
-  the index for its 8 nearest photos. For each threshold the photo takes the key of the closest one at or
-  above it (that photo's id when it has no key yet), otherwise its own id. The photos of the same upload are
-  compared too, since they are not in the index yet. A group therefore forms as photos are indexed, and a
-  photo indexed before the keys existed joins one when it is read again.
+- **Meaning stops** are not keys: in *Similar to this photo* the app embeds the photo's own text
+  (`SyncEngine.embeddingText`, what the server embedded it from) with `batch_embed`, runs one
+  `{!knn f=embeddings topK=200}` search and keeps the photos whose score reaches the stop's floor
+  (`MEANING_FLOORS`; a cosine score is (1 + cos) / 2). Nothing depends on the order photos were indexed
+  in. The library-wide view starts at stop 3 (`FIRST_LIBRARY_LEVEL`), since those stops need one photo
+  to search around.
 - **Pixel key**: the image service returns `dhash` with every description, worked out from the same 640 px
   copy.
 

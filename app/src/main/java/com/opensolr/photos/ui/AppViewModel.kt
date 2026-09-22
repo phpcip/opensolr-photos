@@ -1887,7 +1887,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun showDuplicates() {
         if (_state.value.duplicatesMode) { clearDuplicates(); return }
 
-        _state.update { it.copy(duplicatesMode = true, skippedMode = false, similarToId = null, similarToHit = null) }
+        _state.update {
+            it.copy(
+                duplicatesMode = true, skippedMode = false, similarToId = null, similarToHit = null,
+                duplicateLevel = it.duplicateLevel.coerceAtLeast(com.opensolr.photos.search.SearchRepository.FIRST_LIBRARY_LEVEL),
+            )
+        }
         loadDuplicates(debounceMs = 0)
     }
 
@@ -1900,7 +1905,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setDuplicateLevel(level: Int) {
-        val clamped = level.coerceIn(0, com.opensolr.photos.search.SearchRepository.DUPLICATE_FIELDS.size - 1)
+        val first = if (_state.value.similarToId != null) 0 else com.opensolr.photos.search.SearchRepository.FIRST_LIBRARY_LEVEL
+        val clamped = level.coerceIn(first, com.opensolr.photos.search.SearchRepository.DUPLICATE_FIELDS.size - 1)
         if (clamped == _state.value.duplicateLevel && _state.value.duplicateGroups.isNotEmpty()) return
         _state.update { it.copy(duplicateLevel = clamped) }
         if (_state.value.duplicatesMode) loadDuplicates(debounceMs = 300)
