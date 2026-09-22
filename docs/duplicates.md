@@ -6,7 +6,7 @@ calls a group a duplicate, because only the last stop can prove one.
 
 ## The slider
 
-8 stops, from 0 to 7, with the name of the kind under it, the same in the library-wide view and in *Similar to this photo*. Both open at stop 0.
+9 stops, from 0 to 8, with the name of the kind under it, the same in the library-wide view and in *Similar to this photo*. Both open at stop 0.
 
 | Stop | Name | Photos are grouped when… | Field |
 |---|---|---|---|
@@ -14,10 +14,11 @@ calls a group a duplicate, because only the last stop can prove one.
 | 1 | *Same first 3 words* | the first 3 labels match | `dup_w3_hash` |
 | 2 | *Same first 4 words* | the first 4 labels match | `dup_w4_hash` |
 | 3 | *All 5 words the same* | all 5 labels match | `dup_w5_hash` |
-| 4 | *Same photo (EXIF)* | EXIF: time taken, camera make, camera model, lens, ISO, exposure, f-number, focal length, GPS position, altitude | `dup_exif_hash` |
-| 5 | *Same file name* | file name only, without the folder, since several folders can be indexed | `file_name` |
-| 6 | *Same file size* | size in bytes. Not the same as the same file: a camera pads its files to whole blocks, so unrelated photos share a size exactly | `size_bytes` |
-| 7 | *Same file (exact copy)* | the md5 of the original file, worked out on the phone — the server only ever sees the 1024 px copy | `file_hash` |
+| 4 | *Full description match* | the image model's whole sentence is the same, word for word (lowercased, closing period dropped); never your own wording | `dup_desc_hash` |
+| 5 | *Same photo (EXIF)* | EXIF: time taken, camera make, camera model, lens, ISO, exposure, f-number, focal length, GPS position, altitude | `dup_exif_hash` |
+| 6 | *Same file name* | file name only, without the folder, since several folders can be indexed | `file_name` |
+| 7 | *Same file size* | size in bytes. Not the same as the same file: a camera pads its files to whole blocks, so unrelated photos share a size exactly | `size_bytes` |
+| 8 | *Same file (exact copy)* | the md5 of the original file, worked out on the phone — the server only ever sees the 1024 px copy | `file_hash` |
 
 The EXIF key leaves out file size, pixel size, orientation and modification time, so a photo that went
 through a simple edit keeps it.
@@ -33,7 +34,8 @@ The keys are written by the server when a photo is indexed (`photos_ingest`) or 
 fields with docValues, not stored ([index schema](index-schema.md)).
 
 The server writes only these keys (`Api_lib::_photos_duplicate_hashes`): `dup_w2_hash` … `dup_w5_hash`, the
-labels lowercased, repeats dropped, sorted, md5; and `dup_exif_hash`.
+labels lowercased, repeats dropped, sorted, md5; `dup_desc_hash`, the sentence; and `dup_exif_hash`. The
+labels are only the object names the image model finds, as many as it finds, never a sentence.
 
 Each stop is **one facet request** on its field, sent 300 ms after the slider settles; values seen more than
 once are the groups, biggest first. The answer is held for the cache's lifetime, so walking the slider back

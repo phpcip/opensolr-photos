@@ -138,6 +138,7 @@
         <item>Erste 3 Wörter gleich</item>
         <item>Erste 4 Wörter gleich</item>
         <item>Alle 5 Wörter gleich</item>
+        <item>Gleiche Beschreibung</item>
         <item>Gleiches Foto (EXIF)</item>
         <item>Gleicher Dateiname</item>
         <item>Gleiche Dateigröße</item>

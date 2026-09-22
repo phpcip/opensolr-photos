@@ -135,6 +135,7 @@
         <item>最初の3語が一致</item>
         <item>最初の4語が一致</item>
         <item>5語すべて一致</item>
+        <item>説明が完全に一致</item>
         <item>同じ写真（EXIF）</item>
         <item>同じファイル名</item>
         <item>同じファイルサイズ</item>

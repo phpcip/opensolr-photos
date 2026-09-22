@@ -538,15 +538,5 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
         private const val PACE_SHARE = 0.8
         private const val MINUTE_MS = 60 * 1000L
         private const val HOUR_MS = 60 * 60 * 1000L
-
-        fun embeddingText(doc: JSONObject): String {
-            fun list(field: String) = doc.optJSONArray(field)?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList()
-            val persons = list("persons_ss").ifEmpty { doc.optString("persons_t").split(',') }
-            val meaning = doc.optString("meaning").ifBlank { doc.optString("file_name").substringBeforeLast('.') }
-            return (persons + list("custom_tags") + listOf(meaning, doc.optString("country"), doc.optString("city"), doc.optString("region")))
-                .map { it.trim() }
-                .filter { it.isNotEmpty() }
-                .joinToString(", ")
-        }
     }
 }

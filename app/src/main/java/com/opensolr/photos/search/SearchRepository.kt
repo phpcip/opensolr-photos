@@ -1000,14 +1000,15 @@ class SearchRepository(private val context: Context) {
 
         private const val MM = "2<65% 4<50% 8<40%"
 
-        private const val QF = "custom_tags_text^5 meaning^2 ocr_t^3 persons_t^4 text file_name_text folder_text camera_text place_text^1"
-        private const val HYBRID_QF = "custom_tags_text^0.5 meaning^0.2 ocr_t^0.4 persons_t^0.3 file_name_text folder_text camera_text place_text^0.1"
+        private const val QF = "custom_tags_text^5 meaning^2 labels_t^2 ocr_t^3 persons_t^4 text file_name_text folder_text camera_text place_text^1"
+        private const val HYBRID_QF = "custom_tags_text^0.5 meaning^0.2 labels_t^0.2 ocr_t^0.4 persons_t^0.3 file_name_text folder_text camera_text place_text^0.1"
         private const val LEGACY_QF = "meaning^3 text file_name_text folder_text camera_text"
         private const val LEGACY_FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,labels"
 
-        // The slider's stops, in both views: the model's first 2..5 labels, then EXIF and the file keys
+        // The slider's stops, in both views: the model's first 2..5 labels, its whole sentence, then EXIF and the file keys
         val DUPLICATE_FIELDS = listOf(
             "dup_w2_hash", "dup_w3_hash", "dup_w4_hash", "dup_w5_hash",
+            "dup_desc_hash",
             "dup_exif_hash",
 
             "file_name", "size_bytes",

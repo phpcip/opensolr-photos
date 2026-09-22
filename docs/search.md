@@ -93,11 +93,11 @@ What you type is trimmed to 300 characters and sent **only as the bound paramete
 
 ```
 uq          = dog on the beach
-lexicalRaw  = {!edismax qf="custom_tags_text^5 meaning^2 ocr_t^3 persons_t^4 text file_name_text folder_text camera_text place_text^1" mm="2<65% 4<50% 8<40%" v=$uq}
+lexicalRaw  = {!edismax qf="custom_tags_text^5 meaning^2 labels_t^2 ocr_t^3 persons_t^4 text file_name_text folder_text camera_text place_text^1" mm="2<65% 4<50% 8<40%" v=$uq}
 ```
 
 That is the words-only `qf`. In a hybrid search the lexical leg uses lighter weights, so the meaning leads
-and the words refine it: `custom_tags_text^0.5 meaning^0.2 ocr_t^0.4 persons_t^0.3 file_name_text
+and the words refine it: `custom_tags_text^0.5 meaning^0.2 labels_t^0.2 ocr_t^0.4 persons_t^0.3 file_name_text
 folder_text camera_text place_text^0.1`.
 
 On a plan with vector search, the app first asks `embed` (with `is_query=1`) for the query's vector and
@@ -119,8 +119,16 @@ No vector is asked for, and the search runs words only, on a plan without vector
 AI requests are used up, or for a single character (the embed endpoint refuses it). Nothing about that is
 shown on the photos screen; the reasons are in Me.
 
-The photo's own vector is made of, in order: the people, the owner's tags, what it shows, the country, the
-city and the region (`Api_lib::_photos_embedding_text` at indexing, `SyncEngine.embeddingText` on an edit).
+The photo's own vector is made of one text, built on the server (`Api_lib::_photos_embedding_text`, at
+indexing and after an edit), each part only when the photo has it:
+
+```
+A together with B, C and D, <sentence without its closing period>, label1, label2, at <country>, <city>, <region>, labeled this as: tag1, tag2
+```
+
+One person is just the name; two are `A together with B`; three `A together with B and C`. The sentence is
+the image model's, or your own wording when you wrote one; the labels always follow it. With no sentence the
+labels stand alone, with no labels the sentence does.
 
 Without vector search, or when the month's AI requests are used up, or when the vector service does not
 answer, the same request runs with `q={!bool should=$lexicalRaw}` and the app says so above the results.
@@ -201,10 +209,10 @@ only drags the answer away from the thing you asked for. The same switch search.
 ## The text printed in a photo
 
 `text` also collects `ocr_t`: the words printed **in** the photo, read on Opensolr's side when a photo
-carries any. This is what makes a phone full of paperwork searchable — a petrol receipt by the station's
+carries any. This is what makes a phone full of paperwork searchable — a gas receipt by the station's
 name, the total or its number, an invoice by the company on it, a shelf label by its product code, a
 screenshot by what it says, a business card by the person's name. Nothing new to type and nothing to turn
-on: the words go into the same field the search already reads, so *petrom*, *invoice 4417* or *usa lemn*
+on: the words go into the same field the search already reads, so *chevron*, *invoice 4417* or *oak door*
 answer straight away.
 
 On a plan with vector search, only photos that carry text are read at all. CLIP sees the photo first, and
@@ -391,8 +399,8 @@ them back. If that delete fails, the next sync removes them anyway.
 - **Save**: the save is local first and finishes on the phone. The edit goes into the cache's `edits` table
   (id → tags, wording) and into the phone's copy of the index, the grid shows it at once, and the sync that
   starts straight afterwards carries it up — 50 photos per call, with no pictures attached, since only the
-  words changed, to the `photos_words` endpoint. The vector is computed again from `meaning + tags` on
-  vector plans (`SyncEngine.embeddingText`). Nothing on screen waits for the network.
+  words changed, to the `photos_words` endpoint. The server builds the vector again on
+  vector plans, from the same text as at indexing (`Api_lib::_photos_embedding_text`). Nothing on screen waits for the network.
 
 Writing the words into the photo files themselves is the one part that still happens on the spot: Android
 asks for permission to change the files and a progress bar counts them through.

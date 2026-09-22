@@ -138,6 +138,7 @@
         <item>Same first 3 words</item>
         <item>Same first 4 words</item>
         <item>All 5 words the same</item>
+        <item>Full description match</item>
         <item>Same photo (EXIF)</item>
         <item>Same file name</item>
         <item>Same file size</item>
