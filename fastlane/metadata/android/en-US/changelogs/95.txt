@@ -1,0 +1,2 @@
+Re-sync on selected photos never refuses while a sync is running: those photos are read first.
+Every button answers the tap now, including Cancel and the icon buttons.
