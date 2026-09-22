@@ -135,6 +135,51 @@ fun GhostButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier
     }
 }
 
+/**
+ * Material's TextButton with the same press effect as every other control here: the accent washes
+ * over it and it shrinks while the finger is down. Imported in place of the Material one, so a
+ * Cancel in a dialog answers the tap exactly like the buttons around it.
+ */
+@Composable
+fun TextButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    contentPadding: PaddingValues = ButtonDefaults.TextButtonContentPadding,
+    content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
+) {
+    val source = remember { MutableInteractionSource() }
+    androidx.compose.material3.TextButton(
+        onClick = onClick,
+        modifier = modifier.scale(if (enabled) pressedScale(source) else 1f),
+        enabled = enabled,
+        interactionSource = source,
+        shape = Corner,
+        colors = ButtonDefaults.textButtonColors(containerColor = pressedTint(source)),
+        contentPadding = contentPadding,
+        content = content,
+    )
+}
+
+/** Material's IconButton with the same press effect. */
+@Composable
+fun IconButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    content: @Composable () -> Unit,
+) {
+    val source = remember { MutableInteractionSource() }
+    androidx.compose.material3.IconButton(
+        onClick = onClick,
+        modifier = modifier.scale(if (enabled) pressedScale(source) else 1f),
+        enabled = enabled,
+        interactionSource = source,
+        colors = androidx.compose.material3.IconButtonDefaults.iconButtonColors(containerColor = pressedTint(source)),
+        content = content,
+    )
+}
+
 @Composable
 fun Notice(text: String, modifier: Modifier = Modifier, title: String? = null) {
     val p = LocalPalette.current
