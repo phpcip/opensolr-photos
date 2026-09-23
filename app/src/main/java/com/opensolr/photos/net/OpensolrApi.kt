@@ -115,13 +115,19 @@ data class VectorRegion(val environment: String, val country: String, val solrVe
 
 class OpensolrApi(private val http: OkHttpClient = Http.client) {
 
-    suspend fun exchangeCode(code: String, verifier: String): Pair<Session, AccountLimits> = withContext(Dispatchers.IO) {
+    /** Result of a sign-in: the session, the plan, and whether the key is this phone's own. */
+    data class SignIn(val session: Session, val limits: AccountLimits, val deviceKey: Boolean)
+
+    suspend fun exchangeCode(code: String, verifier: String, deviceId: String): SignIn = withContext(Dispatchers.IO) {
         val body = JSONObject()
             .put("grant_type", "authorization_code")
             .put("code", code)
             .put("code_verifier", verifier)
             .put("client_id", AuthFlow.CLIENT_ID)
             .put("redirect_uri", AuthFlow.REDIRECT_URI)
+            .put("device_id", deviceId)
+            .put("device_label", AuthFlow.deviceLabel())
+            .put("app_version", com.opensolr.photos.BuildConfig.VERSION_NAME)
             .toString()
             .toRequestBody(JSON)
         val request = Request.Builder().url("$SITE/app/token").post(body).build()
@@ -132,7 +138,22 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
             val email = json.optString("email")
             val key = json.optString("api_key")
             if (email.isBlank() || key.isBlank()) throw SignInFailedException("empty answer")
-            Session(email, key) to AccountLimits.fromJson(json.optJSONObject("account") ?: JSONObject())
+            SignIn(Session(email, key), AccountLimits.fromJson(json.optJSONObject("account") ?: JSONObject()), json.optString("key_kind") == "device")
+        }
+    }
+
+    /** Trades the account key of an older sign-in for this phone's own key; null when the server does not offer one. */
+    suspend fun upgradeToDeviceKey(session: Session, deviceId: String): Session? = withContext(Dispatchers.IO) {
+        val body = JSONObject().put("email", session.email).put("api_key", session.apiKey).put("client_id", AuthFlow.CLIENT_ID)
+            .put("device_id", deviceId).put("device_label", AuthFlow.deviceLabel())
+            .put("app_version", com.opensolr.photos.BuildConfig.VERSION_NAME)
+            .toString().toRequestBody(JSON)
+        http.newCall(Request.Builder().url("$SITE/app/api/device_key").post(body).build()).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            if (response.code == 401 || text.contains("ERROR_AUTHENTICATION_FAILED")) throw SignInRequiredException()
+            val msg = runCatching { JSONObject(text).optJSONObject("msg") }.getOrNull()
+            val key = msg?.optString("api_key")
+            if (msg?.optString("key_kind") == "device" && !key.isNullOrBlank() && Regex("^[0-9a-f]{32}$").matches(key)) Session(session.email, key) else null
         }
     }
 

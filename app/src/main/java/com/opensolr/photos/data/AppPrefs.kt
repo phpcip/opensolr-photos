@@ -17,13 +17,19 @@ class AppPrefs(context: Context) {
             prefs.edit().apply {
                 if (value == null) {
                     remove(KEY_EMAIL)
-                    remove(KEY_API_KEY)
+                   .remove(KEY_API_KEY)
+            .remove(KEY_DEVICE_KEY)
                 } else {
                     putString(KEY_EMAIL, value.email)
                     putString(KEY_API_KEY, SecureStore.encrypt(value.apiKey))
                 }
             }.commit()
         }
+
+    /** True when the key held is this phone's own, revocable from Account > Devices; false for the account key of older sign-ins. */
+    var deviceKey: Boolean
+        get() = prefs.getBoolean(KEY_DEVICE_KEY, false)
+        set(value) { prefs.edit().putBoolean(KEY_DEVICE_KEY, value).commit() }
 
     var connection: IndexConnection?
         get() {
@@ -234,6 +240,7 @@ class AppPrefs(context: Context) {
         prefs.edit()
             .remove(KEY_EMAIL)
             .remove(KEY_API_KEY)
+            .remove(KEY_DEVICE_KEY)
             .remove(KEY_ACCOUNT)
             .remove(KEY_SOLR_URL)
             .remove(KEY_SOLR_USER)
@@ -248,6 +255,7 @@ class AppPrefs(context: Context) {
         private const val FILE = "opensolr_photos"
         private const val KEY_EMAIL = "email"
         private const val KEY_API_KEY = "api_key"
+        private const val KEY_DEVICE_KEY = "device_key"
         private const val KEY_ACCOUNT = "account"
         private const val KEY_INDEX = "index_name"
         private const val KEY_SOLR_URL = "solr_url"

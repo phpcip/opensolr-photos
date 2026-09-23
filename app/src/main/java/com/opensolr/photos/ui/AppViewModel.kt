@@ -274,6 +274,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             SyncScheduler.watchMedia(context)
             checkConfigVersion()
         }
+        // A sign-in from before per-device keys moves to this phone's own key, once.
+        prefs.session?.takeIf { !prefs.deviceKey }?.let { old ->
+            viewModelScope.launch {
+                try {
+                    api.upgradeToDeviceKey(old, com.opensolr.photos.auth.AuthFlow.deviceId(context))?.let { prefs.session = it; prefs.deviceKey = true }
+                } catch (e: SignInRequiredException) {
+                    signedOut(AppText.s(R.string.vm_signed_out))
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                }
+            }
+        }
         checkForUpdate()
         refreshSkippedCount()
         refreshPlacesToWrite()
@@ -1136,8 +1149,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(busy = true, signInError = null) }
         viewModelScope.launch {
             try {
-                val (session, limits) = api.exchangeCode(code, pending.first)
+                val signIn = api.exchangeCode(code, pending.first, com.opensolr.photos.auth.AuthFlow.deviceId(context))
+                val session = signIn.session
+                val limits = signIn.limits
                 prefs.session = session
+                prefs.deviceKey = signIn.deviceKey
                 prefs.account = limits
                 _state.update { it.copy(busy = false, email = session.email, account = limits, screen = Screen.Welcome) }
             } catch (e: Exception) {

@@ -51,7 +51,14 @@ object AuthFlow {
         return Base64.encodeToString(buffer, Base64.URL_SAFE or Base64.NO_PADDING or Base64.NO_WRAP)
     }
 
-    private fun deviceLabel(): String {
+    /** This install as Account > Devices knows it: the phone's ANDROID_ID, prefixed so it stays unique across the apps. */
+    fun deviceId(context: android.content.Context): String {
+        @android.annotation.SuppressLint("HardwareIds")
+        val raw = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID).orEmpty()
+        return "photos-" + raw.lowercase().filter { it in 'a'..'z' || it in '0'..'9' }.take(40).padEnd(16, '0')
+    }
+
+    fun deviceLabel(): String {
         val raw = if (Build.MODEL.startsWith(Build.MANUFACTURER, ignoreCase = true)) Build.MODEL
         else "${Build.MANUFACTURER} ${Build.MODEL}"
         return raw.filter { it.isLetterOrDigit() && it.code < 128 || it in " ._()-" }.trim().take(64)
