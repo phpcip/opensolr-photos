@@ -1,0 +1,2 @@
+Similar keeps the filters that are switched on, and never the typed words: those only ever matched the photo itself.
+Similar always shows the photo it is comparing, even at a step that photo has no key for.
