@@ -1,0 +1,2 @@
+The two-word steps are back in duplicates and similar, with and without the same camera.
+The description step asks for the whole description and the same camera, and no longer for the labels as well.
