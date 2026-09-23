@@ -795,7 +795,7 @@ class SearchRepository(private val context: Context) {
 
     private suspend fun cachedDuplicateGroups(connection: IndexConnection, stop: DuplicateStop, base: List<Pair<String, String>>): List<List<String>> {
         val field = stop.field
-        val cap = if (field.startsWith("dup_w")) MAX_WORD_GROUP else MAX_GROUP
+        val cap = if (field == CAPPED_FIELD) MAX_WORD_GROUP else MAX_GROUP
         val within = stop.within
 
         val key = SearchCache.key(
@@ -1050,9 +1050,8 @@ class SearchRepository(private val context: Context) {
         private const val LEGACY_QF = "meaning^3 text file_name_text folder_text camera_text"
         private const val LEGACY_FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,labels"
 
-        /** The labels a stop groups on: the server writes a key for 2..3, the slider offers three only
-         *  (Cip, 09/23/2026 - two labels alone pair photos by arithmetic, not by what is in them). */
-        const val WORD_STOPS_MIN = 3
+        /** The labels a stop groups on: the server writes a key for 2..3 and the slider offers both. */
+        const val WORD_STOPS_MIN = 2
         const val WORD_STOPS_MAX = 3
         val WORD_STOP_COUNT = (WORD_STOPS_MAX - WORD_STOPS_MIN + 1) * 2
 
@@ -1079,9 +1078,10 @@ class SearchRepository(private val context: Context) {
 
         const val MAX_GROUP = 50
 
-        /** A words stop drops any group past this size: more than ten photos on three labels is a theme,
-         *  not a repeat (Cip, 09/23/2026). */
+        /** The three-label stops drop any group past this size: more than ten photos on three labels is
+         *  a theme, not a repeat (Cip, 09/23/2026). */
         const val MAX_WORD_GROUP = 10
+        const val CAPPED_FIELD = "dup_w3_hash"
 
 
         const val MAX_GROUPS = 2000
