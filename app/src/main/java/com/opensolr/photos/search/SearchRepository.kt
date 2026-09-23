@@ -687,14 +687,26 @@ class SearchRepository(private val context: Context) {
         return suggestion.takeIf { it.isNotBlank() && !it.equals(typed, ignoreCase = true) }
     }
 
+    // Every photo that has a place, walked with a cursor, not the newest page of them: with more
+    // than MAP_ROWS placed photos the older ones simply never reached the map (Cip, 09/23/2026).
     suspend fun pins(query: String, filters: SearchFilters): List<PhotoPin> {
         val (params, _, _) = queryParams(query, filters)
         params += "fq" to "has_location:true"
         params += "fl" to FIELDS
-        params += "start" to "0"
-        params += "rows" to MAP_ROWS.toString()
-        val page = parse(select(params), false, null)
-        return page.hits.mapNotNull { hit -> hit.latLon?.let { (lat, lon) -> PhotoPin(hit, lat, lon) } }
+        val out = ArrayList<PhotoPin>()
+        var cursor = "*"
+        while (out.size < MAP_MAX) {
+            val page = ArrayList(params)
+            page += "rows" to MAP_ROWS.toString()
+            page += "cursorMark" to cursor
+            val json = select(page)
+            val hits = parse(json, false, null).hits
+            hits.forEach { hit -> hit.latLon?.let { (lat, lon) -> out += PhotoPin(hit, lat, lon) } }
+            val next = json.optString("nextCursorMark")
+            if (hits.isEmpty() || next.isEmpty() || next == cursor) break
+            cursor = next
+        }
+        return out
     }
 
     // Similar answers about the photo, under the filters that are switched on, and never under the
@@ -1023,7 +1035,9 @@ class SearchRepository(private val context: Context) {
 
         private val FACET_FIELDS = SearchFilters.FACETS.map { it.first }.toSet()
 
+        /** One page of map pins, and the most the map ever holds at once. */
         const val MAP_ROWS = 1000
+        const val MAP_MAX = 20_000
 
         const val GROUP_TICK_MAX = 20000
 
