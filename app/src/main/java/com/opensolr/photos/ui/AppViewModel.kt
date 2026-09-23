@@ -578,15 +578,28 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Folds every group of alike photos, in the memory this view reads its headings from. */
     private fun foldGroups(sizes: List<Int>) {
         val context = contextKey(_state.value)
-        val keys = groupHeadingKeys(sizes)
+        val keys = groupHeadingKeys(sizes).toSet()
         collapsedHeadings[context] = keys
         prefs.collapsedHeadings = collapsedHeadings
         _state.update { it.copy(collapsedHeadings = keys) }
     }
 
+    /** Folds only the groups a further page brought in, so whatever the owner opened stays open. */
+    private fun foldAddedGroups(sizes: List<Int>, from: Int) {
+        if (sizes.size <= from) return
+        val context = contextKey(_state.value)
+        val kept = collapsedHeadings[context]
+        // nothing is folded here any more: the owner opened them all, so a further page arrives open too
+        if (kept != null && kept.isEmpty()) return
+        val next = (kept ?: defaultCollapsed(_state.value)) + groupHeadingKeys(sizes).drop(from)
+        collapsedHeadings[context] = next
+        prefs.collapsedHeadings = collapsedHeadings
+        _state.update { it.copy(collapsedHeadings = next) }
+    }
+
     /** The heading key of every group of alike photos, as buildGridRows writes them. */
-    private fun groupHeadingKeys(sizes: List<Int>): Set<String> =
-        sizes.mapIndexed { index, size -> "h:$size of the same \u00b7 ${index + 1}" }.toSet()
+    private fun groupHeadingKeys(sizes: List<Int>): List<String> =
+        sizes.mapIndexed { index, size -> "h:$size of the same \u00b7 ${index + 1}" }
 
     private fun defaultCollapsed(s: UiState): Set<String> =
         if (!s.duplicatesMode && !s.skippedMode && s.searchedQuery.isNotBlank()) setOf("h:Also similar") else emptySet()
@@ -1795,6 +1808,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (current.searching || current.endReached || current.similarToId != null) return
         val level = current.duplicateLevel
         val from = current.duplicateGroupsLoaded
+        val shown = current.duplicateGroups.size
         _state.update { it.copy(searching = true) }
         searchJob = viewModelScope.launch {
             try {
@@ -1811,7 +1825,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         endReached = page.endReached,
                     )
                 }
-                foldGroups(_state.value.duplicateGroups)
+                foldAddedGroups(_state.value.duplicateGroups, shown)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
