@@ -1,0 +1,1 @@
+Duplicates and similar open with every group expanded, and remember what you folded or opened.
