@@ -1691,6 +1691,35 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private var pinsJob: kotlinx.coroutines.Job? = null
 
+    /** The pins the phone can draw on its own, parsed once and kept while nothing is indexed anew. */
+    private var phonePins: Pair<Int, List<PhotoPin>>? = null
+
+    /**
+     * The photos of the area, out of what this phone holds. The map falls back to these whenever the
+     * index cannot answer: someone who opens the map wants to see their photos, not an error
+     * (Cip, 09/23/2026).
+     */
+    private suspend fun pinsFromPhone(area: com.opensolr.photos.search.SearchRepository.MapArea?): List<PhotoPin> =
+        withContext(Dispatchers.IO) {
+            val count = photoCache.docCount()
+            val all = phonePins?.takeIf { it.first == count }?.second ?: photoCache.locatedDocs(PHONE_PINS_MAX)
+                .mapNotNull { json ->
+                    val hit = runCatching { searches.hitOf(org.json.JSONObject(json)) }.getOrNull() ?: return@mapNotNull null
+                    hit.latLon?.let { (lat, lon) -> PhotoPin(hit, lat, lon) }
+                }.also { phonePins = count to it }
+            val inArea = if (area == null) all else all.filter { kmBetween(area.lat, area.lon, it.lat, it.lon) <= area.radiusKm }
+            inArea.take(com.opensolr.photos.search.SearchRepository.MAP_ROWS)
+        }
+
+    /** Kilometres between two places on the globe. */
+    private fun kmBetween(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLon = Math.toRadians(lon2 - lon1)
+        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2)
+        return 6371.0 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+    }
+
     /** The pins of the area the map is showing; null asks for the newest ones, to place the camera. */
     fun loadPins(area: com.opensolr.photos.search.SearchRepository.MapArea? = null) {
         val current = _state.value
@@ -1698,8 +1727,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(pinsLoading = true, pinsError = null) }
         pinsJob = viewModelScope.launch {
             try {
-                val pins = searches.pins(current.query, current.filters, area)
-                _state.update { it.copy(pins = pins, pinsLoading = false) }
+                val pins = try {
+                    searches.pins(current.query, current.filters, area)
+                } catch (e: kotlinx.coroutines.CancellationException) {
+                    throw e
+                } catch (e: SignInRequiredException) {
+                    throw e
+                } catch (e: Exception) {
+                    // The index is gone, unreachable or slow: the phone draws its own photos instead.
+                    android.util.Log.w("Map", "pins from the index failed", e)
+                    pinsFromPhone(area)
+                }
+                _state.update { it.copy(pins = pins, pinsLoading = false, pinsError = null) }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: SignInRequiredException) {
@@ -2289,6 +2328,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         private const val FOLDER_LEVELS = 3
 
         private const val SPINNER_MS = 350L
+
+        /** The most photos the phone parses out of its own store for the map. */
+        private const val PHONE_PINS_MAX = 20_000
 
         private const val MEDIA_SETTLE_MS = 1500L
 

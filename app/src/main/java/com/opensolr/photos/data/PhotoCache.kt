@@ -557,6 +557,18 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         return out
     }
 
+    /** The newest photos the phone holds that carry a place: what the map draws by itself. */
+    fun locatedDocs(limit: Int): List<String> {
+        val out = ArrayList<String>()
+        readableDatabase.rawQuery(
+            "SELECT json FROM docs WHERE json LIKE '%\"location\"%' ORDER BY taken_ms DESC LIMIT ?",
+            arrayOf(limit.toString()),
+        ).use { c ->
+            while (c.moveToNext()) if (!c.isNull(0)) out += c.getString(0)
+        }
+        return out
+    }
+
     fun docsWithText(): List<String> {
         val out = ArrayList<String>()
         readableDatabase.query("docs", arrayOf("id"), "ocr IS NOT NULL AND ocr != ''", null, null, null, null).use { c ->
