@@ -1,0 +1,2 @@
+Duplicates and similar open with every group folded, so the headings can be read before anything is expanded.
+Documents reads again only the photos that carry printed text.
