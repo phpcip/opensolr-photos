@@ -194,7 +194,7 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
         Row(Modifier.fillMaxWidth().padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.weight(1f).padding(start = 8.dp)) { ScreenHeader(stringResource(R.string.mp_title), onBack = { viewModel.back() }) }
             Text(
-                stringResource(R.string.mp_with_place, Actions.formatCount(state.pins.size.toLong())),
+                stringResource(R.string.mp_with_place, Actions.formatCount(maxOf(state.pinsTotal, state.pins.size).toLong())),
                 style = MaterialTheme.typography.bodySmall, color = p.muted,
             )
 
@@ -330,12 +330,8 @@ private fun GroupSheet(cluster: PhotoCluster, onDismiss: () -> Unit, onShowPhoto
     }
 }
 
-/** The middle of what the map is showing, and how far its corner is, in kilometres. */
+/** The corners of what the map is showing. */
 private fun areaOf(map: MapView): com.opensolr.photos.search.SearchRepository.MapArea {
     val box = map.boundingBox
-    val center = GeoPoint(box.centerLatitude, box.centerLongitude)
-    val corner = GeoPoint(box.latNorth, box.lonEast)
-    return com.opensolr.photos.search.SearchRepository.MapArea(
-        center.latitude, center.longitude, max(0.5, center.distanceToAsDouble(corner) / 1000.0),
-    )
+    return com.opensolr.photos.search.SearchRepository.MapArea(box.latSouth, box.lonWest, box.latNorth, box.lonEast)
 }

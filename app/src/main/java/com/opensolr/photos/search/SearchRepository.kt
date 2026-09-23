@@ -14,6 +14,8 @@ import com.opensolr.photos.net.SolrAuthException
 import com.opensolr.photos.net.SolrClient
 import com.opensolr.photos.net.VectorNotAllowedException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -687,26 +689,65 @@ class SearchRepository(private val context: Context) {
         return suggestion.takeIf { it.isNotBlank() && !it.equals(typed, ignoreCase = true) }
     }
 
-    /** The piece of the world the map is showing: its middle and how far the corner is. */
-    data class MapArea(val lat: Double, val lon: Double, val radiusKm: Double)
+    /** The piece of the world the map is showing, as its corners. */
+    data class MapArea(val south: Double, val west: Double, val north: Double, val east: Double)
 
-    // The photos of the area on screen, newest first, one page of them. The map asks again whenever
-    // it is moved or zoomed, so a trip years ago comes back as soon as you look at that country
-    // (Cip, 09/23/2026 - before this the map only ever held the newest MAP_ROWS of the whole library).
-    suspend fun pins(query: String, filters: SearchFilters, area: MapArea? = null): List<PhotoPin> {
-        val (params, _, _) = queryParams(query, filters)
-        params += "fq" to "has_location:true"
-        if (area != null) {
-            params += "fq" to "{!geofilt sfield=location pt=\$mapPt d=\$mapD}"
-            params += "mapPt" to String.format(Locale.US, "%.6f,%.6f", area.lat, area.lon)
-            params += "mapD" to String.format(Locale.US, "%.3f", area.radiusKm.coerceIn(0.05, 20000.0))
+    /** What the map got, and how many photos that piece of the world really holds. */
+    data class MapPins(val pins: List<PhotoPin>, val total: Int)
+
+    // The photos of the area on screen. The area is cut into a grid and every cell is asked for its
+    // own newest few, so a place with thousands of photos cannot crowd out a trip abroad: asking the
+    // whole area for its newest thousand showed nothing but the city one lives in (Cip, 09/23/2026).
+    suspend fun pins(query: String, filters: SearchFilters, area: MapArea? = null): MapPins {
+        val (base, _, _) = queryParams(query, filters)
+        base += "fq" to "has_location:true"
+        base += "fl" to FIELDS
+        base += "start" to "0"
+        if (area == null) {
+            val params = ArrayList(base)
+            params += "rows" to MAP_ROWS.toString()
+            val page = parse(select(params), false, null)
+            return MapPins(page.hits.mapNotNull { hit -> hit.latLon?.let { (lat, lon) -> PhotoPin(hit, lat, lon) } }, page.numFound.toInt())
         }
-        params += "fl" to FIELDS
-        params += "start" to "0"
-        params += "rows" to MAP_ROWS.toString()
-        val page = parse(select(params), false, null)
-        return page.hits.mapNotNull { hit -> hit.latLon?.let { (lat, lon) -> PhotoPin(hit, lat, lon) } }
+
+        val south = area.south.coerceIn(-90.0, 90.0)
+        val north = area.north.coerceIn(-90.0, 90.0)
+        val west = area.west.coerceIn(-180.0, 180.0)
+        val east = area.east.coerceIn(-180.0, 180.0)
+        if (north <= south || east <= west) return MapPins(emptyList(), 0)
+        val latStep = (north - south) / MAP_GRID
+        val lonStep = (east - west) / MAP_GRID
+
+        val cells = ArrayList<Pair<Int, Int>>(MAP_GRID * MAP_GRID)
+        for (row in 0 until MAP_GRID) for (col in 0 until MAP_GRID) cells += row to col
+
+        val answers = kotlinx.coroutines.coroutineScope {
+            cells.map { (row, col) ->
+                async {
+                    val params = ArrayList(base)
+                    params += "fq" to "location:[" + corner(south + row * latStep, west + col * lonStep) +
+                        " TO " + corner(south + (row + 1) * latStep, west + (col + 1) * lonStep) + "]"
+                    params += "rows" to MAP_CELL_ROWS.toString()
+                    runCatching { parse(select(params), false, null) }.getOrNull()
+                }
+            }.awaitAll()
+        }
+
+        val seen = HashSet<String>()
+        val pins = ArrayList<PhotoPin>()
+        var total = 0
+        answers.filterNotNull().forEach { page ->
+            total += page.numFound.toInt()
+            page.hits.forEach { hit ->
+                if (seen.add(hit.id)) hit.latLon?.let { (lat, lon) -> pins += PhotoPin(hit, lat, lon) }
+            }
+        }
+        return MapPins(pins, total)
     }
+
+    /** A corner of a cell, as Solr reads a point: latitude first. */
+    private fun corner(lat: Double, lon: Double): String =
+        "\"" + String.format(Locale.US, "%.6f,%.6f", lat.coerceIn(-90.0, 90.0), lon.coerceIn(-180.0, 180.0)) + "\""
 
     // Similar answers about the photo, under the filters that are switched on, and never under the
     // typed words: those match the photo itself and nothing else (Cip, 09/23/2026).
@@ -1036,6 +1077,10 @@ class SearchRepository(private val context: Context) {
 
         /** The most pins one view of the map holds: past that, zoom in and the area asks again. */
         const val MAP_ROWS = 1000
+
+        /** The view is cut into this many cells each way, and every cell brings its own newest few. */
+        const val MAP_GRID = 3
+        const val MAP_CELL_ROWS = 120
 
         const val GROUP_TICK_MAX = 20000
 

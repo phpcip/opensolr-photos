@@ -86,6 +86,8 @@ data class UiState(
     val accountError: String? = null,
     val foldersReturnTo: Screen = Screen.Setup,
     val pins: List<PhotoPin> = emptyList(),
+    /** How many photos the piece of the world on screen really holds, pins drawn or not. */
+    val pinsTotal: Int = 0,
     val pinsLoading: Boolean = false,
     val pinsError: String? = null,
     val mapFocus: MapFocus? = null,
@@ -1707,18 +1709,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     val hit = runCatching { searches.hitOf(org.json.JSONObject(json)) }.getOrNull() ?: return@mapNotNull null
                     hit.latLon?.let { (lat, lon) -> PhotoPin(hit, lat, lon) }
                 }.also { phonePins = count to it }
-            val inArea = if (area == null) all else all.filter { kmBetween(area.lat, area.lon, it.lat, it.lon) <= area.radiusKm }
+            val inArea = if (area == null) all else all.filter {
+                it.lat >= area.south && it.lat <= area.north && it.lon >= area.west && it.lon <= area.east
+            }
             inArea.take(com.opensolr.photos.search.SearchRepository.MAP_ROWS)
         }
-
-    /** Kilometres between two places on the globe. */
-    private fun kmBetween(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
-        val dLat = Math.toRadians(lat2 - lat1)
-        val dLon = Math.toRadians(lon2 - lon1)
-        val a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-            Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2)) * Math.sin(dLon / 2) * Math.sin(dLon / 2)
-        return 6371.0 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-    }
 
     /** The pins of the area the map is showing; null asks for the newest ones, to place the camera. */
     fun loadPins(area: com.opensolr.photos.search.SearchRepository.MapArea? = null) {
@@ -1727,7 +1722,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(pinsLoading = true, pinsError = null) }
         pinsJob = viewModelScope.launch {
             try {
-                val pins = try {
+                val found = try {
                     searches.pins(current.query, current.filters, area)
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
@@ -1736,9 +1731,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 } catch (e: Exception) {
                     // The index is gone, unreachable or slow: the phone draws its own photos instead.
                     android.util.Log.w("Map", "pins from the index failed", e)
-                    pinsFromPhone(area)
+                    pinsFromPhone(area).let { com.opensolr.photos.search.SearchRepository.MapPins(it, it.size) }
                 }
-                _state.update { it.copy(pins = pins, pinsLoading = false, pinsError = null) }
+                _state.update { it.copy(pins = found.pins, pinsTotal = found.total, pinsLoading = false, pinsError = null) }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: SignInRequiredException) {
