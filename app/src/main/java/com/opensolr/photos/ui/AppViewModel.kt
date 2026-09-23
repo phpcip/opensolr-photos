@@ -1995,7 +1995,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 var similarGroups = emptyList<ResultGroup>()
                 var photosTotal = 0
                 if (anchor != null) {
-                    val (h, g) = searches.similarTo(anchor, level)
+                    val (h, g) = searches.similarTo(anchor, level, _state.value.filters)
                     hits = h; groups = g; loaded = g.size; done = true; total = g.size; photosTotal = h.size
 
                     val how = _state.value.groupBy

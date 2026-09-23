@@ -697,7 +697,9 @@ class SearchRepository(private val context: Context) {
         return page.hits.mapNotNull { hit -> hit.latLon?.let { (lat, lon) -> PhotoPin(hit, lat, lon) } }
     }
 
-    suspend fun similarTo(photoId: String, level: Int): Pair<List<PhotoHit>, List<Int>> {
+    // Similar answers about the photo, under the filters that are switched on, and never under the
+    // typed words: those match the photo itself and nothing else (Cip, 09/23/2026).
+    suspend fun similarTo(photoId: String, level: Int, filters: SearchFilters = SearchFilters()): Pair<List<PhotoHit>, List<Int>> {
         val stop = stopOf(level)
         val field = stop.field
         var anchorCamera: String? = null
@@ -737,6 +739,11 @@ class SearchRepository(private val context: Context) {
             params += "fq" to "{!field f=${stop.within} v=\$anchorCamera}"
             params += "anchorCamera" to anchorCamera
         }
+        // only the filter half of the query: the empty text leaves q and sort, which this view sets itself
+        queryParams("", filters, legacy = false, wordsOnly = true).first
+            .filter { it.first != "q" && it.first != "sort" }
+            .forEach { params += it }
+
         params += "fl" to FIELDS
         params += "rows" to SIMILAR_ROWS.toString()
 
