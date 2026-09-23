@@ -722,7 +722,8 @@ class SearchRepository(private val context: Context) {
             if (e.message?.contains("HTTP 400") == true) throw ServiceException(AppText.s(R.string.err_similar_needs_reset))
             throw e
         }.filter { it.isNotBlank() && '|' !in it }
-        if (keys.isEmpty()) return emptyList<PhotoHit>() to emptyList()
+        // no key at this stop: the photo being compared is still shown, on its own
+        if (keys.isEmpty()) return anchorAlone(photoId)
 
         val params = ArrayList<Pair<String, String>>()
         params += "q" to "*:*"
@@ -735,7 +736,7 @@ class SearchRepository(private val context: Context) {
         }
         // a stop that asks for the same camera answers only with photos taken by the anchor's own
         if (stop.within != null) {
-            if (anchorCamera == null) return emptyList<PhotoHit>() to emptyList()
+            if (anchorCamera == null) return anchorAlone(photoId)
             params += "fq" to "{!field f=${stop.within} v=\$anchorCamera}"
             params += "anchorCamera" to anchorCamera
         }
@@ -750,6 +751,23 @@ class SearchRepository(private val context: Context) {
         params += "sort" to "taken_at desc, id asc"
 
         val hits = parse(select(params), false, null).hits.sortedByDescending { it.id == photoId }
+        if (hits.isEmpty()) return anchorAlone(photoId)
+        return hits to listOf(hits.size)
+    }
+
+    /** The photo being compared, by itself: a stop it has no key for still shows what it is about. */
+    private suspend fun anchorAlone(photoId: String): Pair<List<PhotoHit>, List<Int>> {
+        val hits = parse(
+            select(
+                listOf(
+                    "q" to "*:*",
+                    "fq" to "{!term f=id v=\$anchorId}",
+                    "anchorId" to photoId,
+                    "fl" to FIELDS,
+                    "rows" to "1",
+                )
+            ), false, null
+        ).hits
         return hits to if (hits.isEmpty()) emptyList() else listOf(hits.size)
     }
 
