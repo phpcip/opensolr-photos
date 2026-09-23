@@ -139,7 +139,7 @@
     <string name="dup_kind_words">Primele %1$s cuvinte la fel</string>
     <string name="dup_kind_words_camera">Primele %1$s cuvinte la fel, aceeași cameră</string>
     <string-array name="dup_kinds">
-        <item>Aceeași descriere completă</item>
+        <item>Aceeași descriere, etichete și cameră</item>
         <item>Aceeași poză (EXIF)</item>
         <item>Același nume de fișier</item>
         <item>Aceeași mărime de fișier</item>

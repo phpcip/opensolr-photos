@@ -136,7 +136,7 @@
     <string name="dup_kind_words">Same first %1$s words</string>
     <string name="dup_kind_words_camera">Same first %1$s words, same camera</string>
     <string-array name="dup_kinds">
-        <item>Full description match</item>
+        <item>Same description, labels and camera</item>
         <item>Same photo (EXIF)</item>
         <item>Same file name</item>
         <item>Same file size</item>
