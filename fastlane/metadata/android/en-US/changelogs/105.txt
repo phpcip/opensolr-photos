@@ -1,0 +1,3 @@
+The map shows the photos of the place you are looking at: move or zoom it and it asks again, so a trip years ago is on it as surely as yesterday.
+Before this it only ever held the newest thousand photos with a place, and everything older was missing from it.
+When the index cannot answer, the map draws the photos the phone itself holds instead of showing an error.
