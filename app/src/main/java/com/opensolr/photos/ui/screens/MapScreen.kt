@@ -75,6 +75,9 @@ import com.opensolr.photos.ui.UiState
 import com.opensolr.photos.ui.map.PhotoCluster
 import com.opensolr.photos.ui.map.PhotoClusterOverlay
 import com.opensolr.photos.ui.theme.LocalPalette
+import org.osmdroid.events.MapListener
+import org.osmdroid.events.ScrollEvent
+import org.osmdroid.events.ZoomEvent
 import org.osmdroid.tileprovider.tilesource.TileSourceFactory
 import org.osmdroid.util.BoundingBox
 import org.osmdroid.util.GeoPoint
@@ -112,7 +115,7 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
             setMultiTouchControls(true)
             zoomController.setVisibility(CustomZoomButtonsController.Visibility.SHOW_AND_FADEOUT)
             isTilesScaledToDpi = true
-            minZoomLevel = 2.0
+            minZoomLevel = 4.0
             maxZoomLevel = 19.0
             setHorizontalMapRepetitionEnabled(false)
             if (dark) overlayManager.tilesOverlay.setColorFilter(darkMapFilter())
@@ -130,6 +133,21 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
 
             PhotoClusterOverlay.MarkerColors(p.chip.toArgb(), p.paper.toArgb(), p.hairline.toArgb(), p.accentFill.toArgb(), p.onAccentFill.toArgb()),
         ) { onTap(it) }.also { mapView.overlays.add(it) }
+    }
+
+    var area by remember { mutableStateOf<com.opensolr.photos.search.SearchRepository.MapArea?>(null) }
+    DisposableEffect(mapView) {
+        val listener = object : MapListener {
+            override fun onScroll(e: ScrollEvent?): Boolean { area = areaOf(mapView); return false }
+            override fun onZoom(e: ZoomEvent?): Boolean { area = areaOf(mapView); return false }
+        }
+        mapView.addMapListener(listener)
+        onDispose { mapView.removeMapListener(listener) }
+    }
+    LaunchedEffect(area) {
+        val asked = area ?: return@LaunchedEffect
+        kotlinx.coroutines.delay(400)
+        viewModel.loadPins(asked)
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -310,4 +328,14 @@ private fun GroupSheet(cluster: PhotoCluster, onDismiss: () -> Unit, onShowPhoto
             }
         }
     }
+}
+
+/** The middle of what the map is showing, and how far its corner is, in kilometres. */
+private fun areaOf(map: MapView): com.opensolr.photos.search.SearchRepository.MapArea {
+    val box = map.boundingBox
+    val center = GeoPoint(box.centerLatitude, box.centerLongitude)
+    val corner = GeoPoint(box.latNorth, box.lonEast)
+    return com.opensolr.photos.search.SearchRepository.MapArea(
+        center.latitude, center.longitude, max(0.5, center.distanceToAsDouble(corner) / 1000.0),
+    )
 }

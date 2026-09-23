@@ -687,26 +687,25 @@ class SearchRepository(private val context: Context) {
         return suggestion.takeIf { it.isNotBlank() && !it.equals(typed, ignoreCase = true) }
     }
 
-    // Every photo that has a place, walked with a cursor, not the newest page of them: with more
-    // than MAP_ROWS placed photos the older ones simply never reached the map (Cip, 09/23/2026).
-    suspend fun pins(query: String, filters: SearchFilters): List<PhotoPin> {
+    /** The piece of the world the map is showing: its middle and how far the corner is. */
+    data class MapArea(val lat: Double, val lon: Double, val radiusKm: Double)
+
+    // The photos of the area on screen, newest first, one page of them. The map asks again whenever
+    // it is moved or zoomed, so a trip years ago comes back as soon as you look at that country
+    // (Cip, 09/23/2026 - before this the map only ever held the newest MAP_ROWS of the whole library).
+    suspend fun pins(query: String, filters: SearchFilters, area: MapArea? = null): List<PhotoPin> {
         val (params, _, _) = queryParams(query, filters)
         params += "fq" to "has_location:true"
-        params += "fl" to FIELDS
-        val out = ArrayList<PhotoPin>()
-        var cursor = "*"
-        while (out.size < MAP_MAX) {
-            val page = ArrayList(params)
-            page += "rows" to MAP_ROWS.toString()
-            page += "cursorMark" to cursor
-            val json = select(page)
-            val hits = parse(json, false, null).hits
-            hits.forEach { hit -> hit.latLon?.let { (lat, lon) -> out += PhotoPin(hit, lat, lon) } }
-            val next = json.optString("nextCursorMark")
-            if (hits.isEmpty() || next.isEmpty() || next == cursor) break
-            cursor = next
+        if (area != null) {
+            params += "fq" to "{!geofilt sfield=location pt=\$mapPt d=\$mapD}"
+            params += "mapPt" to String.format(Locale.US, "%.6f,%.6f", area.lat, area.lon)
+            params += "mapD" to String.format(Locale.US, "%.3f", area.radiusKm.coerceIn(0.05, 20000.0))
         }
-        return out
+        params += "fl" to FIELDS
+        params += "start" to "0"
+        params += "rows" to MAP_ROWS.toString()
+        val page = parse(select(params), false, null)
+        return page.hits.mapNotNull { hit -> hit.latLon?.let { (lat, lon) -> PhotoPin(hit, lat, lon) } }
     }
 
     // Similar answers about the photo, under the filters that are switched on, and never under the
@@ -1035,9 +1034,8 @@ class SearchRepository(private val context: Context) {
 
         private val FACET_FIELDS = SearchFilters.FACETS.map { it.first }.toSet()
 
-        /** One page of map pins, and the most the map ever holds at once. */
+        /** The most pins one view of the map holds: past that, zoom in and the area asks again. */
         const val MAP_ROWS = 1000
-        const val MAP_MAX = 20_000
 
         const val GROUP_TICK_MAX = 20000
 

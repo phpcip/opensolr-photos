@@ -1689,12 +1689,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         loadPins()
     }
 
-    fun loadPins() {
+    private var pinsJob: kotlinx.coroutines.Job? = null
+
+    /** The pins of the area the map is showing; null asks for the newest ones, to place the camera. */
+    fun loadPins(area: com.opensolr.photos.search.SearchRepository.MapArea? = null) {
         val current = _state.value
+        pinsJob?.cancel()
         _state.update { it.copy(pinsLoading = true, pinsError = null) }
-        viewModelScope.launch {
+        pinsJob = viewModelScope.launch {
             try {
-                val pins = searches.pins(current.query, current.filters)
+                val pins = searches.pins(current.query, current.filters, area)
                 _state.update { it.copy(pins = pins, pinsLoading = false) }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
