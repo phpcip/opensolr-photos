@@ -1,0 +1,1 @@
+Scrolling further into duplicates or similar no longer closes the groups that were open: a new page folds only its own groups.
