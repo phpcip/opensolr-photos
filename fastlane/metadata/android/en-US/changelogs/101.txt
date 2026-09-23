@@ -1,0 +1,1 @@
+Signing in gives this phone a key of its own, which the account can revoke on its own under Account, Devices.
