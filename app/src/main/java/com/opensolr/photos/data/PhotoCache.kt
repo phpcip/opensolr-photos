@@ -557,18 +557,10 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         return out
     }
 
-    fun docsLikeDocuments(words: List<String>): List<String> {
-        val needles = words.map { it.trim('"').lowercase() }.filter { it.isNotEmpty() }
-        if (needles.isEmpty()) return emptyList()
-        val whole = Regex("\\b(" + needles.joinToString("|") { Regex.escape(it) } + ")\\b")
-        val where = needles.joinToString(" OR ") { "lower(meaning) LIKE ?" }
-        val args = needles.map { "%$it%" }.toTypedArray()
+    fun docsWithText(): List<String> {
         val out = ArrayList<String>()
-        readableDatabase.query("docs", arrayOf("id", "meaning"), where, args, null, null, null).use { c ->
-            while (c.moveToNext()) {
-                val meaning = if (c.isNull(1)) "" else c.getString(1).lowercase()
-                if (whole.containsMatchIn(meaning)) out += c.getString(0)
-            }
+        readableDatabase.query("docs", arrayOf("id"), "ocr IS NOT NULL AND ocr != ''", null, null, null, null).use { c ->
+            while (c.moveToNext()) out += c.getString(0)
         }
         return out
     }

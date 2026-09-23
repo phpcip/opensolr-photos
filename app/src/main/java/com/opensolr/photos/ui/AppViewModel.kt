@@ -1754,9 +1754,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
 
-            val ids = withContext(Dispatchers.IO) {
-                photoCache.docsLikeDocuments(com.opensolr.photos.search.SearchFilters.DOCUMENT_WORDS)
-            }
+            // Whether a photo carries text is tesseract's verdict, not a word in its description:
+            // this reads again exactly the photos that have printed text in the index.
+            val ids = withContext(Dispatchers.IO) { photoCache.docsWithText() }
             if (ids.isEmpty()) {
                 _state.update { it.copy(notice = AppText.s(R.string.vm_no_documents)) }
                 return@launch
