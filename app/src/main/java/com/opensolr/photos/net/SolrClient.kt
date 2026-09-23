@@ -200,8 +200,9 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
         try {
             val json = JSONObject(execute(request("/opensolr-photos-config?wt=json").get().build()))
             json.optJSONObject("responseHeader")?.optJSONObject("params")?.optString("config_version")?.toIntOrNull() ?: 0
-        } catch (e: ServiceException) {
-            if (e.message?.contains("HTTP 404") == true) 0 else throw e
+        } catch (e: IndexMissingException) {
+            // The configuration handler is missing on an index made before it existed.
+            0
         }
     }
 
@@ -242,6 +243,8 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
             when {
                 response.code == 401 -> throw SolrAuthException()
                 response.code == 403 -> throw PlanLimitException()
+                // The index is not there at all: the owner is told that, not an HTTP number.
+                response.code == 404 -> throw IndexMissingException()
                 !response.isSuccessful -> throw ServiceException("The index answered HTTP ${response.code}")
             }
             text
