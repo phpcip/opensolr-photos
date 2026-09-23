@@ -575,6 +575,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(foldedAlbumSections = folded) }
     }
 
+    /** Folds every group of alike photos, in the memory this view reads its headings from. */
+    private fun foldGroups(sizes: List<Int>) {
+        val context = contextKey(_state.value)
+        val keys = groupHeadingKeys(sizes)
+        collapsedHeadings[context] = keys
+        prefs.collapsedHeadings = collapsedHeadings
+        _state.update { it.copy(collapsedHeadings = keys) }
+    }
+
+    /** The heading key of every group of alike photos, as buildGridRows writes them. */
+    private fun groupHeadingKeys(sizes: List<Int>): Set<String> =
+        sizes.mapIndexed { index, size -> "h:$size of the same \u00b7 ${index + 1}" }.toSet()
+
     private fun defaultCollapsed(s: UiState): Set<String> =
         if (!s.duplicatesMode && !s.skippedMode && s.searchedQuery.isNotBlank()) setOf("h:Also similar") else emptySet()
 
@@ -1798,6 +1811,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         endReached = page.endReached,
                     )
                 }
+                foldGroups(_state.value.duplicateGroups)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -2015,6 +2029,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
 
+                // Groups arrive folded: their headings say what is inside, so nothing has to be opened
+                // to know whether it is worth looking at. Written where the view keeps its own state,
+                // because targetScroll() reads it back from there a moment later.
+                foldGroups(groups)
                 targetScroll()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
