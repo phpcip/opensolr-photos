@@ -12,7 +12,7 @@
     <string name="ob_how_3">検索は各写真から読み取った言葉に一致し、ベクトル検索では言葉の意味にも一致します。</string>
     <string name="ob_open_source">オープンソース。詳しくは opensolr.com/opensolr-photos</string>
     <string name="ob_signed_in">ログインしました。</string>
-    <string name="ob_no_ai_text">日付、カメラ、場所、ファイル名、タグのみです。AI付きのプランなら画像そのものを読み取ります。</string>
+    <string name="ob_no_ai_text">日付、カメラ、場所、ファイル名、タグのみです。このプランでは画像そのものは読み取りません。</string>
     <string name="ob_no_ai_title">このプランでは写真の内容を認識しません</string>
     <string name="ob_covers">プランの内容</string>
     <string name="ob_plan">プラン</string>
@@ -28,9 +28,6 @@
     <string name="ob_indexes">アカウントのインデックス</string>
     <string name="ob_x_of_y">%1$s / %2$s</string>
     <string name="ob_cost">新しい写真10枚でAIリクエスト1回。インデックス済みの写真は二度と費用がかかりません。</string>
-    <string name="ob_more_text">写真、ディスク、帯域を増やすにはプランをアップグレードしてください。</string>
-    <string name="ob_more_title">もっと必要ですか？</string>
-    <string name="ob_see_plans">opensolr.com/pricing でプランを見る</string>
     <string name="ob_continue">続ける</string>
     <string name="ob_allow_title">写真へのアクセスを許可</string>
     <string name="ob_allow_lead">4つの権限のうち、必須は最初の1つだけです。</string>

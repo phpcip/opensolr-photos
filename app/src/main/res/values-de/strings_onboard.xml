@@ -12,7 +12,7 @@
     <string name="ob_how_3">Die Suche findet die Wörter, in die jedes Foto gelesen wurde, und mit Vektorsuche auch, was Ihre Wörter bedeuten.</string>
     <string name="ob_open_source">Open Source. Mehr auf opensolr.com/opensolr-photos</string>
     <string name="ob_signed_in">Sie sind angemeldet.</string>
-    <string name="ob_no_ai_text">Nur Datum, Kamera, Ort, Dateiname und Ihre Tags. Ein Tarif mit KI liest die Bilder selbst.</string>
+    <string name="ob_no_ai_text">Nur Datum, Kamera, Ort, Dateiname und Ihre Tags. Ihr Tarif liest die Bilder selbst nicht.</string>
     <string name="ob_no_ai_title">Fotos werden in diesem Tarif nicht erkannt</string>
     <string name="ob_covers">Was Ihr Tarif umfasst</string>
     <string name="ob_plan">Tarif</string>
@@ -28,9 +28,6 @@
     <string name="ob_indexes">Indizes im Konto</string>
     <string name="ob_x_of_y">%1$s von %2$s</string>
     <string name="ob_cost">Zehn neue Fotos, eine KI-Anfrage. Indexierte kosten nie wieder etwas.</string>
-    <string name="ob_more_text">Mehr Fotos, Speicher oder Bandbreite: Upgraden Sie Ihren Tarif.</string>
-    <string name="ob_more_title">Mehr nötig?</string>
-    <string name="ob_see_plans">Tarife auf opensolr.com/pricing</string>
     <string name="ob_continue">Weiter</string>
     <string name="ob_allow_title">Zugriff auf Ihre Fotos erlauben</string>
     <string name="ob_allow_lead">Vier Berechtigungen, nur die erste ist nötig.</string>

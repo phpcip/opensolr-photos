@@ -10,6 +10,8 @@
     <string name="acc_plan">Plan</string>
     <string name="acc_index">Indexul acestui telefon</string>
     <string name="acc_environment">Mediu</string>
+    <string name="acc_privacy">Politica de confidențialitate</string>
+    <string name="acc_delete_account">Șterge contul și datele</string>
     <string name="acc_app_version">Versiunea aplicației</string>
     <string name="acc_checking">Se verifică…</string>
     <string name="acc_check_updates">Caută actualizări</string>
@@ -40,7 +42,7 @@
     <string name="acc_updated">Actualizat</string>
     <string name="acc_limit_text">Fără disc sau trafic, se oprește. Fără cereri AI, pozele se indexează fără cuvinte.</string>
     <string name="acc_limit_title">Când se atinge o limită</string>
-    <string name="acc_upgrade">Upgrade la opensolr.com/pricing</string>
+    <string name="acc_open_account">Deschide contul Opensolr</string>
     <string name="acc_could_not_refresh">Nu s-a putut actualiza</string>
     <string name="acc_refreshing">Se actualizează…</string>
     <string name="acc_refresh">Actualizează</string>

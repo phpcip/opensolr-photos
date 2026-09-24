@@ -21,7 +21,7 @@ object Notifier {
     private const val ALERT_SIGN_IN = 2001
     private const val ALERT_LIMIT = 2002
     private const val ALERT_RECREATED = 2003
-    const val PRICING_URL = "https://opensolr.com/pricing"
+    private const val ACCOUNT_URL = "https://opensolr.com/admin/solr_manager/dashboard"
 
     fun createChannels(context: Context) {
         val manager = context.getSystemService(NotificationManager::class.java) ?: return
@@ -67,8 +67,7 @@ object Notifier {
             .setContentText(text)
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setAutoCancel(true)
-            .setContentIntent(openPricing(context))
-            .addAction(0, "Upgrade", openPricing(context))
+            .setContentIntent(openAccount(context))
             .build()
     )
 
@@ -99,8 +98,8 @@ object Notifier {
         return PendingIntent.getActivity(context, destination.hashCode(), intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 
-    private fun openPricing(context: Context): PendingIntent {
-        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(PRICING_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    private fun openAccount(context: Context): PendingIntent {
+        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(ACCOUNT_URL)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         return PendingIntent.getActivity(context, 7, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
     }
 }

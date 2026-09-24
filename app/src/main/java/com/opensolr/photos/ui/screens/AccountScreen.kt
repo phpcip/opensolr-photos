@@ -109,6 +109,10 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                 account?.let { InfoRow(stringResource(R.string.acc_plan), it.planLabel, onOpen = { Actions.openUrl(context, Actions.DASHBOARD_URL) }) }
                 state.indexName?.let { InfoRow(stringResource(R.string.acc_index), it) }
                 state.environment?.takeIf { it.isNotBlank() }?.let { InfoRow(stringResource(R.string.acc_environment), it) }
+                Spacer(Modifier.height(14.dp))
+                GhostButton(stringResource(R.string.acc_privacy), onClick = { Actions.openUrl(context, Actions.PRIVACY_URL) }, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(10.dp))
+                GhostButton(stringResource(R.string.acc_delete_account), onClick = { Actions.openUrl(context, Actions.DELETE_ACCOUNT_URL) }, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(18.dp))
             }
         }
@@ -154,7 +158,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                         title = stringResource(R.string.acc_limit_title),
                     )
                     Spacer(Modifier.height(14.dp))
-                    AccentButton(stringResource(R.string.acc_upgrade), onClick = { Actions.openUrl(context, Actions.PRICING_URL) }, modifier = Modifier.fillMaxWidth())
+                    GhostButton(stringResource(R.string.acc_open_account), onClick = { Actions.openUrl(context, Actions.DASHBOARD_URL) }, modifier = Modifier.fillMaxWidth())
                 }
                 state.accountError?.let {
                     Spacer(Modifier.height(14.dp))

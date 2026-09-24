@@ -55,9 +55,10 @@ enum class GroupBy(val key: String, val labelRes: Int) {
 
 object Actions {
 
-    const val PRICING_URL = "https://opensolr.com/pricing"
     const val DASHBOARD_URL = "https://opensolr.com/admin/solr_manager/dashboard"
     const val PROJECT_URL = "https://opensolr.com/opensolr-photos"
+    const val PRIVACY_URL = "https://opensolr.com/opensolr-photos-docs/privacy"
+    const val DELETE_ACCOUNT_URL = "https://opensolr.com/delete-account"
 
     fun openUrl(context: Context, url: String) {
         try {

@@ -10,6 +10,8 @@
     <string name="acc_plan">プラン</string>
     <string name="acc_index">この端末のインデックス</string>
     <string name="acc_environment">環境</string>
+    <string name="acc_privacy">プライバシーポリシー</string>
+    <string name="acc_delete_account">アカウントとデータを削除</string>
     <string name="acc_app_version">アプリのバージョン</string>
     <string name="acc_checking">確認中…</string>
     <string name="acc_check_updates">アップデートを確認</string>
@@ -40,7 +42,7 @@
     <string name="acc_updated">更新日時</string>
     <string name="acc_limit_text">ディスクか帯域が上限に達すると停止します。AIリクエストがなくなると、写真は言葉なしでインデックスされます。</string>
     <string name="acc_limit_title">上限に達したとき</string>
-    <string name="acc_upgrade">opensolr.com/pricing でアップグレード</string>
+    <string name="acc_open_account">Opensolrアカウントを開く</string>
     <string name="acc_could_not_refresh">更新できませんでした</string>
     <string name="acc_refreshing">更新中…</string>
     <string name="acc_refresh">更新</string>

@@ -155,13 +155,6 @@ fun WelcomeScreen(state: UiState, viewModel: AppViewModel) {
                 stringResource(R.string.ob_cost),
                 style = MaterialTheme.typography.bodyMedium, color = p.muted,
             )
-            Spacer(Modifier.height(20.dp))
-            Notice(
-                stringResource(R.string.ob_more_text),
-                title = stringResource(R.string.ob_more_title),
-            )
-            Spacer(Modifier.height(12.dp))
-            GhostButton(stringResource(R.string.ob_see_plans), onClick = { Actions.openUrl(context, Actions.PRICING_URL) }, modifier = Modifier.fillMaxWidth())
         }
 
         Spacer(Modifier.height(28.dp))
@@ -373,7 +366,7 @@ fun SetupScreen(state: UiState, viewModel: AppViewModel) {
             AccentButton(stringResource(R.string.ob_try_again), onClick = { viewModel.runSetup() }, modifier = Modifier.fillMaxWidth())
             if (state.setupNeedsUpgrade) {
                 Spacer(Modifier.height(12.dp))
-                GhostButton(stringResource(R.string.ob_see_plans), onClick = { Actions.openUrl(context, Actions.PRICING_URL) }, modifier = Modifier.fillMaxWidth())
+                GhostButton(stringResource(R.string.acc_open_account), onClick = { Actions.openUrl(context, Actions.DASHBOARD_URL) }, modifier = Modifier.fillMaxWidth())
             }
         }
     }

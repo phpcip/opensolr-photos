@@ -12,7 +12,7 @@
     <string name="ob_how_3">La recherche trouve les mots en lesquels chaque photo a été lue, et avec la recherche vectorielle aussi le sens de vos mots.</string>
     <string name="ob_open_source">Open source. En savoir plus sur opensolr.com/opensolr-photos</string>
     <string name="ob_signed_in">Vous êtes connecté.</string>
-    <string name="ob_no_ai_text">Date, appareil, lieu, nom de fichier et vos étiquettes seulement. Un forfait avec IA lit les images elles-mêmes.</string>
+    <string name="ob_no_ai_text">Date, appareil, lieu, nom de fichier et vos étiquettes seulement. Votre forfait ne lit pas les images elles-mêmes.</string>
     <string name="ob_no_ai_title">Les photos ne sont pas reconnues avec ce forfait</string>
     <string name="ob_covers">Ce que couvre votre forfait</string>
     <string name="ob_plan">Forfait</string>
@@ -28,9 +28,6 @@
     <string name="ob_indexes">Index du compte</string>
     <string name="ob_x_of_y">%1$s sur %2$s</string>
     <string name="ob_cost">Dix nouvelles photos, une requête IA. Les photos indexées ne coûtent plus rien.</string>
-    <string name="ob_more_text">Plus de photos, de disque ou de bande passante : passez à un forfait supérieur.</string>
-    <string name="ob_more_title">Besoin de plus ?</string>
-    <string name="ob_see_plans">Voir les forfaits sur opensolr.com/pricing</string>
     <string name="ob_continue">Continuer</string>
     <string name="ob_allow_title">Autoriser l\'accès à vos photos</string>
     <string name="ob_allow_lead">Quatre autorisations, seule la première est obligatoire.</string>

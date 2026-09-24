@@ -12,7 +12,7 @@
     <string name="ob_how_3">Căutarea găsește cuvintele în care a fost citită fiecare poză și, cu căutarea vectorială, și ce înseamnă cuvintele tale.</string>
     <string name="ob_open_source">Open source. Mai multe pe opensolr.com/opensolr-photos</string>
     <string name="ob_signed_in">Te-ai autentificat.</string>
-    <string name="ob_no_ai_text">Doar dată, cameră, loc, nume de fișier și etichetele tale. Un plan cu AI citește chiar imaginile.</string>
+    <string name="ob_no_ai_text">Doar dată, cameră, loc, nume de fișier și etichetele tale. Planul tău nu citește imaginile.</string>
     <string name="ob_no_ai_title">Pozele nu sunt recunoscute pe acest plan</string>
     <string name="ob_covers">Ce include planul tău</string>
     <string name="ob_plan">Plan</string>
@@ -28,9 +28,6 @@
     <string name="ob_indexes">Indexuri în cont</string>
     <string name="ob_x_of_y">%1$s din %2$s</string>
     <string name="ob_cost">Zece poze noi, o cerere AI. Cele indexate nu mai costă nimic.</string>
-    <string name="ob_more_text">Mai multe poze, disc sau trafic: fă upgrade la plan.</string>
-    <string name="ob_more_title">Ai nevoie de mai mult?</string>
-    <string name="ob_see_plans">Vezi planurile pe opensolr.com/pricing</string>
     <string name="ob_continue">Continuă</string>
     <string name="ob_allow_title">Permite accesul la poze</string>
     <string name="ob_allow_lead">Patru permisiuni, doar prima e obligatorie.</string>

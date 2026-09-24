@@ -12,7 +12,7 @@
     <string name="ob_how_3">搜索会匹配每张照片读出的文字；使用向量搜索时还会匹配你的词语含义。</string>
     <string name="ob_open_source">开源。详情见 opensolr.com/opensolr-photos</string>
     <string name="ob_signed_in">你已登录。</string>
-    <string name="ob_no_ai_text">仅限日期、相机、地点、文件名和你的标签。带 AI 的套餐会读取图片本身。</string>
+    <string name="ob_no_ai_text">仅限日期、相机、地点、文件名和你的标签。你的套餐不读取图片本身。</string>
     <string name="ob_no_ai_title">此套餐不识别照片内容</string>
     <string name="ob_covers">你的套餐包含</string>
     <string name="ob_plan">套餐</string>
@@ -28,9 +28,6 @@
     <string name="ob_indexes">账户中的索引</string>
     <string name="ob_x_of_y">%1$s / %2$s</string>
     <string name="ob_cost">十张新照片，一次 AI 请求。已索引的照片不再产生费用。</string>
-    <string name="ob_more_text">需要更多照片、磁盘或带宽：请升级套餐。</string>
-    <string name="ob_more_title">需要更多？</string>
-    <string name="ob_see_plans">在 opensolr.com/pricing 查看套餐</string>
     <string name="ob_continue">继续</string>
     <string name="ob_allow_title">允许访问你的照片</string>
     <string name="ob_allow_lead">四项权限，只有第一项是必需的。</string>

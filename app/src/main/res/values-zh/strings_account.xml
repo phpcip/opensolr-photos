@@ -10,6 +10,8 @@
     <string name="acc_plan">套餐</string>
     <string name="acc_index">本手机的索引</string>
     <string name="acc_environment">环境</string>
+    <string name="acc_privacy">隐私政策</string>
+    <string name="acc_delete_account">删除账户和数据</string>
     <string name="acc_app_version">应用版本</string>
     <string name="acc_checking">正在检查…</string>
     <string name="acc_check_updates">检查更新</string>
@@ -40,7 +42,7 @@
     <string name="acc_updated">更新时间</string>
     <string name="acc_limit_text">磁盘或带宽用完即停止。AI 请求用完后，照片将不带文字建立索引。</string>
     <string name="acc_limit_title">达到限额时</string>
-    <string name="acc_upgrade">在 opensolr.com/pricing 升级</string>
+    <string name="acc_open_account">打开你的 Opensolr 账户</string>
     <string name="acc_could_not_refresh">无法刷新</string>
     <string name="acc_refreshing">正在刷新…</string>
     <string name="acc_refresh">刷新</string>

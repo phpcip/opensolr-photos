@@ -10,6 +10,8 @@
     <string name="acc_plan">Plan</string>
     <string name="acc_index">This phone\'s index</string>
     <string name="acc_environment">Environment</string>
+    <string name="acc_privacy">Privacy policy</string>
+    <string name="acc_delete_account">Delete account and data</string>
     <string name="acc_app_version">App version</string>
     <string name="acc_checking">Checking…</string>
     <string name="acc_check_updates">Check for updates</string>
@@ -40,7 +42,7 @@
     <string name="acc_updated">Updated</string>
     <string name="acc_limit_text">Over disk or bandwidth, it stops. Out of AI requests, photos are indexed without words.</string>
     <string name="acc_limit_title">When a limit is reached</string>
-    <string name="acc_upgrade">Upgrade at opensolr.com/pricing</string>
+    <string name="acc_open_account">Open your Opensolr account</string>
     <string name="acc_could_not_refresh">Could not refresh</string>
     <string name="acc_refreshing">Refreshing…</string>
     <string name="acc_refresh">Refresh</string>

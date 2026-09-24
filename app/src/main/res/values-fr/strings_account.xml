@@ -10,6 +10,8 @@
     <string name="acc_plan">Forfait</string>
     <string name="acc_index">Index de ce téléphone</string>
     <string name="acc_environment">Environnement</string>
+    <string name="acc_privacy">Politique de confidentialité</string>
+    <string name="acc_delete_account">Supprimer le compte et les données</string>
     <string name="acc_app_version">Version de l\'app</string>
     <string name="acc_checking">Vérification…</string>
     <string name="acc_check_updates">Rechercher des mises à jour</string>
@@ -40,7 +42,7 @@
     <string name="acc_updated">Mis à jour</string>
     <string name="acc_limit_text">Disque ou bande passante pleins : tout s\'arrête. Plus de requêtes IA : les photos sont indexées sans mots.</string>
     <string name="acc_limit_title">Quand une limite est atteinte</string>
-    <string name="acc_upgrade">Passer au niveau supérieur sur opensolr.com/pricing</string>
+    <string name="acc_open_account">Ouvrir votre compte Opensolr</string>
     <string name="acc_could_not_refresh">Actualisation impossible</string>
     <string name="acc_refreshing">Actualisation…</string>
     <string name="acc_refresh">Actualiser</string>

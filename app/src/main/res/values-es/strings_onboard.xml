@@ -12,7 +12,7 @@
     <string name="ob_how_3">La búsqueda encuentra las palabras en que se leyó cada foto y, con búsqueda vectorial, también lo que significan tus palabras.</string>
     <string name="ob_open_source">Código abierto. Más en opensolr.com/opensolr-photos</string>
     <string name="ob_signed_in">Has iniciado sesión.</string>
-    <string name="ob_no_ai_text">Solo fecha, cámara, lugar, nombre de archivo y tus etiquetas. Un plan con IA lee las imágenes.</string>
+    <string name="ob_no_ai_text">Solo fecha, cámara, lugar, nombre de archivo y tus etiquetas. Tu plan no lee las imágenes.</string>
     <string name="ob_no_ai_title">Las fotos no se reconocen con este plan</string>
     <string name="ob_covers">Lo que incluye tu plan</string>
     <string name="ob_plan">Plan</string>
@@ -28,9 +28,6 @@
     <string name="ob_indexes">Índices en la cuenta</string>
     <string name="ob_x_of_y">%1$s de %2$s</string>
     <string name="ob_cost">Diez fotos nuevas, una solicitud de IA. Las indexadas no vuelven a costar.</string>
-    <string name="ob_more_text">Más fotos, disco o ancho de banda: mejora tu plan.</string>
-    <string name="ob_more_title">¿Necesitas más?</string>
-    <string name="ob_see_plans">Ver planes en opensolr.com/pricing</string>
     <string name="ob_continue">Continuar</string>
     <string name="ob_allow_title">Permitir acceso a tus fotos</string>
     <string name="ob_allow_lead">Cuatro permisos, y solo el primero es obligatorio.</string>
