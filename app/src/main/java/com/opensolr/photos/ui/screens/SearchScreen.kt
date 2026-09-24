@@ -760,6 +760,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                     .combinedClickable(
 
                                         onClick = {
+                                            Haptics.tick(view, strong = false)
                                             if (state.selecting && row.selectable) viewModel.toggleSelectedGroup(row.key, row.ids, row.range)
                                             else viewModel.toggleHeading(row.key)
                                         },
@@ -792,7 +793,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
 
                                     PickTick(
                                         selected = allPicked,
-                                        onClick = { viewModel.toggleSelectedGroup(row.key, row.ids, row.range) },
+                                        onClick = { Haptics.tick(view, strong = false); viewModel.toggleSelectedGroup(row.key, row.ids, row.range) },
                                         modifier = Modifier.padding(end = FAST_SCROLL_WIDTH),
                                         dense = true,
                                     )

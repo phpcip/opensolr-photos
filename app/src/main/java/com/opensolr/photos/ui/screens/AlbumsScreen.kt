@@ -175,6 +175,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
                             selecting = selecting,
                             selected = section.title in state.selectedSections,
                             onClick = {
+                                Haptics.tick(view, strong = false)
                                 if (selecting) viewModel.toggleSectionSelected(section.title)
                                 else viewModel.toggleAlbumSection(section.title)
                             },
@@ -182,7 +183,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
                                 if (!selecting) Haptics.tick(view, strong = true)
                                 viewModel.toggleSectionSelected(section.title)
                             },
-                            onTick = { viewModel.toggleSectionSelected(section.title) },
+                            onTick = { Haptics.tick(view, strong = false); viewModel.toggleSectionSelected(section.title) },
                         )
                     }
                     if (!sectionFolded) {
