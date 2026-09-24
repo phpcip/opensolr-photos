@@ -57,6 +57,10 @@
     <string name="acc_place_new_text">位置のない新しい写真は、時間が最も近い端末の写真の場所（30 分以内）を受け取ります。直近 2 時間の写真なら端末の現在地を使います。すでに位置がある写真は変更しません。</string>
     <string name="acc_place_no_location">位置情報へのアクセスがない場合は、端末の写真だけを使います。端末の位置も使うには位置情報を許可してください。</string>
     <string name="acc_place_no_background">Androidはアプリが開いている間だけ位置を渡すため、バックグラウンドで同期された写真には端末の写真の場所だけが付きます。アプリの位置情報の権限で「常に許可」を選んでください。</string>
+    <string name="acc_loc_title">新しい写真に位置情報を使う</string>
+    <string name="acc_loc_text">Opensolr Photos は、位置情報を持たない新しい写真に場所を付けるため、電話の位置情報を収集します。バックグラウンドで同期される写真も対象で、アプリが閉じているときや使用していないときも収集します。位置情報はその写真の場所としてのみ、電話とあなたの Opensolr Index に保存され、検索で場所から写真を見つけるのに使われます。それ以外には使われず、共有もされません。</string>
+    <string name="acc_loc_allow">続ける</string>
+    <string name="acc_loc_not_now">今はしない</string>
     <string name="acc_save_places">場所を写真に書き込む</string>
     <string name="acc_tuning">検索の調整</string>
     <string name="acc_balance">意味 ↔ 語句のバランス</string>

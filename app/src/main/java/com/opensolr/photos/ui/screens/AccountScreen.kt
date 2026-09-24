@@ -56,6 +56,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
     val p = LocalPalette.current
     val context = LocalContext.current
     var confirmSignOut by remember { mutableStateOf(false) }
+    var discloseLocation by remember { mutableStateOf(false) }
     val account = state.account
 
     LaunchedEffect(Unit) {
@@ -246,11 +247,27 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                         checked = state.autoPlace,
                         onCheckedChange = { on ->
                             viewModel.setAutoPlace(on)
-                            if (on && !state.autoPlaceLocation) {
-                                locationAsk.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION))
-                            }
+                            // Google Play: say what the location is for, before Android asks for it.
+                            if (on && !state.autoPlaceLocation) discloseLocation = true
                         },
                         colors = SwitchDefaults.colors(checkedTrackColor = p.accentFill, checkedThumbColor = p.onAccentFill, uncheckedTrackColor = p.chip, uncheckedBorderColor = p.hairline, uncheckedThumbColor = p.muted),
+                    )
+                }
+                if (discloseLocation) {
+                    AlertDialog(
+                        onDismissRequest = { discloseLocation = false },
+                        title = { Text(stringResource(R.string.acc_loc_title)) },
+                        text = { Text(stringResource(R.string.acc_loc_text)) },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                discloseLocation = false
+                                locationAsk.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION))
+                            }) { Text(stringResource(R.string.acc_loc_allow), color = p.accent) }
+                        },
+                        dismissButton = { TextButton(onClick = { discloseLocation = false }) { Text(stringResource(R.string.acc_loc_not_now), color = p.ink) } },
+                        containerColor = p.paper,
+                        titleContentColor = p.ink,
+                        textContentColor = p.muted,
                     )
                 }
                 if (state.autoPlace && !state.autoPlaceLocation) {

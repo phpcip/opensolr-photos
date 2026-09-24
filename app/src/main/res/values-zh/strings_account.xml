@@ -57,6 +57,10 @@
     <string name="acc_place_new_text">没有位置的新照片会取用时间上最接近的手机照片的地点（30 分钟内）；若是最近 2 小时拍的，则取手机当前位置。已有位置的照片不会改动。</string>
     <string name="acc_place_no_location">没有位置权限时，只使用手机自己的照片。允许位置权限即可同时使用手机的位置。</string>
     <string name="acc_place_no_background">Android 仅在应用打开时提供位置，因此后台同步的照片只会获得手机照片的地点。请在应用的位置权限中选择“始终允许”。</string>
+    <string name="acc_loc_title">为新照片使用你的位置</string>
+    <string name="acc_loc_text">Opensolr Photos 会收集手机的位置信息，为没有位置的新照片添加地点，包括在后台同步的照片，即使应用已关闭或未在使用。位置仅作为该照片的地点保存在手机和你的 Opensolr Index 中，用于按地点搜索照片。它不会用于其他任何用途，也不会被共享。</string>
+    <string name="acc_loc_allow">继续</string>
+    <string name="acc_loc_not_now">暂不</string>
     <string name="acc_save_places">将地点写入照片</string>
     <string name="acc_tuning">搜索调整</string>
     <string name="acc_balance">语义 ↔ 词汇平衡</string>

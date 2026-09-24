@@ -57,6 +57,10 @@
     <string name="acc_place_new_text">Una foto nueva sin posición toma el lugar de la foto del móvil más cercana en el tiempo (30 minutos), o, si es de las últimas 2 horas, la posición del móvil. Las que ya tienen una no se tocan.</string>
     <string name="acc_place_no_location">Sin acceso a la ubicación solo se usan las fotos del propio teléfono. Permite la ubicación para usar también la posición del teléfono.</string>
     <string name="acc_place_no_background">Android solo da la posición a la app mientras está abierta, así que las fotos sincronizadas en segundo plano solo reciben el lugar de las fotos del teléfono. Permite «Siempre» en el permiso de ubicación de la app.</string>
+    <string name="acc_loc_title">Usar tu ubicación para las fotos nuevas</string>
+    <string name="acc_loc_text">Opensolr Photos recoge la ubicación de tu teléfono para dar lugar a las fotos nuevas que no tienen uno propio, también a las que se sincronizan en segundo plano, incluso cuando la app está cerrada o no se usa. La ubicación se guarda solo como el lugar de esa foto, en el teléfono y en tu Opensolr Index, donde la búsqueda encuentra la foto por lugar. No se usa para nada más y no se comparte.</string>
+    <string name="acc_loc_allow">Continuar</string>
+    <string name="acc_loc_not_now">Ahora no</string>
     <string name="acc_save_places">Guardar los lugares en las fotos</string>
     <string name="acc_tuning">Ajuste de búsqueda</string>
     <string name="acc_balance">Equilibrio semántico ↔ léxico</string>
