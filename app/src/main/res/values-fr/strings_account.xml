@@ -52,7 +52,7 @@
     <string name="acc_language_phone">Langue du téléphone</string>
     <string name="acc_language_text">L\'app suit la langue de votre téléphone quand elle la parle, sinon l\'anglais.</string>
     <string name="acc_places">Lieux</string>
-    <string name="acc_place_new">Placer les nouvelles photos</string>
+    <string name="acc_place_new">Localiser les nouvelles photos</string>
     <string name="acc_place_new_text">Une nouvelle photo sans position prend le lieu de la photo du téléphone la plus proche dans le temps (30 minutes), ou, si elle date de moins de 2 heures, la position du téléphone. Celles qui en ont une ne sont jamais touchées.</string>
     <string name="acc_place_no_location">Sans accès à la position, seules les photos du téléphone sont utilisées. Autorisez la position pour utiliser aussi celle du téléphone.</string>
     <string name="acc_place_no_background">Android ne donne la position à l\'app que lorsqu\'elle est ouverte ; les photos synchronisées en arrière-plan ne reçoivent donc que le lieu des photos du téléphone. Autorisez « Toujours » dans l\'autorisation de position de l\'app.</string>

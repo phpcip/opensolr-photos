@@ -1,5 +1,6 @@
 package com.opensolr.photos.ui.screens
 
+import com.opensolr.photos.ui.Haptics
 import com.opensolr.photos.ui.tapClickable
 import com.opensolr.photos.R
 import androidx.compose.ui.res.pluralStringResource
@@ -458,6 +459,7 @@ private fun PlaceModeChip(label: String, selected: Boolean, enabled: Boolean, on
 
 @Composable
 private fun ModeHeader(title: String, replace: Boolean, enabled: Boolean, onChange: (Boolean) -> Unit) {
+    val view = androidx.compose.ui.platform.LocalView.current
     val p = LocalPalette.current
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         SectionLabel(title, modifier = Modifier.weight(1f))
@@ -470,7 +472,7 @@ private fun ModeHeader(title: String, replace: Boolean, enabled: Boolean, onChan
         Spacer(Modifier.size(8.dp))
         Switch(
             checked = replace,
-            onCheckedChange = { if (enabled) onChange(it) },
+            onCheckedChange = { if (enabled) { Haptics.toggle(view, it); onChange(it) } },
             enabled = enabled,
             colors = SwitchDefaults.colors(
                 checkedThumbColor = p.onAccentFill,

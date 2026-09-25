@@ -1,5 +1,6 @@
 package com.opensolr.photos.ui.screens
 
+import com.opensolr.photos.ui.Haptics
 import com.opensolr.photos.ui.tapClickable
 import androidx.compose.ui.res.stringResource
 import androidx.compose.foundation.clickable
@@ -215,12 +216,13 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
 
 @Composable
 private fun ScheduleOption(label: String, selected: Boolean, onSelect: () -> Unit) {
+    val view = androidx.compose.ui.platform.LocalView.current
     val p = LocalPalette.current
     Row(
         Modifier.fillMaxWidth().tapClickable(onClick = onSelect).padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        RadioButton(selected = selected, onClick = onSelect, colors = RadioButtonDefaults.colors(selectedColor = p.accent, unselectedColor = p.muted))
+        RadioButton(selected = selected, onClick = { Haptics.tap(view); onSelect() }, colors = RadioButtonDefaults.colors(selectedColor = p.accent, unselectedColor = p.muted))
         Text(label, style = MaterialTheme.typography.bodyLarge, color = p.ink)
     }
 }

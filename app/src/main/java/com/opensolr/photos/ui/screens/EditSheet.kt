@@ -1,5 +1,6 @@
 package com.opensolr.photos.ui.screens
 
+import com.opensolr.photos.ui.Haptics
 import com.opensolr.photos.ui.tapClickable
 import com.opensolr.photos.R
 import androidx.compose.ui.res.pluralStringResource
@@ -89,6 +90,7 @@ private val Corner = RoundedCornerShape(2.dp)
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit) {
+    val view = androidx.compose.ui.platform.LocalView.current
 
     @Suppress("NAME_SHADOWING")
     val hit = state.hits.firstOrNull { it.id == hit.id } ?: hit
@@ -242,7 +244,7 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                                 .clip(Corner)
                                 .background(p.paper)
                                 .border(1.dp, p.accent, Corner)
-                                .clickable { persons = persons - person }
+                                .clickable { Haptics.tap(view); persons = persons - person }
                                 .padding(horizontal = 10.dp, vertical = 7.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
@@ -300,7 +302,7 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                                 .clip(Corner)
                                 .background(p.paper)
                                 .border(1.dp, p.accent, Corner)
-                                .clickable { tags = tags - tag }
+                                .clickable { Haptics.tap(view); tags = tags - tag }
                                 .padding(horizontal = 10.dp, vertical = 7.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {

@@ -1,5 +1,6 @@
 package com.opensolr.photos.ui.screens
 
+import com.opensolr.photos.ui.Haptics
 import com.opensolr.photos.R
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -251,6 +252,7 @@ fun PlacePickerDialog(
                             Modifier
                                 .fillMaxWidth()
                                 .clickable {
+                                    Haptics.tap(view)
                                     keyboard?.hide()
                                     picked = hit.label
                                     term = hit.label

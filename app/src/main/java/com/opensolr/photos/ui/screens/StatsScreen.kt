@@ -123,7 +123,6 @@ fun StatsScreen(state: UiState, viewModel: AppViewModel) {
                 icon = if (anyFolded) R.drawable.ic_expand_all else R.drawable.ic_collapse_all,
                 label = if (anyFolded) stringResource(R.string.al_expand_all) else stringResource(R.string.al_collapse_all),
                 onClick = {
-                    Haptics.tick(view, strong = false)
                     viewModel.setStatsOpen(if (anyFolded) STAT_SECTIONS.toSet() else emptySet())
                 },
             )
@@ -258,6 +257,7 @@ private fun LazyListScope.table(
     if (!all && rows.size > TABLE_ROWS) {
         item(key = "more:$key") {
             val p = LocalPalette.current
+            val view = androidx.compose.ui.platform.LocalView.current
             val count = NumberFormat.getIntegerInstance(locale).format(rows.size)
             Text(
                 if (full) stringResource(R.string.st_show_fewer) else stringResource(R.string.st_show_all, count),
@@ -266,7 +266,7 @@ private fun LazyListScope.table(
                 modifier = Modifier
                     .padding(top = 6.dp)
                     .clip(Corner)
-                    .clickable { expanded[key] = !full }
+                    .clickable { Haptics.tick(view, strong = false); expanded[key] = !full }
                     .padding(horizontal = 4.dp, vertical = 10.dp),
             )
         }

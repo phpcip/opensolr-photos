@@ -52,7 +52,7 @@
     <string name="acc_language_phone">端末の言語</string>
     <string name="acc_language_text">アプリは端末の言語に対応していればその言語、そうでなければ英語を使います。</string>
     <string name="acc_places">場所</string>
-    <string name="acc_place_new">新しい写真に場所を付ける</string>
+    <string name="acc_place_new">新しい写真の位置を特定</string>
     <string name="acc_place_new_text">位置のない新しい写真は、時間が最も近い端末の写真の場所（30 分以内）を受け取ります。直近 2 時間の写真なら端末の現在地を使います。すでに位置がある写真は変更しません。</string>
     <string name="acc_place_no_location">位置情報へのアクセスがない場合は、端末の写真だけを使います。端末の位置も使うには位置情報を許可してください。</string>
     <string name="acc_place_no_background">Androidはアプリが開いている間だけ位置を渡すため、バックグラウンドで同期された写真には端末の写真の場所だけが付きます。アプリの位置情報の権限で「常に許可」を選んでください。</string>

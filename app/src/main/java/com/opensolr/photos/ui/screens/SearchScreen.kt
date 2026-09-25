@@ -523,7 +523,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 Switch(
                     checked = aiUsable && !state.wordsOnly,
                     enabled = aiUsable,
-                    onCheckedChange = { viewModel.setWordsOnly(!it) },
+                    onCheckedChange = { Haptics.toggle(view, it); viewModel.setWordsOnly(!it) },
                     colors = SwitchDefaults.colors(
                         checkedTrackColor = p.accentFill,
                         checkedThumbColor = p.onAccentFill,
@@ -585,7 +585,6 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                     icon = if (anyCollapsed) R.drawable.ic_expand_all else R.drawable.ic_collapse_all,
                     label = if (anyCollapsed) stringResource(R.string.expand_all) else stringResource(R.string.collapse_all),
                     onClick = {
-                        Haptics.tick(view, strong = false)
                         viewModel.setAllHeadings(if (anyCollapsed) emptySet() else headingKeys)
                     },
                 )
@@ -806,7 +805,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
 
                                     PickTick(
                                         selected = allPicked,
-                                        onClick = { Haptics.tick(view, strong = false); viewModel.toggleSelectedGroup(row.key, row.ids, row.range) },
+                                        onClick = { viewModel.toggleSelectedGroup(row.key, row.ids, row.range) },
                                         modifier = Modifier.padding(end = FAST_SCROLL_WIDTH),
                                         dense = true,
                                     )
@@ -830,7 +829,9 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
 
                                     modifier = Modifier
                                         .combinedClickable(
-                                            onClick = { if (state.selecting) viewModel.toggleSelected(hit.id) else viewing = hit },
+                                            onClick = {
+                                                if (state.selecting) { Haptics.toggle(view, hit.id !in state.selectedIds); viewModel.toggleSelected(hit.id) } else viewing = hit
+                                            },
                                         )
                                         .semantics {
                                             onLongClick(label = selectLabel) {
@@ -1124,7 +1125,7 @@ private fun Pill(label: String, onClick: () -> Unit, accent: Boolean = false, tr
         Modifier
             .clip(shape)
             .background(p.chip)
-            .combinedClickableCompat(onClick)
+            .combinedClickableCompat(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1181,7 +1182,7 @@ internal fun DockAction(icon: Int, label: String, enabled: Boolean, accent: Bool
 
             .background(p.dockFill)
             .border(1.dp, p.hairline, Corner)
-            .then(if (enabled) Modifier.combinedClickableCompat(onClick) else Modifier)
+            .then(if (enabled) Modifier.combinedClickableCompat(onClick = onClick) else Modifier)
             .padding(horizontal = 12.dp, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -1763,12 +1764,13 @@ private fun GroupByButton(
 @Composable
 private fun Chip(label: String, selected: Boolean, onClick: () -> Unit, trailingClose: Boolean = false) {
     val p = LocalPalette.current
+    val view = LocalView.current
     Row(
         Modifier
             .clip(Corner)
             .background(if (selected) p.paper else p.chip)
             .border(1.dp, if (selected) p.accent else p.hairline, Corner)
-            .combinedClickableCompat(onClick)
+            .combinedClickableCompat(haptic = false) { Haptics.toggle(view, !selected); onClick() }
             .padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1788,7 +1790,7 @@ private fun PlaceButton(label: String, onClick: () -> Unit) {
             .clip(Corner)
             .background(p.paper)
             .border(1.5.dp, p.accent, Corner)
-            .combinedClickableCompat(onClick)
+            .combinedClickableCompat(onClick = onClick)
             .padding(start = 8.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -1836,7 +1838,7 @@ private fun FilterActions(count: Long, onClear: () -> Unit, onDone: () -> Unit) 
     val view = LocalView.current
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
         OutlinedButton(
-            onClick = onClear,
+            onClick = { Haptics.tick(view, strong = false); onClear() },
             modifier = Modifier.height(34.dp),
             shape = Corner,
             border = BorderStroke(1.dp, p.hairline),
@@ -1988,7 +1990,7 @@ internal fun FilterGroup(title: String, active: Int, open: Boolean, onToggle: ()
                 .padding(top = 10.dp, bottom = 4.dp)
                 .clip(Corner)
                 .background(headingBand(0))
-                .combinedClickableCompat { Haptics.tick(view, strong = false); onToggle() }
+                .combinedClickableCompat { onToggle() }
                 .padding(start = 8.dp, end = 10.dp, top = 7.dp, bottom = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -2331,6 +2333,7 @@ private fun DateRangeValues(current: DateRange?, years: List<Int> = emptyList(),
 @Composable
 private fun FilterSwitch(title: String, hint: String, checked: Boolean, onChange: (Boolean) -> Unit) {
     val p = LocalPalette.current
+    val view = LocalView.current
     Row(Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyLarge, color = p.ink)
@@ -2338,7 +2341,7 @@ private fun FilterSwitch(title: String, hint: String, checked: Boolean, onChange
         }
         Switch(
             checked = checked,
-            onCheckedChange = onChange,
+            onCheckedChange = { Haptics.toggle(view, it); onChange(it) },
             colors = SwitchDefaults.colors(checkedTrackColor = p.accentFill, checkedThumbColor = p.onAccentFill, uncheckedTrackColor = p.chip, uncheckedBorderColor = p.hairline, uncheckedThumbColor = p.muted),
         )
     }
@@ -2649,7 +2652,7 @@ private fun RowScope.ViewerActionFrame(enabled: Boolean, onClick: () -> Unit, co
             .clip(Corner)
 
             .border(1.dp, Color.White.copy(alpha = 0.45f), Corner)
-            .then(if (enabled) Modifier.combinedClickableCompat(onClick) else Modifier)
+            .then(if (enabled) Modifier.combinedClickableCompat(onClick = onClick) else Modifier)
             .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) { content() }
@@ -2679,7 +2682,6 @@ private fun FacetValues(
                 label = if (facet.count > 0) "${label(facet.value)} (${Actions.formatCount(facet.count.toLong())})" else label(facet.value),
                 selected = facet.value in selected,
                 onClick = {
-                    Haptics.tick(view, strong = facet.value !in selected)
                     onToggle(facet.value)
                 },
             )
@@ -2720,7 +2722,6 @@ private fun FacetSearch(
                     label = if (count > 0) "${label(value)} (${Actions.formatCount(count.toLong())})" else label(value),
                     selected = true,
                     onClick = {
-                        Haptics.tick(view, strong = false)
                         onToggle(value)
                     },
                 )
@@ -2759,7 +2760,7 @@ private fun FacetSearch(
                 stringResource(R.string.done),
                 style = MaterialTheme.typography.labelSmall,
                 color = p.accent,
-                modifier = Modifier.clickable { text = ""; focus.clearFocus() }.padding(start = 8.dp),
+                modifier = Modifier.clickable { Haptics.tap(view); text = ""; focus.clearFocus() }.padding(start = 8.dp),
             )
         }
     }
@@ -2989,7 +2990,7 @@ internal fun PickTick(selected: Boolean, onClick: () -> Unit, modifier: Modifier
     val view = LocalView.current
     Box(
         modifier
-            .combinedClickableCompat { Haptics.tick(view, strong = !selected); onClick() }
+            .combinedClickableCompat(haptic = false) { Haptics.toggle(view, !selected); onClick() }
 
             .padding(horizontal = if (dense) 10.dp else 6.dp, vertical = if (dense) 0.dp else 6.dp),
         contentAlignment = Alignment.Center,
@@ -3016,12 +3017,13 @@ private val REBUILD_PHASES = setOf("Resetting your index", "Updating the index c
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun Modifier.combinedClickableCompat(onClick: () -> Unit): Modifier {
+private fun Modifier.combinedClickableCompat(haptic: Boolean = true, onClick: () -> Unit): Modifier {
     val source = remember { MutableInteractionSource() }
+    val view = LocalView.current
     return this
         .scale(com.opensolr.photos.ui.pressedScale(source))
         .background(com.opensolr.photos.ui.pressedTint(source), Corner)
-        .combinedClickable(interactionSource = source, indication = androidx.compose.material3.ripple(), onClick = onClick)
+        .combinedClickable(interactionSource = source, indication = androidx.compose.material3.ripple(), onClick = { if (haptic) Haptics.tap(view); onClick() })
 }
 
 private const val GROUP_WORDS = 6

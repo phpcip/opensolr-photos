@@ -52,12 +52,12 @@
     <string name="acc_language_phone">Phone\'s language</string>
     <string name="acc_language_text">The app follows your phone\'s language when it speaks it, and English otherwise.</string>
     <string name="acc_places">Places</string>
-    <string name="acc_place_new">Place new photos</string>
+    <string name="acc_place_new">Locate new photos</string>
     <string name="acc_place_new_text">A new photo without a position takes the place of the phone photo closest to it in time (within 30 minutes), or, if taken in the last 2 hours, the phone\'s own position. Photos that already have one are never touched.</string>
     <string name="acc_place_no_location">Without location access only the phone\'s own photos are used. Allow location for the app to use the phone\'s position as well.</string>
     <string name="acc_place_no_background">Android lets the app know the phone\'s position only while it is open, so photos synced in the background get only the place of the phone\'s own photos. Allow \"all the time\" in the app\'s location permission to change that.</string>
     <string name="acc_loc_title">Use your location for new photos</string>
-    <string name="acc_loc_text">Opensolr Photos collects your phone\'s location to place new photos that have no location of their own, also for photos synced in the background, even when the app is closed or not in use. The location is kept only as the place of that photo, on the phone and in your Opensolr Index, where search finds the photo by place. It is not used for anything else and is not shared.</string>
+    <string name="acc_loc_text">Opensolr Photos collects your phone\'s location to locate new photos that have no location of their own, also for photos synced in the background, even when the app is closed or not in use. The location is kept only as the place of that photo, on the phone and in your Opensolr Index, where search finds the photo by place. It is not used for anything else and is not shared.</string>
     <string name="acc_loc_allow">Continue</string>
     <string name="acc_loc_not_now">Not now</string>
     <string name="acc_save_places">Save the places into the photos</string>

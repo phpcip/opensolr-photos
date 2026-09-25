@@ -124,7 +124,6 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
                     label = if (allPicked) stringResource(R.string.al_check_none) else stringResource(R.string.al_check_all),
                     active = allPicked,
                     onClick = {
-                        Haptics.tick(view, strong = false)
                         viewModel.selectAllAlbums(!allPicked)
                     },
                 )
@@ -132,7 +131,6 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
                     icon = if (anyFolded) R.drawable.ic_expand_all else R.drawable.ic_collapse_all,
                     label = if (anyFolded) stringResource(R.string.al_expand_all) else stringResource(R.string.al_collapse_all),
                     onClick = {
-                        Haptics.tick(view, strong = false)
                         viewModel.setAlbumSections(if (anyFolded) emptySet() else state.albums.map { it.title }.toSet())
                     },
                 )
@@ -233,7 +231,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
             Column(
                 Modifier
                     .clip(Corner)
-                    .combinedClickable(onClick = { viewModel.clearAlbumSelection() })
+                    .combinedClickable(onClick = { Haptics.tap(view); viewModel.clearAlbumSelection() })
                     .padding(horizontal = 16.dp, vertical = 4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {

@@ -1,5 +1,6 @@
 package com.opensolr.photos.ui.screens
 
+import com.opensolr.photos.ui.Haptics
 import com.opensolr.photos.R
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
@@ -53,6 +54,7 @@ import com.opensolr.photos.ui.theme.LocalPalette
 @OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
 @Composable
 fun AccountScreen(state: UiState, viewModel: AppViewModel) {
+    val view = androidx.compose.ui.platform.LocalView.current
     val p = LocalPalette.current
     val context = LocalContext.current
     var confirmSignOut by remember { mutableStateOf(false) }
@@ -185,7 +187,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                     Spacer(Modifier.width(12.dp))
                     Switch(
                         checked = state.hapticsEnabled,
-                        onCheckedChange = { viewModel.setHaptics(it) },
+                        onCheckedChange = { viewModel.setHaptics(it); Haptics.toggle(view, it) },
                         colors = SwitchDefaults.colors(checkedTrackColor = p.accentFill, checkedThumbColor = p.onAccentFill, uncheckedTrackColor = p.chip, uncheckedBorderColor = p.hairline, uncheckedThumbColor = p.muted),
                     )
                 }
@@ -210,6 +212,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                                 .border(if (on) 1.5.dp else 1.dp, if (on) p.accent else p.hairline, androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
                                 .background(if (on) p.paper else p.chip, androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
                                 .clickable {
+                                    Haptics.tap(view)
                                     var host: android.content.Context? = context
                                     while (host is android.content.ContextWrapper && host !is android.app.Activity) host = host.baseContext
                                     (host as? android.app.Activity)?.let { com.opensolr.photos.ui.AppLanguage.choose(it, tag) }
@@ -245,6 +248,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                     Switch(
                         checked = state.autoPlace,
                         onCheckedChange = { on ->
+                            Haptics.toggle(view, on)
                             viewModel.setAutoPlace(on)
                             // Google Play: say what the location is for, before Android asks for it.
                             if (on && !state.autoPlaceLocation) discloseLocation = true

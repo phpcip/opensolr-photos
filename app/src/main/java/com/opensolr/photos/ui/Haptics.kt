@@ -28,4 +28,19 @@ object Haptics {
         }
         view.performHapticFeedback(constant)
     }
+
+    fun tap(view: View) {
+        if (!enabled) return
+        view.performHapticFeedback(HapticFeedbackConstants.VIRTUAL_KEY)
+    }
+
+    fun toggle(view: View, on: Boolean) {
+        if (!enabled) return
+        val constant = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            if (on) HapticFeedbackConstants.TOGGLE_ON else HapticFeedbackConstants.TOGGLE_OFF
+        } else {
+            HapticFeedbackConstants.VIRTUAL_KEY
+        }
+        view.performHapticFeedback(constant)
+    }
 }

@@ -115,6 +115,7 @@ fun AppRoot(viewModel: AppViewModel) {
 
 @Composable
 private fun DeviceChoiceDialog(state: UiState, viewModel: AppViewModel) {
+    val view = androidx.compose.ui.platform.LocalView.current
     val p = LocalPalette.current
     AlertDialog(
         onDismissRequest = {},
@@ -127,7 +128,7 @@ private fun DeviceChoiceDialog(state: UiState, viewModel: AppViewModel) {
                     Column(
                         Modifier
                             .fillMaxWidth()
-                            .clickable { viewModel.chooseDevice(choice) }
+                            .clickable { Haptics.tap(view); viewModel.chooseDevice(choice) }
                             .padding(vertical = 12.dp)
                     ) {
                         Text(choice.deviceName ?: stringResource(R.string.rt_unknown_phone), style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold), color = p.ink)

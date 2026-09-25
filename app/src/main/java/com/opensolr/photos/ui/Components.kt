@@ -80,10 +80,11 @@ fun pressedTint(source: MutableInteractionSource): androidx.compose.ui.graphics.
 @Composable
 fun Modifier.tapClickable(enabled: Boolean = true, onClick: () -> Unit): Modifier {
     val source = remember { MutableInteractionSource() }
+    val view = androidx.compose.ui.platform.LocalView.current
     return this
         .scale(if (enabled) pressedScale(source) else 1f)
         .background(if (enabled) pressedTint(source) else androidx.compose.ui.graphics.Color.Transparent, Corner)
-        .clickable(enabled = enabled, interactionSource = source, indication = androidx.compose.material3.ripple()) { onClick() }
+        .clickable(enabled = enabled, interactionSource = source, indication = androidx.compose.material3.ripple()) { Haptics.tap(view); onClick() }
 }
 
 @Composable
@@ -102,8 +103,9 @@ fun AccentButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifie
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
     val fill by androidx.compose.animation.animateColorAsState(if (pressed) p.ink else p.accentFill, label = "accentfill")
+    val view = androidx.compose.ui.platform.LocalView.current
     Button(
-        onClick = onClick,
+        onClick = { Haptics.tick(view, true); onClick() },
         enabled = enabled,
         interactionSource = source,
         modifier = modifier.height(52.dp).scale(pressedScale(source)),
@@ -121,8 +123,9 @@ fun GhostButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier
     val p = LocalPalette.current
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
+    val view = androidx.compose.ui.platform.LocalView.current
     OutlinedButton(
-        onClick = onClick,
+        onClick = { Haptics.tap(view); onClick() },
         enabled = enabled,
         interactionSource = source,
         modifier = modifier.height(52.dp).scale(pressedScale(source)),
@@ -149,8 +152,9 @@ fun TextButton(
     content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit,
 ) {
     val source = remember { MutableInteractionSource() }
+    val view = androidx.compose.ui.platform.LocalView.current
     androidx.compose.material3.TextButton(
-        onClick = onClick,
+        onClick = { Haptics.tap(view); onClick() },
         modifier = modifier.scale(if (enabled) pressedScale(source) else 1f),
         enabled = enabled,
         interactionSource = source,
@@ -170,8 +174,9 @@ fun IconButton(
     content: @Composable () -> Unit,
 ) {
     val source = remember { MutableInteractionSource() }
+    val view = androidx.compose.ui.platform.LocalView.current
     androidx.compose.material3.IconButton(
-        onClick = onClick,
+        onClick = { Haptics.tap(view); onClick() },
         modifier = modifier.scale(if (enabled) pressedScale(source) else 1f),
         enabled = enabled,
         interactionSource = source,

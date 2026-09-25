@@ -1,5 +1,6 @@
 package com.opensolr.photos.ui.screens
 
+import com.opensolr.photos.ui.Haptics
 import com.opensolr.photos.R
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
@@ -58,6 +59,7 @@ import com.opensolr.photos.ui.theme.LocalPalette
 
 @Composable
 fun SignInScreen(state: UiState, viewModel: AppViewModel) {
+    val view = androidx.compose.ui.platform.LocalView.current
     val p = LocalPalette.current
     val context = LocalContext.current
     Column(
@@ -109,7 +111,7 @@ fun SignInScreen(state: UiState, viewModel: AppViewModel) {
         Text(
             stringResource(R.string.ob_open_source),
             style = MaterialTheme.typography.bodySmall, color = p.accent,
-            modifier = Modifier.clickable { Actions.openUrl(context, Actions.PROJECT_URL) },
+            modifier = Modifier.clickable { Haptics.tap(view); Actions.openUrl(context, Actions.PROJECT_URL) },
         )
     }
 }
@@ -240,6 +242,7 @@ private fun coveringFolder(selected: Set<String>, path: String): String? =
 
 @Composable
 fun FoldersScreen(state: UiState, viewModel: AppViewModel) {
+    val view = androidx.compose.ui.platform.LocalView.current
     val p = LocalPalette.current
 
     var path by remember { mutableStateOf("") }
@@ -262,7 +265,7 @@ fun FoldersScreen(state: UiState, viewModel: AppViewModel) {
                 stringResource(R.string.ob_all_folders),
                 style = MaterialTheme.typography.labelLarge,
                 color = if (steps.isEmpty()) p.ink else p.accent,
-                modifier = Modifier.clickable { path = "" }.padding(end = 6.dp),
+                modifier = Modifier.clickable { Haptics.tap(view); path = "" }.padding(end = 6.dp),
             )
             steps.forEachIndexed { index, step ->
                 Text("/", style = MaterialTheme.typography.labelLarge, color = p.muted, modifier = Modifier.padding(end = 6.dp))
@@ -271,7 +274,7 @@ fun FoldersScreen(state: UiState, viewModel: AppViewModel) {
                     step,
                     style = MaterialTheme.typography.labelLarge,
                     color = if (index == steps.lastIndex) p.ink else p.accent,
-                    modifier = Modifier.clickable { path = upTo }.padding(end = 6.dp),
+                    modifier = Modifier.clickable { Haptics.tap(view); path = upTo }.padding(end = 6.dp),
                 )
             }
         }
@@ -293,14 +296,17 @@ fun FoldersScreen(state: UiState, viewModel: AppViewModel) {
                     Modifier
                         .fillMaxWidth()
 
-                        .clickable { if (folder.hasChildren) path = folder.path else if (covered == null) viewModel.toggleFolder(folder.path) }
+                        .clickable {
+                            if (folder.hasChildren) { Haptics.tap(view); path = folder.path }
+                            else if (covered == null) { Haptics.toggle(view, !ticked); viewModel.toggleFolder(folder.path) }
+                        }
                         .padding(vertical = 6.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Checkbox(
                         checked = ticked,
                         enabled = covered == null,
-                        onCheckedChange = { viewModel.toggleFolder(folder.path) },
+                        onCheckedChange = { Haptics.toggle(view, it); viewModel.toggleFolder(folder.path) },
                         colors = CheckboxDefaults.colors(checkedColor = p.accentFill, uncheckedColor = p.muted, checkmarkColor = p.onAccentFill),
                     )
                     Column(Modifier.weight(1f)) {

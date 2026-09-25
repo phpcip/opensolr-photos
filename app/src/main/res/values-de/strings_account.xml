@@ -52,7 +52,7 @@
     <string name="acc_language_phone">Sprache des Telefons</string>
     <string name="acc_language_text">Die App folgt der Sprache Ihres Telefons, wenn sie diese spricht, sonst Englisch.</string>
     <string name="acc_places">Orte</string>
-    <string name="acc_place_new">Neuen Fotos einen Ort geben</string>
+    <string name="acc_place_new">Neue Fotos verorten</string>
     <string name="acc_place_new_text">Ein neues Foto ohne Position übernimmt den Ort des zeitlich nächsten Handyfotos (innerhalb von 30 Minuten) oder, wenn in den letzten 2 Stunden aufgenommen, die Position des Handys. Fotos mit Position bleiben unberührt.</string>
     <string name="acc_place_no_location">Ohne Standortzugriff werden nur die eigenen Fotos des Telefons genutzt. Erlauben Sie den Standort, damit auch die Position des Telefons genutzt wird.</string>
     <string name="acc_place_no_background">Android gibt der App die Position nur, solange sie geöffnet ist; im Hintergrund synchronisierte Fotos bekommen daher nur den Ort der eigenen Fotos. Erlauben Sie „Immer“ in der Standortberechtigung der App.</string>
