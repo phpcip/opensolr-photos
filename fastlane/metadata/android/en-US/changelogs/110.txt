@@ -1,0 +1,1 @@
+Every button, switch, tick box, chip and menu now gives haptic feedback, the same as in the other Opensolr apps. Place new photos is now called Locate new photos.
