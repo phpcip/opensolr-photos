@@ -36,6 +36,8 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         db.execSQL(WORD_RETRIES_TABLE)
         db.execSQL(SKIPPED_TABLE)
         db.execSQL(SET_PLACES_TABLE)
+        db.execSQL(INCOMING_TABLE)
+        db.execSQL(INCOMING_TAKEN_INDEX)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -121,6 +123,14 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
             db.execSQL(DOCS_CAMERA_INDEX)
             db.execSQL(DOCS_PLACE_INDEX)
             backfillLabelsAndModel(db)
+        }
+        if (oldVersion < 20) {
+            db.execSQL(INCOMING_TABLE)
+            db.execSQL(INCOMING_TAKEN_INDEX)
+        }
+        if (oldVersion < 21) {
+            // places the app used to guess for new photos: kept for the index, never written into the files
+            db.execSQL("UPDATE set_places SET written = 1 WHERE owner = 0")
         }
     }
 
@@ -506,25 +516,35 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         return out
     }
 
+    // The browsing list: what is indexed plus the photos still on their way up.
     fun takenTimes(): List<Long> {
         val out = ArrayList<Long>()
-        readableDatabase.query("docs", arrayOf("taken_ms"), "taken_ms > 0", null, null, null, "taken_ms DESC").use { c ->
+        readableDatabase.rawQuery(
+            "SELECT taken_ms FROM docs WHERE taken_ms > 0 UNION ALL $INCOMING_TAKEN ORDER BY taken_ms DESC", null,
+        ).use { c ->
             while (c.moveToNext()) out += c.getLong(0)
         }
         return out
     }
 
     fun docsBetween(from: Long, to: Long, limit: Int): List<String> {
-        val out = ArrayList<String>()
+        val rows = ArrayList<Pair<Long, String>>()
         readableDatabase.query(
-            "docs", arrayOf("json"),
+            "docs", arrayOf("taken_ms", "json"),
             "taken_ms BETWEEN ? AND ? AND json IS NOT NULL",
             arrayOf(from.toString(), to.toString()),
             null, null, "taken_ms DESC", limit.coerceAtLeast(1).toString(),
         ).use { c ->
-            while (c.moveToNext()) out += c.getString(0)
+            while (c.moveToNext()) rows += c.getLong(0) to c.getString(1)
         }
-        return out
+        readableDatabase.rawQuery(
+            "SELECT $INCOMING_COLUMNS FROM incoming WHERE taken_ms BETWEEN ? AND ? AND id NOT IN (SELECT id FROM docs) ORDER BY taken_ms DESC LIMIT ?",
+            arrayOf(from.toString(), to.toString(), limit.coerceAtLeast(1).toString()),
+        ).use { c ->
+            while (c.moveToNext()) rows += c.getLong(7) to incomingJson(c)
+        }
+        if (rows.size == 1) return listOf(rows[0].second)
+        return rows.sortedByDescending { it.first }.take(limit.coerceAtLeast(1)).map { it.second }
     }
 
     fun docsByIds(ids: Collection<String>): List<String> {
@@ -537,12 +557,101 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
             ).use { c ->
                 while (c.moveToNext()) out += c.getString(0)
             }
+            readableDatabase.rawQuery(
+                "SELECT $INCOMING_COLUMNS FROM incoming WHERE id IN ($marks) AND id NOT IN (SELECT id FROM docs)",
+                chunk.toTypedArray(),
+            ).use { c ->
+                while (c.moveToNext()) out += incomingJson(c)
+            }
         }
         return out
     }
 
     fun docCount(): Int =
         readableDatabase.rawQuery("SELECT COUNT(*) FROM docs", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
+    fun docIdsAmong(ids: Collection<String>): Set<String> {
+        val out = HashSet<String>()
+        ids.chunked(500).forEach { chunk ->
+            val marks = chunk.joinToString(",") { "?" }
+            readableDatabase.rawQuery("SELECT id FROM docs WHERE id IN ($marks)", chunk.toTypedArray()).use { c ->
+                while (c.moveToNext()) out += c.getString(0)
+            }
+        }
+        return out
+    }
+
+    fun browseCount(): Int =
+        readableDatabase.rawQuery("SELECT (SELECT COUNT(*) FROM docs) + (SELECT COUNT(*) FROM incoming WHERE id NOT IN (SELECT id FROM docs))", null)
+            .use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
+    fun putIncoming(photos: Collection<com.opensolr.photos.media.LocalPhoto>, takenMs: (com.opensolr.photos.media.LocalPhoto) -> Long) {
+        if (photos.isEmpty()) return
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.compileStatement("INSERT OR IGNORE INTO incoming (id, media_id, path, folder, file_name, mime, size_bytes, taken_ms, width, height, at) VALUES (?,?,?,?,?,?,?,?,?,?,?)").use { st ->
+                val now = System.currentTimeMillis()
+                photos.forEach { p ->
+                    st.clearBindings()
+                    st.bindString(1, p.id)
+                    st.bindLong(2, p.mediaId)
+                    st.bindString(3, p.absolutePath)
+                    st.bindString(4, p.folder)
+                    st.bindString(5, p.fileName)
+                    st.bindString(6, p.mime)
+                    st.bindLong(7, p.sizeBytes)
+                    st.bindLong(8, takenMs(p))
+                    st.bindLong(9, p.width.toLong())
+                    st.bindLong(10, p.height.toLong())
+                    st.bindLong(11, now)
+                    st.executeInsert()
+                }
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    fun incomingIds(): Set<String> = incomingMedia().keys
+
+    fun incomingMedia(): Map<String, Long> {
+        val out = HashMap<String, Long>()
+        readableDatabase.query("incoming", arrayOf("id", "media_id"), null, null, null, null, null).use { c ->
+            while (c.moveToNext()) out[c.getString(0)] = c.getLong(1)
+        }
+        return out
+    }
+
+    fun removeIncoming(ids: Collection<String>) = deleteByIds("incoming", ids)
+
+    // What is indexed by now, or no longer on the phone, is not on its way any more.
+    fun pruneIncoming(onPhone: Set<String>?) {
+        writableDatabase.execSQL("DELETE FROM incoming WHERE id IN (SELECT id FROM docs)")
+        if (onPhone != null) removeIncoming(incomingIds().filter { it !in onPhone })
+    }
+
+    private fun incomingJson(c: android.database.Cursor): String {
+        val taken = c.getLong(7)
+        return org.json.JSONObject()
+            .put("id", c.getString(0))
+            .put("media_id", c.getLong(1))
+            .put("path", c.getString(2))
+            .put("folder", c.getString(3))
+            .put("file_name", c.getString(4))
+            .put("mime", c.getString(5))
+            .put("size_bytes", c.getLong(6))
+            .apply { if (taken > 0) put("taken_at", isoUtc(taken)) }
+            .put("width", c.getInt(8))
+            .put("height", c.getInt(9))
+            .put("pending", true)
+            .toString()
+    }
+
+    private fun isoUtc(millis: Long): String =
+        java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US)
+            .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.format(millis)
 
     fun docsWithoutWords(): List<String> {
         val out = ArrayList<String>()
@@ -718,6 +827,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
     fun clearDocs() {
         writableDatabase.delete("docs", null, null)
+        writableDatabase.delete("incoming", null, null)
         writableDatabase.delete("doc_words", null, null)
         writableDatabase.delete("actions", null, null)
     }
@@ -1117,6 +1227,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         writableDatabase.delete("places", null, null)
         writableDatabase.delete("word_retries", null, null)
         writableDatabase.delete("skipped", null, null)
+        writableDatabase.delete("incoming", null, null)
     }
 
     private fun toBytes(vector: FloatArray): ByteArray {
@@ -1132,7 +1243,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
     companion object {
         private const val NAME = "photo_cache.db"
-        private const val VERSION = 19
+        private const val VERSION = 21
 
         @Volatile private var shared: PhotoCache? = null
 
@@ -1186,6 +1297,10 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         private val EDIT_COLUMNS = arrayOf("tags_json", "meaning", "persons_json")
         private const val EDITS_TABLE = "CREATE TABLE IF NOT EXISTS edits (id TEXT PRIMARY KEY NOT NULL, tags_json TEXT NOT NULL, meaning TEXT, updated INTEGER NOT NULL, persons_json TEXT, pending INTEGER NOT NULL DEFAULT 0, tags_mode TEXT, persons_mode TEXT)"
         private const val SKIPPED_TABLE = "CREATE TABLE IF NOT EXISTS skipped (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, media_id INTEGER NOT NULL, path TEXT NOT NULL, folder TEXT NOT NULL, file_name TEXT NOT NULL, mime TEXT NOT NULL, taken_ms INTEGER NOT NULL, reason TEXT NOT NULL, at INTEGER NOT NULL)"
+        private const val INCOMING_TABLE = "CREATE TABLE IF NOT EXISTS incoming (id TEXT PRIMARY KEY NOT NULL, media_id INTEGER NOT NULL, path TEXT NOT NULL, folder TEXT NOT NULL, file_name TEXT NOT NULL, mime TEXT NOT NULL, size_bytes INTEGER NOT NULL, taken_ms INTEGER NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL, at INTEGER NOT NULL)"
+        private const val INCOMING_TAKEN_INDEX = "CREATE INDEX IF NOT EXISTS incoming_taken_ms ON incoming (taken_ms)"
+        private const val INCOMING_COLUMNS = "id, media_id, path, folder, file_name, mime, size_bytes, taken_ms, width, height"
+        private const val INCOMING_TAKEN = "SELECT taken_ms FROM incoming WHERE taken_ms > 0 AND id NOT IN (SELECT id FROM docs)"
         private const val WORD_RETRIES_TABLE = "CREATE TABLE IF NOT EXISTS word_retries (id TEXT PRIMARY KEY NOT NULL, attempts INTEGER NOT NULL, next_at INTEGER NOT NULL)"
     }
 }

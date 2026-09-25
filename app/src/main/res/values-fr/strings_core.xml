@@ -71,8 +71,6 @@
     <string name="pw_bw_90_text">L\'index a utilisé %1$s de la bande passante de ce mois. Une fois épuisée, synchro et recherche s\'arrêtent jusqu\'au renouvellement.</string>
     <string name="nt_signin_title">Reconnectez-vous à Opensolr</string>
     <string name="nt_signin_text">Votre connexion Opensolr ne fonctionne plus, la synchro est en pause.</string>
-    <string name="nt_recreated_title">Votre index photo a été vidé</string>
-    <string name="nt_recreated_text">Il manquait dans votre compte Opensolr ; un nouveau a été créé et vos photos sont resynchronisées.</string>
     <string name="md_empty">Le fichier est vide</string>
     <string name="md_undecodable">L\'image ne peut pas être décodée</string>
     <string name="md_unopenable">Le fichier ne peut pas être ouvert</string>

@@ -92,6 +92,7 @@
     <string name="apply">適用</string>
     <string name="viewer_position">%1$s / %2$s</string>
     <string name="details">詳細</string>
+    <string name="still_syncing">同期中</string>
     <string name="act_tag">タグ・人物・言葉</string>
     <string name="act_gallery">ギャラリーで開く</string>
     <string name="act_similar">類似の写真</string>

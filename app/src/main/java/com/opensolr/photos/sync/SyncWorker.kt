@@ -58,15 +58,21 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     private fun touchesChosenFolders(prefs: AppPrefs): Boolean =
         MediaScanner.touchesFolders(applicationContext, triggeredContentUris, prefs.folders, prefs.folderStamp)
 
-    private suspend fun promote(text: String, done: Int, total: Int) {
+    // expedited runs on Android 11 and older start as a foreground service with this
+    override suspend fun getForegroundInfo(): ForegroundInfo = foregroundInfo("Preparing", 0, 0)
+
+    private fun foregroundInfo(text: String, done: Int, total: Int): ForegroundInfo {
         val notification = Notifier.progress(applicationContext, AppText.s(R.string.sy_syncing_photos), text, done, total)
-        val info = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             ForegroundInfo(Notifier.PROGRESS_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
         } else {
             ForegroundInfo(Notifier.PROGRESS_ID, notification)
         }
+    }
+
+    private suspend fun promote(text: String, done: Int, total: Int) {
         try {
-            setForeground(info)
+            setForeground(foregroundInfo(text, done, total))
         } catch (e: IllegalStateException) {
         }
     }

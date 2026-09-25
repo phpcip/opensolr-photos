@@ -314,6 +314,19 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         restored = true
     }
 
+    // Someone sitting at the very top keeps seeing the newest photos as they come in: the grid
+    // otherwise holds on to the row that was first and a new group lands above the screen.
+    var pinnedTop by remember { mutableStateOf(true) }
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.isScrollInProgress }.collect { scrolling ->
+            if (!scrolling) pinnedTop = gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0
+        }
+    }
+    val firstKey = rows.firstOrNull()?.key
+    LaunchedEffect(firstKey) {
+        if (pinnedTop && gridState.firstVisibleItemIndex != 0) gridState.scrollToItem(0)
+    }
+
     val currentRows by rememberUpdatedState(rows)
     LaunchedEffect(restored) {
         if (!restored) return@LaunchedEffect
@@ -852,7 +865,9 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                             .padding(horizontal = 4.dp, vertical = 2.dp),
                                     )
                                 }
-                                if (!state.selecting && !state.skippedMode) {
+                                if (hit.pending && !state.skippedMode) {
+                                    SyncingMark(Modifier.align(Alignment.TopEnd).padding(4.dp))
+                                } else if (!state.selecting && !state.skippedMode) {
                                     PhotoMarks(
                                         hasPlace = !hit.location.isNullOrBlank(),
                                         hasPeople = hit.persons.isNotBlank(),
@@ -873,7 +888,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                             .padding(horizontal = 6.dp, vertical = 2.dp),
                                     )
                                 }
-                                if (state.selecting) {
+                                if (state.selecting && !hit.pending) {
                                     PickTick(
                                         selected = selected,
                                         onClick = { viewModel.toggleSelected(hit.id) },
@@ -2492,7 +2507,7 @@ internal fun PhotoViewer(
                                     },
                                     onDragEnd = {
 
-                                        if (dismiss.value == 0f && upBy.value > VIEWER_SWIPE_UP) {
+                                        if (dismiss.value == 0f && upBy.value > VIEWER_SWIPE_UP && !hit.pending) {
 
                                             Haptics.tick(view, strong = false)
                                             sheetFor = hit
@@ -2554,7 +2569,7 @@ internal fun PhotoViewer(
                         )
                     }
                     Text(
-                        stringResource(R.string.details),
+                        stringResource(if (hit.pending) R.string.still_syncing else R.string.details),
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.White.copy(alpha = 0.55f),
                         modifier = Modifier.padding(top = 8.dp),
@@ -2576,15 +2591,17 @@ internal fun PhotoViewer(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
 
-                    ViewerAction(stringResource(R.string.act_tag), R.drawable.ic_tag) { editFor = hit }
-                    ViewerAction(stringResource(R.string.act_gallery), R.drawable.ic_open) { Actions.openPhoto(context, hit) }
-                    ViewerAction(stringResource(R.string.act_similar), R.drawable.ic_duplicates) { onClose(); viewModel.showSimilar(hit) }
-                    ViewerAction(stringResource(R.string.act_share), R.drawable.ic_share) { Actions.sharePhotos(context, listOf(hit)) }
+                    // a photo still syncing shows its actions greyed out until its document is back
+                    val on = !hit.pending
+                    ViewerAction(stringResource(R.string.act_tag), R.drawable.ic_tag, on) { editFor = hit }
+                    ViewerAction(stringResource(R.string.act_gallery), R.drawable.ic_open, on) { Actions.openPhoto(context, hit) }
+                    ViewerAction(stringResource(R.string.act_similar), R.drawable.ic_duplicates, on) { onClose(); viewModel.showSimilar(hit) }
+                    ViewerAction(stringResource(R.string.act_share), R.drawable.ic_share, on) { Actions.sharePhotos(context, listOf(hit)) }
                     hit.latLon?.let { (lat, lon) ->
-                        ViewerAction(stringResource(R.string.act_map), R.drawable.ic_map) { onClose(); viewModel.openMap(MapFocus(lat, lon, 15.0)) }
-                        ViewerIconAction(stringResource(R.string.act_nearby), Icons.Filled.LocationOn) { onClose(); viewModel.searchNear(lat, lon, 5.0) }
+                        ViewerAction(stringResource(R.string.act_map), R.drawable.ic_map, on) { onClose(); viewModel.openMap(MapFocus(lat, lon, 15.0)) }
+                        ViewerIconAction(stringResource(R.string.act_nearby), Icons.Filled.LocationOn, on) { onClose(); viewModel.searchNear(lat, lon, 5.0) }
                     }
-                    ViewerAction(stringResource(R.string.act_delete), R.drawable.ic_delete) { onDelete(hit) }
+                    ViewerAction(stringResource(R.string.act_delete), R.drawable.ic_delete, on) { onDelete(hit) }
                 }
             }
 
@@ -2610,28 +2627,29 @@ internal fun PhotoViewer(
 }
 
 @Composable
-private fun RowScope.ViewerAction(label: String, icon: Int, onClick: () -> Unit) {
-    ViewerActionFrame(onClick) {
+private fun RowScope.ViewerAction(label: String, icon: Int, enabled: Boolean = true, onClick: () -> Unit) {
+    ViewerActionFrame(enabled, onClick) {
         Icon(painterResource(icon), contentDescription = label, tint = Color.White, modifier = Modifier.size(26.dp))
     }
 }
 
 @Composable
-private fun RowScope.ViewerIconAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
-    ViewerActionFrame(onClick) {
+private fun RowScope.ViewerIconAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, enabled: Boolean = true, onClick: () -> Unit) {
+    ViewerActionFrame(enabled, onClick) {
         Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(26.dp))
     }
 }
 
 @Composable
-private fun RowScope.ViewerActionFrame(onClick: () -> Unit, content: @Composable () -> Unit) {
+private fun RowScope.ViewerActionFrame(enabled: Boolean, onClick: () -> Unit, content: @Composable () -> Unit) {
     Box(
         Modifier
             .weight(1f)
+            .alpha(if (enabled) 1f else 0.3f)
             .clip(Corner)
 
             .border(1.dp, Color.White.copy(alpha = 0.45f), Corner)
-            .combinedClickableCompat(onClick)
+            .then(if (enabled) Modifier.combinedClickableCompat(onClick) else Modifier)
             .padding(vertical = 10.dp),
         contentAlignment = Alignment.Center,
     ) { content() }
@@ -3035,6 +3053,22 @@ private fun PhotoMarks(hasPlace: Boolean, hasPeople: Boolean, hasTags: Boolean, 
             PhotoMark {
                 Icon(painterResource(R.drawable.ic_tag), contentDescription = stringResource(R.string.cd_has_tags), tint = Color.White, modifier = Modifier.size(11.dp))
             }
+        }
+    }
+}
+
+@Composable
+private fun SyncingMark(modifier: Modifier = Modifier) {
+    val spin = rememberInfiniteTransition(label = "syncing")
+    val turn by spin.animateFloat(0f, 360f, infiniteRepeatable(tween(1400, easing = androidx.compose.animation.core.LinearEasing)), label = "syncingTurn")
+    Box(modifier) {
+        PhotoMark {
+            Icon(
+                painterResource(R.drawable.ic_sync),
+                contentDescription = stringResource(R.string.still_syncing),
+                tint = Color.White,
+                modifier = Modifier.size(12.dp).graphicsLayer { rotationZ = turn },
+            )
         }
     }
 }

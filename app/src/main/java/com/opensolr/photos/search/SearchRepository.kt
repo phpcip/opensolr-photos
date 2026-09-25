@@ -176,6 +176,9 @@ data class PhotoHit(
     val customTags: List<String> = emptyList(),
 
     val score: Double = 0.0,
+
+    // on the phone, not indexed yet: shown with the syncing mark, no actions until it is
+    val pending: Boolean = false,
 ) {
 
     val latLon: Pair<Double, Double>? get() = parseLatLon(location)
@@ -367,6 +370,7 @@ class SearchRepository(private val context: Context) {
         labels = d.optJSONArray("labels")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList(),
         customTags = d.optJSONArray("custom_tags")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList(),
         score = d.optDouble("score", 0.0),
+        pending = d.optBoolean("pending"),
     )
 
     private suspend fun embedOnce(session: com.opensolr.photos.data.Session, indexName: String, text: String): FloatArray {

@@ -132,6 +132,13 @@ class AppPrefs(context: Context) {
             prefs.edit().putString(KEY_FOLDER_STAMP, value).apply()
         }
 
+    // "index|config version|millis" of the last full index check that passed; the quick sync leans on it
+    var indexChecked: String?
+        get() = prefs.getString(KEY_INDEX_CHECKED, null)
+        set(value) {
+            prefs.edit().putString(KEY_INDEX_CHECKED, value).apply()
+        }
+
     var lastWatchSyncAt: Long
         get() = prefs.getLong(KEY_WATCH_SYNC, 0L)
         set(value) {
@@ -189,6 +196,7 @@ class AppPrefs(context: Context) {
         get() = prefs.getString(KEY_FACETS, null)
         set(value) = prefs.edit().putString(KEY_FACETS, value).apply()
 
+    // off until the owner turns it on; the key changed on 09/25/2026 so every phone starts off again
     var autoPlaceSince: Long
         get() = prefs.getLong(KEY_AUTO_PLACE_SINCE, 0L)
         set(value) = prefs.edit().putLong(KEY_AUTO_PLACE_SINCE, value).apply()
@@ -248,6 +256,7 @@ class AppPrefs(context: Context) {
             .remove(KEY_ENVIRONMENT)
             .remove(KEY_INDEX)
             .remove(KEY_REPORT)
+            .remove(KEY_INDEX_CHECKED)
             .commit()
     }
 
@@ -262,7 +271,6 @@ class AppPrefs(context: Context) {
         private const val KEY_SOLR_USER = "solr_user"
         private const val KEY_SOLR_PASSWORD = "solr_password"
         private const val KEY_ENVIRONMENT = "environment"
-        private const val KEY_AUTO_PLACE_SINCE = "auto_place_since"
         private const val KEY_GROUP_BY = "group_by"
         private const val KEY_FOLDERS = "folders"
         private const val KEY_FOLDERS_CHOSEN = "folders_chosen"
@@ -277,6 +285,8 @@ class AppPrefs(context: Context) {
         private const val KEY_NOTICE = "notice"
         private const val KEY_UPDATE_CHECKED = "update_checked_at"
         private const val KEY_WATCH_SYNC = "watch_sync_at"
+        private const val KEY_INDEX_CHECKED = "index_checked"
+        private const val KEY_AUTO_PLACE_SINCE = "auto_place_on_since"
         private const val KEY_FOLDER_STAMP = "folder_stamp"
         private const val KEY_UPDATE_DISMISSED = "update_dismissed"
         private const val KEY_CACHE_SECONDS = "cache_seconds"

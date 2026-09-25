@@ -9,7 +9,6 @@
     <string name="acc_email">E-mail</string>
     <string name="acc_plan">Forfait</string>
     <string name="acc_index">Index de ce téléphone</string>
-    <string name="acc_environment">Environnement</string>
     <string name="acc_privacy">Politique de confidentialité</string>
     <string name="acc_delete_account">Supprimer le compte et les données</string>
     <string name="acc_app_version">Version de l\'app</string>

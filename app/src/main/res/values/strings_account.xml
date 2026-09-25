@@ -9,7 +9,6 @@
     <string name="acc_email">Email</string>
     <string name="acc_plan">Plan</string>
     <string name="acc_index">This phone\'s index</string>
-    <string name="acc_environment">Environment</string>
     <string name="acc_privacy">Privacy policy</string>
     <string name="acc_delete_account">Delete account and data</string>
     <string name="acc_app_version">App version</string>

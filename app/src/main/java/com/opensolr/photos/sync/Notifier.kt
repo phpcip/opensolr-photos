@@ -20,7 +20,6 @@ object Notifier {
     const val PROGRESS_ID = 1001
     private const val ALERT_SIGN_IN = 2001
     private const val ALERT_LIMIT = 2002
-    private const val ALERT_RECREATED = 2003
     private const val ACCOUNT_URL = "https://opensolr.com/admin/solr_manager/dashboard"
 
     fun createChannels(context: Context) {
@@ -68,18 +67,6 @@ object Notifier {
             .setStyle(NotificationCompat.BigTextStyle().bigText(text))
             .setAutoCancel(true)
             .setContentIntent(openAccount(context))
-            .build()
-    )
-
-    fun indexRecreated(context: Context) = post(
-        context, ALERT_RECREATED,
-        NotificationCompat.Builder(context, CHANNEL_ALERTS)
-            .setSmallIcon(R.drawable.ic_notification)
-            .setContentTitle(AppText.s(R.string.nt_recreated_title))
-            .setContentText(AppText.s(R.string.nt_recreated_text))
-            .setStyle(NotificationCompat.BigTextStyle().bigText(AppText.s(R.string.nt_recreated_text)))
-            .setAutoCancel(true)
-            .setContentIntent(openApp(context, MainActivity.DESTINATION_SYNC))
             .build()
     )
 

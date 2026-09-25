@@ -71,8 +71,6 @@
     <string name="pw_bw_90_text">Der Index hat %1$s der Suchbandbreite dieses Monats genutzt. Ist sie aufgebraucht, stoppen Sync und Suche bis zum Monatswechsel.</string>
     <string name="nt_signin_title">Erneut bei Opensolr anmelden</string>
     <string name="nt_signin_text">Ihre Opensolr-Anmeldung funktioniert nicht mehr, daher ist der Sync pausiert.</string>
-    <string name="nt_recreated_title">Ihr Fotoindex wurde geleert</string>
-    <string name="nt_recreated_text">Er fehlte in Ihrem Opensolr-Konto; ein neuer wurde erstellt und Ihre Fotos werden erneut synchronisiert.</string>
     <string name="md_empty">Die Datei ist leer</string>
     <string name="md_undecodable">Das Bild kann nicht dekodiert werden</string>
     <string name="md_unopenable">Die Datei kann nicht geöffnet werden</string>

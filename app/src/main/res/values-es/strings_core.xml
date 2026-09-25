@@ -71,8 +71,6 @@
     <string name="pw_bw_90_text">El índice usó el %1$s del ancho de banda de este mes. Cuando se agote, la sincronización y la búsqueda se detendrán hasta la renovación.</string>
     <string name="nt_signin_title">Vuelve a iniciar sesión en Opensolr</string>
     <string name="nt_signin_text">Tu sesión de Opensolr dejó de funcionar, así que la sincronización está en pausa.</string>
-    <string name="nt_recreated_title">Tu índice de fotos se vació</string>
-    <string name="nt_recreated_text">Faltaba en tu cuenta de Opensolr; se creó uno nuevo y tus fotos se están sincronizando de nuevo.</string>
     <string name="md_empty">El archivo está vacío</string>
     <string name="md_undecodable">La imagen no se puede decodificar</string>
     <string name="md_unopenable">El archivo no se puede abrir</string>

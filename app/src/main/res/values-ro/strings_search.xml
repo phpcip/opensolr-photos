@@ -92,6 +92,7 @@
     <string name="apply">Aplică</string>
     <string name="viewer_position">%1$s din %2$s</string>
     <string name="details">Detalii</string>
+    <string name="still_syncing">Se sincronizează</string>
     <string name="act_tag">Etichete, persoane și cuvinte</string>
     <string name="act_gallery">Deschide în galerie</string>
     <string name="act_similar">Poze asemănătoare</string>

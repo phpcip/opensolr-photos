@@ -71,8 +71,6 @@
     <string name="pw_bw_90_text">Indexul a folosit %1$s din traficul de căutare al lunii. Când se termină, sincronizarea și căutarea se opresc până se resetează luna.</string>
     <string name="nt_signin_title">Autentifică-te din nou în Opensolr</string>
     <string name="nt_signin_text">Autentificarea Opensolr nu mai merge, așa că sincronizarea e în pauză.</string>
-    <string name="nt_recreated_title">Indexul de poze a fost golit</string>
-    <string name="nt_recreated_text">Lipsea din contul tău Opensolr, așa că s-a creat unul nou și pozele se sincronizează din nou.</string>
     <string name="md_empty">Fișierul e gol</string>
     <string name="md_undecodable">Imaginea nu poate fi decodată</string>
     <string name="md_unopenable">Fișierul nu poate fi deschis</string>

@@ -99,7 +99,32 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
 
     private class SyncStoppedException : Exception()
 
+    // A sync right after a full index check skips it; if the quick run cannot write, it runs again with the check.
     suspend fun run(onProgress: suspend (Progress) -> Unit): SyncReport {
+        val quick = indexRecentlyChecked()
+        val report = runOnce(onProgress, quick)
+        if (quick && (report.status == "failed" || (report.failed > 0 && report.added == 0))) {
+            prefs.indexChecked = null
+            return runOnce(onProgress, false)
+        }
+        return report
+    }
+
+    private fun indexRecentlyChecked(): Boolean {
+        val connection = prefs.connection ?: return false
+        if (prefs.rebuildApproved || prefs.chosenIndexName == null) return false
+        val parts = prefs.indexChecked?.split('|') ?: return false
+        if (parts.size != 3 || parts[0] != connection.indexName || parts[0] != indexes.indexName) return false
+        if (parts[1] != IndexManager.CONFIG_VERSION.toString()) return false
+        val at = parts[2].toLongOrNull() ?: return false
+        return System.currentTimeMillis() - at in 0..QUICK_CHECK_MS
+    }
+
+    private fun noteIndexChecked(connection: IndexConnection) {
+        prefs.indexChecked = "${connection.indexName}|${IndexManager.CONFIG_VERSION}|${System.currentTimeMillis()}"
+    }
+
+    private suspend fun runOnce(onProgress: suspend (Progress) -> Unit, quick: Boolean): SyncReport {
         val session = prefs.session ?: return report("sign_in_required", message = AppText.s(R.string.sy_sign_in))
         var localCount = 0
         var indexCount = 0
@@ -114,10 +139,12 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
         shortAllowance = ""
         runFix = null
         runFixAsked = false
+        var onPhone: Set<String>? = null
 
         try {
-            onProgress(Progress(AppText.s(R.string.sy_checking), 0, 0))
-            val prefetched = try {
+            val checked = if (quick) prefs.connection else null
+            if (checked == null) onProgress(Progress(AppText.s(R.string.sy_checking), 0, 0))
+            val prefetched = if (checked != null) null else try {
                 api.syncInfo(session, indexes.indexName, prefs.account)
             } catch (e: CancellationException) {
                 throw e
@@ -126,9 +153,12 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             } catch (e: Exception) {
                 null
             }
-            val (initialConnection, outcome) = indexes.ensure(session, prefetched) { onProgress(Progress(it, 0, 0)) }
+            val (initialConnection, outcome) = if (checked != null) checked to IndexManager.Outcome.EXISTING
+                else indexes.ensure(session, prefetched) { onProgress(Progress(it, 0, 0)) }
+            if (checked == null && outcome in setOf(IndexManager.Outcome.EXISTING, IndexManager.Outcome.CREATED, IndexManager.Outcome.RECREATED)) {
+                noteIndexChecked(initialConnection)
+            }
             recreated = outcome == IndexManager.Outcome.RECREATED
-            if (recreated) Notifier.indexRecreated(context)
             var connection = initialConnection
             var solr = SolrClient(connection)
 
@@ -148,12 +178,13 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             val foldersBefore = MediaScanner.folderStamp(context, prefs.folders)
             val local = MediaScanner.scan(context, prefs.folders)
             localCount = local.size
+            onPhone = local.keys
 
             val prefetchedAccount = prefetched?.accountFor(connection.indexName)
             if (prefetchedAccount != null) {
                 prefs.account = prefetchedAccount
                 PlanWatch.notifyNew(context, prefs, prefetchedAccount)
-            } else {
+            } else if (checked == null || prefs.account == null) {
                 refreshAccount(session, connection)
             }
             val limits = prefs.account
@@ -168,6 +199,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                 withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { keepOwnersEdits(solr) }
                 solr.deleteAll()
                 indexes.applyConfig(session, connection) { onProgress(Progress(it, 0, 0)) }
+                noteIndexChecked(connection)
 
                 prefs.rebuildApproved = false
             }
@@ -208,6 +240,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                     }
                     if (jpeg == null) {
                         cache.markSkipped(photo, PhotoReader.unreadableReason(context, photo))
+                        cache.removeIncoming(listOf(photo.id))
                         failed++
                         continue
                     }
@@ -249,6 +282,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                                 cache.clearActions(listOf(item.photo.id))
 
                                 if (item.photo.id in placed) cache.markPlacesSynced(listOf(item.photo.id))
+                                cache.removeIncoming(listOf(item.photo.id))
                                 if (result.words) {
                                     cache.clearWordRetry(item.photo.id)
                                 } else {
@@ -300,12 +334,14 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             }
 
             val toDelete = ArrayList<String>(500)
+            var indexedIds: Set<String> = emptySet()
             if (!rebuild) {
                 if (edits.cloneMissing()) {
                     onProgress(Progress(AppText.s(R.string.sy_reading_once), 0, 0))
                     withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { edits.readIndexIntoCache() }
                 }
                 val known = cache.docSizes()
+                indexedIds = known.keys
                 indexCount = known.size
                 onProgress(Progress(AppText.s(R.string.sy_comparing), 0, 0))
 
@@ -366,6 +402,13 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
 
             val queued = cache.actions(PhotoCache.ACTION_INDEX).mapNotNull { local[it] }
             expected = queued.size
+            // new photos show in the list at once, marked as syncing, until their document comes back
+            val arriving = queued.filter { it.id !in indexedIds && skippedSizes[it.id] != it.sizeBytes }
+            if (arriving.isNotEmpty()) {
+                val exact = arriving.size <= EXACT_TAKEN_MAX
+                cache.putIncoming(arriving) { takenForList(it, exact) }
+                progress(phase)
+            }
             for (photo in queued) queue(photo)
             if (pending.isNotEmpty()) {
                 val batch = pending.toList()
@@ -443,8 +486,19 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
         } catch (e: Exception) {
             commitQuietly()
             return report("failed", added, deleted, failed, localCount, indexCount, AppText.s(R.string.sy_stopped_err, friendlyMessage(e, AppText.s(R.string.sy_try_later))), recreated)
+        } finally {
+            try {
+                cache.pruneIncoming(onPhone)
+            } catch (e: Exception) {
+            }
         }
     }
+
+    private fun takenForList(photo: LocalPhoto, exact: Boolean): Long =
+        (if (exact) PhotoReader.takenAsIndexed(context, photo.uri) else null)
+            ?: photo.dateTakenMs.takeIf { it > 0 }
+            ?: (photo.addedSec * 1000L).takeIf { it > 0 }
+            ?: (photo.modifiedSec * 1000L)
 
     private suspend fun <T> retrying(block: suspend () -> T): T {
         pace()
@@ -562,6 +616,10 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
         private const val DEVICE_WINDOW_MS = 2 * 60 * 60 * 1000L
 
         private const val READ_BATCH = 5
+
+        private const val QUICK_CHECK_MS = 24 * 60 * 60 * 1000L
+
+        private const val EXACT_TAKEN_MAX = 200
 
         private const val BATTERY_PAUSE_PERCENT = 20
 

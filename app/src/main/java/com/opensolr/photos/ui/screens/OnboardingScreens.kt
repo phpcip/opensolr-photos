@@ -177,8 +177,6 @@ fun PermissionsScreen(state: UiState, viewModel: AppViewModel) {
         if (Build.VERSION.SDK_INT >= 34) add(partialPermission)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) add(Manifest.permission.ACCESS_MEDIA_LOCATION)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)
-
-        add(Manifest.permission.ACCESS_COARSE_LOCATION)
     }
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
         val granted = result[photoPermission] == true || result[partialPermission] == true || photosAllowed()

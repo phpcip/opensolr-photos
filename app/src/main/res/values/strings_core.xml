@@ -71,8 +71,6 @@
     <string name="pw_bw_90_text">The index used %1$s of this month\'s search bandwidth. When it runs out, syncing and searching stop until the month resets.</string>
     <string name="nt_signin_title">Sign in to Opensolr again</string>
     <string name="nt_signin_text">Your Opensolr sign-in stopped working, so syncing is paused.</string>
-    <string name="nt_recreated_title">Your photo index was emptied</string>
-    <string name="nt_recreated_text">It was missing from your Opensolr account, so a new one was created and your photos are being synced again.</string>
     <string name="md_empty">The file is empty</string>
     <string name="md_undecodable">The picture cannot be decoded</string>
     <string name="md_unopenable">The file cannot be opened</string>

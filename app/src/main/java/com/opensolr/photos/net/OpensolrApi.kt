@@ -111,7 +111,7 @@ data class AccountIndex(val name: String, val deviceName: String?, val deviceId:
     val isPhotos: Boolean get() = Regex("^photos_[a-f0-9]{1,32}__dense$").matches(name)
 }
 
-data class VectorRegion(val environment: String, val country: String, val solrVersion: String)
+data class VectorRegion(val environment: String, val country: String, val solrVersion: String, val nearest: Boolean = false)
 
 class OpensolrApi(private val http: OkHttpClient = Http.client) {
 
@@ -208,13 +208,17 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         }
     }
 
+    // the platform flags the region nearest to this phone among those the app's configuration runs on
     suspend fun vectorRegions(session: Session): List<VectorRegion> = withContext(Dispatchers.IO) {
-        val trimmed = post(MANAGEMENT + "vector_regions", form(session)).trim()
+        val trimmed = post(MANAGEMENT + "vector_regions", form(session) {
+            add("nearest", "1")
+            add("min_solr", MIN_SOLR)
+        }).trim()
         if (!trimmed.startsWith("[")) throw ServiceException(platformMessage(trimmed))
         val array = JSONArray(trimmed)
         (0 until array.length()).mapNotNull {
             array.optJSONObject(it)?.let { row ->
-                VectorRegion(row.optString("environment"), row.optString("country"), row.optString("solr_version"))
+                VectorRegion(row.optString("environment"), row.optString("country"), row.optString("solr_version"), row.optBoolean("nearest"))
             }
         }.filter { it.environment.isNotBlank() }
     }
@@ -563,6 +567,8 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
     companion object {
         const val SITE = "https://opensolr.com"
         const val MANAGEMENT = "https://opensolr.com/solr_manager/api/"
+
+        const val MIN_SOLR = "9.6"
         const val AI = "https://api.opensolr.com/solr_manager/api/"
         private val JSON = "application/json; charset=utf-8".toMediaType()
     }

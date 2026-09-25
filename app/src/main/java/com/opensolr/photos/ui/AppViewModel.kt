@@ -79,7 +79,6 @@ data class UiState(
     val schedule: SyncSchedule = SyncSchedule.WEEKLY,
     val lastReport: SyncReport? = null,
     val indexName: String? = null,
-    val environment: String? = null,
     val sync: SyncStatus = SyncStatus(false, false, "", 0, 0),
     val showBusyDialog: Boolean = false,
     val accountRefreshing: Boolean = false,
@@ -127,6 +126,7 @@ data class UiState(
     val autoPlaceLocation: Boolean = false,
 
     val autoPlaceBackground: Boolean = false,
+
 
     val duplicateLevel: Int = com.opensolr.photos.search.SearchRepository.DEFAULT_DUPLICATE_LEVEL,
 
@@ -263,10 +263,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             var wasBusy = false
+            var lastStep = -1 to -1
             SyncScheduler.status(context).collect { status ->
                 _state.update { it.copy(sync = status) }
                 if (wasBusy && !status.busy) onSyncFinished()
                 wasBusy = status.busy
+                // every batch the sync sends shows up in the list as it lands, not at the end
+                val step = status.done to status.total
+                if (status.running && status.total > 0 && step != lastStep) refreshLocalQuietly()
+                lastStep = step
             }
         }
         if (_state.value.screen == Screen.Search) search(reset = true)
@@ -310,7 +315,88 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val batch = changedUris.toList()
             changedUris.clear()
             val relevant = withContext(Dispatchers.IO) { MediaScanner.touchesFolders(context, batch, prefs.folders, prefs.folderStamp) }
-            if (relevant) syncForChange()
+            if (relevant) {
+                noteIncoming()
+                syncForChange()
+            } else if (withContext(Dispatchers.IO) { photoCache.incomingIds().isNotEmpty() }) {
+                // photos deleted before they were synced bring the folders back to where the last sync left them
+                noteIncoming()
+            }
+        }
+    }
+
+    // New photos go in the list straight from the phone, marked as syncing, before the sync reaches them.
+    private suspend fun noteIncoming() {
+        val added = withContext(Dispatchers.IO) {
+            try {
+                // a photo deleted before the sync reached it leaves the list at once too
+                val waiting = photoCache.incomingMedia()
+                val present = MediaScanner.existing(context, waiting.values)
+                val gone = waiting.filter { it.value !in present }.keys
+                if (gone.isNotEmpty()) photoCache.removeIncoming(gone)
+                val since = System.currentTimeMillis() / 1000 - INCOMING_WINDOW_S
+                val recent = MediaScanner.addedSince(context, prefs.folders, since)
+                val indexed = if (recent.isEmpty()) emptySet() else photoCache.docIdsAmong(recent.map { it.id })
+                val skipped = if (recent.isEmpty()) emptyMap() else photoCache.skippedSizes()
+                val fresh = recent.filter { (it.id !in waiting || it.id in gone) && it.id !in indexed && skipped[it.id] != it.sizeBytes }
+                if (fresh.isNotEmpty()) {
+                    photoCache.putIncoming(fresh) { p ->
+                        PhotoReader.takenAsIndexed(context, p.uri) ?: p.dateTakenMs.takeIf { it > 0 } ?: (p.addedSec * 1000L)
+                    }
+                }
+                fresh.isNotEmpty() || gone.isNotEmpty()
+            } catch (e: Exception) {
+                false
+            }
+        }
+        if (added) refreshLocalQuietly()
+    }
+
+    private var quietRefreshJob: Job? = null
+    private var quietRefreshAgain = false
+
+    // The local list re-read in place: same position, no spinner.
+    private fun refreshLocalQuietly() {
+        val s = _state.value
+        if (s.screen != Screen.Search || !browsingLocally()) return
+        if (quietRefreshJob?.isActive == true) { quietRefreshAgain = true; return }
+        quietRefreshJob = viewModelScope.launch {
+            do {
+                quietRefreshAgain = false
+                // a list being built right now would overwrite this read with an older one: after it
+                searchJob?.join()
+                val generation = _state.value.searchGeneration
+                val how = _state.value.groupBy
+                val byValue = how == GroupBy.PLACE || how == GroupBy.PEOPLE || how == GroupBy.TAGS ||
+                    how == GroupBy.FOLDER || how == GroupBy.CAMERA
+                val shown = _state.value.hits
+                val groups = withContext(Dispatchers.IO) { if (byValue) emptyList() else buildSkeleton(photoCache.takenTimes()) }
+                val valueGroups = withContext(Dispatchers.IO) { if (!byValue) emptyList() else buildResultGroups(photoCache.groupingRows(), how) }
+                val count = withContext(Dispatchers.IO) { photoCache.browseCount() }
+                val asked = shown.mapTo(HashSet()) { it.id }
+                val fresh = withContext(Dispatchers.IO) {
+                    photoCache.docsByIds(asked).map { searches.hitOf(org.json.JSONObject(it)) }.associateBy { it.id }
+                }
+                if (_state.value.screen != Screen.Search || !browsingLocally()) return@launch
+                if (_state.value.searchGeneration != generation || _state.value.groupBy != how || searchJob?.isActive == true) {
+                    quietRefreshAgain = true
+                    continue
+                }
+                _state.update { st -> st.copy(skeleton = groups, resultGroups = valueGroups, numFound = count.toLong(), hits = st.hits.mapNotNull { h -> fresh[h.id] ?: h.takeIf { it.id !in asked } }) }
+                kotlinx.coroutines.delay(QUIET_REFRESH_GAP_MS)
+            } while (quietRefreshAgain)
+        }
+    }
+
+    // After a sync, only what it could not have seen justifies another one.
+    private fun phoneAheadOfIndex(): Boolean {
+        val local = MediaScanner.scan(context, prefs.folders)
+        val known = photoCache.docSizes()
+        val skipped = photoCache.skippedSizes()
+        if (known.keys.any { it !in local }) return true
+        return local.values.any { photo ->
+            val stamp = known[photo.id]
+            skipped[photo.id] != photo.sizeBytes && (stamp == null || stamp.first != photo.sizeBytes)
         }
     }
 
@@ -318,7 +404,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (prefs.session == null || prefs.connection == null) return
         viewModelScope.launch {
             val stamp = withContext(Dispatchers.IO) { MediaScanner.folderStamp(context, prefs.folders) }
-            if (stamp != null && stamp != prefs.folderStamp) syncForChange()
+            if (stamp != null && stamp != prefs.folderStamp) {
+                noteIncoming()
+                syncForChange()
+            } else if (withContext(Dispatchers.IO) { photoCache.incomingIds().isNotEmpty() }) {
+                noteIncoming()
+            }
         }
     }
 
@@ -882,7 +973,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 how == GroupBy.FOLDER || how == GroupBy.CAMERA
             val groups = if (byValue) emptyList() else withContext(Dispatchers.IO) { buildSkeleton(photoCache.takenTimes()) }
             val valueGroups = if (!byValue) emptyList() else withContext(Dispatchers.IO) { buildResultGroups(photoCache.groupingRows(), how) }
-            val count = withContext(Dispatchers.IO) { photoCache.docCount() }
+            val count = withContext(Dispatchers.IO) { photoCache.browseCount() }
 
             val shown = _state.value.hits
             val kept = if (keepPosition && shown.isNotEmpty() && _state.value.searchedQuery.isEmpty()) {
@@ -1088,7 +1179,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             schedule = prefs.schedule,
             lastReport = prefs.lastReport,
             indexName = prefs.connection?.indexName,
-            environment = prefs.connection?.environment,
             openFilterSections = prefs.openFilterSections,
             foldedAlbumSections = prefs.foldedAlbumSections,
             statsOpen = prefs.statsOpen,
@@ -1202,7 +1292,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 SyncScheduler.applySchedule(context, prefs.schedule)
                 SyncScheduler.watchMedia(context)
                 SyncScheduler.runNow(context)
-                _state.update { it.copy(screen = Screen.Search, indexName = connection.indexName, environment = connection.environment) }
+                _state.update { it.copy(screen = Screen.Search, indexName = connection.indexName) }
                 refreshAccount()
                 search(reset = true)
             } catch (e: SignInRequiredException) {
@@ -1864,7 +1954,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private var dragAnchor: Pair<String, Boolean>? = null
 
+    // a photo still on its way to the index takes no actions, so it cannot be picked either
+    private fun pendingIds(): Set<String> = _state.value.hits.filter { it.pending }.mapTo(HashSet()) { it.id }
+
     fun beginDragSelect(id: String) {
+        if (id in pendingIds()) return
         val current = _state.value
         val base = if (current.selecting) current.selectedIds else emptySet()
         val unselecting = id in base
@@ -1888,7 +1982,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // A drag that starts on a ticked photo unticks the range it covers; on an unticked one it ticks it.
     private fun applyDragSelection(base: Set<String>, ids: Collection<String>, unselecting: Boolean) {
-        val next = if (unselecting) base - ids.toSet() else base + ids
+        val next = if (unselecting) base - ids.toSet() else base + (ids - pendingIds())
         _state.update { it.copy(selecting = true, selectedIds = next) }
     }
 
@@ -1897,6 +1991,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleSelected(id: String) {
+        if (id !in _state.value.selectedIds && id in pendingIds()) return
         _state.update {
             val next = if (id in it.selectedIds) it.selectedIds - id else it.selectedIds + id
             if (next.isEmpty()) it.copy(selecting = false, selectedIds = emptySet(), selectedOffscreen = emptyMap(), selectedGroups = emptyMap())
@@ -1904,7 +1999,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun toggleSelectedGroup(key: String, ids: List<String>, range: Pair<Long, Long>? = null) {
+    fun toggleSelectedGroup(key: String, allIds: List<String>, range: Pair<Long, Long>? = null) {
+        val waiting = pendingIds()
+        val ids = allIds.filter { it !in waiting }
         val current = _state.value
         val already = current.selectedGroups[key]
         if (already != null) {
@@ -1938,7 +2035,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 } else {
                     searches.photosBetween(s.searchedQuery, s.filters, range.first, range.second, s.freshBias, s.wordsOnly)
-                }
+                }.filter { !it.pending }
                 val onScreen = _state.value.hits.map { it.id }.toSet()
                 _state.update { st ->
                     st.copy(
@@ -2278,13 +2375,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
         if (mediaChangedDuringSync) {
             mediaChangedDuringSync = false
-            SyncScheduler.runNow(context)
+            viewModelScope.launch {
+                val behind = withContext(Dispatchers.IO) { try { phoneAheadOfIndex() } catch (e: Exception) { true } }
+                if (behind) SyncScheduler.runNow(context)
+            }
         }
 
         if (report == null || report.added > 0 || report.deleted > 0) {
             searches.clearCache()
         }
-        _state.update { it.copy(lastReport = report, account = prefs.account, planWarnings = prefs.account?.let { a -> PlanWatch.evaluate(a) } ?: emptyList(), indexName = prefs.connection?.indexName, environment = prefs.connection?.environment) }
+        _state.update { it.copy(lastReport = report, account = prefs.account, planWarnings = prefs.account?.let { a -> PlanWatch.evaluate(a) } ?: emptyList(), indexName = prefs.connection?.indexName) }
         if (report?.status == "sign_in_required") {
             signedOut(prefs.pendingNotice ?: AppText.s(R.string.vm_signed_out))
             prefs.pendingNotice = null
@@ -2327,7 +2427,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         /** The most photos the phone parses out of its own store for the map. */
         private const val PHONE_PINS_MAX = 20_000
 
-        private const val MEDIA_SETTLE_MS = 1500L
+        private const val MEDIA_SETTLE_MS = 400L
+
+        private const val INCOMING_WINDOW_S = 3 * 24 * 60 * 60L
+
+        private const val QUIET_REFRESH_GAP_MS = 700L
 
         private const val PROGRESS_MS = 100L
 

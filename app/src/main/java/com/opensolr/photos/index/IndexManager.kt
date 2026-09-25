@@ -2,14 +2,9 @@ package com.opensolr.photos.index
 
 import com.opensolr.photos.R
 import com.opensolr.photos.AppText
-import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.pm.PackageManager
 import android.os.Build
-import android.location.Location
-import android.location.LocationManager
-import androidx.core.content.ContextCompat
 import android.provider.Settings
 import com.opensolr.photos.data.AppPrefs
 import com.opensolr.photos.data.IndexConnection
@@ -24,7 +19,6 @@ import com.opensolr.photos.net.SolrClient
 import com.opensolr.photos.net.VectorRegion
 import kotlinx.coroutines.delay
 import java.io.IOException
-import java.util.TimeZone
 
 class IndexManager(
     private val context: Context,
@@ -98,7 +92,7 @@ class IndexManager(
         val hadIndex = prefs.knownIndexName == name
         prefs.connection = null
         onStep(AppText.s(R.string.ix_creating))
-        api.createIndex(session, name, pickRegion(api.vectorRegions(session), lastKnownLocation()), deviceName, deviceId)
+        api.createIndex(session, name, pickRegion(api.vectorRegions(session)), deviceName, deviceId)
         prefs.chosenIndexName = name
         onStep(AppText.s(R.string.ix_setting_up))
         val connection = connectionWithRetry(session, name)
@@ -154,34 +148,27 @@ class IndexManager(
 
     private fun configZip(): ByteArray = context.assets.open(CONFIG_ASSET).use { it.readBytes() }
 
-    private fun pickRegion(regions: List<VectorRegion>, location: Location?): String {
+    // silent: the region the platform flags as nearest, else the first one the configuration runs on
+    private fun pickRegion(regions: List<VectorRegion>): String {
         if (regions.isEmpty()) throw ServiceException(AppText.s(R.string.err_no_region))
-        val americas = location?.let { it.longitude in -170.0..-30.0 } ?: TimeZone.getDefault().id.startsWith("America/")
-        val wanted = if (americas) REGION_AMERICAS else REGION_EUROPE
-        regions.firstOrNull { it.environment.equals(wanted, ignoreCase = true) }?.let { return it.environment }
-        val newest = regions.filter { it.solrVersion.startsWith("9.6") }.ifEmpty { regions }
-        val preferred = newest.firstOrNull { (it.country == "USA") == americas } ?: newest.first()
-        return preferred.environment
+        regions.firstOrNull { it.nearest }?.let { return it.environment }
+        return (regions.firstOrNull { versionAtLeast(it.solrVersion, OpensolrApi.MIN_SOLR) } ?: regions.first()).environment
     }
 
-    private fun lastKnownLocation(): Location? {
-        val granted = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-        if (!granted) return null
-        val manager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
-        return try {
-            manager.getProviders(true).mapNotNull { manager.getLastKnownLocation(it) }.maxByOrNull { it.time }
-        } catch (e: SecurityException) {
-            null
+    private fun versionAtLeast(version: String, min: String): Boolean {
+        val have = version.split('.').map { it.toIntOrNull() ?: 0 }
+        val need = min.split('.').map { it.toIntOrNull() ?: 0 }
+        for (i in 0 until maxOf(have.size, need.size)) {
+            val h = have.getOrElse(i) { 0 }
+            val n = need.getOrElse(i) { 0 }
+            if (h != n) return h > n
         }
+        return true
     }
 
     companion object {
         const val CONFIG_ASSET = "opensolr-photos-conf.zip"
 
         const val CONFIG_VERSION = 11
-
-        const val REGION_AMERICAS = "CHICAGO-96"
-
-        const val REGION_EUROPE = "FINLAND9"
     }
 }

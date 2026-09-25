@@ -71,8 +71,6 @@
     <string name="pw_bw_90_text">インデックスは今月の検索帯域の %1$s を使いました。使い切ると、月のリセットまで同期と検索は止まります。</string>
     <string name="nt_signin_title">Opensolrに再ログインしてください</string>
     <string name="nt_signin_text">Opensolrのログインが無効になったため、同期は一時停止中です。</string>
-    <string name="nt_recreated_title">写真インデックスが空になりました</string>
-    <string name="nt_recreated_text">Opensolrアカウントにありませんでした。新しいインデックスを作成し、写真を再同期しています。</string>
     <string name="md_empty">ファイルが空です</string>
     <string name="md_undecodable">画像をデコードできません</string>
     <string name="md_unopenable">ファイルを開けません</string>

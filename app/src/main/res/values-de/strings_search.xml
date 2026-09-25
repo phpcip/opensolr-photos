@@ -92,6 +92,7 @@
     <string name="apply">Anwenden</string>
     <string name="viewer_position">%1$s von %2$s</string>
     <string name="details">Details</string>
+    <string name="still_syncing">Wird synchronisiert</string>
     <string name="act_tag">Tags, Personen und Wörter</string>
     <string name="act_gallery">In Galerie öffnen</string>
     <string name="act_similar">Ähnliche Fotos</string>

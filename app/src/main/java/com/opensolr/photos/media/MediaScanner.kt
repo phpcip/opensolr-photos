@@ -71,6 +71,19 @@ object MediaScanner {
         return result
     }
 
+    fun addedSince(context: Context, folders: Set<String>, sinceSec: Long): List<LocalPhoto> {
+        val prefixes = folders.map { normalizeFolder(it) }
+        if (prefixes.isEmpty()) return emptyList()
+        val out = ArrayList<LocalPhoto>()
+        query(
+            context,
+            where = "${MediaStore.Images.Media.DATE_ADDED} >= ?",
+            args = arrayOf(sinceSec.toString()),
+            keep = { folder -> prefixes.any { folder.startsWith(it, ignoreCase = true) } },
+        ) { out += it }
+        return out
+    }
+
     fun findByPath(context: Context, absolutePath: String): LocalPhoto? {
         if (absolutePath.isBlank()) return null
 

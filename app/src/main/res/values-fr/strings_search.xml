@@ -92,6 +92,7 @@
     <string name="apply">Appliquer</string>
     <string name="viewer_position">%1$s sur %2$s</string>
     <string name="details">Détails</string>
+    <string name="still_syncing">Synchronisation en cours</string>
     <string name="act_tag">Étiquettes, personnes et mots</string>
     <string name="act_gallery">Ouvrir dans la galerie</string>
     <string name="act_similar">Photos similaires</string>

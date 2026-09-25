@@ -102,13 +102,13 @@ Consequences worth knowing:
   (`device_name` from `get_index_list`, sent at `create_index` as maker + model + the phone's own name);
   the pick is stored in `AppPrefs.chosenIndexName` and used from then on, or *none of these* stores the
   phone's own name and creates it. The name is never derived again once chosen.
-- **Not found, and this phone never had one:** first setup. The app picks the nearest environment: with the
-  optional coarse-location permission, a phone in the Americas (longitude between -170 and -30) gets
-  `CHICAGO-96`, everyone else `FINLAND9`; without a position the time zone decides the same way. If the
-  chosen environment is not offered, the newest vector environment on the same continent is used. Then it
-  creates the index and uploads the configuration.
+- **Not found, and this phone never had one:** first setup, silent. `vector_regions` is called with
+  `nearest=1&min_solr=9.6`: the platform flags the region nearest to the address the phone connects from,
+  among those running Solr 9.6 or newer, and the platform's default region when the place cannot be told.
+  The app takes the flagged one (or, from a platform that does not flag one, the first region on 9.6 or
+  newer), creates the index and uploads the configuration. No region name is in the app.
 - **Not found, but this phone had one** (deleted from the control panel, removed as unused, anything):
-  created again the same way, and a notification says the index was emptied and is being filled again.
+  created again the same way; the Sync screen says the index was emptied and is being filled again.
 
 An index is only ever created after the account's index list was **read successfully** and did not contain
 it. A network error, a server error or a refused key never lead to a create; they end the run, and the next

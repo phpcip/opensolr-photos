@@ -71,8 +71,6 @@
     <string name="pw_bw_90_text">索引已使用本月搜索带宽的 %1$s。用完后，在月度重置前同步和搜索都会停止。</string>
     <string name="nt_signin_title">请重新登录 Opensolr</string>
     <string name="nt_signin_text">你的 Opensolr 登录已失效，同步已暂停。</string>
-    <string name="nt_recreated_title">你的照片索引已被清空</string>
-    <string name="nt_recreated_text">你的 Opensolr 账户中找不到它，因此已新建一个索引，照片正在重新同步。</string>
     <string name="md_empty">文件为空</string>
     <string name="md_undecodable">无法解码图片</string>
     <string name="md_unopenable">无法打开文件</string>

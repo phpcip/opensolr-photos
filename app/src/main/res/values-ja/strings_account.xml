@@ -9,7 +9,6 @@
     <string name="acc_email">メール</string>
     <string name="acc_plan">プラン</string>
     <string name="acc_index">この端末のインデックス</string>
-    <string name="acc_environment">環境</string>
     <string name="acc_privacy">プライバシーポリシー</string>
     <string name="acc_delete_account">アカウントとデータを削除</string>
     <string name="acc_app_version">アプリのバージョン</string>

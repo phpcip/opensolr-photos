@@ -109,7 +109,6 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                 InfoRow(stringResource(R.string.acc_email), state.email ?: "")
                 account?.let { InfoRow(stringResource(R.string.acc_plan), it.planLabel, onOpen = { Actions.openUrl(context, Actions.DASHBOARD_URL) }) }
                 state.indexName?.let { InfoRow(stringResource(R.string.acc_index), it) }
-                state.environment?.takeIf { it.isNotBlank() }?.let { InfoRow(stringResource(R.string.acc_environment), it) }
                 Spacer(Modifier.height(14.dp))
                 GhostButton(stringResource(R.string.acc_privacy), onClick = { Actions.openUrl(context, Actions.PRIVACY_URL) }, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(10.dp))
