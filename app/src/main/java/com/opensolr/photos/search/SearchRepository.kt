@@ -1051,7 +1051,8 @@ class SearchRepository(private val context: Context) {
                 facets[field] = (0 until pairs.length() / 2).map { FacetValue(pairs.optString(it * 2), pairs.optInt(it * 2 + 1)) }
             }
         }
-        facets["year"] = facets["year"]?.sortedByDescending { it.value } ?: emptyList()
+        // Only a response that carries facets has them: a page of more results (no facets asked) stays empty.
+        facets["year"]?.let { years -> facets["year"] = years.sortedByDescending { it.value } }
         json.optJSONObject("facet_counts")?.optJSONObject("facet_queries")?.let { queries ->
             val roots = folderRoots()
             val counts = roots.mapIndexedNotNull { i, root ->

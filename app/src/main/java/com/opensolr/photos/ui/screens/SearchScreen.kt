@@ -56,8 +56,6 @@ import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -398,7 +396,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             ) {
                 Icon(Icons.Filled.Search, contentDescription = null, tint = p.muted, modifier = Modifier.size(16.dp))
                 Spacer(Modifier.size(8.dp))
-                BasicTextField(
+                com.opensolr.photos.ui.TextBox(
                     value = state.query,
                     onValueChange = { viewModel.onQueryChange(it) },
                     modifier = Modifier
@@ -414,8 +412,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                     textStyle = MaterialTheme.typography.bodyMedium.copy(color = p.ink),
                     cursorBrush = SolidColor(p.accent),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                    keyboardActions = KeyboardActions(onSearch = { keyboard?.hide(); viewModel.search(reset = true) }),
-                    decorationBox = { field ->
+                    onImeAction = { keyboard?.hide(); viewModel.search(reset = true) },
+                    decorator = { field ->
                         if (state.query.isEmpty()) {
                             Text(stringResource(R.string.search_hint), style = MaterialTheme.typography.bodyMedium, color = p.muted, maxLines = 1)
                         }
@@ -1370,10 +1368,12 @@ private fun buildRows(
         return rows
     }
     if (!byDate) {
-        val cut = scoreCut(hits) ?: return hits.map { GridRow.Photo(it) }
+        // A ranked list with scores close together (no clear fall) is all best matches: the grouping is always
+        // there. A list with no scores (browsing, nothing typed) has no ranking to group.
+        val cut = scoreCut(hits) ?: if (hits.first().score > 0.0) hits.size else return hits.map { GridRow.Photo(it) }
         val rows = ArrayList<GridRow>(hits.size + 2)
         rows.addGroup("Best matches", hits.take(cut), text = words.best)
-        rows.addGroup("Also similar", hits.drop(cut), text = words.similar)
+        if (cut < hits.size) rows.addGroup("Also similar", hits.drop(cut), text = words.similar)
         return rows
     }
 
@@ -2742,14 +2742,14 @@ private fun FacetSearch(
             if (text.isEmpty()) {
                 Text(stringResource(R.string.search_values, Actions.formatCount(all.size.toLong())), style = MaterialTheme.typography.bodySmall, color = p.muted)
             }
-            androidx.compose.foundation.text.BasicTextField(
+            com.opensolr.photos.ui.TextBox(
                 value = text,
                 onValueChange = { text = it },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodySmall.copy(color = p.ink),
                 cursorBrush = androidx.compose.ui.graphics.SolidColor(p.accent),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                keyboardActions = androidx.compose.foundation.text.KeyboardActions(onDone = { focus.clearFocus() }),
+                onImeAction = { focus.clearFocus() },
                 modifier = Modifier
                     .fillMaxWidth()
                     .onFocusChanged { open = it.isFocused },

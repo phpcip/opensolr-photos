@@ -27,10 +27,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Place
@@ -200,7 +198,7 @@ fun PlacePickerDialog(
                     searching = false
                 }
             }
-            OutlinedTextField(
+            com.opensolr.photos.ui.OutlinedTextBox(
                 value = term,
                 onValueChange = { term = it },
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
@@ -217,7 +215,7 @@ fun PlacePickerDialog(
                 singleLine = true,
                 shape = RoundedCornerShape(2.dp),
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                keyboardActions = KeyboardActions(onSearch = { keyboard?.hide() }),
+                onImeAction = { keyboard?.hide() },
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = p.accent,
                     unfocusedBorderColor = p.hairline,

@@ -1038,7 +1038,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     obj.put(field, arr)
                 }
                 prefs.facetsJson = obj.toString()
-                _state.update { it.copy(facets = facets) }
+                // The whole library's facets are the filters of the browse view only, never of a search on screen.
+                _state.update { if (it.query.isBlank() && it.filters.count == 0) it.copy(facets = facets) else it }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1435,7 +1436,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                         hits = hits,
                         numFound = page.numFound,
 
-                        facets = if (reset || page.facets.isNotEmpty()) page.facets else it.facets,
+                        // Facets come with the first page only; the next pages keep the ones the filters show.
+                        facets = if (start <= 0) page.facets else it.facets,
                         smart = page.smart,
                         searchNotice = page.notice,
                         didYouMean = if (reset) page.didYouMean else it.didYouMean,

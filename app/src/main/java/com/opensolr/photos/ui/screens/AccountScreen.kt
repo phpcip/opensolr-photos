@@ -24,7 +24,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import com.opensolr.photos.ui.TextButton
 import androidx.compose.runtime.Composable
@@ -360,7 +359,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                 Spacer(Modifier.height(14.dp))
 
                 var seconds by remember(state.cacheSeconds) { mutableStateOf(state.cacheSeconds.toString()) }
-                OutlinedTextField(
+                com.opensolr.photos.ui.OutlinedTextBox(
                     value = seconds,
                     onValueChange = { typed -> seconds = typed.filter { it.isDigit() }.take(6) },
                     label = { Text(stringResource(R.string.acc_cache_seconds)) },
