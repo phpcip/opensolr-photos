@@ -683,7 +683,10 @@ class SearchRepository(private val context: Context) {
         }
         return try {
             SolrClient(connection).suggest(text).also { cache.put(key, JSONArray(it).toString()) }
-        } catch (e: ServiceException) {
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // Suggestions are best effort: no answer means no suggestions, never a crash.
             emptyList()
         }
     }

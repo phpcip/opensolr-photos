@@ -2,6 +2,8 @@ package com.opensolr.photos.net
 
 import com.opensolr.photos.data.IndexConnection
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import okhttp3.Credentials
 import okhttp3.FormBody
@@ -12,9 +14,9 @@ import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
 
-class SolrClient(private val connection: IndexConnection, private val http: OkHttpClient = Http.client) {
+class SolrClient(private var connection: IndexConnection, private val http: OkHttpClient = Http.client) {
 
-    private val authorization = Credentials.basic(connection.username, connection.password, Charsets.UTF_8)
+    private var authorization = Credentials.basic(connection.username, connection.password, Charsets.UTF_8)
 
     suspend fun select(params: List<Pair<String, String>>): JSONObject = JSONObject(selectText(params))
 
@@ -237,11 +239,23 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
     private fun request(path: String): Request.Builder =
         Request.Builder().url(connection.baseUrl.trimEnd('/') + path).header("Authorization", authorization)
 
-    private fun execute(request: Request): String =
+    // A 401 means the index password was rotated: fetch the current one from the account once and repeat the request.
+    private suspend fun execute(request: Request): String {
+        call(request)?.let { return it }
+        val stale = connection
+        val fresh = refreshLock.withLock { credentials?.invoke(stale) } ?: throw SolrAuthException()
+        connection = fresh
+        authorization = Credentials.basic(fresh.username, fresh.password, Charsets.UTF_8)
+        val url = request.url.toString().let { if (it.startsWith(stale.baseUrl.trimEnd('/'))) fresh.baseUrl.trimEnd('/') + it.removePrefix(stale.baseUrl.trimEnd('/')) else it }
+        return call(request.newBuilder().url(url).header("Authorization", authorization).build()) ?: throw SolrAuthException()
+    }
+
+    // The body of a successful answer, null on 401.
+    private fun call(request: Request): String? =
         http.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty()
             when {
-                response.code == 401 -> throw SolrAuthException()
+                response.code == 401 -> return null
                 response.code == 403 -> throw PlanLimitException()
                 // The index is not there at all: the owner is told that, not an HTTP number.
                 response.code == 404 -> throw IndexMissingException()
@@ -251,6 +265,12 @@ class SolrClient(private val connection: IndexConnection, private val http: OkHt
         }
 
     companion object {
+        // Set by the app: returns the index connection with the account's current password (null = none).
+        @Volatile
+        var credentials: (suspend (stale: IndexConnection) -> IndexConnection?)? = null
+
+        private val refreshLock = Mutex()
+
         private val JSON = "application/json; charset=utf-8".toMediaType()
 
         private const val WITHIN_LIMIT = 50
