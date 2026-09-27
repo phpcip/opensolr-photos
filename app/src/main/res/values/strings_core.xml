@@ -143,4 +143,13 @@
         <item quantity="one">%1$s photo that looks like a document will be read again.</item>
         <item quantity="other">%1$s photos that look like documents will be read again.</item>
     </plurals>
+    <plurals name="sh_title">
+        <item quantity="one">Share %1$s photo</item>
+        <item quantity="other">Share %1$s photos</item>
+    </plurals>
+    <string name="sh_original">Originals</string>
+    <string name="sh_original_sub">Full resolution, as taken</string>
+    <string name="sh_small">1024 px</string>
+    <string name="sh_small_sub">Smaller copies, 1024 px on the long edge</string>
+    <string name="sh_preparing">Preparing %1$s of %2$s</string>
 </resources>

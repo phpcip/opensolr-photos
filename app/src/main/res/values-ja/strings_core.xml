@@ -138,4 +138,12 @@
     <plurals name="vm_documents_n">
         <item quantity="other">書類のような写真 %1$s 枚を読み直します。</item>
     </plurals>
+    <plurals name="sh_title">
+        <item quantity="other">%1$s 枚の写真を共有</item>
+    </plurals>
+    <string name="sh_original">オリジナル</string>
+    <string name="sh_original_sub">撮影時のフル解像度</string>
+    <string name="sh_small">1024 px</string>
+    <string name="sh_small_sub">縮小コピー（長辺 1024 px）</string>
+    <string name="sh_preparing">準備中 %1$s / %2$s</string>
 </resources>

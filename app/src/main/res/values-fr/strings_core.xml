@@ -148,4 +148,14 @@
         <item quantity="many">%1$s photos qui ressemblent à des documents seront relues.</item>
         <item quantity="other">%1$s photos qui ressemblent à des documents seront relues.</item>
     </plurals>
+    <plurals name="sh_title">
+        <item quantity="one">Partager %1$s photo</item>
+        <item quantity="many">Partager %1$s photos</item>
+        <item quantity="other">Partager %1$s photos</item>
+    </plurals>
+    <string name="sh_original">Originaux</string>
+    <string name="sh_original_sub">Pleine résolution, telles que prises</string>
+    <string name="sh_small">1024 px</string>
+    <string name="sh_small_sub">Copies plus petites, 1024 px sur le grand côté</string>
+    <string name="sh_preparing">Préparation %1$s sur %2$s</string>
 </resources>

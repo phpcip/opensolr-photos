@@ -11,6 +11,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.widget.Toast
+import kotlinx.coroutines.ensureActive
 import com.opensolr.photos.media.MediaScanner
 import com.opensolr.photos.search.PhotoHit
 import java.text.NumberFormat
@@ -124,22 +125,64 @@ object Actions {
     fun sharePhotos(context: Context, hits: List<PhotoHit>) {
         val uris = ArrayList(contentUris(context, hits))
         if (uris.isEmpty()) {
-            Toast.makeText(context, AppText.s(R.string.ac_photos_gone), Toast.LENGTH_LONG).show()
+            toast(context, R.string.ac_photos_gone)
             return
         }
+        startShare(context, uris, "image/*")
+    }
+
+    /**
+     * Smaller copies of [hits] (long edge [edge] px) written to the app's cache and shared from there; the copies
+     * of the share before are removed first. [progress] gets (done, total). Runs off the main thread.
+     */
+    suspend fun shareCopies(context: Context, hits: List<PhotoHit>, edge: Int, progress: (Int, Int) -> Unit = { _, _ -> }) {
+        val sources = contentUris(context, hits)
+        if (sources.isEmpty()) {
+            toast(context, R.string.ac_photos_gone)
+            return
+        }
+        val dir = java.io.File(context.cacheDir, SHARE_DIR).apply { deleteRecursively(); mkdirs() }
+        val authority = context.packageName + ".share"
+        val uris = ArrayList<Uri>(sources.size)
+        sources.forEachIndexed { i, source ->
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            val file = java.io.File(dir, "photo_" + (i + 1) + ".jpg")
+            if (com.opensolr.photos.media.PhotoReader.shareCopy(context, source, file, edge)) {
+                uris += androidx.core.content.FileProvider.getUriForFile(context, authority, file)
+            }
+            progress(i + 1, sources.size)
+        }
+        if (uris.isEmpty()) {
+            toast(context, R.string.ac_photos_gone)
+            return
+        }
+        startShare(context, uris, "image/jpeg")
+    }
+
+    private fun startShare(context: Context, uris: ArrayList<Uri>, type: String) {
         val intent = if (uris.size == 1) {
             Intent(Intent.ACTION_SEND).putExtra(Intent.EXTRA_STREAM, uris.first())
         } else {
             Intent(Intent.ACTION_SEND_MULTIPLE).putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
         }
-        intent.type = "image/*"
+        intent.type = type
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        // the receiving app gets read access to every file, not only the first
+        intent.clipData = android.content.ClipData.newRawUri("", uris.first()).apply { uris.drop(1).forEach { addItem(android.content.ClipData.Item(it)) } }
         try {
             context.startActivity(Intent.createChooser(intent, AppText.s(R.string.ac_share_photos)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (e: ActivityNotFoundException) {
-            Toast.makeText(context, AppText.s(R.string.ac_no_share), Toast.LENGTH_LONG).show()
+            toast(context, R.string.ac_no_share)
         }
     }
+
+    /** Shares are started from background threads too: the message is shown on the main one. */
+    private fun toast(context: Context, text: Int) {
+        android.os.Handler(android.os.Looper.getMainLooper()).post { Toast.makeText(context, AppText.s(text), Toast.LENGTH_LONG).show() }
+    }
+
+    const val SHARE_EDGE_PX = 1024
+    private const val SHARE_DIR = "share"
 
     fun deleteRequest(context: Context, uris: List<Uri>): IntentSender? {
         if (uris.isEmpty()) return null

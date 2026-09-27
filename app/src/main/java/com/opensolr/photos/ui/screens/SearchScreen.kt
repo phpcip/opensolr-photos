@@ -244,6 +244,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     var editing by remember { mutableStateOf<PhotoHit?>(null) }
 
     var bulkTagging by remember { mutableStateOf(false) }
+    var shareFor by remember { mutableStateOf<List<PhotoHit>?>(null) }
     val gridState = rememberLazyGridState()
 
     val gridWords = GridWords(stringResource(R.string.best_matches), stringResource(R.string.also_similar), stringResource(R.string.of_the_same))
@@ -908,7 +909,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         SelectionDock(
             count = state.selectedIds.size,
             modifier = Modifier.align(Alignment.BottomCenter),
-            onShare = { Actions.sharePhotos(context, viewModel.photosToTag()) },
+            onShare = { shareFor = viewModel.photosToTag() },
 
             onDelete = { confirmDelete = true },
             onResync = { viewModel.resyncSelected() },
@@ -951,6 +952,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     if (bulkTagging) {
         BulkTagSheet(state = state, viewModel = viewModel, onDismiss = { bulkTagging = false })
     }
+
+    shareFor?.let { photos -> com.opensolr.photos.ui.ShareChooser(photos) { shareFor = null } }
 
     viewing?.let { hit ->
 
@@ -1477,6 +1480,11 @@ private fun viewerWindowOverflow(): Dp {
     SideEffect {
         window?.let { w ->
             w.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
+            // full screen photo: no status bar; a swipe from the top shows it for a moment
+            androidx.core.view.WindowCompat.getInsetsController(w, w.decorView).apply {
+                systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                hide(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 val attrs = w.attributes
                 val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
@@ -2375,6 +2383,7 @@ internal fun PhotoViewer(
     LaunchedEffect(pager.currentPage) { zoomJob?.cancel(); scale = 1f; offset = Offset.Zero }
 
     var sheetFor by remember { mutableStateOf<PhotoHit?>(null) }
+    var viewerShare by remember { mutableStateOf<PhotoHit?>(null) }
 
     var editFor by remember { mutableStateOf<PhotoHit?>(null) }
 
@@ -2388,6 +2397,11 @@ internal fun PhotoViewer(
 
     val upBy = remember { mutableFloatStateOf(0f) }
     val scope = rememberCoroutineScope()
+
+    // side bars and cutouts in landscape, read from the activity window (the dialog window may report none)
+    val sides = WindowInsets.safeDrawing.asPaddingValues()
+    val sideLeft = sides.calculateLeftPadding(androidx.compose.ui.unit.LayoutDirection.Ltr)
+    val sideRight = sides.calculateRightPadding(androidx.compose.ui.unit.LayoutDirection.Ltr)
 
     Dialog(
         onDismissRequest = onClose,
@@ -2409,11 +2423,14 @@ internal fun PhotoViewer(
                 val uri = remember(hit.mediaId) {
                     ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, hit.mediaId)
                 }
+                var baseSize by remember(hit.mediaId) { mutableStateOf<androidx.compose.ui.geometry.Size?>(null) }
+                Box(Modifier.fillMaxSize()) {
                 AsyncImage(
 
                     model = ImageRequest.Builder(context).data(uri).setParameter("bytes", hit.sizeBytes).crossfade(true).build(),
                     contentDescription = hit.meaning.ifBlank { hit.fileName },
                     contentScale = ContentScale.Fit,
+                    onSuccess = { baseSize = it.painter.intrinsicSize },
                     modifier = Modifier
                         .fillMaxSize()
                         .pointerInput(hit.id) {
@@ -2542,6 +2559,16 @@ internal fun PhotoViewer(
                             translationY = offset.y + (if (page == pager.currentPage) dismiss.value else 0f)
                         },
                 )
+                // zoomed in: the original file's pixels over the screen-sized image
+                ViewerSharpLayer(
+                    uri = uri,
+                    active = page == pager.currentPage,
+                    baseSize = baseSize,
+                    scale = { scale },
+                    offset = { offset },
+                    lift = { if (page == pager.currentPage) dismiss.value else 0f },
+                )
+                }
             }
 
             val hit = hits.getOrNull(pager.currentPage)
@@ -2586,8 +2613,8 @@ internal fun PhotoViewer(
                         .background(Color(0xCC000000))
 
                         .padding(
-                            start = 12.dp,
-                            end = 12.dp,
+                            start = 12.dp + sideLeft,
+                            end = 12.dp + sideRight,
                             top = 12.dp,
                             bottom = maxOf(bottomInset, VIEWER_MIN_BOTTOM) + overflow + 12.dp,
                         ),
@@ -2599,7 +2626,7 @@ internal fun PhotoViewer(
                     ViewerAction(stringResource(R.string.act_tag), R.drawable.ic_tag, on) { editFor = hit }
                     ViewerAction(stringResource(R.string.act_gallery), R.drawable.ic_open, on) { Actions.openPhoto(context, hit) }
                     ViewerAction(stringResource(R.string.act_similar), R.drawable.ic_duplicates, on) { onClose(); viewModel.showSimilar(hit) }
-                    ViewerAction(stringResource(R.string.act_share), R.drawable.ic_share, on) { Actions.sharePhotos(context, listOf(hit)) }
+                    ViewerAction(stringResource(R.string.act_share), R.drawable.ic_share, on) { viewerShare = hit }
                     hit.latLon?.let { (lat, lon) ->
                         ViewerAction(stringResource(R.string.act_map), R.drawable.ic_map, on) { onClose(); viewModel.openMap(MapFocus(lat, lon, 15.0)) }
                         ViewerIconAction(stringResource(R.string.act_nearby), Icons.Filled.LocationOn, on) { onClose(); viewModel.searchNear(lat, lon, 5.0) }
@@ -2616,6 +2643,9 @@ internal fun PhotoViewer(
                     { editFor = it },
                 )
             }
+
+            // composed inside the viewer's window, so the choice shows above the photo
+            viewerShare?.let { one -> com.opensolr.photos.ui.ShareChooser(listOf(one), fullScreen = true) { viewerShare = null } }
 
             editFor?.let { held ->
                 val photo = hits.firstOrNull { it.id == held.id } ?: held

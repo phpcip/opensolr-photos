@@ -92,6 +92,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
     val folded = state.foldedAlbumSections
     var pendingDelete by remember { mutableStateOf(emptySet<String>()) }
     var confirmDelete by remember { mutableStateOf(false) }
+    var shareFor by remember { mutableStateOf<List<com.opensolr.photos.search.PhotoHit>?>(null) }
     val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) viewModel.albumPhotosDeleted(pendingDelete)
         pendingDelete = emptySet()
@@ -221,11 +222,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
         ) {
             DockAction(R.drawable.ic_share, stringResource(R.string.al_share), enabled = shareEnabled) {
 
-                viewModel.withSelectedAlbumPhotos { photos ->
-                    albumScope.launch {
-                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Actions.sharePhotos(context, photos) }
-                    }
-                }
+                viewModel.withSelectedAlbumPhotos { photos -> shareFor = photos }
             }
             DockAction(R.drawable.ic_delete, stringResource(R.string.al_delete), enabled = !state.albumsWorking) { confirmDelete = true }
             Column(
@@ -241,6 +238,8 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
             }
         }
     }
+
+    shareFor?.let { photos -> com.opensolr.photos.ui.ShareChooser(photos) { shareFor = null } }
 
     if (confirmDelete && selecting) {
         AlertDialog(

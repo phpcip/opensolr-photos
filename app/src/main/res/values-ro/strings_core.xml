@@ -148,4 +148,14 @@
         <item quantity="few">%1$s poze care arată a documente vor fi recitite.</item>
         <item quantity="other">%1$s de poze care arată a documente vor fi recitite.</item>
     </plurals>
+    <plurals name="sh_title">
+        <item quantity="one">Trimite %1$s poză</item>
+        <item quantity="few">Trimite %1$s poze</item>
+        <item quantity="other">Trimite %1$s de poze</item>
+    </plurals>
+    <string name="sh_original">Originale</string>
+    <string name="sh_original_sub">Rezoluție completă, cum au fost făcute</string>
+    <string name="sh_small">1024 px</string>
+    <string name="sh_small_sub">Copii mai mici, 1024 px pe latura lungă</string>
+    <string name="sh_preparing">Se pregătește %1$s din %2$s</string>
 </resources>

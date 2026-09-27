@@ -42,8 +42,9 @@ object PhotoReader {
 
     private const val CLIP_EDGE_PX = 1024
     private const val JPEG_QUALITY = 85
+    private const val SHARE_JPEG_QUALITY = 92
 
-    fun shrinkForClip(context: Context, uri: Uri, rotationDegrees: Int): ByteArray? {
+    fun shrinkForClip(context: Context, uri: Uri, rotationDegrees: Int, edge: Int = CLIP_EDGE_PX, quality: Int = JPEG_QUALITY): ByteArray? {
         val resolver = context.contentResolver
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         val stream = resolver.openInputStream(uri) ?: return null
@@ -51,14 +52,14 @@ object PhotoReader {
         if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
 
         var sample = 1
-        while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= CLIP_EDGE_PX) {
+        while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= edge) {
             sample *= 2
         }
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
         val decoded = resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, options) } ?: return null
 
         val longEdge = max(decoded.width, decoded.height)
-        val scale = if (longEdge > CLIP_EDGE_PX) CLIP_EDGE_PX.toFloat() / longEdge else 1f
+        val scale = if (longEdge > edge) edge.toFloat() / longEdge else 1f
         val matrix = Matrix().apply {
             if (scale != 1f) postScale(scale, scale)
             if (rotationDegrees != 0) postRotate(rotationDegrees.toFloat())
@@ -67,7 +68,7 @@ object PhotoReader {
             Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
 
         val out = ByteArrayOutputStream()
-        upright.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+        upright.compress(Bitmap.CompressFormat.JPEG, quality, out)
         if (upright !== decoded) upright.recycle()
         decoded.recycle()
         return out.toByteArray()
@@ -99,6 +100,20 @@ object PhotoReader {
     }
 
     private val HEX = "0123456789abcdef".toCharArray()
+
+    /** A smaller copy to send: upright JPEG, long edge [edge] px, the original's date, camera and place kept. */
+    fun shareCopy(context: Context, uri: Uri, out: java.io.File, edge: Int): Boolean {
+        val exif = openExif(context, uri)
+        val jpeg = shrinkForClip(context, uri, exif?.rotationDegrees ?: 0, edge, SHARE_JPEG_QUALITY) ?: return false
+        out.writeBytes(jpeg)
+        if (exif != null) runCatching {
+            val copy = ExifInterface(out.absolutePath)
+            for (tag in CARRIED_EXIF) exif.getAttribute(tag)?.let { copy.setAttribute(tag, it) }
+            copy.setAttribute(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL.toString())
+            copy.saveAttributes()
+        }
+        return true
+    }
 
     fun copyForIngest(context: Context, photo: LocalPhoto, place: com.opensolr.photos.data.PhotoCache.SetPlace? = null): ByteArray? {
         val exif = openExif(context, photo.uri)

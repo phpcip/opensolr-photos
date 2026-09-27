@@ -138,4 +138,12 @@
     <plurals name="vm_documents_n">
         <item quantity="other">将重新读取 %1$s 张文档类照片。</item>
     </plurals>
+    <plurals name="sh_title">
+        <item quantity="other">分享 %1$s 张照片</item>
+    </plurals>
+    <string name="sh_original">原图</string>
+    <string name="sh_original_sub">拍摄时的完整分辨率</string>
+    <string name="sh_small">1024 px</string>
+    <string name="sh_small_sub">较小的副本，长边 1024 像素</string>
+    <string name="sh_preparing">正在准备 %1$s / %2$s</string>
 </resources>
