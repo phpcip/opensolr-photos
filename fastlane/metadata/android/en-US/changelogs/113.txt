@@ -1,0 +1,4 @@
+- Zoom into a photo and you see the original file's own pixels, sharp at any zoom.
+- Turn the phone while a photo is open and it stays open, in landscape too.
+- The full screen photo view shows no status bar.
+- Share one photo or many as the originals (full resolution) or as smaller 1024 px copies that keep the date, camera and place.
