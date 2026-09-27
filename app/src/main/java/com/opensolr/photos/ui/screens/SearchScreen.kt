@@ -26,6 +26,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -519,19 +520,24 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                     color = if (state.wordsOnly || !aiUsable) p.muted else p.accent,
                     modifier = Modifier.padding(end = 2.dp),
                 )
-                Switch(
-                    checked = aiUsable && !state.wordsOnly,
-                    enabled = aiUsable,
-                    onCheckedChange = { Haptics.toggle(view, it); viewModel.setWordsOnly(!it) },
-                    colors = SwitchDefaults.colors(
-                        checkedTrackColor = p.accentFill,
-                        checkedThumbColor = p.onAccentFill,
-                        uncheckedTrackColor = p.chip,
-                        uncheckedBorderColor = p.hairline,
-                        uncheckedThumbColor = p.muted,
-                    ),
-                    modifier = Modifier.scale(0.7f),
-                )
+                // no taller than the buttons beside it: the row keeps its height when the switch appears
+                Box(Modifier.size(width = 52.dp, height = 36.dp), contentAlignment = Alignment.Center) {
+                    androidx.compose.runtime.CompositionLocalProvider(androidx.compose.material3.LocalMinimumInteractiveComponentSize provides 0.dp) {
+                        Switch(
+                            checked = aiUsable && !state.wordsOnly,
+                            enabled = aiUsable,
+                            onCheckedChange = { Haptics.toggle(view, it); viewModel.setWordsOnly(!it) },
+                            colors = SwitchDefaults.colors(
+                                checkedTrackColor = p.accentFill,
+                                checkedThumbColor = p.onAccentFill,
+                                uncheckedTrackColor = p.chip,
+                                uncheckedBorderColor = p.hairline,
+                                uncheckedThumbColor = p.muted,
+                            ),
+                            modifier = Modifier.requiredSize(52.dp, 32.dp).scale(0.7f),
+                        )
+                    }
+                }
                 Spacer(Modifier.width(2.dp))
             }
 
