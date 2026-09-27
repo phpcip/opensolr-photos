@@ -1,0 +1,1 @@
+The app no longer closes when you type in search right after the nightly change of your index password. Search, suggestions and sync pick up the new password by themselves.
