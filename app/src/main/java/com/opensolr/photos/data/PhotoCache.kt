@@ -163,6 +163,17 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         if (oldVersion < 29) {
             db.execSQL("CREATE INDEX IF NOT EXISTS faces_media ON faces (media_id)")
         }
+        if (oldVersion < 30) {
+            // where the file is on this phone, as columns: filled once from the documents' json
+            addColumnIfMissing(db, "docs", "media_id", "INTEGER NOT NULL DEFAULT 0")
+            addColumnIfMissing(db, "docs", "path", "TEXT")
+            db.rawQuery("SELECT id, json FROM docs WHERE json IS NOT NULL", null).use { c ->
+                while (c.moveToNext()) {
+                    val doc = runCatching { org.json.JSONObject(c.getString(1)) }.getOrNull() ?: continue
+                    db.execSQL("UPDATE docs SET media_id = ?, path = ? WHERE id = ?", arrayOf<Any>(doc.optLong("media_id", 0L), doc.optString("path"), c.getString(0)))
+                }
+            }
+        }
         if (oldVersion < 24) {
             // who named a face: 0 the owner, 1 learned from the photos' tags, 2 the matcher on its own
             addColumnIfMissing(db, "faces", "how", "INTEGER NOT NULL DEFAULT 0")
@@ -523,6 +534,9 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
             if (doc.embedModel == null) putNull("embed_model") else put("embed_model", doc.embedModel)
             if (doc.fileHash == null) putNull("file_hash") else put("file_hash", doc.fileHash)
+            val where = runCatching { org.json.JSONObject(doc.json ?: "{}") }.getOrNull()
+            put("media_id", where?.optLong("media_id", 0L) ?: 0L)
+            put("path", where?.optString("path").orEmpty())
         }
         writableDatabase.beginTransaction()
         try {
@@ -544,6 +558,24 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         readableDatabase.query("docs", DOC_COLUMNS, "id = ?", arrayOf(id), null, null, null, "1").use { c ->
             return if (c.moveToFirst()) readDoc(c) else null
         }
+    }
+
+    /** Where each document says its file is: this phone's MediaStore id and absolute path, or another phone's. */
+    fun docMedia(): Map<String, Pair<Long, String>> {
+        val out = HashMap<String, Pair<Long, String>>()
+        readableDatabase.query("docs", arrayOf("id", "media_id", "path"), null, null, null, null, null).use { c ->
+            while (c.moveToNext()) out[c.getString(0)] = c.getLong(1) to (if (c.isNull(2)) "" else c.getString(2))
+        }
+        return out
+    }
+
+    /** The file is here, under this id and path: the document (and its json, which travels to the index) says so now. */
+    fun relocateDoc(id: String, mediaId: Long, path: String) {
+        val json = readableDatabase.query("docs", arrayOf("json"), "id = ?", arrayOf(id), null, null, null, "1").use { c ->
+            if (c.moveToFirst() && !c.isNull(0)) c.getString(0) else null
+        }
+        val updated = json?.let { runCatching { org.json.JSONObject(it).put("media_id", mediaId).put("path", path).toString() }.getOrNull() }
+        writableDatabase.execSQL("UPDATE docs SET media_id = ?, path = ?, json = COALESCE(?, json) WHERE id = ?", arrayOf<Any?>(mediaId, path, updated, id))
     }
 
     fun docSizes(): Map<String, Pair<Long, Long>> {
@@ -1747,7 +1779,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
     companion object {
         private const val NAME = "photo_cache.db"
-        private const val VERSION = 29
+        private const val VERSION = 30
 
         @Volatile private var shared: PhotoCache? = null
 
@@ -1760,7 +1792,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
         private val PLACE_NAME_FIELDS = listOf("city", "region", "province", "community", "country", "country_code")
 
-        private const val DOCS_TABLE = "CREATE TABLE IF NOT EXISTS docs (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, indexed_at INTEGER NOT NULL, taken_at TEXT, tags_json TEXT, persons_json TEXT, meaning TEXT, ocr TEXT, city TEXT, country TEXT, json TEXT, modified INTEGER NOT NULL DEFAULT 0, taken_ms INTEGER NOT NULL DEFAULT 0, embed_model TEXT, file_hash TEXT, region TEXT, folder TEXT, camera TEXT, camera_model TEXT)"
+        private const val DOCS_TABLE = "CREATE TABLE IF NOT EXISTS docs (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, indexed_at INTEGER NOT NULL, taken_at TEXT, tags_json TEXT, persons_json TEXT, meaning TEXT, ocr TEXT, city TEXT, country TEXT, json TEXT, modified INTEGER NOT NULL DEFAULT 0, taken_ms INTEGER NOT NULL DEFAULT 0, embed_model TEXT, file_hash TEXT, region TEXT, folder TEXT, camera TEXT, camera_model TEXT, media_id INTEGER NOT NULL DEFAULT 0, path TEXT)"
 
         private const val DOCS_TAKEN_INDEX = "CREATE INDEX IF NOT EXISTS docs_taken_ms ON docs (taken_ms)"
 

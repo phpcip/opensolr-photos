@@ -142,6 +142,9 @@ class EditRepository(private val context: Context) {
                     location = places[id]?.let { it.lat to it.lon },
                     // the faces travel with the words: a name put on one changes both
                     faces = cache.facesForIndex(id, doc?.sizeBytes ?: 0L),
+                    // where the file is on this phone, so another phone's document opens here
+                    mediaId = doc?.json?.let { runCatching { JSONObject(it).optLong("media_id", 0L) }.getOrNull() }?.takeIf { it > 0 },
+                    path = doc?.json?.let { runCatching { JSONObject(it).optString("path") }.getOrNull() }?.takeIf { it.isNotBlank() },
                 )
             }
             val results = api.photosWords(session, connection.indexName, items)
@@ -187,7 +190,7 @@ class EditRepository(private val context: Context) {
         val connection = prefs.connection ?: return
         prefs.cloneComplete = false
         com.opensolr.photos.net.SolrClient(connection)
-            .forEachDoc(CLONE_FIELDS) { d ->
+            .forEachDoc(CLONE_FIELDS, pageSize = CLONE_PAGE) { d ->
                 val id = d.optString("id")
                 if (id.isNotEmpty()) storeDoc(id, d, indexedAt = com.opensolr.photos.ui.Actions.solrDateMillis(d.optString("indexed_at")) ?: 0L)
             }
@@ -240,6 +243,7 @@ class EditRepository(private val context: Context) {
     private companion object {
 
         const val WORDS_BATCH = 50
+        const val CLONE_PAGE = 10000
         val ANSWER_KEYS = listOf("status", "msg", "error", "results", "score", "_version_")
 
         const val CLONE_FIELDS = "id,media_id,path,file_name,folder,mime,size_bytes,file_hash," +

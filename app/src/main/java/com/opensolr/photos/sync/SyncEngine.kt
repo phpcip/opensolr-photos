@@ -433,9 +433,20 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                 val toIndex = ArrayList<String>()
                 val needWords = if (!aiAvailable) emptySet() else cache.docsWithoutWords().toSet() - waiting
                 val reread = if (rereadSince > 0) cache.docsIndexedBefore(rereadSince).toSet() else emptySet()
+                // a known photo whose document points at another phone's file (or an old MediaStore row): the
+                // document takes this phone's id and path, as data, with the next words batch
+                val where = cache.docMedia()
+                val relocated = ArrayList<String>()
 
                 local.values.forEach { photo ->
                     val stamp = known[photo.id]
+                    if (stamp != null) {
+                        val was = where[photo.id]
+                        if (was != null && (was.first != photo.mediaId || was.second != photo.absolutePath)) {
+                            cache.relocateDoc(photo.id, photo.mediaId, photo.absolutePath)
+                            relocated += photo.id
+                        }
+                    }
 
                     val changed = stamp == null || stamp.first != photo.sizeBytes ||
                         (stamp.second > 0 && stamp.second != photo.modifiedSec)
@@ -459,6 +470,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                 }
 
                 cache.queueActions(toIndex, PhotoCache.ACTION_INDEX)
+                cache.queueActions(relocated.filter { it !in toIndex }, PhotoCache.ACTION_WORDS)
             } else {
                 indexCount = 0
 

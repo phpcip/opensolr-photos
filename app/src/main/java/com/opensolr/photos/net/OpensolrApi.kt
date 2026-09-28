@@ -37,6 +37,8 @@ data class WordsItem(
     val tags: List<String>?,
     val persons: List<String>?,
     val meaning: String?,
+    /** Where the file is on this phone: the document follows the photo from phone to phone. */
+    val mediaId: Long? = null, val path: String? = null,
 
     val fileHash: String? = null,
 
@@ -494,6 +496,8 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
                 item.fileHash?.let { put("file_hash", it) }
                 item.location?.let { (lat, lon) -> put("location", JSONObject().put("lat", lat).put("lon", lon)) }
                 item.faces?.let { put("faces", it) }
+                item.mediaId?.let { put("media_id", it) }
+                item.path?.let { put("path", it) }
             })
         }
         val body = JSONObject()
