@@ -26,8 +26,16 @@ class FaceEngine private constructor(context: Context) {
     /** A face in an upright photo: box and points as shares of the photo's width and height, fingerprint unit length. */
     class Face(val x: Float, val y: Float, val w: Float, val h: Float, val score: Float, val vector: FloatArray)
 
-    private val detector = Interpreter(model(context, "faces/yunet.tflite"), Interpreter.Options().setNumThreads(2))
-    private val recognizer = Interpreter(model(context, "faces/sface.tflite"), Interpreter.Options().setNumThreads(2))
+    private val detector = Interpreter(model(context, "faces/yunet.tflite"), options())
+    private val recognizer = Interpreter(model(context, "faces/sface.tflite"), options())
+
+    // the emulator's virtual CPU lacks the ARM instructions XNNPACK picks, and dies with SIGILL: plain kernels there
+    private fun options(): Interpreter.Options {
+        val o = Interpreter.Options().setNumThreads(2)
+        val emulator = android.os.Build.HARDWARE.let { it.contains("ranchu") || it.contains("goldfish") }
+        if (emulator) o.setUseXNNPACK(false)
+        return o
+    }
     private val lock = Any()
 
     // buffers reused for every photo: the finder's frame, its outputs, the aligned face and its fingerprint
