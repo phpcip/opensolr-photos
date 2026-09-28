@@ -882,6 +882,43 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return onScreen + state.selectedOffscreen.filterKeys { it in state.selectedIds && it !in known }.values
     }
 
+    /** A name gone from the whole library: off every photo and face, the filters and the results follow at once. */
+    fun removePerson(name: String) {
+        if (_state.value.bulkTagging) return
+        _state.update { it.copy(bulkTagging = true, bulkTagError = null, bulkTagDone = 0, bulkTagTotal = 0, bulkTagWriting = false) }
+        viewModelScope.launch {
+            try {
+                val ids = withContext(Dispatchers.IO) {
+                    edits.removePersonEverywhere(name) { done -> _state.update { it.copy(bulkTagDone = done) } }
+                }
+                prefs.facetsJson = null
+                searches.clearCache()
+                val gone = ids.toSet()
+                _state.update { s ->
+                    val facets = s.facets.toMutableMap()
+                    facets["persons_ss"] = facets["persons_ss"].orEmpty().filter { !it.value.equals(name, ignoreCase = true) }
+                    val filters = if (name in s.filters.values("persons_ss")) s.filters.toggled("persons_ss", name) else s.filters
+                    s.copy(
+                        bulkTagging = false,
+                        facets = facets,
+                        filters = filters,
+                        hits = s.hits.map { hit ->
+                            if (hit.id !in gone) hit
+                            else hit.copy(persons = hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() && !it.equals(name, ignoreCase = true) }.joinToString(", "))
+                        },
+                    )
+                }
+                flash(AppText.p(R.plurals.vm_saved_n, ids.size, Actions.formatCount(ids.size.toLong())))
+                _state.update { it.copy(sync = it.sync.copy(queued = true)) }
+                SyncScheduler.runNow(context)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(bulkTagging = false, bulkTagError = e.message) }
+            }
+        }
+    }
+
     fun tagPhotos(
         tags: List<String>?,
         tagsReplace: Boolean,

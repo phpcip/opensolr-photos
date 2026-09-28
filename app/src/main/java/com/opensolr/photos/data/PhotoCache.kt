@@ -1017,6 +1017,24 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         }
     }
 
+    /** Every photo that carries [person]: as one of its people or on one of its faces. */
+    fun idsWithPerson(person: String): List<String> {
+        val out = LinkedHashSet<String>()
+        readableDatabase.rawQuery(
+            "SELECT id FROM doc_words WHERE kind = '$WORD_PERSON' AND word = ? COLLATE NOCASE UNION SELECT photo_id FROM faces WHERE person = ? COLLATE NOCASE",
+            arrayOf(person, person),
+        ).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        return out.toList()
+    }
+
+    /** The name comes off every face that carries it, and what was refused for it is forgotten. */
+    fun unnameFaces(person: String) {
+        val db = writableDatabase
+        db.execSQL("UPDATE faces SET person = NULL, sure = 1, how = $HOW_OWNER WHERE person = ? COLLATE NOCASE", arrayOf(person))
+        db.delete("face_rejects", "person = ? COLLATE NOCASE", arrayOf(person))
+        db.delete("auto_words", "person = ? COLLATE NOCASE", arrayOf(person))
+    }
+
     /** Faces the owner said are not [person]: never offered for them again. */
     fun rejectFaces(fids: Collection<Long>, person: String) {
         if (fids.isEmpty()) return

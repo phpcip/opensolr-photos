@@ -25,4 +25,8 @@
     <string name="fc_scan_text">Liest jedes Foto einmal, um die Gesichter darin zu finden. Läuft nur, solange das Telefon lädt, dauert eine Weile und kann hier gestoppt werden. Bereits gelesene Gesichter bleiben in deinem Index und werden nie wieder gelesen.</string>
     <string name="fc_scan_start">Starten</string>
     <string name="fc_scan_progress">Gesichter werden gelesen: %1$s von %2$s</string>
+    <string name="fc_remove_title">%1$s überall entfernen?</string>
+    <string name="fc_remove_text">Der Name wird von %1$s Fotos und von allen Gesichtern entfernt, die ihn tragen. Die Fotos selbst bleiben.</string>
+    <string name="fc_remove_go">Entfernen</string>
+    <string name="cd_remove_name">Diesen Namen von allen Fotos entfernen</string>
 </resources>

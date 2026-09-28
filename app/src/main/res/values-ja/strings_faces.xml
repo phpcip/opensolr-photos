@@ -23,4 +23,8 @@
     <string name="fc_scan_text">各写真を一度読み込んで顔を探します。充電中のみ実行され、時間がかかり、ここで停止できます。読み込んだ顔はインデックスに保存され、二度と読み込まれません。</string>
     <string name="fc_scan_start">開始</string>
     <string name="fc_scan_progress">顔を読み込み中: %1$s / %2$s</string>
+    <string name="fc_remove_title">%1$s をすべてから削除しますか？</string>
+    <string name="fc_remove_text">この名前は %1$s 枚の写真と、その名前が付いたすべての顔から削除されます。写真自体は残ります。</string>
+    <string name="fc_remove_go">削除</string>
+    <string name="cd_remove_name">この名前をすべての写真から削除</string>
 </resources>

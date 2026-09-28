@@ -23,4 +23,8 @@
     <string name="fc_scan_text">每张照片读取一次以查找其中的人脸。仅在手机充电时运行，需要一段时间，可在此停止。已读取的人脸会保存在索引中，不会再次读取。</string>
     <string name="fc_scan_start">开始</string>
     <string name="fc_scan_progress">正在读取人脸：%1$s / %2$s</string>
+    <string name="fc_remove_title">要在所有照片中移除 %1$s 吗？</string>
+    <string name="fc_remove_text">该名字将从 %1$s 张照片和所有带有它的人脸上移除。照片本身保留。</string>
+    <string name="fc_remove_go">移除</string>
+    <string name="cd_remove_name">从所有照片中移除此名字</string>
 </resources>

@@ -155,6 +155,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.FocusRequester
@@ -948,6 +949,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             open = state.openFilterSections,
             onToggleSection = { viewModel.toggleFilterSection(it) },
             onChange = { viewModel.setFilters(it) },
+            onRemovePerson = { viewModel.removePerson(it) },
             onDismiss = { showFilters = false },
         )
     }
@@ -1884,6 +1886,7 @@ private fun FilterSheet(
     open: Set<String>,
     onToggleSection: (String) -> Unit,
     onChange: (SearchFilters) -> Unit,
+    onRemovePerson: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
     val p = LocalPalette.current
@@ -1911,7 +1914,7 @@ private fun FilterSheet(
                     val chosen = draft.values(field)
                     if (!values.isNullOrEmpty() || chosen.isNotEmpty()) {
                         FilterGroup(facetTitle(field), chosen.size, title in open, { onToggleSection(title) }) {
-                            FacetValues(values, chosen, label = { facetLabel(context, field, it) }, cap = if (field == "labels") MEANING_ROWS else Int.MAX_VALUE) { onChange(draft.toggled(field, it)) }
+                            FacetValues(values, chosen, label = { facetLabel(context, field, it) }, cap = if (field == "labels") MEANING_ROWS else Int.MAX_VALUE, onRemove = if (field == "persons_ss") onRemovePerson else null) { onChange(draft.toggled(field, it)) }
                         }
                     }
                 }
@@ -2746,13 +2749,14 @@ private fun FacetValues(
     selected: Set<String>,
     label: (String) -> String = { it },
     cap: Int = Int.MAX_VALUE,
+    onRemove: ((String) -> Unit)? = null,
     onToggle: (String) -> Unit,
 ) {
     if (values.isNullOrEmpty() && selected.isEmpty()) return
     val view = LocalView.current
     val all = values.orEmpty().ifEmpty { selected.map { FacetValue(it, 0) } }
-    if (all.size > FACET_SEARCH_OVER) {
-        FacetSearch(all, selected, label, cap, onToggle)
+    if (all.size > FACET_SEARCH_OVER || onRemove != null) {
+        FacetSearch(all, selected, label, cap, onRemove, onToggle)
         return
     }
 
@@ -2782,12 +2786,27 @@ private fun FacetSearch(
     selected: Set<String>,
     label: (String) -> String,
     cap: Int,
+    onRemove: ((String) -> Unit)?,
     onToggle: (String) -> Unit,
 ) {
     val p = LocalPalette.current
     val view = LocalView.current
     val focus = androidx.compose.ui.platform.LocalFocusManager.current
     var text by remember(all) { mutableStateOf("") }
+    // the name whose X was tapped: removed only once the owner confirms
+    var removing by remember { mutableStateOf<FacetValue?>(null) }
+    removing?.let { facet ->
+        AlertDialog(
+            onDismissRequest = { removing = null },
+            containerColor = p.paper,
+            title = { Text(stringResource(R.string.fc_remove_title, label(facet.value)), color = p.ink) },
+            text = { Text(stringResource(R.string.fc_remove_text, Actions.formatCount(facet.count.toLong())), color = p.ink) },
+            confirmButton = {
+                TextButton(onClick = { Haptics.tick(view, strong = true); removing = null; onRemove?.invoke(facet.value) }) { Text(stringResource(R.string.fc_remove_go), color = p.accent, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { removing = null }) { Text(stringResource(R.string.cancel), color = p.muted) } },
+        )
+    }
     var open by remember { mutableStateOf(false) }
 
     val folded = remember(all) { all.map { com.opensolr.photos.data.Words.fold(label(it.value)) } }
@@ -2882,6 +2901,10 @@ private fun FacetSearch(
                         modifier = Modifier.weight(1f),
                     )
                     if (on) Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.cd_selected), tint = p.accent, modifier = Modifier.size(16.dp))
+                    if (onRemove != null) {
+                        Spacer(Modifier.width(10.dp))
+                        RemoveX { removing = facet }
+                    }
                 }
             }
             if (matches.size > cap) {
@@ -2894,6 +2917,26 @@ private fun FacetSearch(
         }
     }
     Spacer(Modifier.height(18.dp))
+}
+
+/** The X beside a name: a bordered square that fills with the accent colour while the finger is on it. */
+@Composable
+private fun RemoveX(onClick: () -> Unit) {
+    val p = LocalPalette.current
+    val view = LocalView.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    Box(
+        Modifier
+            .size(32.dp)
+            .clip(Corner)
+            .background(if (pressed) p.accentFill else p.chip)
+            .border(1.dp, if (pressed) p.accentFill else p.hairline, Corner)
+            .clickable(interactionSource = interaction, indication = null) { Haptics.tick(view, strong = true); onClick() },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.cd_remove_name), tint = if (pressed) p.onAccentFill else p.ink, modifier = Modifier.size(16.dp))
+    }
 }
 
 private fun facetLabel(context: android.content.Context, field: String, value: String): String = when (field) {

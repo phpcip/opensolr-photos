@@ -25,4 +25,8 @@
     <string name="fc_scan_text">Reads every photo once to find the faces in it. It runs only while the phone is charging, takes a while, and can be stopped here. Faces already read are kept in your index and never read again.</string>
     <string name="fc_scan_start">Start</string>
     <string name="fc_scan_progress">Reading faces: %1$s of %2$s</string>
+    <string name="fc_remove_title">Remove %1$s everywhere?</string>
+    <string name="fc_remove_text">The name comes off %1$s photos and off every face that carries it. The photos themselves stay.</string>
+    <string name="fc_remove_go">Remove</string>
+    <string name="cd_remove_name">Remove this name from all photos</string>
 </resources>

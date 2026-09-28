@@ -93,6 +93,28 @@ class EditRepository(private val context: Context) {
         }
     }
 
+    /** [person] taken off every photo and face that carries it; the photos go to the index as usual. How many photos. */
+    fun removePersonEverywhere(person: String, onProgress: (Int) -> Unit = {}): List<String> {
+        val ids = cache.idsWithPerson(person)
+        if (ids.isEmpty()) return ids
+        cache.inTransaction {
+            ids.forEachIndexed { i, id ->
+                val doc = cache.doc(id)
+                val edits = cache.getEdits(id)
+                val had = edits?.persons ?: doc?.persons ?: emptyList()
+                val names = had.filter { !it.equals(person, ignoreCase = true) }
+                val tags = edits?.tags ?: doc?.tags ?: emptyList()
+                cache.putEdits(id, PhotoCache.Edits(tags, edits?.meaning, names))
+                doc?.let { cache.putDoc(it.copy(persons = names, json = withWords(it.json, tags, names, it.meaning))) }
+                if ((i + 1) % PROGRESS_EVERY == 0) onProgress(i + 1)
+            }
+            cache.unnameFaces(person)
+            cache.queueActions(ids, PhotoCache.ACTION_WORDS)
+        }
+        onProgress(ids.size)
+        return ids
+    }
+
     fun pendingCount(): Int = cache.actionCount()
 
 

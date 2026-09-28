@@ -27,4 +27,8 @@
     <string name="fc_scan_text">Citește fiecare poză o dată ca să găsească fețele din ea. Rulează doar cât timp telefonul e la încărcat, durează, și poate fi oprit de aici. Fețele deja citite rămân în index și nu se mai citesc niciodată.</string>
     <string name="fc_scan_start">Pornește</string>
     <string name="fc_scan_progress">Se citesc fețele: %1$s din %2$s</string>
+    <string name="fc_remove_title">Scoți %1$s de peste tot?</string>
+    <string name="fc_remove_text">Numele dispare de pe %1$s poze și de pe toate fețele care îl poartă. Pozele rămân.</string>
+    <string name="fc_remove_go">Scoate</string>
+    <string name="cd_remove_name">Scoate numele de pe toate pozele</string>
 </resources>
