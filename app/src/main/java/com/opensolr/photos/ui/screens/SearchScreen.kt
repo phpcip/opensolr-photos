@@ -239,6 +239,19 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     LaunchedEffect(state.placesToWrite, state.placesDeclined) {
         if (state.placesToWrite > 0 && !state.placesDeclined) writePlaces()
     }
+    // the people named in photos go into the files too, as soon as Android lets the app change them
+    val faceWriteScope = rememberCoroutineScope()
+    val faceWriteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
+        viewModel.finishFaceWrite(result.resultCode == android.app.Activity.RESULT_OK)
+    }
+    LaunchedEffect(state.faceWrites, state.faceWritesDeclined) {
+        if (state.faceWrites > 0 && !state.faceWritesDeclined) {
+            faceWriteScope.launch {
+                val sender = viewModel.prepareFaceWrite() ?: return@launch
+                faceWriteLauncher.launch(IntentSenderRequest.Builder(sender).build())
+            }
+        }
+    }
 
     val systemBars = WindowInsets.systemBars.asPaddingValues()
     val topInset = systemBars.calculateTopPadding()

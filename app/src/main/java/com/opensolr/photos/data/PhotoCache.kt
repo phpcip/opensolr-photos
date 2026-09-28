@@ -49,6 +49,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         db.execSQL("CREATE INDEX IF NOT EXISTS faces_person ON faces (person)")
         db.execSQL(FACE_REJECTS_TABLE)
         db.execSQL(FACE_SCANNED_TABLE)
+        db.execSQL(FACE_WRITES_TABLE)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -149,6 +150,9 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         }
         if (oldVersion < 23) {
             createFaceTables(db)
+        }
+        if (oldVersion < 25) {
+            db.execSQL(FACE_WRITES_TABLE)
         }
         if (oldVersion < 24) {
             // who named a face: 0 the owner, 1 learned from the photos' tags, 2 the matcher on its own
@@ -903,6 +907,8 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
                 val marks = batch.joinToString(",") { "?" }
                 val args = batch.map { it.toString() }.toTypedArray()
                 db.update("faces", ContentValues().apply { if (person == null) putNull("person") else put("person", person); put("sure", if (sure) 1 else 0); put("how", how) }, "fid IN ($marks)", args)
+                // the names in the photo's file follow: written there as soon as the owner allows it
+                db.execSQL("INSERT OR IGNORE INTO face_writes (photo_id) SELECT DISTINCT photo_id FROM faces WHERE fid IN ($marks)", args)
                 if (person != null) db.delete("face_rejects", "fid IN ($marks) AND person = ? COLLATE NOCASE", args + person)
             }
             db.setTransactionSuccessful()
@@ -950,6 +956,23 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
     /** What was learned for [person] from the tags is forgotten, before it is learned again. */
     fun clearLearned(person: String) {
         writableDatabase.execSQL("UPDATE faces SET person = NULL, sure = 1, how = $HOW_OWNER WHERE how = $HOW_LEARNED AND person = ? COLLATE NOCASE", arrayOf(person))
+    }
+
+    /** Photos whose people and face areas still have to be written into the file, up to [limit]. */
+    fun pendingFaceWrites(limit: Int): List<String> {
+        val out = ArrayList<String>()
+        readableDatabase.rawQuery("SELECT photo_id FROM face_writes LIMIT $limit", null).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        return out
+    }
+
+    fun pendingFaceWriteCount(): Int =
+        readableDatabase.rawQuery("SELECT COUNT(*) FROM face_writes", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
+    fun clearFaceWrites(ids: Collection<String>) = deleteByIds("face_writes", ids, "photo_id")
+
+    /** The file changed by our own write: its new size, so the faces are not read again for it. */
+    fun updateFaceScannedSize(photoId: String, sizeBytes: Long) {
+        writableDatabase.execSQL("UPDATE face_scanned SET size_bytes = ? WHERE photo_id = ?", arrayOf<Any>(sizeBytes, photoId))
     }
 
     /** Faces the owner said are not [person]: never offered for them again. */
@@ -1132,6 +1155,20 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
             return
         }
         writableDatabase.execSQL("UPDATE docs SET json = ?, city = NULL, region = NULL, country = NULL WHERE id = ?", arrayOf<Any>(updated, id))
+    }
+
+    private fun deleteByIds(table: String, ids: Collection<String>, column: String) {
+        if (ids.isEmpty()) return
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            ids.chunked(DELETE_BATCH).forEach { batch ->
+                db.delete(table, "$column IN (${batch.joinToString(",") { "?" }})", batch.toTypedArray())
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     private fun deleteByIds(table: String, ids: Collection<String>) {
@@ -1569,7 +1606,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
     companion object {
         private const val NAME = "photo_cache.db"
-        private const val VERSION = 24
+        private const val VERSION = 25
 
         @Volatile private var shared: PhotoCache? = null
 
@@ -1633,6 +1670,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         private const val FACES_TABLE = "CREATE TABLE IF NOT EXISTS faces (fid INTEGER PRIMARY KEY AUTOINCREMENT, photo_id TEXT NOT NULL, media_id INTEGER NOT NULL, x REAL NOT NULL, y REAL NOT NULL, w REAL NOT NULL, h REAL NOT NULL, score REAL NOT NULL, vec BLOB NOT NULL, person TEXT, sure INTEGER NOT NULL DEFAULT 1, how INTEGER NOT NULL DEFAULT 0)"
         private const val FACE_REJECTS_TABLE = "CREATE TABLE IF NOT EXISTS face_rejects (fid INTEGER NOT NULL, person TEXT NOT NULL COLLATE NOCASE, PRIMARY KEY (fid, person))"
         private const val FACE_SCANNED_TABLE = "CREATE TABLE IF NOT EXISTS face_scanned (photo_id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, faces INTEGER NOT NULL)"
+        private const val FACE_WRITES_TABLE = "CREATE TABLE IF NOT EXISTS face_writes (photo_id TEXT PRIMARY KEY NOT NULL)"
         private const val FACE_PAGE = 2000
         const val HOW_OWNER = 0
         const val HOW_LEARNED = 1

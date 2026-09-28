@@ -130,6 +130,9 @@ data class UiState(
     val placesToWrite: Int = 0,
 
     val placesDeclined: Boolean = false,
+    /** Photos whose people still have to be written into their files, and whether the owner said no this time. */
+    val faceWrites: Int = 0,
+    val faceWritesDeclined: Boolean = false,
 
     val autoPlace: Boolean = false,
 
@@ -454,6 +457,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 next
             }
             onSaved()
+            refreshFaceWrites()
             searches.clearCache()
             _state.update { s -> s.copy(hits = s.hits.map { if (it.id == hit.id) it.copy(persons = people.joinToString(", ")) else it }) }
             SyncScheduler.runNow(context)
@@ -487,6 +491,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 if (yes.isNotEmpty()) edits.queueForAll(yes.map { it.photoId }.distinct(), null, false, listOf(review.person), false)
             }
             onSaved()
+            refreshFaceWrites()
             if (yes.isEmpty()) return@launch
             searches.clearCache()
             val ids = yes.map { it.photoId }.toSet()
@@ -506,6 +511,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (prefs.session == null || prefs.connection == null) return
         // faces of photos not read yet (the first time: all of them) are read in the background
         com.opensolr.photos.sync.FaceWorker.next(context)
+        // names given in the background wait for the owner's go-ahead to reach the files
+        _state.update { it.copy(faceWritesDeclined = false) }
+        refreshFaceWrites()
         viewModelScope.launch {
             val stamp = withContext(Dispatchers.IO) { MediaScanner.folderStamp(context, prefs.folders) }
             if (stamp != null && stamp != prefs.folderStamp) {
@@ -602,6 +610,63 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         photoCache.markPlacesWritten(done)
         pendingPlaceWrite = emptyList()
+    }
+
+    fun refreshFaceWrites() {
+        viewModelScope.launch {
+            val n = withContext(Dispatchers.IO) { photoCache.pendingFaceWriteCount() }
+            _state.update { it.copy(faceWrites = n) }
+        }
+    }
+
+    private var pendingFaceWrite: List<Pair<PhotoHit, android.net.Uri>> = emptyList()
+
+    /** The files that need the people written into them, and Android's request to let the app change them (null = nothing to ask). */
+    suspend fun prepareFaceWrite(): android.content.IntentSender? = withContext(Dispatchers.IO) {
+        val ids = photoCache.pendingFaceWrites(FACE_WRITE_BATCH)
+        if (ids.isEmpty()) return@withContext null
+        val hits = photoCache.docsByIds(ids).map { searches.hitOf(org.json.JSONObject(it)) }
+        val uris = Actions.contentUrisByPhoto(context, hits)
+        // photos no longer on the phone, or without a document, have nothing to write into
+        photoCache.clearFaceWrites(ids.filter { id -> hits.none { it.id == id } || uris[id] == null })
+        pendingFaceWrite = hits.mapNotNull { h -> uris[h.id]?.let { h to it } }
+        if (pendingFaceWrite.isEmpty()) return@withContext null
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
+            writePendingFaces()
+            return@withContext null
+        }
+        android.provider.MediaStore.createWriteRequest(context.contentResolver, pendingFaceWrite.map { it.second }).intentSender
+    }
+
+    fun finishFaceWrite(allowed: Boolean) {
+        if (!allowed) {
+            pendingFaceWrite = emptyList()
+            _state.update { it.copy(faceWritesDeclined = true) }
+            return
+        }
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { writePendingFaces() }
+            refreshFaceWrites()
+        }
+    }
+
+    /** The photo's people (IPTC PersonInImage) and each named face's area (MWG regions) into the file itself. */
+    private fun writePendingFaces() {
+        val done = ArrayList<String>(pendingFaceWrite.size)
+        pendingFaceWrite.forEach { (hit, uri) ->
+            if (!PhotoReader.canWriteExif(hit.mime)) { done += hit.id; return@forEach }
+            val people = photoCache.doc(hit.id)?.persons ?: hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+            val areas = photoCache.facesOf(hit.id).mapNotNull { f -> f.person?.let { PhotoReader.FaceArea(it, f.x, f.y, f.w, f.h) } }
+            if (PhotoReader.writeXmp(context, uri, hit.mime, people, null, faces = areas)) {
+                val (size, modified) = fileStampOf(uri)
+                // our own change to the file: no new sync of it, no new face reading of it
+                photoCache.updateDocSize(hit.id, size, modified, fileHashOf(uri))
+                photoCache.updateFaceScannedSize(hit.id, size)
+                done += hit.id
+            }
+        }
+        photoCache.clearFaceWrites(done)
+        pendingFaceWrite = emptyList()
     }
 
     private fun refreshSkippedCount() {
@@ -2583,6 +2648,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     companion object {
+        /** Most files one of Android's "allow changes" requests covers. */
+        private const val FACE_WRITE_BATCH = 500
 
         private const val UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L
         private val CODE_PATTERN = Regex("^[A-Za-z0-9_-]{43}$")

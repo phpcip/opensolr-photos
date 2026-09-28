@@ -271,9 +271,10 @@ object PhotoReader {
         tags: List<String>?,
         meaning: String? = null,
         clearMeaning: Boolean = false,
+        faces: List<FaceArea>? = null,
     ): Boolean {
         if (mime !in setOf("image/jpeg", "image/png", "image/webp")) return false
-        if (persons == null && tags == null && meaning == null && !clearMeaning) return true
+        if (persons == null && tags == null && meaning == null && !clearMeaning && faces == null) return true
         return try {
             context.contentResolver.openFileDescriptor(uri, "rw")?.use { pfd ->
                 val exif = ExifInterface(pfd.fileDescriptor)
@@ -286,6 +287,12 @@ object PhotoReader {
                     packet = withProperty(packet, XMP_OPENSOLR_TAGS, bag("opensolr:Tags", "xmlns:opensolr=\"$OPENSOLR_NS\"", tags))
                 }
 
+                if (faces != null) {
+                    // the face areas with their names, in the regions standard photo apps read (MWG), on the stored pixels
+                    val dims = storedSize(context, uri)
+                    val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+                    packet = withProperty(packet, XMP_REGIONS, if (faces.isEmpty() || dims == null) "" else regions(faces, dims, orientation))
+                }
                 if (meaning != null || clearMeaning) {
                     val text = meaning?.trim()?.take(MEANING_MAX_CHARS).orEmpty()
                     val property = if (text.isEmpty()) "" else "<opensolr:Meaning xmlns:opensolr=\"$OPENSOLR_NS\">${escapeXml(text)}</opensolr:Meaning>"
@@ -300,6 +307,48 @@ object PhotoReader {
             false
         }
     }
+
+    /** A named face in the upright photo: box as shares of its width and height. */
+    data class FaceArea(val name: String, val x: Float, val y: Float, val w: Float, val h: Float)
+
+    private fun storedSize(context: Context, uri: Uri): Pair<Int, Int>? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
+        return if (bounds.outWidth > 0 && bounds.outHeight > 0) bounds.outWidth to bounds.outHeight else null
+    }
+
+    /**
+     * MWG face regions: centre and size as shares of the stored image (the Exif orientation not applied, as the
+     * standard says), so an app that turns the photo upright turns the areas with it.
+     */
+    private fun regions(faces: List<FaceArea>, dims: Pair<Int, Int>, orientation: Int): String {
+        fun stored(x: Float, y: Float): Pair<Float, Float> = when (orientation) {
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> (1 - x) to y
+            ExifInterface.ORIENTATION_ROTATE_180 -> (1 - x) to (1 - y)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> x to (1 - y)
+            ExifInterface.ORIENTATION_TRANSPOSE -> y to x
+            ExifInterface.ORIENTATION_ROTATE_90 -> y to (1 - x)
+            ExifInterface.ORIENTATION_TRANSVERSE -> (1 - y) to (1 - x)
+            ExifInterface.ORIENTATION_ROTATE_270 -> (1 - y) to x
+            else -> x to y
+        }
+        val items = faces.joinToString("") { f ->
+            val a = stored(f.x, f.y)
+            val b = stored(f.x + f.w, f.y + f.h)
+            val w = kotlin.math.abs(b.first - a.first)
+            val h = kotlin.math.abs(b.second - a.second)
+            val cx = (a.first + b.first) / 2
+            val cy = (a.second + b.second) / 2
+            "<rdf:li rdf:parseType=\"Resource\"><mwg-rs:Name>${escapeXml(f.name)}</mwg-rs:Name><mwg-rs:Type>Face</mwg-rs:Type>" +
+                "<mwg-rs:Area stArea:x=\"${num(cx)}\" stArea:y=\"${num(cy)}\" stArea:w=\"${num(w)}\" stArea:h=\"${num(h)}\" stArea:unit=\"normalized\"/></rdf:li>"
+        }
+        return "<mwg-rs:Regions xmlns:mwg-rs=\"http://www.metadataworkinggroup.com/schemas/regions/\" xmlns:stArea=\"http://ns.adobe.com/xmp/sType/Area#\" " +
+            "xmlns:stDim=\"http://ns.adobe.com/xap/1.0/sType/Dimensions#\" rdf:parseType=\"Resource\">" +
+            "<mwg-rs:AppliedToDimensions stDim:w=\"${dims.first}\" stDim:h=\"${dims.second}\" stDim:unit=\"pixel\"/>" +
+            "<mwg-rs:RegionList><rdf:Bag>$items</rdf:Bag></mwg-rs:RegionList></mwg-rs:Regions>"
+    }
+
+    private fun num(v: Float): String = String.format(Locale.US, "%.5f", v.coerceIn(0f, 1f))
 
     // ExifInterface reads a JPEG's standalone XMP segment but writes only the EXIF copy: the standalone one gets the same packet
     private fun syncJpegXmpSegment(fd: java.io.FileDescriptor, packet: String) {
@@ -415,6 +464,8 @@ object PhotoReader {
     private val XMP_OPENSOLR_TAGS = Regex("<opensolr:Tags(?:\\s[^>]*)?>(.*?)</opensolr:Tags>", RegexOption.DOT_MATCHES_ALL)
 
     private val XMP_SUBJECT = Regex("<([A-Za-z0-9_]+:)?subject(?:\\s[^>]*)?>(.*?)</([A-Za-z0-9_]+:)?subject>", RegexOption.DOT_MATCHES_ALL)
+
+    private val XMP_REGIONS = Regex("<([A-Za-z0-9_]+:)?Regions(?:\\s[^>]*)?>(.*?)</([A-Za-z0-9_]+:)?Regions>", RegexOption.DOT_MATCHES_ALL)
 
     private val XMP_PERSONS = Regex("<([A-Za-z0-9_]+:)?PersonInImage[^>]*>(.*?)</([A-Za-z0-9_]+:)?PersonInImage>", RegexOption.DOT_MATCHES_ALL)
 
