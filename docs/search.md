@@ -145,7 +145,7 @@ the place and your tags, so *pixel* or *screenshots* find what you would expect.
 ## The people in a photo
 
 People are put on a photo by naming a face. Open a photo, tap the face button under it, and every face
-found in it is framed; tap one and give it a name (`ui/FacesPanel`, drawn inside the viewer's window). From
+found in it is framed; tap one and give it a name (`ui/screens/FaceViews.kt`, drawn inside the viewer's window). From
 then on the app looks for that person in the rest of the library: faces that clearly match (`FaceMatcher.AUTO`,
 0.6) get the name on their own, marked as the matcher's guess and never used as a reference; the rest are
 offered under *Is this Anna?* (`FaceMatcher.candidates`, from `SAME` 0.40, ticked in advance from `SURE`
