@@ -44,7 +44,7 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
         val engine = FaceEngine.of(ctx)
         // the people named for sure, read once per run: new faces close enough to one of them get the name
-        val people = cache.facePeople().keys.associateWith { cache.personVectors(it, REFERENCES) }.filterValues { it.isNotEmpty() }
+        val people = cache.facePeople().keys.associateWith { com.opensolr.photos.search.FaceMatcher.references(cache, it) }.filterValues { it.isNotEmpty() }
         val until = System.currentTimeMillis() + RUN_MS
         for (photo in todo) {
             // stopped by the system: the next run carries on where this one left off
@@ -80,7 +80,8 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             var best = AUTO
             for ((name, refs) in people) {
                 if (name.lowercase() in taken) continue
-                for (r in refs) { val s = FaceEngine.similarity(r, vector); if (s >= best) { best = s; bestName = name } }
+                val s = com.opensolr.photos.search.FaceMatcher.score(vector, refs)
+                if (s >= best) { best = s; bestName = name }
             }
             bestName?.let { name ->
                 cache.setFacePerson(listOf(row.fid), name, sure = false)
@@ -98,7 +99,6 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     companion object {
         /** A face this close to a person named for sure is taken as that person without asking. */
         const val AUTO = 0.6f
-        private const val REFERENCES = 64
         private const val WORK = "faces"
         private const val RUN_MS = 4 * 60 * 1000L
         private const val BATTERY_MIN = 5

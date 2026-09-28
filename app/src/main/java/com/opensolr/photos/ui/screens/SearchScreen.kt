@@ -1529,7 +1529,7 @@ internal val VIEWER_MIN_BOTTOM = 28.dp
 
 private const val FAST_SCROLL_MIN_ROWS = 60
 
-private val FAST_SCROLL_THUMB = 72.dp
+private val FAST_SCROLL_THUMB = com.opensolr.photos.ui.SCROLL_THUMB_HEIGHT
 
 private val FAST_SCROLL_LABEL_LIFT = 64.dp
 
@@ -2195,7 +2195,7 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
             Modifier
                 .align(Alignment.CenterEnd)
                 .fillMaxHeight()
-                .width(FAST_SCROLL_WIDTH)
+                .width(com.opensolr.photos.ui.SCROLL_TRACK)
                 .pointerInput(travelPx) {
                     try {
                         detectVerticalDragGestures(
@@ -2212,16 +2212,9 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
                 },
         )
 
-        Box(
-            Modifier
-
-                .offset { IntOffset(0, (travelPx * fraction.value).roundToInt()) }
-                .align(Alignment.TopEnd)
-                .padding(end = 4.dp)
-                .size(width = 16.dp, height = FAST_SCROLL_THUMB)
-                .alpha(alpha)
-                .background(if (dragging) p.accentFill else p.ink, Corner)
-                .border(1.dp, if (dragging) p.accentFill else p.paper, Corner),
+        com.opensolr.photos.ui.ScrollThumb(
+            dragging, alpha,
+            Modifier.offset { IntOffset(0, (travelPx * fraction.value).roundToInt()) }.align(Alignment.TopEnd).padding(end = 4.dp),
         )
 
         if (dragging) {
@@ -2245,7 +2238,7 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
 
                         .offset { IntOffset(0, (travelPx * fraction.value - labelLiftPx).roundToInt().coerceAtLeast(0)) }
                         .align(Alignment.TopEnd)
-                        .padding(end = FAST_SCROLL_WIDTH + 4.dp)
+                        .padding(end = com.opensolr.photos.ui.SCROLL_THUMB_WIDTH + 12.dp)
                         .background(p.accentFill, Corner)
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                 ) {

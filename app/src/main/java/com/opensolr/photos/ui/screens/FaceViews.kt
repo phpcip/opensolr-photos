@@ -38,6 +38,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
+import kotlinx.coroutines.launch
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -197,9 +201,12 @@ internal fun FaceReviewPanel(review: FaceReview, topPad: androidx.compose.ui.uni
                 Text(stringResource(R.string.fc_title, review.person), style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold), color = p.ink)
                 Text(stringResource(R.string.fc_lead, review.person), style = MaterialTheme.typography.bodyMedium, color = p.muted, modifier = Modifier.padding(top = 6.dp, bottom = 10.dp))
             }
+            val grid = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+            Box(Modifier.weight(1f)) {
             LazyVerticalGrid(
+                state = grid,
                 columns = GridCells.Fixed(3),
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -222,6 +229,8 @@ internal fun FaceReviewPanel(review: FaceReview, topPad: androidx.compose.ui.uni
                         }
                     }
                 }
+            }
+            GridScroller(grid, review.faces.size, 3)
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 GhostButton(stringResource(R.string.cancel), onClick = onDismiss, modifier = Modifier.weight(1f))
@@ -265,3 +274,42 @@ private class FaceCrop(private val f: PhotoCache.FaceRow) : Transformation {
 }
 
 private const val THUMB_PX = 220f
+
+/** A fast scroller for a plain grid of [count] items in [columns] columns: drag the handle to go anywhere at once. */
+@Composable
+private fun androidx.compose.foundation.layout.BoxScope.GridScroller(state: androidx.compose.foundation.lazy.grid.LazyGridState, count: Int, columns: Int) {
+    if (count < columns * GRID_SCROLL_MIN_ROWS) return
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    val view = androidx.compose.ui.platform.LocalView.current
+    var dragging by remember { mutableStateOf(false) }
+    val alpha by androidx.compose.animation.core.animateFloatAsState(if (dragging || state.isScrollInProgress) 1f else 0f, label = "gridScroller")
+    BoxWithConstraints(Modifier.align(Alignment.CenterEnd).fillMaxSize()) {
+        val density = LocalDensity.current
+        val travelPx = with(density) { (maxHeight - com.opensolr.photos.ui.SCROLL_THUMB_HEIGHT).toPx() }.coerceAtLeast(1f)
+        val halfThumb = with(density) { com.opensolr.photos.ui.SCROLL_THUMB_HEIGHT.toPx() } / 2f
+        val visible = state.layoutInfo.visibleItemsInfo.size.coerceAtLeast(1)
+        val last = (count - visible).coerceAtLeast(1)
+        val fraction = (state.firstVisibleItemIndex.toFloat() / last).coerceIn(0f, 1f)
+        fun aimAt(y: Float) {
+            val at = ((y - halfThumb) / travelPx).coerceIn(0f, 1f)
+            val target = ((at * last).roundToInt() / columns) * columns
+            scope.launch { state.scrollToItem(target) }
+        }
+        Box(
+            Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(com.opensolr.photos.ui.SCROLL_TRACK).pointerInput(travelPx) {
+                detectVerticalDragGestures(
+                    onDragStart = { o -> dragging = true; com.opensolr.photos.ui.Haptics.tap(view); aimAt(o.y) },
+                    onDragEnd = { dragging = false },
+                    onDragCancel = { dragging = false },
+                    onVerticalDrag = { change, _ -> change.consume(); aimAt(change.position.y) },
+                )
+            },
+        )
+        com.opensolr.photos.ui.ScrollThumb(
+            dragging, alpha,
+            Modifier.align(Alignment.TopEnd).offset { androidx.compose.ui.unit.IntOffset(0, (travelPx * fraction).roundToInt()) }.padding(end = 4.dp),
+        )
+    }
+}
+
+private const val GRID_SCROLL_MIN_ROWS = 12
