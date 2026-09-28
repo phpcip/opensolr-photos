@@ -45,7 +45,7 @@ import com.opensolr.photos.ui.GhostButton
 import com.opensolr.photos.ui.InfoRow
 import com.opensolr.photos.ui.Notice
 import com.opensolr.photos.ui.ScreenHeader
-import com.opensolr.photos.ui.SectionLabel
+import com.opensolr.photos.ui.SubZone
 import com.opensolr.photos.ui.UiState
 import com.opensolr.photos.ui.UsageRow
 import com.opensolr.photos.ui.theme.LocalPalette
@@ -173,215 +173,250 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
         FilterGroup(stringResource(R.string.acc_zone_settings), 0, "settings" in state.meZonesOpen, { viewModel.toggleMeZone("settings") }) {
             Column {
 
-                SectionLabel(stringResource(R.string.acc_feedback))
-                Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.acc_haptics), style = MaterialTheme.typography.bodyLarge, color = p.ink)
-                        Text(
-                            stringResource(R.string.acc_haptics_text),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = p.muted,
+                SubZone(stringResource(R.string.acc_feedback), "set_feedback" in state.meZonesOpen, { viewModel.toggleMeZone("set_feedback") }) {
+                    Column {
+                        Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(stringResource(R.string.acc_haptics), style = MaterialTheme.typography.bodyLarge, color = p.ink)
+                                Text(
+                                    stringResource(R.string.acc_haptics_text),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = p.muted,
+                                )
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Switch(
+                                checked = state.hapticsEnabled,
+                                onCheckedChange = { viewModel.setHaptics(it); Haptics.toggle(view, it) },
+                                colors = SwitchDefaults.colors(checkedTrackColor = p.accentFill, checkedThumbColor = p.onAccentFill, uncheckedTrackColor = p.chip, uncheckedBorderColor = p.hairline, uncheckedThumbColor = p.muted),
+                            )
+                        }
+                    }
+                }
+                SubZone(stringResource(R.string.acc_language), "set_language" in state.meZonesOpen, { viewModel.toggleMeZone("set_language") }) {
+                    Column {
+                        Spacer(Modifier.height(6.dp))
+                        Text(stringResource(R.string.acc_language_text), style = MaterialTheme.typography.bodySmall, color = p.muted)
+                        Spacer(Modifier.height(10.dp))
+                        val chosenLanguage = remember { com.opensolr.photos.ui.AppLanguage.chosen(context) }
+                        androidx.compose.foundation.layout.FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            (listOf("" to stringResource(R.string.acc_language_phone)) + com.opensolr.photos.ui.AppLanguage.SUPPORTED).forEach { (tag, name) ->
+                                val on = tag == chosenLanguage
+                                Text(
+                                    name,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (on) p.accent else p.ink,
+                                    modifier = Modifier
+                                        .border(if (on) 1.5.dp else 1.dp, if (on) p.accent else p.hairline, androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
+                                        .background(if (on) p.paper else p.chip, androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
+                                        .clickable {
+                                            Haptics.tap(view)
+                                            var host: android.content.Context? = context
+                                            while (host is android.content.ContextWrapper && host !is android.app.Activity) host = host.baseContext
+                                            (host as? android.app.Activity)?.let { com.opensolr.photos.ui.AppLanguage.choose(it, tag) }
+                                        }
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                )
+                            }
+                        }
+                    }
+                }
+                SubZone(stringResource(R.string.acc_places), "set_places" in state.meZonesOpen, { viewModel.toggleMeZone("set_places") }) {
+                    Column {
+                        val backgroundAsk = androidx.activity.compose.rememberLauncherForActivityResult(
+                            androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+                        ) { viewModel.refreshPlacesToWrite() }
+                        val locationAsk = androidx.activity.compose.rememberLauncherForActivityResult(
+                            androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+                        ) { granted ->
+                            viewModel.refreshPlacesToWrite()
+                            if (granted.values.any { it } && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                                backgroundAsk.launch(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                            }
+                        }
+                        Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(stringResource(R.string.acc_place_new), style = MaterialTheme.typography.bodyLarge, color = p.ink)
+                                Text(
+                                    stringResource(R.string.acc_place_new_text),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = p.muted,
+                                )
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Switch(
+                                checked = state.autoPlace,
+                                onCheckedChange = { on ->
+                                    Haptics.toggle(view, on)
+                                    viewModel.setAutoPlace(on)
+                                    // Google Play: say what the location is for, before Android asks for it.
+                                    if (on && !state.autoPlaceLocation) discloseLocation = true
+                                },
+                                colors = SwitchDefaults.colors(checkedTrackColor = p.accentFill, checkedThumbColor = p.onAccentFill, uncheckedTrackColor = p.chip, uncheckedBorderColor = p.hairline, uncheckedThumbColor = p.muted),
+                            )
+                        }
+                        if (discloseLocation) {
+                            AlertDialog(
+                                onDismissRequest = { discloseLocation = false },
+                                title = { Text(stringResource(R.string.acc_loc_title)) },
+                                text = { Text(stringResource(R.string.acc_loc_text)) },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        discloseLocation = false
+                                        locationAsk.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION))
+                                    }) { Text(stringResource(R.string.acc_loc_allow), color = p.accent) }
+                                },
+                                dismissButton = { TextButton(onClick = { discloseLocation = false }) { Text(stringResource(R.string.acc_loc_not_now), color = p.ink) } },
+                                containerColor = p.paper,
+                                titleContentColor = p.ink,
+                                textContentColor = p.muted,
+                            )
+                        }
+                        if (state.autoPlace && !state.autoPlaceLocation) {
+                            Text(
+                                stringResource(R.string.acc_place_no_location),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = p.muted,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                        } else if (state.autoPlace && !state.autoPlaceBackground) {
+                            Text(
+                                stringResource(R.string.acc_place_no_background),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = p.muted,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                        }
+                        if (state.placesToWrite > 0) {
+                            val writePlaces = rememberPlaceWriter(viewModel)
+                            Text(
+                                pluralStringResource(R.plurals.acc_places_pending, state.placesToWrite, Actions.formatCount(state.placesToWrite.toLong())),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = p.muted,
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            GhostButton(stringResource(R.string.acc_save_places), onClick = writePlaces, modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                }
+                SubZone(stringResource(R.string.acc_tuning), "set_tuning" in state.meZonesOpen, { viewModel.toggleMeZone("set_tuning") }) {
+                    Column {
+                        Spacer(Modifier.height(10.dp))
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(stringResource(R.string.acc_balance), style = MaterialTheme.typography.bodyLarge, color = p.ink)
+                                Text(stringResource(R.string.acc_balance_text), style = MaterialTheme.typography.bodySmall, color = p.muted)
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            GhostButton(
+                                stringResource(R.string.acc_reset),
+                                onClick = { viewModel.setLexicalWeight(com.opensolr.photos.data.AppPrefs.DEFAULT_LEXICAL_WEIGHT) },
+                                enabled = state.lexicalWeight != com.opensolr.photos.data.AppPrefs.DEFAULT_LEXICAL_WEIGHT &&
+                                    state.account?.vectorAllowed == true,
+                            )
+                        }
+
+                        val limits = state.account
+                        val balanceUsable = limits != null && limits.vectorAllowed &&
+                            (limits.maxAiRequests <= 0 || limits.aiRequestsUsed < limits.maxAiRequests)
+                        if (!balanceUsable) {
+                            Text(
+                                if (limits?.vectorAllowed == true) stringResource(R.string.acc_balance_quota)
+                                else stringResource(R.string.acc_balance_plan),
+                                style = MaterialTheme.typography.bodySmall, color = p.muted,
+                                modifier = Modifier.padding(top = 6.dp),
+                            )
+                        }
+                        val balanceView = androidx.compose.ui.platform.LocalView.current
+                        var balance by remember(state.lexicalWeight) { mutableStateOf(state.lexicalWeight) }
+                        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                            Text(stringResource(R.string.acc_semantic), style = MaterialTheme.typography.bodySmall, color = p.muted)
+                            androidx.compose.material3.Slider(
+                                value = balance,
+                                onValueChange = { v ->
+                                    val stepped = (Math.round(v * 20) / 20f).coerceIn(0f, 1f)
+                                    if (stepped != balance) com.opensolr.photos.ui.Haptics.tick(balanceView, strong = false)
+                                    balance = stepped
+                                },
+                                onValueChangeFinished = { viewModel.setLexicalWeight(balance) },
+                                valueRange = 0f..1f,
+                                steps = 19,
+                                enabled = balanceUsable,
+                                colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = p.accentFill, activeTrackColor = p.accentFill, inactiveTrackColor = p.chip, activeTickColor = p.accentFill, inactiveTickColor = p.hairline),
+                                modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
+                            )
+                            Text(stringResource(R.string.acc_lexical), style = MaterialTheme.typography.bodySmall, color = p.muted)
+                            Spacer(Modifier.width(10.dp))
+                            Text(String.format(java.util.Locale.US, "%.2f", balance), style = MaterialTheme.typography.bodyLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = p.ink)
+                        }
+                        // How many of the typed words must match, in three steps.
+                        Spacer(Modifier.height(16.dp))
+                        Text(stringResource(R.string.acc_match), style = MaterialTheme.typography.bodyLarge, color = p.ink)
+                        var level by remember(state.matchLevel) { mutableStateOf(state.matchLevel) }
+                        androidx.compose.material3.Slider(
+                            value = level.toFloat(),
+                            onValueChange = { v ->
+                                val next = Math.round(v).coerceIn(0, 2)
+                                if (next != level) com.opensolr.photos.ui.Haptics.tick(balanceView, strong = false)
+                                level = next
+                            },
+                            onValueChangeFinished = { viewModel.setMatchLevel(level) },
+                            valueRange = 0f..2f,
+                            steps = 1,
+                            colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = p.accentFill, activeTrackColor = p.accentFill, inactiveTrackColor = p.chip, activeTickColor = p.accentFill, inactiveTickColor = p.hairline),
                         )
+                        Row(Modifier.fillMaxWidth()) {
+                            listOf(R.string.acc_match_flexible, R.string.acc_match_balanced, R.string.acc_match_strict).forEachIndexed { i, label ->
+                                Text(
+                                    stringResource(label),
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = if (i == level) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Medium,
+                                    color = if (i == level) p.accent else p.muted,
+                                    textAlign = when (i) { 0 -> androidx.compose.ui.text.style.TextAlign.Start; 1 -> androidx.compose.ui.text.style.TextAlign.Center; else -> androidx.compose.ui.text.style.TextAlign.End },
+                                    modifier = Modifier.weight(1f),
+                                )
+                            }
+                        }
                     }
-                    Spacer(Modifier.width(12.dp))
-                    Switch(
-                        checked = state.hapticsEnabled,
-                        onCheckedChange = { viewModel.setHaptics(it); Haptics.toggle(view, it) },
-                        colors = SwitchDefaults.colors(checkedTrackColor = p.accentFill, checkedThumbColor = p.onAccentFill, uncheckedTrackColor = p.chip, uncheckedBorderColor = p.hairline, uncheckedThumbColor = p.muted),
-                    )
                 }
-                Spacer(Modifier.height(28.dp))
-
-                SectionLabel(stringResource(R.string.acc_language))
-                Spacer(Modifier.height(6.dp))
-                Text(stringResource(R.string.acc_language_text), style = MaterialTheme.typography.bodySmall, color = p.muted)
-                Spacer(Modifier.height(10.dp))
-                val chosenLanguage = remember { com.opensolr.photos.ui.AppLanguage.chosen(context) }
-                androidx.compose.foundation.layout.FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    (listOf("" to stringResource(R.string.acc_language_phone)) + com.opensolr.photos.ui.AppLanguage.SUPPORTED).forEach { (tag, name) ->
-                        val on = tag == chosenLanguage
+                SubZone(stringResource(R.string.acc_cache), "set_cache" in state.meZonesOpen, { viewModel.toggleMeZone("set_cache") }) {
+                    Column {
+                        Spacer(Modifier.height(10.dp))
                         Text(
-                            name,
-                            style = MaterialTheme.typography.labelMedium,
-                            color = if (on) p.accent else p.ink,
-                            modifier = Modifier
-                                .border(if (on) 1.5.dp else 1.dp, if (on) p.accent else p.hairline, androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
-                                .background(if (on) p.paper else p.chip, androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
-                                .clickable {
-                                    Haptics.tap(view)
-                                    var host: android.content.Context? = context
-                                    while (host is android.content.ContextWrapper && host !is android.app.Activity) host = host.baseContext
-                                    (host as? android.app.Activity)?.let { com.opensolr.photos.ui.AppLanguage.choose(it, tag) }
-                                }
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            stringResource(R.string.acc_cache_text),
+                            style = MaterialTheme.typography.bodyMedium, color = p.muted,
                         )
-                    }
-                }
-                Spacer(Modifier.height(28.dp))
+                        Spacer(Modifier.height(14.dp))
 
-                SectionLabel(stringResource(R.string.acc_places))
-                val backgroundAsk = androidx.activity.compose.rememberLauncherForActivityResult(
-                    androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-                ) { viewModel.refreshPlacesToWrite() }
-                val locationAsk = androidx.activity.compose.rememberLauncherForActivityResult(
-                    androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
-                ) { granted ->
-                    viewModel.refreshPlacesToWrite()
-                    if (granted.values.any { it } && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                        backgroundAsk.launch(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-                    }
-                }
-                Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.acc_place_new), style = MaterialTheme.typography.bodyLarge, color = p.ink)
-                        Text(
-                            stringResource(R.string.acc_place_new_text),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = p.muted,
+                        var seconds by remember(state.cacheSeconds) { mutableStateOf(state.cacheSeconds.toString()) }
+                        com.opensolr.photos.ui.OutlinedTextBox(
+                            value = seconds,
+                            onValueChange = { typed -> seconds = typed.filter { it.isDigit() }.take(6) },
+                            label = { Text(stringResource(R.string.acc_cache_seconds)) },
+                            supportingText = { Text(stringResource(R.string.acc_cache_limits, SearchCache.MIN_SECONDS.toString(), state.cacheSeconds.toString())) },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth(),
                         )
+                        Spacer(Modifier.height(12.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            GhostButton(
+                                stringResource(R.string.acc_save),
+                                onClick = { viewModel.setCacheSeconds(seconds.toIntOrNull() ?: SearchCache.DEFAULT_SECONDS) },
+                                enabled = seconds.toIntOrNull()?.let { it != state.cacheSeconds } ?: false,
+                                modifier = Modifier.weight(1f),
+                            )
+                            GhostButton(
+                                if (state.cachedCount > 0) stringResource(R.string.acc_clear_cache_n, state.cachedCount.toString()) else stringResource(R.string.acc_clear_cache),
+                                onClick = { viewModel.clearSearchCache() },
+                                enabled = state.cachedCount > 0,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
                     }
-                    Spacer(Modifier.width(12.dp))
-                    Switch(
-                        checked = state.autoPlace,
-                        onCheckedChange = { on ->
-                            Haptics.toggle(view, on)
-                            viewModel.setAutoPlace(on)
-                            // Google Play: say what the location is for, before Android asks for it.
-                            if (on && !state.autoPlaceLocation) discloseLocation = true
-                        },
-                        colors = SwitchDefaults.colors(checkedTrackColor = p.accentFill, checkedThumbColor = p.onAccentFill, uncheckedTrackColor = p.chip, uncheckedBorderColor = p.hairline, uncheckedThumbColor = p.muted),
-                    )
-                }
-                if (discloseLocation) {
-                    AlertDialog(
-                        onDismissRequest = { discloseLocation = false },
-                        title = { Text(stringResource(R.string.acc_loc_title)) },
-                        text = { Text(stringResource(R.string.acc_loc_text)) },
-                        confirmButton = {
-                            TextButton(onClick = {
-                                discloseLocation = false
-                                locationAsk.launch(arrayOf(android.Manifest.permission.ACCESS_FINE_LOCATION, android.Manifest.permission.ACCESS_COARSE_LOCATION))
-                            }) { Text(stringResource(R.string.acc_loc_allow), color = p.accent) }
-                        },
-                        dismissButton = { TextButton(onClick = { discloseLocation = false }) { Text(stringResource(R.string.acc_loc_not_now), color = p.ink) } },
-                        containerColor = p.paper,
-                        titleContentColor = p.ink,
-                        textContentColor = p.muted,
-                    )
-                }
-                if (state.autoPlace && !state.autoPlaceLocation) {
-                    Text(
-                        stringResource(R.string.acc_place_no_location),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = p.muted,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                } else if (state.autoPlace && !state.autoPlaceBackground) {
-                    Text(
-                        stringResource(R.string.acc_place_no_background),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = p.muted,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                }
-                if (state.placesToWrite > 0) {
-                    val writePlaces = rememberPlaceWriter(viewModel)
-                    Text(
-                        pluralStringResource(R.plurals.acc_places_pending, state.placesToWrite, Actions.formatCount(state.placesToWrite.toLong())),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = p.muted,
-                    )
-                    Spacer(Modifier.height(8.dp))
-                    GhostButton(stringResource(R.string.acc_save_places), onClick = writePlaces, modifier = Modifier.fillMaxWidth())
-                }
-                Spacer(Modifier.height(28.dp))
-
-                SectionLabel(stringResource(R.string.acc_tuning))
-                Spacer(Modifier.height(10.dp))
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f)) {
-                        Text(stringResource(R.string.acc_balance), style = MaterialTheme.typography.bodyLarge, color = p.ink)
-                        Text(stringResource(R.string.acc_balance_text), style = MaterialTheme.typography.bodySmall, color = p.muted)
-                    }
-                    Spacer(Modifier.width(12.dp))
-                    GhostButton(
-                        stringResource(R.string.acc_reset),
-                        onClick = { viewModel.setLexicalWeight(com.opensolr.photos.data.AppPrefs.DEFAULT_LEXICAL_WEIGHT) },
-                        enabled = state.lexicalWeight != com.opensolr.photos.data.AppPrefs.DEFAULT_LEXICAL_WEIGHT &&
-                            state.account?.vectorAllowed == true,
-                    )
-                }
-
-                val limits = state.account
-                val balanceUsable = limits != null && limits.vectorAllowed &&
-                    (limits.maxAiRequests <= 0 || limits.aiRequestsUsed < limits.maxAiRequests)
-                if (!balanceUsable) {
-                    Text(
-                        if (limits?.vectorAllowed == true) stringResource(R.string.acc_balance_quota)
-                        else stringResource(R.string.acc_balance_plan),
-                        style = MaterialTheme.typography.bodySmall, color = p.muted,
-                        modifier = Modifier.padding(top = 6.dp),
-                    )
-                }
-                val balanceView = androidx.compose.ui.platform.LocalView.current
-                var balance by remember(state.lexicalWeight) { mutableStateOf(state.lexicalWeight) }
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.acc_semantic), style = MaterialTheme.typography.bodySmall, color = p.muted)
-                    androidx.compose.material3.Slider(
-                        value = balance,
-                        onValueChange = { v ->
-                            val stepped = (Math.round(v * 20) / 20f).coerceIn(0f, 1f)
-                            if (stepped != balance) com.opensolr.photos.ui.Haptics.tick(balanceView, strong = false)
-                            balance = stepped
-                        },
-                        onValueChangeFinished = { viewModel.setLexicalWeight(balance) },
-                        valueRange = 0f..1f,
-                        steps = 19,
-                        enabled = balanceUsable,
-                        colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = p.accentFill, activeTrackColor = p.accentFill, inactiveTrackColor = p.chip, activeTickColor = p.accentFill, inactiveTickColor = p.hairline),
-                        modifier = Modifier.weight(1f).padding(horizontal = 8.dp),
-                    )
-                    Text(stringResource(R.string.acc_lexical), style = MaterialTheme.typography.bodySmall, color = p.muted)
-                    Spacer(Modifier.width(10.dp))
-                    Text(String.format(java.util.Locale.US, "%.2f", balance), style = MaterialTheme.typography.bodyLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = p.ink)
-                }
-                Spacer(Modifier.height(28.dp))
-
-                SectionLabel(stringResource(R.string.acc_cache))
-                Spacer(Modifier.height(10.dp))
-                Text(
-                    stringResource(R.string.acc_cache_text),
-                    style = MaterialTheme.typography.bodyMedium, color = p.muted,
-                )
-                Spacer(Modifier.height(14.dp))
-
-                var seconds by remember(state.cacheSeconds) { mutableStateOf(state.cacheSeconds.toString()) }
-                com.opensolr.photos.ui.OutlinedTextBox(
-                    value = seconds,
-                    onValueChange = { typed -> seconds = typed.filter { it.isDigit() }.take(6) },
-                    label = { Text(stringResource(R.string.acc_cache_seconds)) },
-                    supportingText = { Text(stringResource(R.string.acc_cache_limits, SearchCache.MIN_SECONDS.toString(), state.cacheSeconds.toString())) },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(12.dp))
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    GhostButton(
-                        stringResource(R.string.acc_save),
-                        onClick = { viewModel.setCacheSeconds(seconds.toIntOrNull() ?: SearchCache.DEFAULT_SECONDS) },
-                        enabled = seconds.toIntOrNull()?.let { it != state.cacheSeconds } ?: false,
-                        modifier = Modifier.weight(1f),
-                    )
-                    GhostButton(
-                        if (state.cachedCount > 0) stringResource(R.string.acc_clear_cache_n, state.cachedCount.toString()) else stringResource(R.string.acc_clear_cache),
-                        onClick = { viewModel.clearSearchCache() },
-                        enabled = state.cachedCount > 0,
-                        modifier = Modifier.weight(1f),
-                    )
                 }
                 Spacer(Modifier.height(18.dp))
             }

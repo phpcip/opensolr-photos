@@ -52,8 +52,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             running.set(false)
 
             if (AppPrefs(applicationContext).session != null) SyncScheduler.watchMedia(applicationContext)
-            // new photos get their faces read after every sync
-            FaceWorker.next(applicationContext)
+            // photos this sync brought get their faces read before older ones; otherwise the face pass just goes on
+            if ((AppPrefs(applicationContext).lastReport?.added ?: 0) > 0) FaceWorker.photosArrived(applicationContext) else FaceWorker.next(applicationContext)
         }
     }
 

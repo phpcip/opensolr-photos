@@ -997,7 +997,7 @@ class SearchRepository(private val context: Context) {
             } else {
                 params += "uq" to text
             }
-            params += "lexicalRaw" to "{!edismax qf=\"$qf\" mm=\"$MM\" v=\$uq}"
+            params += "lexicalRaw" to "{!edismax qf=\"$qf\" mm=\"${MM_LEVELS[prefs.matchLevel]}\" v=\$uq}"
             val matched = if (vector != null) {
                 smart = true
 
@@ -1125,7 +1125,8 @@ class SearchRepository(private val context: Context) {
 
         private const val FRESH_BIAS = "recip(max(0,ms(NOW,taken_at)),3.16e-11,1,1)"
 
-        private const val MM = "2<65% 4<50% 8<40%"
+        /** Minimum match for flexible, balanced and strict. */
+        private val MM_LEVELS = listOf("2<65% 4<50% 8<40%", "2<90% 5<75% 8<60% 12<50%", "2<95% 5<90% 8<80%")
 
         private const val QF = "custom_tags_text^5 meaning^2 labels_t^2 ocr_t^3 persons_t^4 text file_name_text folder_text camera_text place_text^1"
         private const val HYBRID_QF = "custom_tags_text^0.5 meaning^0.2 labels_t^0.2 ocr_t^0.4 persons_t^0.3 file_name_text folder_text camera_text place_text^0.1"

@@ -28,81 +28,82 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val prefs = AppPrefs(ctx)
         if (prefs.session == null || prefs.folders.isEmpty()) return Result.success()
         val cache = PhotoCache.of(ctx)
+        val edits = com.opensolr.photos.search.EditRepository(ctx)
         // a better finder reads every photo again, once
         val sp = ctx.getSharedPreferences("faces", Context.MODE_PRIVATE)
         if (sp.getInt("engine", 0) < FaceEngine.VERSION) {
             cache.rereadAllFaces()
             sp.edit().putInt("engine", FaceEngine.VERSION).apply()
         }
+        arrived.set(false)
         val local = MediaScanner.scan(ctx, prefs.folders)
         cache.dropFacesExcept(local.keys)
         val read = cache.faceScannedSizes()
         // what arrived last goes first: a photo without a date in it (WhatsApp, edited copies) never waits behind the rest
         val todo = local.values.filter { read[it.id] != it.sizeBytes }
             .sortedWith(compareByDescending<com.opensolr.photos.media.LocalPhoto> { it.addedSec }.thenByDescending { it.dateTakenMs })
+        if (learnPeople(ctx, cache)) {
+            // photos read before a person was learned get the name now: the newest ones, a bounded number
+            val recent = local.values.sortedByDescending { it.addedSec }.take(RECHECK).map { it.id }
+            if (com.opensolr.photos.search.FaceMatcher.nameRecent(cache, edits, recent)) SyncScheduler.runNow(ctx)
+        }
         if (todo.isEmpty()) return Result.success()
 
         val engine = FaceEngine.of(ctx)
         // the people named for sure, read once per run: new faces close enough to one of them get the name
-        val people = cache.facePeople().keys.associateWith { com.opensolr.photos.search.FaceMatcher.references(cache, it) }.filterValues { it.isNotEmpty() }
+        val people = com.opensolr.photos.search.FaceMatcher.people(cache)
         val until = System.currentTimeMillis() + RUN_MS
         for (photo in todo) {
             // stopped by the system: the next run carries on where this one left off
             if (isStopped) { next(ctx, continuation = true); return Result.success() }
+            // a photo arrived while this run works through older ones: the next run starts now, newest first
+            if (arrived.getAndSet(false)) { next(ctx, continuation = true); return Result.success() }
             if (System.currentTimeMillis() > until) { next(ctx, continuation = true); return Result.success() }
             if (!charging(ctx) && battery(ctx) < BATTERY_MIN) { next(ctx, continuation = true, delayMinutes = WAIT_MINUTES); return Result.success() }
             val bitmap = try { PhotoReader.uprightBitmap(ctx, photo.uri, FaceEngine.READ_EDGE) } catch (e: Exception) { null }
             val faces = if (bitmap == null) emptyList() else try { engine.analyze(bitmap) } catch (e: Exception) { emptyList() } finally { bitmap.recycle() }
             val rows = cache.putFaces(photo.id, photo.mediaId, photo.sizeBytes, faces)
-            // a photo with one face and one name already on it: that face is that person, free to learn from
-            if (rows.size == 1 && rows[0].person == null) {
-                val names = cache.doc(photo.id)?.persons.orEmpty()
-                if (names.size == 1) { cache.setFacePerson(listOf(rows[0].fid), names[0]); continue }
-            }
-            autoName(ctx, cache, photo.id, rows, faces, people)
+            if (com.opensolr.photos.search.FaceMatcher.autoName(cache, edits, photo.id, rows, faces.map { it.vector }, people)) SyncScheduler.runNow(ctx)
         }
         return Result.success()
     }
 
 
-    /** Unnamed faces very close to a person named for sure take that name, and the photo gets the person. */
-    private fun autoName(
-        ctx: Context, cache: PhotoCache, photoId: String, rows: List<PhotoCache.FaceRow>,
-        faces: List<FaceEngine.Face>, people: Map<String, List<FloatArray>>,
-    ) {
-        if (people.isEmpty()) return
-        val taken = rows.mapNotNull { it.person?.lowercase() }.toMutableSet()
-        val named = ArrayList<String>()
-        rows.forEachIndexed { i, row ->
-            if (row.person != null) return@forEachIndexed
-            val vector = faces.getOrNull(i)?.vector ?: return@forEachIndexed
-            var bestName: String? = null
-            var best = AUTO
-            for ((name, refs) in people) {
-                if (name.lowercase() in taken) continue
-                val s = com.opensolr.photos.search.FaceMatcher.score(vector, refs)
-                if (s >= best) { best = s; bestName = name }
-            }
-            bestName?.let { name ->
-                cache.setFacePerson(listOf(row.fid), name, sure = false)
-                taken += name.lowercase()
-                named += name
-            }
+    /**
+     * Each tagged person's face is learned from their tagged photos, again whenever more of those photos have had
+     * their faces read (a tenth more, or the first time), so the references grow with the reading.
+     */
+    private fun learnPeople(ctx: Context, cache: PhotoCache): Boolean {
+        val sp = ctx.getSharedPreferences("faces", Context.MODE_PRIVATE)
+        var learned = false
+        cache.taggedPeople().forEach { (person, count) ->
+            if (count < 3) return@forEach
+            val key = "learned:" + person.lowercase()
+            val was = sp.getInt(key, 0)
+            if (was > 0 && count < was + maxOf(3, was / 10)) return@forEach
+            com.opensolr.photos.search.FaceSeeder.learn(cache, person)
+            sp.edit().putInt(key, count).apply()
+            learned = true
         }
-        if (named.isNotEmpty()) {
-            com.opensolr.photos.search.EditRepository(ctx).queueForAll(listOf(photoId), null, false, named, false)
-            // the name reaches the index now, not when this run ends (a sync already queued takes it along)
-            SyncScheduler.runNow(ctx)
-        }
+        return learned
     }
 
     companion object {
-        /** A face this close to a person named for sure is taken as that person without asking. */
-        const val AUTO = 0.6f
         private const val WORK = "faces"
         private const val RUN_MS = 4 * 60 * 1000L
+        /** How many of the newest photos are checked again for people when someone is learned. */
+        private const val RECHECK = 1000
         private const val BATTERY_MIN = 5
         private const val WAIT_MINUTES = 30L
+
+        /** Set when new photos were synced: a run at work hands over at once so they are read first. */
+        private val arrived = java.util.concurrent.atomic.AtomicBoolean(false)
+
+        /** After a sync: new photos get their faces read before anything older. */
+        fun photosArrived(context: Context) {
+            arrived.set(true)
+            next(context)
+        }
 
         /** Reads what is new; a run already waiting or at work is left alone unless this is its own hand-over. */
         fun next(context: Context, continuation: Boolean = false, delayMinutes: Long = 0) {

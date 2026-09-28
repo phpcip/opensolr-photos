@@ -176,6 +176,11 @@ class AppPrefs(context: Context) {
         get() = prefs.getStringSet(KEY_OPEN_FILTERS, emptySet()).orEmpty()
         set(value) = prefs.edit().putStringSet(KEY_OPEN_FILTERS, value).apply()
 
+    /** Zones and sections of the Me screen that are open. */
+    var meZonesOpen: Set<String>
+        get() = prefs.getStringSet(KEY_ME_ZONES_OPEN, emptySet()).orEmpty()
+        set(value) = prefs.edit().putStringSet(KEY_ME_ZONES_OPEN, value).apply()
+
     var statsOpen: Set<String>
         get() = prefs.getStringSet(KEY_STATS_OPEN, emptySet()).orEmpty()
         set(value) = prefs.edit().putStringSet(KEY_STATS_OPEN, value).apply()
@@ -212,6 +217,11 @@ class AppPrefs(context: Context) {
     var lexicalWeight: Float
         get() = prefs.getFloat(KEY_LEXICAL_WEIGHT, DEFAULT_LEXICAL_WEIGHT).coerceIn(0f, 1f)
         set(value) = prefs.edit().putFloat(KEY_LEXICAL_WEIGHT, value.coerceIn(0f, 1f)).apply()
+
+    /** How many of the typed words must match: 0 flexible, 1 balanced, 2 strict. */
+    var matchLevel: Int
+        get() = prefs.getInt(KEY_MATCH_LEVEL, DEFAULT_MATCH_LEVEL).coerceIn(0, 2)
+        set(value) = prefs.edit().putInt(KEY_MATCH_LEVEL, value.coerceIn(0, 2)).apply()
 
     var cacheSeconds: Int
         get() = prefs.getInt(KEY_CACHE_SECONDS, SearchCache.DEFAULT_SECONDS)
@@ -300,9 +310,12 @@ class AppPrefs(context: Context) {
         private const val CLONE_FORMAT = 2
         private const val KEY_FOLDED_ALBUMS = "folded_album_sections"
         private const val KEY_STATS_OPEN = "stats_open_sections"
+        private const val KEY_ME_ZONES_OPEN = "me_zones_open"
         private const val KEY_HAPTICS = "haptics_enabled"
         private const val KEY_LEXICAL_WEIGHT = "lexical_weight"
         const val DEFAULT_LEXICAL_WEIGHT = 0.2f
+        private const val KEY_MATCH_LEVEL = "match_level"
+        const val DEFAULT_MATCH_LEVEL = 1
         private const val KEY_AUTH_VERIFIER = "auth_verifier"
         private const val KEY_AUTH_STATE = "auth_state"
         private const val KEY_AUTH_STARTED = "auth_started"

@@ -205,6 +205,7 @@ data class UiState(
     val cacheSeconds: Int = com.opensolr.photos.data.SearchCache.DEFAULT_SECONDS,
 
     val lexicalWeight: Float = AppPrefs.DEFAULT_LEXICAL_WEIGHT,
+    val matchLevel: Int = AppPrefs.DEFAULT_MATCH_LEVEL,
 
     val hapticsEnabled: Boolean = true,
 
@@ -425,7 +426,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val bitmap = runCatching { PhotoReader.uprightBitmap(context, uri, com.opensolr.photos.media.FaceEngine.READ_EDGE) }.getOrNull()
             if (bitmap != null) {
                 val faces = try { com.opensolr.photos.media.FaceEngine.of(context).analyze(bitmap) } finally { bitmap.recycle() }
-                photoCache.putFaces(hit.id, hit.mediaId, hit.sizeBytes, faces)
+                val rows = photoCache.putFaces(hit.id, hit.mediaId, hit.sizeBytes, faces)
+                // a photo read here, before the background pass, is named the same way
+                val people = com.opensolr.photos.search.FaceMatcher.people(photoCache)
+                if (com.opensolr.photos.search.FaceMatcher.autoName(photoCache, edits, hit.id, rows, faces.map { it.vector }, people)) SyncScheduler.runNow(context)
             }
         }
         photoCache.facesOf(hit.id)
@@ -697,13 +701,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshCacheInfo() {
         viewModelScope.launch {
             val held = withContext(Dispatchers.IO) { searches.cachedCount() }
-            _state.update { it.copy(cacheSeconds = prefs.cacheSeconds, cachedCount = held, hapticsEnabled = prefs.hapticsEnabled, lexicalWeight = prefs.lexicalWeight) }
+            _state.update { it.copy(cacheSeconds = prefs.cacheSeconds, cachedCount = held, hapticsEnabled = prefs.hapticsEnabled, lexicalWeight = prefs.lexicalWeight, matchLevel = prefs.matchLevel) }
         }
     }
 
     fun setLexicalWeight(value: Float) {
         prefs.lexicalWeight = value
         _state.update { it.copy(lexicalWeight = prefs.lexicalWeight) }
+    }
+
+    fun setMatchLevel(value: Int) {
+        prefs.matchLevel = value
+        _state.update { it.copy(matchLevel = prefs.matchLevel) }
     }
 
     fun setHaptics(on: Boolean) {
@@ -1283,6 +1292,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             openFilterSections = prefs.openFilterSections,
             foldedAlbumSections = prefs.foldedAlbumSections,
             statsOpen = prefs.statsOpen,
+            meZonesOpen = prefs.meZonesOpen,
             groupBy = GroupBy.of(prefs.groupBy),
         )
     }
@@ -1617,7 +1627,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         s.groupBy != GroupBy.RELEVANCE && !s.duplicatesMode && !s.skippedMode && (s.query.isNotBlank() || s.filters.count > 0)
 
     fun toggleMeZone(key: String) {
-        _state.update { it.copy(meZonesOpen = if (key in it.meZonesOpen) it.meZonesOpen - key else it.meZonesOpen + key) }
+        val next = _state.value.meZonesOpen.let { if (key in it) it - key else it + key }
+        prefs.meZonesOpen = next
+        _state.update { it.copy(meZonesOpen = next) }
     }
 
     fun toggleStatsSection(key: String) {

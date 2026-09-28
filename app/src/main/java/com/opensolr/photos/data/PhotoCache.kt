@@ -150,6 +150,13 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         if (oldVersion < 23) {
             createFaceTables(db)
         }
+        if (oldVersion < 24) {
+            // who named a face: 0 the owner, 1 learned from the photos' tags, 2 the matcher on its own
+            addColumnIfMissing(db, "faces", "how", "INTEGER NOT NULL DEFAULT 0")
+            // names given before this came from single-face photos, which can be anyone: they are learned again
+            db.execSQL("UPDATE faces SET how = 1 WHERE person IS NOT NULL AND sure = 1")
+            db.execSQL("UPDATE faces SET how = 2 WHERE person IS NOT NULL AND sure = 0")
+        }
     }
 
     private fun backfillLabelsAndModel(db: SQLiteDatabase) {
@@ -822,8 +829,12 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         db.beginTransaction()
         try {
             val before = ArrayList<Triple<FaceRow, Boolean, Long>>()
-            db.rawQuery("SELECT fid, photo_id, media_id, x, y, w, h, person, sure FROM faces WHERE photo_id = ?", arrayOf(photoId)).use { c ->
-                while (c.moveToNext()) before += Triple(FaceRow(c.getLong(0), c.getString(1), c.getLong(2), c.getFloat(3), c.getFloat(4), c.getFloat(5), c.getFloat(6), c.getString(7)), c.getInt(8) == 1, c.getLong(0))
+            val hows = HashMap<Long, Int>()
+            db.rawQuery("SELECT fid, photo_id, media_id, x, y, w, h, person, sure, how FROM faces WHERE photo_id = ?", arrayOf(photoId)).use { c ->
+                while (c.moveToNext()) {
+                    before += Triple(FaceRow(c.getLong(0), c.getString(1), c.getLong(2), c.getFloat(3), c.getFloat(4), c.getFloat(5), c.getFloat(6), c.getString(7)), c.getInt(8) == 1, c.getLong(0))
+                    hows[c.getLong(0)] = c.getInt(9)
+                }
             }
             db.delete("faces", "photo_id = ?", arrayOf(photoId))
             val claimed = HashSet<Long>()
@@ -836,6 +847,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
                     put("vec", toBytes(f.vector))
                     if (named == null) putNull("person") else put("person", named)
                     put("sure", if (was == null || was.second) 1 else 0)
+                    put("how", was?.let { hows[it.third] } ?: HOW_OWNER)
                 }
                 val fid = db.insert("faces", null, values)
                 if (was != null) db.execSQL("UPDATE face_rejects SET fid = ? WHERE fid = ?", arrayOf<Any>(fid, was.third))
@@ -882,7 +894,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
      * Names faces (or clears the name with null); a named face is no longer refused for that person. [sure] false
      * = named by the matcher on its own: shown and searchable, but never used to recognise anyone else.
      */
-    fun setFacePerson(fids: Collection<Long>, person: String?, sure: Boolean = true) {
+    fun setFacePerson(fids: Collection<Long>, person: String?, sure: Boolean = true, how: Int = HOW_OWNER) {
         if (fids.isEmpty()) return
         val db = writableDatabase
         db.beginTransaction()
@@ -890,13 +902,54 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
             fids.chunked(DELETE_BATCH).forEach { batch ->
                 val marks = batch.joinToString(",") { "?" }
                 val args = batch.map { it.toString() }.toTypedArray()
-                db.update("faces", ContentValues().apply { if (person == null) putNull("person") else put("person", person); put("sure", if (sure) 1 else 0) }, "fid IN ($marks)", args)
+                db.update("faces", ContentValues().apply { if (person == null) putNull("person") else put("person", person); put("sure", if (sure) 1 else 0); put("how", how) }, "fid IN ($marks)", args)
                 if (person != null) db.delete("face_rejects", "fid IN ($marks) AND person = ? COLLATE NOCASE", args + person)
             }
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
         }
+    }
+
+    /** Every person the photos are tagged with, and on how many photos whose faces were read. */
+    fun taggedPeople(): Map<String, Int> {
+        val out = LinkedHashMap<String, Int>()
+        readableDatabase.rawQuery(
+            "SELECT w.word, COUNT(*) FROM doc_words w JOIN face_scanned s ON s.photo_id = w.id WHERE w.kind = '$WORD_PERSON' AND s.faces > 0 GROUP BY w.word",
+            null,
+        ).use { c -> while (c.moveToNext()) out[c.getString(0)] = c.getInt(1) }
+        return out
+    }
+
+    /** The newest [limit] photos tagged [person] that have faces, with every face in them and its fingerprint. */
+    fun facesOfTagged(person: String, limit: Int): List<Pair<FaceRow, FloatArray>> {
+        val out = ArrayList<Pair<FaceRow, FloatArray>>()
+        readableDatabase.rawQuery(
+            "SELECT f.fid, f.photo_id, f.media_id, f.x, f.y, f.w, f.h, f.person, f.vec FROM faces f WHERE f.photo_id IN (" +
+                "SELECT w.id FROM doc_words w JOIN face_scanned s ON s.photo_id = w.id LEFT JOIN docs d ON d.id = w.id " +
+                "WHERE w.kind = '$WORD_PERSON' AND w.word = ? AND s.faces > 0 ORDER BY d.taken_ms DESC LIMIT $limit) " +
+                "AND NOT EXISTS (SELECT 1 FROM face_rejects r WHERE r.fid = f.fid AND r.person = ? COLLATE NOCASE)",
+            arrayOf(person, person),
+        ).use { c ->
+            while (c.moveToNext()) {
+                out += FaceRow(c.getLong(0), c.getString(1), c.getLong(2), c.getFloat(3), c.getFloat(4), c.getFloat(5), c.getFloat(6), c.getString(7)) to toFloats(c.getBlob(8))
+            }
+        }
+        return out
+    }
+
+    /** The faces of one photo with their fingerprints. */
+    fun facesWithVectors(photoId: String): List<Pair<FaceRow, FloatArray>> {
+        val out = ArrayList<Pair<FaceRow, FloatArray>>()
+        readableDatabase.rawQuery("SELECT fid, photo_id, media_id, x, y, w, h, person, vec FROM faces WHERE photo_id = ?", arrayOf(photoId)).use { c ->
+            while (c.moveToNext()) out += FaceRow(c.getLong(0), c.getString(1), c.getLong(2), c.getFloat(3), c.getFloat(4), c.getFloat(5), c.getFloat(6), c.getString(7)) to toFloats(c.getBlob(8))
+        }
+        return out
+    }
+
+    /** What was learned for [person] from the tags is forgotten, before it is learned again. */
+    fun clearLearned(person: String) {
+        writableDatabase.execSQL("UPDATE faces SET person = NULL, sure = 1, how = $HOW_OWNER WHERE how = $HOW_LEARNED AND person = ? COLLATE NOCASE", arrayOf(person))
     }
 
     /** Faces the owner said are not [person]: never offered for them again. */
@@ -1514,7 +1567,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
     companion object {
         private const val NAME = "photo_cache.db"
-        private const val VERSION = 23
+        private const val VERSION = 24
 
         @Volatile private var shared: PhotoCache? = null
 
@@ -1575,10 +1628,13 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         private const val PARKED_DOCS_TABLE = "CREATE TABLE IF NOT EXISTS parked_docs (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, indexed_at INTEGER NOT NULL, taken_at TEXT, tags_json TEXT, persons_json TEXT, meaning TEXT, ocr TEXT, city TEXT, country TEXT, json TEXT, modified INTEGER NOT NULL DEFAULT 0, taken_ms INTEGER NOT NULL DEFAULT 0, embed_model TEXT, file_hash TEXT, region TEXT, folder TEXT, camera TEXT, camera_model TEXT)"
         private const val PARKED_WORDS_TABLE = "CREATE TABLE IF NOT EXISTS parked_words (id TEXT NOT NULL, kind TEXT NOT NULL, word TEXT NOT NULL, PRIMARY KEY (id, kind, word))"
         private const val PARKED_COLUMNS = "id, size_bytes, indexed_at, taken_at, tags_json, persons_json, meaning, ocr, city, country, json, modified, taken_ms, embed_model, file_hash, region, folder, camera, camera_model"
-        private const val FACES_TABLE = "CREATE TABLE IF NOT EXISTS faces (fid INTEGER PRIMARY KEY AUTOINCREMENT, photo_id TEXT NOT NULL, media_id INTEGER NOT NULL, x REAL NOT NULL, y REAL NOT NULL, w REAL NOT NULL, h REAL NOT NULL, score REAL NOT NULL, vec BLOB NOT NULL, person TEXT, sure INTEGER NOT NULL DEFAULT 1)"
+        private const val FACES_TABLE = "CREATE TABLE IF NOT EXISTS faces (fid INTEGER PRIMARY KEY AUTOINCREMENT, photo_id TEXT NOT NULL, media_id INTEGER NOT NULL, x REAL NOT NULL, y REAL NOT NULL, w REAL NOT NULL, h REAL NOT NULL, score REAL NOT NULL, vec BLOB NOT NULL, person TEXT, sure INTEGER NOT NULL DEFAULT 1, how INTEGER NOT NULL DEFAULT 0)"
         private const val FACE_REJECTS_TABLE = "CREATE TABLE IF NOT EXISTS face_rejects (fid INTEGER NOT NULL, person TEXT NOT NULL COLLATE NOCASE, PRIMARY KEY (fid, person))"
         private const val FACE_SCANNED_TABLE = "CREATE TABLE IF NOT EXISTS face_scanned (photo_id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, faces INTEGER NOT NULL)"
         private const val FACE_PAGE = 2000
+        const val HOW_OWNER = 0
+        const val HOW_LEARNED = 1
+        const val HOW_AUTO = 2
         private const val WORD_RETRIES_TABLE = "CREATE TABLE IF NOT EXISTS word_retries (id TEXT PRIMARY KEY NOT NULL, attempts INTEGER NOT NULL, next_at INTEGER NOT NULL)"
     }
 }

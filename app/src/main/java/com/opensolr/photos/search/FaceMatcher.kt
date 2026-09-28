@@ -60,6 +60,55 @@ object FaceMatcher {
         return best.sum() / votes
     }
 
+    /** A face this close to a person is taken as that person without asking. */
+    const val AUTO = 0.6f
+
+    /** Every person with references, and those references. */
+    fun people(cache: PhotoCache): Map<String, List<FloatArray>> =
+        cache.facePeople().keys.associateWith { references(cache, it) }.filterValues { it.isNotEmpty() }
+
+    /**
+     * Names the unnamed faces of one photo that are very close to a person (one person per photo at most once),
+     * marks them as the matcher's own and puts the people on the photo. True when anything was named.
+     */
+    fun autoName(cache: PhotoCache, edits: EditRepository, photoId: String, rows: List<PhotoCache.FaceRow>, vectors: List<FloatArray>, people: Map<String, List<FloatArray>>): Boolean {
+        if (people.isEmpty()) return false
+        val taken = rows.mapNotNull { it.person?.lowercase() }.toMutableSet()
+        val named = ArrayList<String>()
+        rows.forEachIndexed { i, row ->
+            if (row.person != null) return@forEachIndexed
+            val vector = vectors.getOrNull(i) ?: return@forEachIndexed
+            var bestName: String? = null
+            var best = AUTO
+            for ((name, refs) in people) {
+                if (name.lowercase() in taken) continue
+                val s = score(vector, refs)
+                if (s >= best) { best = s; bestName = name }
+            }
+            bestName?.let { name ->
+                cache.setFacePerson(listOf(row.fid), name, sure = false, how = PhotoCache.HOW_AUTO)
+                taken += name.lowercase()
+                named += name
+            }
+        }
+        if (named.isEmpty()) return false
+        edits.queueForAll(listOf(photoId), null, false, named, false)
+        return true
+    }
+
+    /** [autoName] over photos already read ([photoIds]), with the people as they are now. True when anything was named. */
+    fun nameRecent(cache: PhotoCache, edits: EditRepository, photoIds: List<String>): Boolean {
+        val people = people(cache)
+        if (people.isEmpty()) return false
+        var any = false
+        photoIds.forEach { id ->
+            val faces = cache.facesWithVectors(id)
+            if (faces.isEmpty() || faces.all { it.first.person != null }) return@forEach
+            if (autoName(cache, edits, id, faces.map { it.first }, faces.map { it.second }, people)) any = true
+        }
+        return any
+    }
+
     /** Unnamed faces that look like [person], best first, one per photo. */
     suspend fun candidates(cache: PhotoCache, person: String): List<PhotoCache.FaceRow> = withContext(Dispatchers.Default) {
         val refs = references(cache, person)

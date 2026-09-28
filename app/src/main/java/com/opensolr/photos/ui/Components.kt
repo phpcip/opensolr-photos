@@ -37,6 +37,8 @@ import androidx.compose.ui.res.painterResource
 import com.opensolr.photos.R
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -85,6 +87,34 @@ fun Modifier.tapClickable(enabled: Boolean = true, onClick: () -> Unit): Modifie
         .scale(if (enabled) pressedScale(source) else 1f)
         .background(if (enabled) pressedTint(source) else androidx.compose.ui.graphics.Color.Transparent, Corner)
         .clickable(enabled = enabled, interactionSource = source, indication = androidx.compose.material3.ripple()) { Haptics.tap(view); onClick() }
+}
+
+/** A section inside a zone: a lighter heading with its own chevron, folded until tapped, and remembered. */
+@Composable
+fun SubZone(title: String, open: Boolean, onToggle: () -> Unit, content: @Composable () -> Unit) {
+    val p = LocalPalette.current
+    val view = androidx.compose.ui.platform.LocalView.current
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().clickable { Haptics.tick(view, strong = false); onToggle() }.padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                if (open) Icons.Filled.KeyboardArrowDown else Icons.Filled.KeyboardArrowRight,
+                contentDescription = null, tint = p.accent, modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = p.ink)
+        }
+        androidx.compose.animation.AnimatedVisibility(
+            visible = open,
+            enter = androidx.compose.animation.expandVertically(androidx.compose.animation.core.tween(200)) + androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(200)),
+            exit = androidx.compose.animation.shrinkVertically(androidx.compose.animation.core.tween(160)) + androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(120)),
+        ) {
+            Column(Modifier.padding(start = 26.dp, bottom = 8.dp)) { content() }
+        }
+        HorizontalDivider(color = p.hairline, thickness = 1.dp)
+    }
 }
 
 @Composable
