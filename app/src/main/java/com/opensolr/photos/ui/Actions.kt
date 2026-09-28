@@ -69,8 +69,18 @@ object Actions {
         }
     }
 
-    fun indexPanelUrl(indexName: String): String =
-        "https://opensolr.com/admin/solr_manager/tools/" + Uri.encode(indexName)
+    /** The Opensolr app, which manages the indexes of the account; its product page links every way to install it. */
+    const val OPENSOLR_APP = "com.opensolr.main"
+    const val OPENSOLR_APP_URL = "https://opensolr.com/opensolr-app"
+
+    /** Opens the Opensolr app on [indexName]; false when it is not installed. */
+    fun openInOpensolrApp(context: Context, indexName: String?): Boolean {
+        val launch = context.packageManager.getLaunchIntentForPackage(OPENSOLR_APP) ?: return false
+        launch.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP or android.content.Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        if (!indexName.isNullOrBlank()) launch.putExtra("open_index", indexName)
+        return runCatching { context.startActivity(launch) }.isSuccess
+    }
+
 
     fun openPhoto(context: Context, hit: PhotoHit) {
         val mediaId = when {

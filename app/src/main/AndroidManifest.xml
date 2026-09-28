@@ -22,6 +22,7 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <queries>
+        <package android:name="com.opensolr.main" />
         <intent>
             <action android:name="android.support.customtabs.action.CustomTabsService" />
         </intent>

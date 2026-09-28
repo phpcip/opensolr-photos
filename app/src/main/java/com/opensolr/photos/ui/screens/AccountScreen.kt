@@ -58,6 +58,7 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
     val context = LocalContext.current
     var confirmSignOut by remember { mutableStateOf(false) }
     var discloseLocation by remember { mutableStateOf(false) }
+    var getApp by remember { mutableStateOf(false) }
     val account = state.account
 
     LaunchedEffect(Unit) {
@@ -428,15 +429,29 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                     style = MaterialTheme.typography.bodyMedium, color = p.muted,
                 )
                 Spacer(Modifier.height(14.dp))
-                state.indexName?.let { name ->
-                    GhostButton(stringResource(R.string.acc_open_index), onClick = { Actions.openUrl(context, Actions.indexPanelUrl(name)) }, modifier = Modifier.fillMaxWidth())
-                    Spacer(Modifier.height(10.dp))
-                }
+                // The index is managed, and deleted if wanted, in the Opensolr app, or in the control panel without it.
+                GhostButton(stringResource(R.string.acc_open_index), onClick = {
+                    if (!Actions.openInOpensolrApp(context, state.indexName)) getApp = true
+                }, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(10.dp))
                 GhostButton(stringResource(R.string.acc_sign_out), onClick = { confirmSignOut = true }, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(18.dp))
             }
         }
         Spacer(Modifier.height(40.dp))
+    }
+
+    if (getApp) {
+        AlertDialog(
+            onDismissRequest = { getApp = false },
+            title = { Text(stringResource(R.string.acc_get_app_title)) },
+            text = { Text(stringResource(R.string.acc_get_app_text)) },
+            confirmButton = { TextButton(onClick = { getApp = false; Actions.openUrl(context, Actions.OPENSOLR_APP_URL) }) { Text(stringResource(R.string.acc_get_app_install), color = p.accent) } },
+            dismissButton = { TextButton(onClick = { getApp = false; Actions.openUrl(context, Actions.DASHBOARD_URL) }) { Text(stringResource(R.string.acc_get_app_browser), color = p.ink) } },
+            containerColor = p.paper,
+            titleContentColor = p.ink,
+            textContentColor = p.muted,
+        )
     }
 
     if (confirmSignOut) {

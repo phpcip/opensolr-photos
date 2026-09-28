@@ -144,11 +144,6 @@ private fun DeviceChoiceDialog(state: UiState, viewModel: AppViewModel) {
                     }
                     HorizontalDivider(color = p.hairline)
                 }
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    stringResource(R.string.rt_device_note),
-                    style = MaterialTheme.typography.bodySmall, color = p.muted,
-                )
             }
         },
         containerColor = p.paper,

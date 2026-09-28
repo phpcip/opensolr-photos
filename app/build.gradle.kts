@@ -27,8 +27,8 @@ android {
         applicationId = "com.opensolr.photos"
         minSdk = 26
         targetSdk = 36
-        versionCode = 117
-        versionName = "3.16.2"
+        versionCode = 118
+        versionName = "3.16.3"
         // the face models run natively, on phones (arm)
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
@@ -41,6 +41,8 @@ android {
         }
         create("play") {
             dimension = "store"
+            // Google Play knows the app under its own package name; GitHub installs keep the original one and update in place.
+            applicationId = "com.opensolr.photos.main"
             buildConfigField("boolean", "PLAY_BUILD", "true")
         }
     }
