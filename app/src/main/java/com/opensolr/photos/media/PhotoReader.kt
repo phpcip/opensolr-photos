@@ -88,19 +88,27 @@ object PhotoReader {
      * with tags or a place written into it by any app hashes the same, an edited or cropped one does not.
      */
     fun pixelHash(context: Context, uri: Uri): String? = try {
-        val bitmap = uprightBitmap(context, uri, PIXEL_HASH_EDGE)
-        if (bitmap == null) null else {
+        val big = uprightBitmap(context, uri, FaceEngine.READ_EDGE)
+        if (big == null) null else try { pixelHashOf(big) } finally { big.recycle() }
+    } catch (e: Exception) {
+        null
+    }
+
+    /** The picture hash of an upright decode: always taken from the same reduction, so every path agrees. */
+    fun pixelHashOf(upright: Bitmap): String? = try {
+        val bitmap = scaled(upright, PIXEL_HASH_EDGE)
+        run {
             val w = bitmap.width
             val h = bitmap.height
             val pixels = IntArray(w * h)
             bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
-            bitmap.recycle()
             val digest = java.security.MessageDigest.getInstance("MD5")
             val buffer = java.nio.ByteBuffer.allocate(pixels.size * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN)
             // only the top bits of each channel: a re-save of the same picture must not count as a change
             pixels.forEach { buffer.putInt(it and 0x00F0F0F0) }
             digest.update(byteArrayOf((w shr 8).toByte(), w.toByte(), (h shr 8).toByte(), h.toByte()))
             digest.update(buffer.array())
+            if (bitmap !== upright) bitmap.recycle()
             hex(digest.digest())
         }
     } catch (e: Exception) {
@@ -158,9 +166,62 @@ object PhotoReader {
         return true
     }
 
+    /** What one read of a file gives the sync: the copy for the server, the file md5, the picture hash and the upright image for faces. */
+    class IngestRead(val jpeg: ByteArray, val md5: String, val pixelHash: String?, val upright: Bitmap?)
+
+    /**
+     * The file read once into memory: md5 over its bytes, one decode (upright, long edge [FaceEngine.READ_EDGE])
+     * from which the server copy, the picture hash and the face image are all taken. Null when it cannot be read.
+     */
+    fun readForIngest(context: Context, photo: LocalPhoto, place: com.opensolr.photos.data.PhotoCache.SetPlace? = null): IngestRead? {
+        val bytes = context.contentResolver.openInputStream(photo.uri)?.use { it.readBytes() } ?: return null
+        val md5 = hex(java.security.MessageDigest.getInstance("MD5").digest(bytes))
+        val exif = openExif(context, photo.uri)
+        val upright = decodeUprightBytes(bytes, exif?.rotationDegrees ?: 0, FaceEngine.READ_EDGE) ?: return null
+        val pixelHash = pixelHashOf(upright)
+        val small = scaled(upright, CLIP_EDGE_PX)
+        val out = ByteArrayOutputStream()
+        small.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+        if (small !== upright) small.recycle()
+        val jpeg = withCarriedExif(context, out.toByteArray(), exif, place)
+        return IngestRead(jpeg, md5, pixelHash, upright)
+    }
+
+    /** [bitmap] with its long edge at most [edge] px: the same bitmap when it already is. */
+    private fun scaled(bitmap: Bitmap, edge: Int): Bitmap {
+        val longEdge = max(bitmap.width, bitmap.height)
+        if (longEdge <= edge) return bitmap
+        val scale = edge.toFloat() / longEdge
+        return Bitmap.createScaledBitmap(bitmap, max(1, (bitmap.width * scale).toInt()), max(1, (bitmap.height * scale).toInt()), true)
+    }
+
+    private fun decodeUprightBytes(bytes: ByteArray, rotationDegrees: Int, edge: Int): Bitmap? {
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+        if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+        var sample = 1
+        while (max(bounds.outWidth, bounds.outHeight) / (sample * 2) >= edge) sample *= 2
+        val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, BitmapFactory.Options().apply { inSampleSize = sample }) ?: return null
+        val longEdge = max(decoded.width, decoded.height)
+        val scale = if (longEdge > edge) edge.toFloat() / longEdge else 1f
+        val matrix = Matrix().apply {
+            if (scale != 1f) postScale(scale, scale)
+            if (rotationDegrees != 0) postRotate(rotationDegrees.toFloat())
+        }
+        if (matrix.isIdentity) return decoded
+        val upright = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+        if (upright !== decoded) decoded.recycle()
+        return upright
+    }
+
     fun copyForIngest(context: Context, photo: LocalPhoto, place: com.opensolr.photos.data.PhotoCache.SetPlace? = null): ByteArray? {
         val exif = openExif(context, photo.uri)
         val jpeg = shrinkForClip(context, photo.uri, exif?.rotationDegrees ?: 0) ?: return null
+        return withCarriedExif(context, jpeg, exif, place)
+    }
+
+    /** The server copy with the original's EXIF carried over and the place put in, as the copy always was. */
+    private fun withCarriedExif(context: Context, jpeg: ByteArray, exif: ExifInterface?, place: com.opensolr.photos.data.PhotoCache.SetPlace?): ByteArray {
 
         val placed = place?.takeIf { it.owner || exif == null || usableLatLong(exif) == null }
         if (exif == null && placed == null) return jpeg

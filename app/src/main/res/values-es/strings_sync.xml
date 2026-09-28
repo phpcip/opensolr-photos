@@ -74,4 +74,9 @@
     <string name="fo_delete_failed">No se pudo contactar con el índice. Las fotos siguen en él, ocultas, hasta que lo intentes de nuevo.</string>
     <string name="sync_hidden">Conservadas de carpetas quitadas</string>
     <string name="fo_open_failed">Ninguna app de archivos de este teléfono puede abrir la carpeta.</string>
+    <string name="sy_cannot_read">No se pudieron leer las fotos de este teléfono. No se cambió nada.</string>
+    <string name="sy_restore_refused">%1$s documentos no se pudieron volver a escribir en el índice. Se intentará de nuevo en la próxima sincronización.</string>
+    <string name="sy_missing_many">%1$s fotos indexadas ya no están en este teléfono. No se quitó nada del índice.</string>
+    <string name="sy_remove_missing">Quitar del índice las %1$s fotos que faltan</string>
+    <string name="sy_index_short">El índice contiene %1$s de las %2$s fotos que conoce este teléfono. Reset lo rellena desde la copia del teléfono.</string>
 </resources>

@@ -212,6 +212,8 @@ data class UiState(
     val cachedCount: Int = 0,
 
     val deviceChoices: List<AccountIndex> = emptyList(),
+    /** Indexed photos the last sync found gone from the phone and kept, until the owner says to remove them. */
+    val missingHeld: Int = 0,
 
     val stats: com.opensolr.photos.data.LibraryStats? = null,
     val statsLoading: Boolean = false,
@@ -401,7 +403,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // After a sync, only what it could not have seen justifies another one.
     private fun phoneAheadOfIndex(): Boolean {
-        val local = MediaScanner.scan(context, prefs.folders)
+        val local = MediaScanner.scan(context, prefs.folders) ?: return false
         val known = photoCache.docSizes()
         val skipped = photoCache.skippedSizes()
         if (known.keys.any { it !in local }) return true
@@ -468,6 +470,13 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val found = com.opensolr.photos.search.FaceMatcher.candidates(photoCache, person)
             _state.update { it.copy(faceReview = FaceReview(person, found)) }
         }
+    }
+
+    /** The owner confirms: the photos the last sync found gone from the phone leave the index at the next sync. */
+    fun removeMissingPhotos() {
+        prefs.removeMissingApproved = true
+        _state.update { it.copy(missingHeld = 0) }
+        SyncScheduler.runNow(context)
     }
 
     /** The owner asked for every photo to be read for faces: runs on the charger, in the background, stoppable. */
@@ -2493,7 +2502,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (report == null || report.added > 0 || report.deleted > 0) {
             searches.clearCache()
         }
-        _state.update { it.copy(lastReport = report, account = prefs.account, planWarnings = prefs.account?.let { a -> PlanWatch.evaluate(a) } ?: emptyList(), indexName = prefs.connection?.indexName) }
+        _state.update { it.copy(lastReport = report, account = prefs.account, planWarnings = prefs.account?.let { a -> PlanWatch.evaluate(a) } ?: emptyList(), indexName = prefs.connection?.indexName, missingHeld = prefs.missingHeld) }
         refreshFolderCounts()
         if (report?.status == "sign_in_required") {
             signedOut(prefs.pendingNotice ?: AppText.s(R.string.vm_signed_out))

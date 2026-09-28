@@ -74,4 +74,9 @@
     <string name="fo_delete_failed">L’index n’a pas répondu. Les photos y restent, masquées, jusqu’à ton prochain essai.</string>
     <string name="sync_hidden">Gardées des dossiers retirés</string>
     <string name="fo_open_failed">Aucune app de fichiers de ce téléphone ne peut ouvrir ce dossier.</string>
+    <string name="sy_cannot_read">Les photos de ce téléphone n\'ont pas pu être lues. Rien n\'a été modifié.</string>
+    <string name="sy_restore_refused">%1$s documents n\'ont pas pu être réécrits dans l\'index. Nouvel essai à la prochaine synchronisation.</string>
+    <string name="sy_missing_many">%1$s photos indexées ne sont plus sur ce téléphone. Rien n\'a été retiré de l\'index.</string>
+    <string name="sy_remove_missing">Retirer de l\'index les %1$s photos manquantes</string>
+    <string name="sy_index_short">L\'index contient %1$s des %2$s photos que ce téléphone connaît. Reset le remplit à nouveau depuis la copie du téléphone.</string>
 </resources>

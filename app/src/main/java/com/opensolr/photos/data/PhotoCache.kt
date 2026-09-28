@@ -1057,6 +1057,45 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         return out
     }
 
+    /**
+     * Every photo moved to the id [newIdOf] gives for its document, in every table that keys on it, in one
+     * transaction: the clone keeps everything it had under the new name. How many changed.
+     */
+    fun migrateIds(newIdOf: (json: String) -> String?): Int {
+        val moves = ArrayList<Pair<String, String>>()
+        for (table in listOf("docs", "parked_docs")) {
+            readableDatabase.rawQuery("SELECT id, json FROM $table WHERE json IS NOT NULL", null).use { c ->
+                while (c.moveToNext()) {
+                    val old = c.getString(0)
+                    val new = newIdOf(c.getString(1)) ?: continue
+                    if (new != old) moves += old to new
+                }
+            }
+        }
+        if (moves.isEmpty()) return 0
+        val keyed = listOf(
+            "docs" to "id", "parked_docs" to "id", "doc_words" to "id", "parked_words" to "id", "edits" to "id", "set_places" to "id",
+            "actions" to "id", "skipped" to "id", "incoming" to "id", "word_retries" to "id",
+            "faces" to "photo_id", "face_scanned" to "photo_id", "auto_words" to "photo_id",
+        )
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            moves.forEach { (old, new) ->
+                keyed.forEach { (table, column) -> db.execSQL("UPDATE OR REPLACE $table SET $column = ? WHERE $column = ?", arrayOf(new, old)) }
+                for (table in listOf("docs", "parked_docs")) {
+                    db.execSQL("UPDATE $table SET json = replace(json, ?, ?) WHERE id = ?", arrayOf("\"id\":\"$old\"", "\"id\":\"$new\"", new))
+                }
+            }
+            // the list cache is keyed by the old ids: read again from the documents
+            db.delete("photos", null, null)
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        return moves.size
+    }
+
     /** Faces the owner said are not [person]: never offered for them again. */
     fun rejectFaces(fids: Collection<Long>, person: String) {
         if (fids.isEmpty()) return

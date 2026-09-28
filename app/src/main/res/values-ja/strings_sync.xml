@@ -72,4 +72,9 @@
     <string name="fo_delete_failed">インデックスに接続できませんでした。写真は非表示のまま残り、次回もう一度試せます。</string>
     <string name="sync_hidden">外したフォルダから保持</string>
     <string name="fo_open_failed">このフォルダを開けるファイルアプリがありません。</string>
+    <string name="sy_cannot_read">この端末の写真を読み取れませんでした。何も変更されていません。</string>
+    <string name="sy_restore_refused">%1$s 件のドキュメントをインデックスに書き戻せませんでした。次回の同期で再試行します。</string>
+    <string name="sy_missing_many">インデックス済みの写真 %1$s 枚がこの端末にありません。インデックスからは何も削除していません。</string>
+    <string name="sy_remove_missing">見つからない %1$s 枚をインデックスから削除</string>
+    <string name="sy_index_short">インデックスにはこの端末が知る %2$s 枚のうち %1$s 枚があります。リセットで端末のコピーから復元します。</string>
 </resources>

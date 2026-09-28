@@ -116,6 +116,10 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
                 Spacer(Modifier.height(14.dp))
                 Notice(report.message)
             }
+            if (state.missingHeld > 0) {
+                Spacer(Modifier.height(10.dp))
+                com.opensolr.photos.ui.GhostButton(stringResource(R.string.sy_remove_missing, Actions.formatCount(state.missingHeld.toLong())), onClick = { viewModel.removeMissingPhotos() }, modifier = Modifier.fillMaxWidth())
+            }
             if (report.recreated) {
                 Spacer(Modifier.height(14.dp))
                 Notice(stringResource(R.string.sync_recreated_text), title = stringResource(R.string.sync_recreated_title))

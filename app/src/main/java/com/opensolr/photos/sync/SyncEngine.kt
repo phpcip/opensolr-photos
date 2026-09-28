@@ -124,8 +124,23 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
         prefs.indexChecked = "${connection.indexName}|${IndexManager.CONFIG_VERSION}|${System.currentTimeMillis()}"
     }
 
+    /** The id a clone document gets under the path-inside-the-volume rule, from what the document says of its file. */
+    private fun relativeId(json: String): String? = runCatching {
+        val doc = JSONObject(json)
+        val folder = doc.optString("folder")
+        val name = doc.optString("file_name")
+        if (name.isBlank()) null else MediaScanner.photoId(MediaScanner.folderKey(folder) + name)
+    }.getOrNull()
+
+    /** The clone moved to the path-inside-the-volume ids: once for what the phone holds, and after every read of an index. */
+    private fun migrateIds() {
+        cache.migrateIds(::relativeId)
+        prefs.idsRelative = true
+    }
+
     private suspend fun runOnce(onProgress: suspend (Progress) -> Unit, quick: Boolean): SyncReport {
         val session = prefs.session ?: return report("sign_in_required", message = AppText.s(R.string.sy_sign_in))
+        if (!prefs.idsRelative) migrateIds()
         var localCount = 0
         var indexCount = 0
         var added = 0
@@ -176,7 +191,9 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             onProgress(Progress(AppText.s(R.string.sy_looking), 0, 0))
 
             val foldersBefore = MediaScanner.folderStamp(context, prefs.folders)
+            // Android not answering is not "no photos": nothing is compared, nothing is removed
             val local = MediaScanner.scan(context, prefs.folders)
+                ?: return report("failed", message = AppText.s(R.string.sy_cannot_read))
             localCount = local.size
             onPhone = local.keys
 
@@ -201,6 +218,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                 if (edits.cloneMissing()) {
                     onProgress(Progress(AppText.s(R.string.sy_reading_once), 0, 0))
                     withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { edits.readIndexIntoCache() }
+                    migrateIds()
                 }
                 onProgress(Progress(AppText.s(R.string.sy_resetting), 0, 0))
                 solr.deleteAll()
@@ -211,6 +229,8 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             }
             if (prefs.restoreFromClone) refill = true
             if (refill) {
+                // until every document is back, the next sync starts the refill again (a rewrite is harmless)
+                prefs.restoreFromClone = true
                 withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { restoreFromClone(session, connection, onProgress) }
                 prefs.restoreFromClone = false
                 prefs.cloneComplete = true
@@ -245,14 +265,17 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                 val guessed = newPhotoPlaces(batch, placed.keys)
                 val people = com.opensolr.photos.search.FaceMatcher.people(cache)
                 for (photo in batch) {
-                    val jpeg = try {
-                        PhotoReader.copyForIngest(context, photo, placed[photo.id] ?: guessed[photo.id])
+                    // the file is read once: its bytes give the md5, one decode gives the copy for the server,
+                    // the picture hash and the image the face finder reads
+                    val read = try {
+                        PhotoReader.readForIngest(context, photo, placed[photo.id] ?: guessed[photo.id])
                     } catch (e: CancellationException) {
                         throw e
                     } catch (e: Exception) {
                         null
                     }
-                    if (jpeg == null) {
+                    val jpeg = read?.jpeg
+                    if (jpeg == null || read == null) {
                         // a file that is gone from the disk but still listed by Android (a stale MediaStore row)
                         // is not a photo to keep: the row is dropped, and the next sync takes it out of the index
                         if (!PhotoReader.fileExists(context, photo)) {
@@ -276,14 +299,14 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                     val meaning = if (cleared) null else edits?.meaning ?: xmp?.meaning
                     var names = edits?.persons ?: xmp?.persons ?: emptyList()
                     // the faces, read once here for a new or changed picture, go up with it and stay in the index
-                    val faces = readFaces(photo, people)
+                    val faces = try { readFaces(photo, people, read.upright) } finally { read.upright?.recycle() }
                     if (faces != null && edits == null && names.isEmpty()) {
                         names = cache.facesOf(photo.id).mapNotNull { it.person }.distinctBy { it.lowercase() }
                     }
                     items += IngestItem(
-                        photo, jpeg, tags, meaning, weighed[photo.id] ?: PhotoReader.fileMd5(context, photo), names, resetWording = cleared || photo.id in wordingReset,
+                        photo, jpeg, tags, meaning, weighed[photo.id] ?: read.md5, names, resetWording = cleared || photo.id in wordingReset,
                         ownerTags = edits != null, ownerPersons = edits?.persons != null, ownerMeaning = !edits?.meaning.isNullOrEmpty(),
-                        faces = faces, pixelHash = PhotoReader.pixelHash(context, photo.uri),
+                        faces = faces, pixelHash = read.pixelHash,
                     )
                 }
                 if (items.isNotEmpty()) {
@@ -366,10 +389,22 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
 
             val toDelete = ArrayList<String>(500)
             var indexedIds: Set<String> = emptySet()
+            var indexShort = ""
             if (!rebuilt) {
                 if (edits.cloneMissing()) {
                     onProgress(Progress(AppText.s(R.string.sy_reading_once), 0, 0))
                     withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { edits.readIndexIntoCache() }
+                    migrateIds()
+                }
+                // the index against the clone: an emptied index is filled back from the clone, a short one is reported
+                val inClone = cache.docCount() + cache.parkedCount()
+                val inIndex = withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { solr.count() }
+                if (inIndex == 0L && inClone > 0) {
+                    prefs.restoreFromClone = true
+                    withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { restoreFromClone(session, connection, onProgress) }
+                    prefs.restoreFromClone = false
+                } else if (inIndex < inClone) {
+                    indexShort = AppText.s(R.string.sy_index_short, Actions.formatCount(inIndex), Actions.formatCount(inClone.toLong()))
                 }
                 // a folder added back brings its kept photos back as they were: nothing is read again
                 val roots = com.opensolr.photos.search.SearchFilters.folderRoots(prefs.folders)
@@ -381,11 +416,20 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                 indexCount = known.size
                 onProgress(Progress(AppText.s(R.string.sy_comparing), 0, 0))
 
-                known.keys.filter { it !in local }.forEach { toDelete += it }
+                // many photos gone at once is a phone that cannot see them, not an owner who deleted them:
+                // they stay in the index until the owner says otherwise on the Sync screen
+                val missing = known.keys.filter { it !in local }
+                if (missing.size * 2 > known.size && !prefs.removeMissingApproved) {
+                    prefs.missingHeld = missing.size
+                    shortAllowance = AppText.s(R.string.sy_missing_many, Actions.formatCount(missing.size.toLong()))
+                } else {
+                    prefs.missingHeld = 0
+                    prefs.removeMissingApproved = false
+                    toDelete += missing
+                }
 
                 val waiting = cache.wordRetriesWaiting(System.currentTimeMillis())
 
-                val queuedWords = cache.actions(PhotoCache.ACTION_WORDS).toSet()
                 val toIndex = ArrayList<String>()
                 val needWords = if (!aiAvailable) emptySet() else cache.docsWithoutWords().toSet() - waiting
                 val reread = if (rereadSince > 0) cache.docsIndexedBefore(rereadSince).toSet() else emptySet()
@@ -395,12 +439,6 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
 
                     val changed = stamp == null || stamp.first != photo.sizeBytes ||
                         (stamp.second > 0 && stamp.second != photo.modifiedSec)
-                    val waitingWords = photo.id in queuedWords
-                    if (changed && waitingWords && stamp != null) {
-
-                        cache.updateDocSize(photo.id, photo.sizeBytes, photo.modifiedSec, PhotoReader.fileMd5(context, photo))
-                        return@forEach
-                    }
                     if (changed && stamp != null) {
                         // the file changed: the same picture (its pixels) means only the metadata did, and a photo
                         // is sent again only when the picture itself changed
@@ -477,7 +515,8 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             cache.keepSkippedOnly(local.keys)
             refreshAccount(session, connection)
             var message = ""
-            if (shortAllowance.isNotEmpty()) message = shortAllowance
+            if (indexShort.isNotEmpty()) message = indexShort
+            else if (shortAllowance.isNotEmpty()) message = shortAllowance
             else if (withoutWords > 0) {
 
                 val n = AppText.p(R.plurals.sy_n_photos, withoutWords, Actions.formatCount(withoutWords.toLong()))
@@ -500,6 +539,9 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             commitQuietly()
             return report("waiting_charger", added, deleted, failed, localCount, indexCount,
                 AppText.s(R.string.sy_charger, batteryPercent().toString(), Actions.formatCount(added.toLong()), Actions.formatCount(e.photos.toLong())), recreated)
+        } catch (e: RestoreRefusedException) {
+            commitQuietly()
+            return report("failed", added, deleted, failed, localCount, indexCount, AppText.s(R.string.sy_restore_refused, Actions.formatCount(e.refused.toLong())), recreated)
         } catch (e: RetryLaterException) {
             commitQuietly()
             return report("retry_later", added, deleted, failed, localCount, indexCount, e.message ?: "", recreated)
@@ -580,6 +622,8 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             val onDisk = MediaScanner.existingPaths(context, missing.map { it.third }.filter { it.isNotEmpty() })
             missing.forEach { (id, _, path) -> if (path !in onDisk) gone += id }
         }
+        val parked = cache.parkedCount()
+        if (parked > 0 && gone.size * 2 > parked) return
         gone.chunked(500).forEach { batch ->
             solr.delete(batch)
             cache.dropParked(batch)
@@ -619,10 +663,10 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
      * The faces of a photo about to go up: read now unless this phone already has them for this file, the names
      * the file carries put on them, then the people already known matched. As one string for the index.
      */
-    private fun readFaces(photo: LocalPhoto, people: Map<String, List<FloatArray>>): String? {
+    private fun readFaces(photo: LocalPhoto, people: Map<String, List<FloatArray>>, upright: android.graphics.Bitmap?): String? {
         if (!cache.faceScanned(photo.id, photo.sizeBytes)) {
-            val bitmap = try { PhotoReader.uprightBitmap(context, photo.uri, com.opensolr.photos.media.FaceEngine.READ_EDGE) } catch (e: Exception) { null } ?: return null
-            val found = try { com.opensolr.photos.media.FaceEngine.of(context).analyze(bitmap) } catch (e: Exception) { return null } finally { bitmap.recycle() }
+            val bitmap = upright ?: return null
+            val found = try { com.opensolr.photos.media.FaceEngine.of(context).analyze(bitmap) } catch (e: Exception) { return null }
             com.opensolr.photos.search.FaceMatcher.fromFile(context, cache, photo.uri, cache.putFaces(photo.id, photo.mediaId, photo.sizeBytes, found))
             com.opensolr.photos.search.FaceMatcher.nameOnlyFace(cache, photo.id)
             val stored = cache.facesWithVectors(photo.id)
@@ -663,11 +707,15 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             val docs = batch.map { json ->
                 runCatching { org.json.JSONObject(json).apply { ANSWER_KEYS.forEach { remove(it) } }.toString() }.getOrDefault(json)
             }
-            api.photosRestore(session, connection.indexName, docs)
+            val written = api.photosRestore(session, connection.indexName, docs)
+            val refused = written.count { !it } + (docs.size - written.size).coerceAtLeast(0)
+            if (refused > 0) throw RestoreRefusedException(refused)
             done += batch.size
             onProgress(Progress(AppText.s(R.string.sy_restoring), done, total))
         }
     }
+
+    private class RestoreRefusedException(val refused: Int) : Exception()
 
     private fun batteryPercent(): Int {
         val intent = context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED)) ?: return 100
@@ -737,7 +785,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
 
     companion object {
         private const val RESTORE_BATCH = 50
-        private val ANSWER_KEYS = listOf("status", "msg", "error", "results")
+        private val ANSWER_KEYS = listOf("status", "msg", "error", "results", "score", "_version_")
 
         private const val NEAR_PHOTO_MS = 30 * 60 * 1000L
 

@@ -148,11 +148,15 @@ class EditRepository(private val context: Context) {
             val done = ArrayList<String>(batch.size)
 
             val placed = ArrayList<String>()
+            // a document the index no longer holds is written back from the clone, never read from the file again;
+            // only a photo the clone has nothing for goes up as a new one
+            val rewrite = ArrayList<String>()
             batch.forEachIndexed { index, id ->
                 val answer = results.getOrNull(index)
-                if (answer == null) {
-
-                    cache.queueAction(id, PhotoCache.ACTION_INDEX)
+                if (answer == null || !answer.optBoolean("status")) {
+                    val json = cache.doc(id)?.json
+                    if (answer?.optString("msg") == "NOT_INDEXED" && json != null) rewrite += json
+                    else if (answer == null || answer.optString("msg") == "NOT_INDEXED") cache.queueAction(id, PhotoCache.ACTION_INDEX)
                 } else {
                     places[id]?.let { place ->
                         val got = com.opensolr.photos.search.parseLatLon(answer.optString("location"))
@@ -165,6 +169,11 @@ class EditRepository(private val context: Context) {
             }
             cache.clearActions(done)
             cache.markPlacesSynced(placed)
+            if (rewrite.isNotEmpty()) {
+                val docs = rewrite.map { json -> runCatching { JSONObject(json).apply { ANSWER_KEYS.forEach { remove(it) } }.toString() }.getOrDefault(json) }
+                api.photosRestore(session, connection.indexName, docs)
+                // the words stay queued: the place and the faces go on the rewritten document at the next pass
+            }
 
             done.filter { it in places && it !in placed }.let { if (it.isNotEmpty()) cache.queueActions(it, PhotoCache.ACTION_WORDS) }
             onProgress(written, waiting.size)
@@ -231,6 +240,7 @@ class EditRepository(private val context: Context) {
     private companion object {
 
         const val WORDS_BATCH = 50
+        val ANSWER_KEYS = listOf("status", "msg", "error", "results", "score", "_version_")
 
         const val CLONE_FIELDS = "id,media_id,path,file_name,folder,mime,size_bytes,file_hash," +
             "taken_at,indexed_at,modified_at,year,month,width,height,orientation," +

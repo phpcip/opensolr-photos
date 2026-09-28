@@ -510,10 +510,11 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
             val json = parseObject(text)
             if (!json.optBoolean("status")) throw ServiceException(platformMessage(text))
             val results = json.optJSONArray("results") ?: throw ServiceException("The Opensolr AI service answered without results")
+            // every answer comes back, refused ones too (status false, msg): the caller decides what a refusal means
             val byId = HashMap<String, JSONObject>()
             (0 until results.length()).forEach { i ->
                 val r = results.optJSONObject(i) ?: return@forEach
-                if (r.optBoolean("status")) byId[r.optString("id")] = r
+                byId[r.optString("id")] = r
             }
             items.map { byId[it.id] }
         }

@@ -91,6 +91,21 @@ class AppPrefs(context: Context) {
             prefs.edit().putString(KEY_REPORT, value?.toJson()).commit()
         }
 
+    /** Photo ids follow the path inside the volume (not the mount point) since this was set: the clone was moved over once. */
+    var idsRelative: Boolean
+        get() = prefs.getBoolean("ids_relative", false)
+        set(value) { prefs.edit().putBoolean("ids_relative", value).commit() }
+
+    /** Photos gone from the phone in numbers: the owner said to take them out of the index. */
+    var removeMissingApproved: Boolean
+        get() = prefs.getBoolean("remove_missing_ok", false)
+        set(value) { prefs.edit().putBoolean("remove_missing_ok", value).commit() }
+
+    /** How many indexed photos the last sync found gone from the phone and left in the index, waiting for the owner. */
+    var missingHeld: Int
+        get() = prefs.getInt("missing_held", 0)
+        set(value) { prefs.edit().putInt("missing_held", value).commit() }
+
     /** Reset: the index was emptied and is to be filled again from the local clone at the next sync. */
     var restoreFromClone: Boolean
         get() = prefs.getBoolean("restore_from_clone", false)

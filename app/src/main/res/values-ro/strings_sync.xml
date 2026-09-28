@@ -74,4 +74,9 @@
     <string name="fo_delete_failed">Indexul nu a răspuns. Pozele rămân în el, ascunse, până încerci din nou.</string>
     <string name="sync_hidden">Păstrate din foldere scoase</string>
     <string name="fo_open_failed">Nicio aplicație de fișiere de pe telefon nu poate deschide folderul.</string>
+    <string name="sy_cannot_read">Pozele de pe telefon nu au putut fi citite. Nu s-a schimbat nimic.</string>
+    <string name="sy_restore_refused">%1$s documente nu au putut fi rescrise în index. Se încearcă din nou la următorul sync.</string>
+    <string name="sy_missing_many">%1$s poze indexate nu mai sunt pe telefon. Nu s-a scos nimic din index.</string>
+    <string name="sy_remove_missing">Scoate din index cele %1$s poze lipsă</string>
+    <string name="sy_index_short">Indexul ține %1$s din cele %2$s poze pe care le știe telefonul. Reset îl reface din copia de pe telefon.</string>
 </resources>

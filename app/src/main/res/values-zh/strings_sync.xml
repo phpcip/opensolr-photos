@@ -72,4 +72,9 @@
     <string name="fo_delete_failed">无法连接索引。照片会隐藏保留在其中，直到你再次尝试。</string>
     <string name="sync_hidden">从已移除文件夹保留</string>
     <string name="fo_open_failed">这台手机上没有可以打开此文件夹的文件应用。</string>
+    <string name="sy_cannot_read">无法读取此手机上的照片。未做任何更改。</string>
+    <string name="sy_restore_refused">%1$s 个文档无法写回索引。下次同步时会重试。</string>
+    <string name="sy_missing_many">%1$s 张已索引的照片已不在此手机上。索引中未删除任何内容。</string>
+    <string name="sy_remove_missing">从索引中移除缺失的 %1$s 张照片</string>
+    <string name="sy_index_short">索引中有此手机已知的 %2$s 张照片中的 %1$s 张。重置会从手机副本重新填充。</string>
 </resources>

@@ -35,7 +35,7 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         if (prefs.session == null || prefs.folders.isEmpty()) return Result.success()
         val cache = PhotoCache.of(ctx)
         val edits = EditRepository(ctx)
-        val local = MediaScanner.scan(ctx, prefs.folders)
+        val local = MediaScanner.scan(ctx, prefs.folders) ?: return Result.success()
         cache.dropFacesExcept(local.keys)
         return if (inputData.getBoolean(SCAN_ALL, false)) scanAll(ctx, prefs, cache, edits, local.values) else learn(ctx, cache, edits, local.values)
     }

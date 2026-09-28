@@ -73,4 +73,9 @@
     <string name="fo_delete_failed">The index could not be reached. The photos stay in it, hidden, until you try again.</string>
     <string name="sync_hidden">Kept from removed folders</string>
     <string name="fo_open_failed">No files app on this phone can open this folder.</string>
+    <string name="sy_cannot_read">The photos on this phone could not be read. Nothing was changed.</string>
+    <string name="sy_restore_refused">%1$s documents could not be written back into the index. It is tried again at the next sync.</string>
+    <string name="sy_missing_many">%1$s indexed photos are not on this phone any more. Nothing was removed from the index.</string>
+    <string name="sy_remove_missing">Remove the %1$s missing photos from the index</string>
+    <string name="sy_index_short">The index holds %1$s of the %2$s photos this phone knows. Reset fills it back from this phone\'s copy.</string>
 </resources>

@@ -60,15 +60,16 @@ object MediaScanner {
         folders.map { it.relativePath }.filter { it.startsWith("DCIM/", ignoreCase = true) }.toSet()
             .ifEmpty { setOf("DCIM/") }
 
-    fun scan(context: Context, folders: Set<String>): Map<String, LocalPhoto> {
+    /** The photos in [folders]; null when Android would not answer (permission gone, no volume): nothing is concluded from that. */
+    fun scan(context: Context, folders: Set<String>): Map<String, LocalPhoto>? {
         val prefixes = folders.map { normalizeFolder(it) }
         val result = LinkedHashMap<String, LocalPhoto>()
         if (prefixes.isEmpty()) return result
 
-        query(context, keep = { folder -> prefixes.any { folder.startsWith(it, ignoreCase = true) } }) { row ->
+        val answered = query(context, keep = { folder -> prefixes.any { folder.startsWith(it, ignoreCase = true) } }) { row ->
             result[row.id] = row
         }
-        return result
+        return if (answered) result else null
     }
 
     /** How many photos lie in [folders], without keeping them. */
@@ -169,7 +170,7 @@ object MediaScanner {
 
         keep: ((String) -> Boolean)? = null,
         onRow: (LocalPhoto) -> Unit,
-    ) {
+    ): Boolean {
         val hasRelativePath = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
         val projection = mutableListOf(
             MediaStore.Images.Media._ID,
@@ -195,7 +196,7 @@ object MediaScanner {
             )
         } catch (e: SecurityException) {
             null
-        } ?: return
+        } ?: return false
 
         cursor.use {
             val idCol = it.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
@@ -242,6 +243,7 @@ object MediaScanner {
                 )
             }
         }
+        return true
     }
 
     @Suppress("DEPRECATION")
@@ -298,6 +300,9 @@ object MediaScanner {
         val withSlash = parent.trimEnd('/') + "/"
         return if (withSlash.startsWith(root)) withSlash.removePrefix(root) else withSlash.trimStart('/')
     }
+
+    /** A folder as the id is made of it: relative to the volume, no leading slash, one trailing slash. */
+    fun folderKey(folder: String): String = normalizeFolder(folder)
 
     private fun normalizeFolder(folder: String): String {
         val trimmed = folder.trim().trimStart('/')
