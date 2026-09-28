@@ -32,10 +32,10 @@ data class PhotoFolder(val relativePath: String, val count: Int)
 
 object MediaScanner {
 
-    fun photoId(absolutePath: String): String {
+    fun photoId(relativePath: String): String {
         val digest = MD5.get()!!
         digest.reset()
-        val bytes = digest.digest(absolutePath.toByteArray(Charsets.UTF_8))
+        val bytes = digest.digest(relativePath.toByteArray(Charsets.UTF_8))
 
         val out = CharArray(bytes.size * 2)
         for (i in bytes.indices) {
@@ -224,7 +224,9 @@ object MediaScanner {
                 if (keep != null && !keep(folder)) continue
                 onRow(
                     LocalPhoto(
-                        id = photoId(absolute),
+                        // the id follows the path inside the storage volume, never its mount point: the same
+                        // folders copied to another phone keep every photo's identity in the index
+                        id = photoId(folder + name),
                         mediaId = mediaId,
                         absolutePath = absolute,
                         folder = folder,
