@@ -12,6 +12,7 @@
 | The same 1024 px copy is also read for printed words — vector search plans only | opensolr.com `image_ocr`, then one Opensolr Solr server for the reading itself | No: read in memory on a temporary file that is deleted immediately; the text it produces goes into your index. The reading is cached against the picture's md5 so the same photo is never sent twice |
 | The words you saved on up to 50 photos at a time — their id, tags, people, wording and the file's md5, as text, with no picture attached | api.opensolr.com `photos_words` | No: the server reads each document, puts the words in, makes the vector again and writes it back to your index |
 | Your typed searches | api.opensolr.com `embed` (vector search plans), then your index `/select` | Not by the app; the query goes to your own index like any search on it |
+| The faces found in a photo: frames, the names you gave them and a 128-number fingerprint of each, as text, with no picture attached | Your Opensolr Index (`faces_json`) | Yes, until the photo leaves the phone or you empty the index. Found and measured on the phone; nothing but your phone compares them |
 | Labels, vector, the text printed in the photo, the people, your own tags and wording, the place, EXIF fields, path, folder, file name, size, the file's md5, duplicate keys | Your Opensolr Index | Yes, until the photo leaves the phone or you empty the index |
 | Account email and API key | opensolr.com, with each API call | It is your account |
 
@@ -40,6 +41,9 @@ whenever you tap **Check for updates** on the account screen. The request is una
 nothing about you or your photos.
 
 ## What stays on the phone
+
+- The faces: frames, names and fingerprints for every photo read, the faces you unticked for a person, and
+  which photos were read. Every comparison between faces happens here.
 
 - **The phone's own copy of the index.** It holds every field of every document the index has, except the
   search vector and the duplicate keys: id, path, folder, file name, size, the dates, the camera, the EXIF

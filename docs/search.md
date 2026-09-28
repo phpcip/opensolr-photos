@@ -144,20 +144,38 @@ the place and your tags, so *pixel* or *screenshots* find what you would expect.
 
 ## The people in a photo
 
-If something has already recognised the faces on your photos — Google Photos, Lightroom, digiKam, Apple
-Photos — it writes the names onto the files themselves, in the XMP property `PersonInImage`. The app reads
-them from the file and indexes them as `persons_t`, copied into `text`, so typing a name finds that
-person's photos.
+People are put on a photo by naming a face. Open a photo, tap the face button under it, and every face
+found in it is framed; tap one and give it a name (`ui/FacesPanel`, drawn inside the viewer's window). From
+then on the app looks for that person in the rest of the library: faces that clearly match (`FaceMatcher.AUTO`,
+0.6) get the name on their own, marked as the matcher's guess and never used as a reference; the rest are
+offered under *Is this Anna?* (`FaceMatcher.candidates`, from `SAME` 0.40, ticked in advance from `SURE`
+0.50), with long press and drag to tick many at once. A face left unticked goes to `face_rejects` and is never
+offered for that person again.
 
-Nothing recognises faces here: no face is measured, compared or stored, on the phone or on Opensolr. The
-names are read the way a file name is read, and a photo that carries none is indexed exactly as before.
-Accent folding applies as everywhere else, so a name written with diacritics is found without them and the
-other way round.
+The faces are found and measured on the phone by two models bundled with the app, YuNet (detection) and
+SFace (a 128-float fingerprint per face), converted to TFLite and run with LiteRT (`media/FaceEngine.kt`).
+No picture and no face goes to Opensolr's AI servers for this. The fingerprints, frames and names live in
+the phone's `faces` table (`PhotoCache`) and travel to the owner's own index as `faces_json`
+([index schema](index-schema.md)), so a reinstall or another phone gets them back without reading the
+photos again. Nothing but the phone ever compares them: a person is the set of faces the owner named for
+sure, cleaned of the ones that disagree with the rest (`FaceMatcher.references`), and a face counts as the
+person when it is close to three of them, not to one.
 
-You can add, change or remove the names yourself in **Edit**, under *People*, or add them to many photos at
-once from **Tag** in the selection bar; the names you already use are suggested from the phone's own copy of
-the index, so the list is there at once and costs no request. Two spellings of one
-name (case, diacritics, spaces: `Words.fold` on the phone, `Api_lib::photos_word_key` on the server) are
+New photos have their faces read as they are indexed (`SyncEngine`). Photos indexed before faces existed
+are read once with **Find faces in all photos** in Sync (`FaceWorker` with `SCAN_ALL`): only while charging,
+in short runs, with progress, stoppable. After every sync `FaceWorker` names the newest faces from the people
+known so far.
+
+If something else has already recognised the faces — Google Photos, Lightroom, digiKam, Apple Photos — it
+wrote the names on the files, in the XMP property `PersonInImage`; those names are read too and put on the
+matching faces (`FaceMatcher.fromFile`). The names land in `persons_t`, copied into `text`, and `persons_ss`,
+so typing a name finds that person's photos. Accent folding applies as everywhere else.
+
+People can still be named without a face, in **Edit** under *People* or on many photos at once from
+**Tag** in the selection bar; a photo with one face and one name binds them (`FaceMatcher.nameOnlyFace`,
+`bindTagged`). A name comes off the whole library from the People filter (`unnameFaces`). Two spellings of
+one name (case, diacritics, spaces: `Words.fold` on the phone, `Api_lib::photos_word_key` on the server) are
+
 kept once. They are written into the
 file's XMP (`PhotoReader.writeXmp`, after Android asks once for permission to change the photo), so
 any other app sees them too, and into `persons_t` in the index at once. Names outside ASCII are written

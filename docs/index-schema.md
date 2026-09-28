@@ -34,7 +34,8 @@ APK, so the app always uploads exactly what is in the repository.
 | `labels` | string, multi | The object names the image model found, one by one (none, one or up to five; never a sentence) |
 | `labels_t` | text (`*_t`) | The same labels as one searchable text, written by the server; in the search's `qf` |
 | `custom_tags` | string, multi | The owner's tags; `custom_tags_text` is their tokenised copy for search |
-| `persons_t` | text | The names of the people in the photo, as one line, read from the XMP property `PersonInImage` that whatever recognised the faces wrote on the file. No declared field of its own: it matches the `*_t` dynamic field |
+| `persons_t` | text | The names of the people in the photo, as one line, given by naming a face in the app, or read from the XMP property `PersonInImage` that whatever recognised the faces before wrote on the file. No declared field of its own: it matches the `*_t` dynamic field |
+| `faces_json` | string, stored | The faces the phone found in the photo, as one string: file size they were read from, face model version, and per face its frame, name, whether the owner confirmed it, and its fingerprint. Written and read by phones only; the server checks its shape and never compares anything |
 | `persons_ss` | string, multi | The same names, each kept whole. No declared field of its own: it matches the `*_ss` dynamic field. The People filter and the phone's copy read it; `persons_t` is analysed text and gives words |
 | `embeddings` | dense vector, 1024, cosine | Vector of `meaning`. On a plan without vector search nothing is sent to be read at all, so `meaning`, `labels`, `ocr_t` and `embeddings` all stay empty: the document is date, camera, place, file name and the owner's own words, and search is lexical |
 | `clip_model`, `embed_model` | string | What produced the labels and the vector |

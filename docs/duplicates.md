@@ -81,6 +81,13 @@ rather than `{!term}`, because `size_bytes` is a `plong` and `{!term}` does not 
 
 It opens at stop 0, the loosest one, rather than inheriting wherever the slider was left.
 
+Under a single photo the slider has one more stop before all of the above: **Same faces**
+(`SearchRepository.sameFaces`, `FACES_FIELD`), which asks which photos show the same people. A face with a
+name stands for the person: a photo has them when it names them (`idsWithPerson`) or when one of its faces
+scores as them against the person's references (`FaceMatcher.score` ≥ `SAME`). A face nobody named is looked
+for as itself (≥ `SURE`). Every person of the anchor must be in a result. It is answered entirely from the
+phone's copy, faces table and documents alike, with no request and no cap on the number of results.
+
 The anchor photo is ringed in the grid and labelled *This one*; **Back to search** above the slider leaves
 the view and runs the search that was in force again, with its query and filters (`AppViewModel.backToSearch`
 → `clearDuplicates`). A photo's details are reopened with a long press, as everywhere else. The count line
