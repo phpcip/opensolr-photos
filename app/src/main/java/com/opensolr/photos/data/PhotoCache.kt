@@ -813,25 +813,36 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
     }
 
     /**
-     * The faces of one photo, replacing what it had. A face that sits where a named one sat keeps its name,
-     * so an edited file does not lose who is in it. Returns the rows as stored.
+     * The faces of one photo, replacing what it had. A face that sits where an earlier one sat keeps what the
+     * owner said about it (its name, whether that name is sure, the people it is not), so an edited file or a
+     * better finder never loses who is in the photo. Returns the rows as stored.
      */
     fun putFaces(photoId: String, mediaId: Long, sizeBytes: Long, faces: List<com.opensolr.photos.media.FaceEngine.Face>): List<FaceRow> {
         val db = writableDatabase
         db.beginTransaction()
         try {
-            val before = facesOf(photoId).filter { it.person != null }
+            val before = ArrayList<Triple<FaceRow, Boolean, Long>>()
+            db.rawQuery("SELECT fid, photo_id, media_id, x, y, w, h, person, sure FROM faces WHERE photo_id = ?", arrayOf(photoId)).use { c ->
+                while (c.moveToNext()) before += Triple(FaceRow(c.getLong(0), c.getString(1), c.getLong(2), c.getFloat(3), c.getFloat(4), c.getFloat(5), c.getFloat(6), c.getString(7)), c.getInt(8) == 1, c.getLong(0))
+            }
             db.delete("faces", "photo_id = ?", arrayOf(photoId))
+            val claimed = HashSet<Long>()
             val rows = faces.map { f ->
-                val named = before.maxByOrNull { boxOverlap(it, f) }?.takeIf { boxOverlap(it, f) > 0.5f }?.person
+                val was = before.filter { it.third !in claimed }.maxByOrNull { boxOverlap(it.first, f) }?.takeIf { boxOverlap(it.first, f) > 0.5f }
+                was?.let { claimed += it.third }
+                val named = was?.first?.person
                 val values = ContentValues().apply {
                     put("photo_id", photoId); put("media_id", mediaId); put("x", f.x); put("y", f.y); put("w", f.w); put("h", f.h); put("score", f.score)
                     put("vec", toBytes(f.vector))
                     if (named == null) putNull("person") else put("person", named)
+                    put("sure", if (was == null || was.second) 1 else 0)
                 }
                 val fid = db.insert("faces", null, values)
+                if (was != null) db.execSQL("UPDATE face_rejects SET fid = ? WHERE fid = ?", arrayOf<Any>(fid, was.third))
                 FaceRow(fid, photoId, mediaId, f.x, f.y, f.w, f.h, named)
             }
+            // what was said about faces the new reading no longer finds goes with them
+            before.filter { it.third !in claimed }.forEach { db.delete("face_rejects", "fid = ?", arrayOf(it.third.toString())) }
             db.insertWithOnConflict("face_scanned", null, ContentValues().apply {
                 put("photo_id", photoId); put("size_bytes", sizeBytes); put("faces", faces.size)
             }, SQLiteDatabase.CONFLICT_REPLACE)
@@ -840,6 +851,11 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         } finally {
             db.endTransaction()
         }
+    }
+
+    /** Every photo's faces are read again (a better finder): marks cleared, names and refusals kept by [putFaces]. */
+    fun rereadAllFaces() {
+        writableDatabase.execSQL("UPDATE face_scanned SET size_bytes = -1")
     }
 
     private fun boxOverlap(a: FaceRow, b: com.opensolr.photos.media.FaceEngine.Face): Float {
@@ -858,8 +874,9 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         return out
     }
 
-    fun faceScanned(photoId: String): Boolean =
-        readableDatabase.rawQuery("SELECT 1 FROM face_scanned WHERE photo_id = ?", arrayOf(photoId)).use { it.moveToFirst() }
+    /** Whether the faces of this version of the file ([sizeBytes]) were read with the current finder. */
+    fun faceScanned(photoId: String, sizeBytes: Long): Boolean =
+        readableDatabase.rawQuery("SELECT 1 FROM face_scanned WHERE photo_id = ? AND size_bytes = ?", arrayOf(photoId, sizeBytes.toString())).use { it.moveToFirst() }
 
     /**
      * Names faces (or clears the name with null); a named face is no longer refused for that person. [sure] false

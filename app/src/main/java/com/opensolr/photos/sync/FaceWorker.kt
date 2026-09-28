@@ -4,7 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.os.BatteryManager
-import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
@@ -29,6 +28,12 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val prefs = AppPrefs(ctx)
         if (prefs.session == null || prefs.folders.isEmpty()) return Result.success()
         val cache = PhotoCache.of(ctx)
+        // a better finder reads every photo again, once
+        val sp = ctx.getSharedPreferences("faces", Context.MODE_PRIVATE)
+        if (sp.getInt("engine", 0) < FaceEngine.VERSION) {
+            cache.rereadAllFaces()
+            sp.edit().putInt("engine", FaceEngine.VERSION).apply()
+        }
         val local = MediaScanner.scan(ctx, prefs.folders)
         cache.dropFacesExcept(local.keys)
         val read = cache.faceScannedSizes()
@@ -98,13 +103,12 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         private const val REFERENCES = 64
         private const val WORK = "faces"
         private const val RUN_MS = 8 * 60 * 1000L
-        private const val BATTERY_MIN = 30
+        private const val BATTERY_MIN = 5
         private const val WAIT_MINUTES = 30L
 
         /** Reads what is new; a run already waiting or at work is left alone unless this is its own hand-over. */
         fun next(context: Context, continuation: Boolean = false, delayMinutes: Long = 0) {
             val request = OneTimeWorkRequestBuilder<FaceWorker>()
-                .setConstraints(Constraints.Builder().setRequiresBatteryNotLow(true).build())
                 .apply { if (delayMinutes > 0) setInitialDelay(delayMinutes, TimeUnit.MINUTES) }
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(

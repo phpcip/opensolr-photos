@@ -38,37 +38,59 @@ class FaceEngine private constructor(context: Context) {
     private val faceIn = direct(ALIGN * ALIGN * 3)
     private val printOut = direct(128)
 
-    /** Every face clear enough to recognise in [photo] (upright, long edge ~[READ_EDGE] px). */
+    /**
+     * Every face clear enough to recognise in [photo] (upright, long edge ~[READ_EDGE] px): the finder looks at
+     * the whole photo shrunk to 640 for the large faces, then at 640 px tiles of the photo itself for the small
+     * ones (people further away, group photos), and the two are merged.
+     */
     fun analyze(photo: Bitmap): List<Face> = synchronized(lock) {
         val scale = DETECT_SIZE.toFloat() / max(photo.width, photo.height)
-        val found = detect(letterbox(photo, scale))
+        val all = ArrayList<Found>()
+        detect(letterbox(photo, scale, 0, 0), FACE_MIN_PX * scale).forEach { all += it.scaled(1f / scale, 0f, 0f) }
+        if (max(photo.width, photo.height) > DETECT_SIZE) {
+            for (y0 in tiles(photo.height)) for (x0 in tiles(photo.width)) {
+                detect(letterbox(photo, 1f, x0, y0), FACE_MIN_PX).forEach { all += it.scaled(1f, x0.toFloat(), y0.toFloat()) }
+            }
+        }
+        all.sortByDescending { it.score }
+        val found = ArrayList<Found>()
+        for (f in all) if (found.none { overlap(it, f) > NMS_IOU }) found += f
         found.mapNotNull { f ->
-            // back to the photo's own pixels: the fingerprint is read from the sharper, larger image
-            val points = FloatArray(10) { f.points[it] / scale }
-            val vector = fingerprint(photo, points) ?: return@mapNotNull null
-            val x = f.x / scale
-            val y = f.y / scale
-            val w = f.w / scale
-            val h = f.h / scale
+            val vector = fingerprint(photo, f.points) ?: return@mapNotNull null
             Face(
-                (x / photo.width).coerceIn(0f, 1f), (y / photo.height).coerceIn(0f, 1f),
-                (w / photo.width).coerceIn(0f, 1f), (h / photo.height).coerceIn(0f, 1f),
+                (f.x / photo.width).coerceIn(0f, 1f), (f.y / photo.height).coerceIn(0f, 1f),
+                (f.w / photo.width).coerceIn(0f, 1f), (f.h / photo.height).coerceIn(0f, 1f),
                 f.score, vector,
             )
         }
     }
 
-    private class Found(val x: Float, val y: Float, val w: Float, val h: Float, val score: Float, val points: FloatArray)
+    /** Tile origins covering [size] px with 640 px tiles that overlap, so no face is cut in two by every tile. */
+    private fun tiles(size: Int): List<Int> {
+        if (size <= DETECT_SIZE) return listOf(0)
+        val out = ArrayList<Int>()
+        var at = 0
+        while (at < size - DETECT_SIZE) { out += at; at += TILE_STEP }
+        out += size - DETECT_SIZE
+        return out
+    }
 
-    private fun letterbox(photo: Bitmap, scale: Float): Bitmap {
+    private class Found(val x: Float, val y: Float, val w: Float, val h: Float, val score: Float, val points: FloatArray) {
+        /** Back to the photo's pixels: times [k], then shifted by the tile's origin. */
+        fun scaled(k: Float, dx: Float, dy: Float) =
+            Found(x * k + dx, y * k + dy, w * k, h * k, score, FloatArray(10) { i -> points[i] * k + if (i % 2 == 0) dx else dy })
+    }
+
+    /** A 640x640 frame: the photo times [scale], its ([x0], [y0]) at the frame's corner, black where it ends. */
+    private fun letterbox(photo: Bitmap, scale: Float, x0: Int, y0: Int): Bitmap {
         val out = Bitmap.createBitmap(DETECT_SIZE, DETECT_SIZE, Bitmap.Config.ARGB_8888)
-        val m = Matrix().apply { setScale(scale, scale) }
+        val m = Matrix().apply { setScale(scale, scale); postTranslate(-x0.toFloat(), -y0.toFloat()) }
         Canvas(out).drawBitmap(photo, m, Paint(Paint.FILTER_BITMAP_FLAG))
         return out
     }
 
-    /** YuNet on the 640x640 frame: raw BGR in, anchor-free heads at strides 8/16/32 out, then NMS. */
-    private fun detect(frame: Bitmap): List<Found> {
+    /** YuNet on one 640x640 frame: raw BGR in, anchor-free heads at strides 8/16/32 out, then NMS. */
+    private fun detect(frame: Bitmap, minWidth: Float): List<Found> {
         val n = DETECT_SIZE * DETECT_SIZE
         val pixels = IntArray(n)
         frame.getPixels(pixels, 0, DETECT_SIZE, 0, 0, DETECT_SIZE, DETECT_SIZE)
@@ -103,7 +125,7 @@ class FaceEngine private constructor(context: Context) {
                 val cy = (r + box.get(i * 4 + 1)) * stride
                 val w = exp(box.get(i * 4 + 2)) * stride
                 val h = exp(box.get(i * 4 + 3)) * stride
-                if (w < FACE_MIN_PX) continue
+                if (w < minWidth) continue
                 val points = FloatArray(10) { k -> (kps.get(i * 10 + k) + if (k % 2 == 0) c else r) * stride }
                 candidates += Found(cx - w / 2, cy - h / 2, w, h, score, points)
             }
@@ -173,15 +195,19 @@ class FaceEngine private constructor(context: Context) {
 
     companion object {
         /** The long edge a photo is read at: the finder works at 640, the fingerprint on this sharper copy. */
-        const val READ_EDGE = 1280
+        const val READ_EDGE = 1600
+
+        /** Raised when the finder changes, so every photo is read again. 2 = tiles for small faces. */
+        const val VERSION = 2
 
         private const val DETECT_SIZE = 640
         private const val ALIGN = 112
         private val STRIDES = intArrayOf(8, 16, 32)
         private const val SCORE_MIN = 0.8f
         private const val NMS_IOU = 0.3f
-        /** Smaller faces (at 640) are too blurred to tell people apart and only bring false matches. */
-        private const val FACE_MIN_PX = 32f
+        /** Smaller faces (in the photo read at [READ_EDGE]) are too blurred to tell people apart and only bring false matches. */
+        private const val FACE_MIN_PX = 40f
+        private const val TILE_STEP = 512
         /** Where the eyes, nose tip and mouth corners sit in the 112x112 face SFace was trained on. */
         private val TEMPLATE = floatArrayOf(38.2946f, 51.6963f, 73.5318f, 51.5014f, 56.0252f, 71.7366f, 41.5493f, 92.3655f, 70.7299f, 92.2041f)
 
