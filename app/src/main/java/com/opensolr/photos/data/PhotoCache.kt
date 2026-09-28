@@ -997,8 +997,10 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
                 "SELECT f.fid, f.photo_id, f.media_id, f.x, f.y, f.w, f.h, f.vec FROM faces f WHERE f.fid > ? AND f.person IS NULL " +
                     "AND NOT EXISTS (SELECT 1 FROM face_rejects r WHERE r.fid = f.fid AND r.person = ? COLLATE NOCASE) " +
                     "AND NOT EXISTS (SELECT 1 FROM faces o WHERE o.photo_id = f.photo_id AND o.person = ? COLLATE NOCASE) " +
+                    // a photo already tagged with the person needs nothing: it is never offered again
+                    "AND NOT EXISTS (SELECT 1 FROM doc_words w WHERE w.id = f.photo_id AND w.kind = '$WORD_PERSON' AND w.word = ? COLLATE NOCASE) " +
                     "ORDER BY f.fid LIMIT $page",
-                arrayOf(after.toString(), person, person),
+                arrayOf(after.toString(), person, person, person),
             ).use { c ->
                 while (c.moveToNext()) {
                     rows += FaceRow(c.getLong(0), c.getString(1), c.getLong(2), c.getFloat(3), c.getFloat(4), c.getFloat(5), c.getFloat(6), null) to toFloats(c.getBlob(7))
