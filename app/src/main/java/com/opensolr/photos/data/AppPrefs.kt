@@ -111,6 +111,11 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean("sync_paused", false)
         set(value) { prefs.edit().putBoolean("sync_paused", value).commit() }
 
+    /** How far the refill from the clone got (the last document id written): it goes on from there, never from the start. */
+    var restoreAfter: String
+        get() = prefs.getString("restore_after", "") ?: ""
+        set(value) { prefs.edit().putString("restore_after", value).commit() }
+
     /** Reset: the index was emptied and is to be filled again from the local clone at the next sync. */
     var restoreFromClone: Boolean
         get() = prefs.getBoolean("restore_from_clone", false)

@@ -618,8 +618,8 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
     }
 
     /** Every document of the clone, [batch] at a time, in id order; never all in memory. */
-    fun forEachDocJson(batch: Int, block: suspend (List<String>) -> Unit) = kotlinx.coroutines.runBlocking {
-        var after = ""
+    fun forEachDocJson(batch: Int, from: String = "", block: suspend (docs: List<String>, lastId: String) -> Unit) = kotlinx.coroutines.runBlocking {
+        var after = from
         while (true) {
             val page = ArrayList<String>(batch)
             var last = after
@@ -627,7 +627,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
                 while (c.moveToNext()) { last = c.getString(0); page += c.getString(1) }
             }
             if (page.isEmpty()) return@runBlocking
-            block(page)
+            block(page, last)
             after = last
             if (page.size < batch) return@runBlocking
         }
@@ -655,6 +655,10 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
     fun docCount(): Int =
         readableDatabase.rawQuery("SELECT COUNT(*) FROM docs", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
+    /** How many documents come before and including [id] in id order: where a refill that stopped there stands. */
+    fun docCountUpTo(id: String): Int =
+        readableDatabase.rawQuery("SELECT COUNT(*) FROM docs WHERE id <= ?", arrayOf(id)).use { if (it.moveToFirst()) it.getInt(0) else 0 }
 
     fun docIdsAmong(ids: Collection<String>): Set<String> {
         val out = HashSet<String>()

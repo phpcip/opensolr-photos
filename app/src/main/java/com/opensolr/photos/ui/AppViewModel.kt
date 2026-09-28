@@ -1994,6 +1994,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // starts now. The clone, the source of truth, is not touched and no photo is sent again.
         withContext(Dispatchers.IO) { com.opensolr.photos.net.SolrClient(connection).deleteAll() }
         prefs.restoreFromClone = true
+        prefs.restoreAfter = ""
         searches.clearCache()
         _state.update { it.copy(notice = null, hits = emptyList(), numFound = 0, duplicateGroups = emptyList(), duplicatesMode = false, similarToId = null, similarToHit = null) }
         true

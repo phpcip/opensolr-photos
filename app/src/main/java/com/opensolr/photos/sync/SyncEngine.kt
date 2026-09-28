@@ -222,6 +222,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                 }
                 onProgress(Progress(AppText.s(R.string.sy_resetting), 0, 0))
                 solr.deleteAll()
+                prefs.restoreAfter = ""
                 indexes.applyConfig(session, connection) { onProgress(Progress(it, 0, 0)) }
                 noteIndexChecked(connection)
                 prefs.rebuildApproved = false
@@ -401,6 +402,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                 val inIndex = withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { solr.count() }
                 if (inIndex == 0L && inClone > 0) {
                     prefs.restoreFromClone = true
+                    prefs.restoreAfter = ""
                     withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { restoreFromClone(session, connection, onProgress) }
                     prefs.restoreFromClone = false
                 } else if (inIndex < inClone) {
@@ -713,19 +715,35 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
     /** The emptied index filled again from the local clone, in batches; the server makes the search vector and the place names again. */
     private suspend fun restoreFromClone(session: Session, connection: IndexConnection, onProgress: suspend (Progress) -> Unit) {
         val total = cache.docCount()
-        var done = 0
-        cache.forEachDocJson(RESTORE_BATCH) { batch ->
+        // it goes on from where an earlier run stopped (a refused batch, a lost connection, a stop); a batch is
+        // tried again a few times before the run gives up, and the run is retried at the next sync
+        val from = prefs.restoreAfter
+        var done = if (from.isEmpty()) 0 else cache.docCountUpTo(from)
+        cache.forEachDocJson(RESTORE_BATCH, from) { batch, lastId ->
             if (SyncWorker.stopRequested.get()) throw SyncStoppedException()
             // the clone keeps a document as the server answered it, answer keys included: those are not fields
             val docs = batch.map { json ->
                 runCatching { org.json.JSONObject(json).apply { PhotoCache.ANSWER_KEYS.forEach { remove(it) } }.toString() }.getOrDefault(json)
             }
-            val written = api.photosRestore(session, connection.indexName, docs)
+            var attempt = 0
+            val written = while (true) {
+                try {
+                    break api.photosRestore(session, connection.indexName, docs)
+                } catch (e: ServiceException) {
+                    if (++attempt >= RESTORE_TRIES) throw e
+                    delay(RESTORE_RETRY_MS)
+                } catch (e: java.io.IOException) {
+                    if (++attempt >= RESTORE_TRIES) throw e
+                    delay(RESTORE_RETRY_MS)
+                }
+            }
             val refused = written.count { !it } + (docs.size - written.size).coerceAtLeast(0)
             if (refused > 0) throw RestoreRefusedException(refused)
+            prefs.restoreAfter = lastId
             done += batch.size
             onProgress(Progress(AppText.s(R.string.sy_restoring), done, total))
         }
+        prefs.restoreAfter = ""
     }
 
     private class RestoreRefusedException(val refused: Int) : Exception()
@@ -798,6 +816,8 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
 
     companion object {
         private const val RESTORE_BATCH = 50
+        private const val RESTORE_TRIES = 4
+        private const val RESTORE_RETRY_MS = 8_000L
 
         private const val NEAR_PHOTO_MS = 30 * 60 * 1000L
 
