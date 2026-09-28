@@ -140,10 +140,10 @@
     <string name="dup_kind_words">Mismas %1$s primeras palabras</string>
     <string name="dup_kind_words_camera">Mismas %1$s primeras palabras, misma cámara</string>
     <string-array name="dup_kinds">
+        <item>Mismas caras</item>
+        <item>Mismas 3 primeras palabras, misma cámara</item>
         <item>Misma descripción, misma cámara</item>
         <item>Misma foto (EXIF)</item>
-        <item>Mismo nombre de archivo</item>
-        <item>Mismo tamaño de archivo</item>
         <item>Mismo archivo (copia exacta)</item>
     </string-array>
 </resources>

@@ -2182,7 +2182,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setDuplicateLevel(level: Int) {
-        val first = com.opensolr.photos.search.SearchRepository.FIRST_LIBRARY_LEVEL
+        val first = if (_state.value.similarToId != null) 0 else com.opensolr.photos.search.SearchRepository.FIRST_LIBRARY_LEVEL
         val clamped = level.coerceIn(first, com.opensolr.photos.search.SearchRepository.DUPLICATE_STOPS.size - 1)
         if (clamped == _state.value.duplicateLevel && _state.value.duplicateGroups.isNotEmpty()) return
         _state.update { it.copy(duplicateLevel = clamped) }

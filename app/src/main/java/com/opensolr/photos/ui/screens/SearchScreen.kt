@@ -620,7 +620,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         ) {
             DuplicateLevelSlider(
                 level = state.duplicateLevel,
-                firstStop = com.opensolr.photos.search.SearchRepository.FIRST_LIBRARY_LEVEL,
+                firstStop = if (state.similarToId != null) 0 else com.opensolr.photos.search.SearchRepository.FIRST_LIBRARY_LEVEL,
                 onLevel = { viewModel.setDuplicateLevel(it) },
                 canSelect = state.duplicateGroups.isNotEmpty(),
 
@@ -1643,18 +1643,13 @@ private fun DuplicateLevelSlider(level: Int, firstStop: Int, onLevel: (Int) -> U
     }
 }
 
-// The words stops are named from the number itself; the five after them come from the array.
+// The stops' names, in the order of DUPLICATE_STOPS.
 @Composable
-private fun duplicateKindName(stop: Int): String {
-    val words = com.opensolr.photos.search.SearchRepository.WORD_STOP_COUNT
-    if (stop >= words) return stringArrayResource(R.array.dup_kinds)[(stop - words).coerceIn(0, 4)]
-    val count = com.opensolr.photos.ui.Actions.formatCount((stop / 2 + com.opensolr.photos.search.SearchRepository.WORD_STOPS_MIN).toLong())
-    return stringResource(if (stop % 2 == 0) R.string.dup_kind_words else R.string.dup_kind_words_camera, count)
-}
+private fun duplicateKindName(stop: Int): String = stringArrayResource(R.array.dup_kinds)[stop.coerceIn(0, com.opensolr.photos.search.SearchRepository.DUPLICATE_STOPS.size - 1)]
 
 private const val STOP_SLOP = 0.7f
 
-private val DUPLICATE_EXIF_STOP = com.opensolr.photos.search.SearchRepository.WORD_STOP_COUNT + 1
+private const val DUPLICATE_EXIF_STOP = 3
 
 private val DUPLICATE_LOOSE_LIGHT = Color(0xFF111111)
 private val DUPLICATE_NEUTRAL_LIGHT = Color(0xFF495057)

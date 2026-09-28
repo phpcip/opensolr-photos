@@ -765,6 +765,7 @@ class SearchRepository(private val context: Context) {
     suspend fun similarTo(photoId: String, level: Int, filters: SearchFilters = SearchFilters()): Pair<List<PhotoHit>, List<Int>> {
         val stop = stopOf(level)
         val field = stop.field
+        if (field == FACES_FIELD) return sameFaces(photoId)
         var anchorCamera: String? = null
 
         val keys = try {
@@ -816,6 +817,37 @@ class SearchRepository(private val context: Context) {
         val hits = parse(select(params), false, null).hits.sortedByDescending { it.id == photoId }
         if (hits.isEmpty()) return anchorAlone(photoId)
         return hits to listOf(hits.size)
+    }
+
+    /**
+     * The photos with the same faces as [photoId]: every face of the compared photo must be found (close enough)
+     * among the other photo's faces. Fingerprints and documents both come from the phone's clone: nothing is asked
+     * of the index. The compared photo comes first, the rest by how close they are.
+     */
+    private suspend fun sameFaces(photoId: String): Pair<List<PhotoHit>, List<Int>> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+        val photos = com.opensolr.photos.data.PhotoCache.of(context)
+        val source = photos.facesWithVectors(photoId).map { it.second }
+        if (source.isEmpty()) return@withContext anchorAlone(photoId)
+        val closest = HashMap<String, FloatArray>()
+        photos.forEachFace { page ->
+            for ((row, vector) in page) {
+                if (row.photoId == photoId) continue
+                val best = closest.getOrPut(row.photoId) { FloatArray(source.size) { -1f } }
+                source.forEachIndexed { i, face ->
+                    val s = com.opensolr.photos.media.FaceEngine.similarity(face, vector)
+                    if (s > best[i]) best[i] = s
+                }
+            }
+        }
+        val matched = closest.entries
+            .filter { e -> e.value.all { it >= SAME_FACE } }
+            .sortedByDescending { e -> e.value.average() }
+            .take(SIMILAR_ROWS)
+            .map { it.key }
+        val anchor = photos.doc(photoId)?.json?.let { runCatching { hitOf(JSONObject(it)) }.getOrNull() }
+        val hits = listOfNotNull(anchor) + matched.mapNotNull { id -> photos.doc(id)?.json?.let { runCatching { hitOf(JSONObject(it)) }.getOrNull() } }
+        if (hits.isEmpty()) return@withContext anchorAlone(photoId)
+        hits to listOf(hits.size)
     }
 
     /** The photo being compared, by itself: a stop it has no key for still shows what it is about. */
@@ -1138,25 +1170,19 @@ class SearchRepository(private val context: Context) {
         private const val LEGACY_QF = "meaning^3 text file_name_text folder_text camera_text"
         private const val LEGACY_FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,labels"
 
-        /** The labels a stop groups on: the server writes a key for 2..3 and the slider offers both. */
-        const val WORD_STOPS_MIN = 2
-        const val WORD_STOPS_MAX = 3
-        val WORD_STOP_COUNT = (WORD_STOPS_MAX - WORD_STOPS_MIN + 1) * 2
-
         /** One stop of the slider: the key photos are grouped on, and the field they must also share. */
         data class DuplicateStop(val field: String, val within: String? = null)
 
-        // The stops, in both views, from loose to strict: each words stop has its own "and the same
-        // camera" twin (the camera turns a word pair back into one person photographing one thing),
-        // then the sentence, the EXIF and the three file keys.
-        val DUPLICATE_STOPS = (WORD_STOPS_MIN..WORD_STOPS_MAX).flatMap { k ->
-            listOf(DuplicateStop("dup_w${k}_hash"), DuplicateStop("dup_w${k}_hash", "camera_model"))
-        } + listOf(
+        /** The first stop: the same faces, compared on the phone, offered only when a photo is being compared. */
+        const val FACES_FIELD = "faces"
+
+        // The stops, from loose to strict: the same faces (similar view only), three labels and the same camera,
+        // the sentence, the EXIF, the exact file.
+        val DUPLICATE_STOPS = listOf(
+            DuplicateStop(FACES_FIELD),
+            DuplicateStop("dup_w3_hash", "camera_model"),
             DuplicateStop("dup_desc_hash"),
             DuplicateStop("dup_exif_hash"),
-
-            DuplicateStop("file_name"), DuplicateStop("size_bytes"),
-
             DuplicateStop("file_hash"),
         )
 
@@ -1174,9 +1200,12 @@ class SearchRepository(private val context: Context) {
 
         const val MAX_GROUPS = 2000
 
-        const val FIRST_LIBRARY_LEVEL = 0
+        /** The library's duplicates start after the faces stop: that one needs a photo to compare with. */
+        const val FIRST_LIBRARY_LEVEL = 1
 
         const val DEFAULT_DUPLICATE_LEVEL = FIRST_LIBRARY_LEVEL
+        /** A face this close to one of the compared photo's faces is the same person. */
+        const val SAME_FACE = com.opensolr.photos.search.FaceMatcher.SURE
 
         const val GROUPS_PAGE = 20
 

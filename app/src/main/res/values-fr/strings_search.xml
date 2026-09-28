@@ -140,10 +140,10 @@
     <string name="dup_kind_words">%1$s premiers mots identiques</string>
     <string name="dup_kind_words_camera">%1$s premiers mots identiques, même appareil</string>
     <string-array name="dup_kinds">
+        <item>Mêmes visages</item>
+        <item>Mêmes 3 premiers mots, même appareil</item>
         <item>Même description, même appareil</item>
         <item>Même photo (EXIF)</item>
-        <item>Même nom de fichier</item>
-        <item>Même taille de fichier</item>
         <item>Même fichier (copie exacte)</item>
     </string-array>
 </resources>

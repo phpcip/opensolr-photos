@@ -1160,7 +1160,24 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         return true
     }
 
-    /** Faces the owner said are not [person]: never offered for them again. */
+    /** Every face on the phone with its fingerprint, in pages (id order), never all in memory at once. */
+    fun forEachFace(page: Int = FACE_PAGE, block: (List<Pair<FaceRow, FloatArray>>) -> Unit) {
+        var after = 0L
+        while (true) {
+            val rows = ArrayList<Pair<FaceRow, FloatArray>>(page)
+            readableDatabase.rawQuery("SELECT fid, photo_id, media_id, x, y, w, h, person, vec FROM faces WHERE fid > ? ORDER BY fid LIMIT $page", arrayOf(after.toString())).use { c ->
+                while (c.moveToNext()) {
+                    rows += FaceRow(c.getLong(0), c.getString(1), c.getLong(2), c.getFloat(3), c.getFloat(4), c.getFloat(5), c.getFloat(6), c.getString(7)) to toFloats(c.getBlob(8))
+                }
+            }
+            if (rows.isEmpty()) return
+            block(rows)
+            after = rows.last().first.fid
+            if (rows.size < page) return
+        }
+    }
+
+
     fun rejectFaces(fids: Collection<Long>, person: String) {
         if (fids.isEmpty()) return
         val db = writableDatabase
