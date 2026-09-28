@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -73,13 +74,14 @@ import com.opensolr.photos.ui.theme.LocalPalette
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-/** Frames on the faces of the photo on screen, following its zoom; a tap on one names it. */
+/** Frames on the faces of the photo on screen, following its zoom; a tap on one names it. Names live in [FaceStrip]. */
 @Composable
 internal fun FaceBoxes(
     baseSize: Size?,
     faces: List<PhotoCache.FaceRow>,
     scale: () -> Float,
     offset: () -> Offset,
+    highlight: Long?,
     onTap: (PhotoCache.FaceRow) -> Unit,
 ) {
     val size = baseSize ?: return
@@ -100,35 +102,57 @@ internal fun FaceBoxes(
             val y = top + f.y * size.height * fit
             val bw = f.w * size.width * fit
             val bh = f.h * size.height * fit
-            val named = f.person != null
+            val lit = f.fid == highlight
             Box(
                 Modifier
                     .offset { androidx.compose.ui.unit.IntOffset(x.roundToInt(), y.roundToInt()) }
                     .size(with(density) { bw.toDp() }, with(density) { bh.toDp() })
-                    .border(2.dp, if (named) Color.White else Color(0xFFC05520), RoundedCornerShape(2.dp))
+                    .border(if (lit) 3.dp else 2.dp, if (lit) Color(0xFFC05520) else if (f.person != null) Color.White else Color(0xFFC05520), RoundedCornerShape(2.dp))
+                    .background(if (lit) Color(0x33C05520) else Color.Transparent, RoundedCornerShape(2.dp))
                     .tapClickable { onTap(f) },
-            )
-            Text(
-                f.person ?: "?",
-                color = Color.White,
-                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    // under the face, but never past the edges of the photo's area
-                    .layout { measurable, c ->
-                        val placeable = measurable.measure(c.copy(minWidth = 0, maxWidth = w.roundToInt()))
-                        val px = x.roundToInt().coerceIn(0, maxOf(0, w.roundToInt() - placeable.width))
-                        val py = ((y + bh).roundToInt() + 4).coerceIn(0, maxOf(0, h.roundToInt() - placeable.height))
-                        layout(placeable.width, placeable.height) { placeable.place(px, py) }
-                    }
-                    .background(Color(0xCC000000), RoundedCornerShape(2.dp))
-                    .tapClickable { onTap(f) }
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
             )
         }
     }
 }
+
+/**
+ * The people in the photo as a row of cut-out faces with their names, left to right as in the photo: nothing is
+ * written over the photo, and in a group photo it is clear which face a name belongs to.
+ */
+@Composable
+internal fun FaceStrip(faces: List<PhotoCache.FaceRow>, highlight: Long?, onTap: (PhotoCache.FaceRow) -> Unit, modifier: Modifier = Modifier) {
+    val p = LocalPalette.current
+    androidx.compose.foundation.lazy.LazyRow(
+        modifier = modifier.fillMaxWidth(),
+        contentPadding = PaddingValues(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        items(faces.sortedBy { it.x }.size) { i ->
+            val f = faces.sortedBy { it.x }[i]
+            val lit = f.fid == highlight
+            Column(
+                Modifier.width(STRIP_FACE + 16.dp).tapClickable { onTap(f) },
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                Box(
+                    Modifier.size(STRIP_FACE).clip(RoundedCornerShape(2.dp))
+                        .border(if (lit) 3.dp else 1.dp, if (lit) Color(0xFFC05520) else if (f.person != null) Color.White else Color(0xFFC05520), RoundedCornerShape(2.dp)),
+                ) { FaceThumb(f) }
+                Text(
+                    f.person ?: "?",
+                    color = Color.White,
+                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+        }
+    }
+}
+
+private val STRIP_FACE = 56.dp
 
 /** Names a face: type or pick a person; a named face can lose its name or look for the person elsewhere. */
 @Composable
@@ -150,6 +174,8 @@ internal fun FaceNameDialog(
         text = {
             com.opensolr.photos.ui.HideStatusBar()
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                // the face being named, so there is no doubt which one it is
+                Box(Modifier.size(96.dp).clip(RoundedCornerShape(2.dp)).border(1.dp, p.hairline, RoundedCornerShape(2.dp))) { FaceThumb(face) }
                 com.opensolr.photos.ui.TextBox(
                     value = typed,
                     onValueChange = { typed = it },
@@ -246,7 +272,7 @@ internal fun FaceReviewPanel(review: FaceReview, topPad: androidx.compose.ui.uni
 
 /** The face cut out of its photo, read just large enough to be sharp. */
 @Composable
-private fun FaceThumb(f: PhotoCache.FaceRow) {
+internal fun FaceThumb(f: PhotoCache.FaceRow) {
     val context = LocalContext.current
     val request = remember(f.fid) {
         val edge = (THUMB_PX / max(f.w, 0.01f)).roundToInt().coerceIn(256, 2048)

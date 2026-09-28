@@ -2388,6 +2388,7 @@ internal fun PhotoViewer(
     var facesOn by remember { mutableStateOf(false) }
     var faces by remember { mutableStateOf<List<com.opensolr.photos.data.PhotoCache.FaceRow>?>(null) }
     var faceToName by remember { mutableStateOf<com.opensolr.photos.data.PhotoCache.FaceRow?>(null) }
+    var faceLit by remember { mutableStateOf<Long?>(null) }
     var facesVersion by remember { mutableIntStateOf(0) }
     val viewerState by viewModel.state.collectAsState()
     LaunchedEffect(facesOn, pager.currentPage, facesVersion, hits.size) {
@@ -2581,7 +2582,7 @@ internal fun PhotoViewer(
                     lift = { if (page == pager.currentPage) dismiss.value else 0f },
                 )
                 if (facesOn && page == pager.currentPage) {
-                    faces?.let { shown -> FaceBoxes(baseSize, shown, { scale }, { offset }) { faceToName = it } }
+                    faces?.let { shown -> FaceBoxes(baseSize, shown, { scale }, { offset }, faceLit) { faceLit = it.fid; faceToName = it } }
                 }
                 }
             }
@@ -2663,28 +2664,32 @@ internal fun PhotoViewer(
             // composed inside the viewer's window, so the choice shows above the photo
             viewerShare?.let { one -> com.opensolr.photos.ui.ShareChooser(listOf(one), fullScreen = true) { viewerShare = null } }
 
-            // what the face finder saw, or that it is still looking
+            // what the face finder saw: the people as a strip of faces with their names, or that it is still looking
             if (facesOn && showActions) {
-                val note = when {
-                    faces == null -> stringResource(R.string.fc_reading)
-                    faces.isNullOrEmpty() -> stringResource(R.string.fc_no_faces)
-                    else -> stringResource(R.string.fc_tap)
+                val shown = faces
+                if (!shown.isNullOrEmpty()) {
+                    FaceStrip(
+                        shown, faceLit,
+                        onTap = { faceLit = it.fid; faceToName = it },
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = maxOf(topInset, 24.dp) + 8.dp),
+                    )
+                } else {
+                    Text(
+                        stringResource(if (shown == null) R.string.fc_reading else R.string.fc_no_faces), color = Color.White, style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = maxOf(topInset, 24.dp) + 8.dp)
+                            .background(Color(0xCC000000), androidx.compose.foundation.shape.RoundedCornerShape(2.dp)).padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
                 }
-                Text(
-                    note, color = Color.White, style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = maxOf(topInset, 24.dp) + 8.dp)
-                        .background(Color(0xCC000000), androidx.compose.foundation.shape.RoundedCornerShape(2.dp)).padding(horizontal = 12.dp, vertical = 6.dp),
-                )
             }
             faceToName?.let { face ->
                 val hit = hits.firstOrNull { it.id == face.photoId }
                 FaceNameDialog(
                     face = face,
                     suggest = { typed -> viewModel.personSuggestions(typed, emptyList()) },
-                    onSave = { name -> faceToName = null; if (hit != null) viewModel.nameFace(hit, face, name) { facesVersion++ } },
-                    onClear = { faceToName = null; if (hit != null) viewModel.nameFace(hit, face, null) { facesVersion++ } },
+                    onSave = { name -> faceToName = null; faceLit = null; if (hit != null) viewModel.nameFace(hit, face, name) { facesVersion++ } },
+                    onClear = { faceToName = null; faceLit = null; if (hit != null) viewModel.nameFace(hit, face, null) { facesVersion++ } },
                     onFindMore = { name -> faceToName = null; viewModel.reviewPerson(name) },
-                    onDismiss = { faceToName = null },
+                    onDismiss = { faceToName = null; faceLit = null },
                 )
             }
             viewerState.faceReview?.let { review ->
