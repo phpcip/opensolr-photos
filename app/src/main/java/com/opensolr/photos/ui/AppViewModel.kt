@@ -2174,9 +2174,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun showSimilar(hit: PhotoHit) {
+        // the comparison is about the photo alone: whatever was typed or filtered before is dropped
         _state.update {
-
-            it.copy(screen = Screen.Search, duplicatesMode = true, duplicateLevel = 0, similarToId = hit.id, similarToHit = hit)
+            it.copy(
+                screen = Screen.Search, duplicatesMode = true, duplicateLevel = 0, similarToId = hit.id, similarToHit = hit,
+                query = "", searchedQuery = "", filters = com.opensolr.photos.search.SearchFilters(), suggestions = emptyList(),
+            )
         }
         loadDuplicates(debounceMs = 0)
     }
