@@ -461,9 +461,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** Every other photo where [person] seems to be, for the owner to confirm. */
     fun reviewPerson(person: String) {
         viewModelScope.launch {
+            // the panel opens over the viewer either way: with nothing found it says so where the owner is looking
             val found = com.opensolr.photos.search.FaceMatcher.candidates(photoCache, person)
-            if (found.isEmpty()) flash(AppText.s(R.string.fc_none, person))
-            else _state.update { it.copy(faceReview = FaceReview(person, found)) }
+            _state.update { it.copy(faceReview = FaceReview(person, found)) }
         }
     }
 

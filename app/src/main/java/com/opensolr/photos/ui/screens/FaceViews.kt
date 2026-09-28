@@ -233,6 +233,9 @@ internal fun FaceReviewPanel(review: FaceReview, topPad: androidx.compose.ui.uni
             var dragBase by remember(review) { mutableStateOf(chosen) }
             var dragUntick by remember(review) { mutableStateOf(false) }
             Box(Modifier.weight(1f)) {
+            if (review.faces.isEmpty()) {
+                Text(stringResource(R.string.fc_none, review.person), style = MaterialTheme.typography.bodyMedium, color = p.ink, modifier = Modifier.padding(horizontal = 16.dp))
+            } else
             LazyVerticalGrid(
                 state = grid,
                 columns = GridCells.Fixed(3),
@@ -274,11 +277,11 @@ internal fun FaceReviewPanel(review: FaceReview, topPad: androidx.compose.ui.uni
                     }
                 }
             }
-            GridScroller(grid, review.faces.size, 3)
+            if (review.faces.isNotEmpty()) GridScroller(grid, review.faces.size, 3)
             }
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 GhostButton(stringResource(R.string.cancel), onClick = onDismiss, modifier = Modifier.weight(1f))
-                AccentButton(
+                if (review.faces.isNotEmpty()) AccentButton(
                     pluralStringResource(R.plurals.fc_add, chosen.size, Actions.formatCount(chosen.size.toLong())),
                     onClick = { onConfirm(chosen) },
                     enabled = chosen.isNotEmpty(),
