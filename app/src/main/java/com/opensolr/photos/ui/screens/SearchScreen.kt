@@ -727,7 +727,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 state = gridState,
                 modifier = Modifier.fillMaxSize().dragSelect(
                     gridState = gridState,
-                    rowsNow = { currentRows },
+                    idAt = { (currentRows.getOrNull(it) as? GridRow.Photo)?.hit?.id },
                     onStart = { id -> Haptics.tick(view, strong = true); viewModel.beginDragSelect(id) },
                     onRange = { ids, felt -> if (felt) Haptics.tick(view, strong = false); viewModel.dragSelectTo(ids) },
                     onEnd = { movedAway -> viewModel.endDragSelect(movedAway) },
@@ -3156,11 +3156,12 @@ internal fun headingStyle(level: Int): androidx.compose.ui.text.TextStyle =
         else -> MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp)
     }
 
-private fun Modifier.dragSelect(
+/** Long press on a grid cell, then drag: every cell between the first and the finger is selected, the grid scrolling at the edges. */
+internal fun <T : Any> Modifier.dragSelect(
     gridState: androidx.compose.foundation.lazy.grid.LazyGridState,
-    rowsNow: () -> List<GridRow>,
-    onStart: (String) -> Unit,
-    onRange: (List<String>, Boolean) -> Unit,
+    idAt: (Int) -> T?,
+    onStart: (T) -> Unit,
+    onRange: (List<T>, Boolean) -> Unit,
     onEnd: (Boolean) -> Unit,
 ): Modifier = composed {
     val scope = rememberCoroutineScope()
@@ -3182,15 +3183,14 @@ private fun Modifier.dragSelect(
         return items.lastOrNull { it.offset.y <= point.y }?.index ?: items.first().index
     }
 
-    fun idsTo(point: Offset): List<String>? {
+    fun idsTo(point: Offset): List<T>? {
         val anchor = anchorIndex.value ?: return null
         val here = rowIndexAt(point) ?: return null
-        val rows = rowsNow()
         val from = minOf(anchor, here).coerceAtLeast(0)
-        val to = maxOf(anchor, here).coerceAtMost(rows.lastIndex)
+        val to = maxOf(anchor, here)
         if (from > to) return null
 
-        return (from..to).mapNotNull { (rows.getOrNull(it) as? GridRow.Photo)?.hit?.id }
+        return (from..to).mapNotNull { idAt(it) }
     }
 
     this.pointerInput(Unit) {
@@ -3209,7 +3209,7 @@ private fun Modifier.dragSelect(
             }
             if (left != null) return@awaitEachGesture
             val startIndex = rowIndexAt(down.position) ?: return@awaitEachGesture
-            val startId = (rowsNow().getOrNull(startIndex) as? GridRow.Photo)?.hit?.id ?: return@awaitEachGesture
+            val startId = idAt(startIndex) ?: return@awaitEachGesture
             anchorIndex.value = startIndex
             at.value = down.position
             onStart(startId)

@@ -228,11 +228,29 @@ internal fun FaceReviewPanel(review: FaceReview, topPad: androidx.compose.ui.uni
                 Text(stringResource(R.string.fc_lead, review.person), style = MaterialTheme.typography.bodyMedium, color = p.muted, modifier = Modifier.padding(top = 6.dp, bottom = 10.dp))
             }
             val grid = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
+            val view = androidx.compose.ui.platform.LocalView.current
+            // long press then drag: the faces swept over are ticked, or unticked when the first one was ticked
+            var dragBase by remember(review) { mutableStateOf(chosen) }
+            var dragUntick by remember(review) { mutableStateOf(false) }
             Box(Modifier.weight(1f)) {
             LazyVerticalGrid(
                 state = grid,
                 columns = GridCells.Fixed(3),
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().dragSelect(
+                    gridState = grid,
+                    idAt = { review.faces.getOrNull(it)?.fid },
+                    onStart = { fid ->
+                        com.opensolr.photos.ui.Haptics.tick(view, strong = true)
+                        dragBase = chosen
+                        dragUntick = fid in chosen
+                        chosen = if (dragUntick) chosen - fid else chosen + fid
+                    },
+                    onRange = { fids, felt ->
+                        if (felt) com.opensolr.photos.ui.Haptics.tick(view, strong = false)
+                        chosen = if (dragUntick) dragBase - fids.toSet() else dragBase + fids
+                    },
+                    onEnd = { },
+                ),
                 contentPadding = PaddingValues(horizontal = 12.dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
