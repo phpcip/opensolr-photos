@@ -253,6 +253,13 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                         null
                     }
                     if (jpeg == null) {
+                        // a file that is gone from the disk but still listed by Android (a stale MediaStore row)
+                        // is not a photo to keep: the row is dropped, and the next sync takes it out of the index
+                        if (!PhotoReader.fileExists(context, photo)) {
+                            android.media.MediaScannerConnection.scanFile(context, arrayOf(photo.absolutePath), null, null)
+                            cache.removeIncoming(listOf(photo.id))
+                            continue
+                        }
                         cache.markSkipped(photo, PhotoReader.unreadableReason(context, photo))
                         cache.removeIncoming(listOf(photo.id))
                         failed++

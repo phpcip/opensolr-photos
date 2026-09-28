@@ -236,6 +236,13 @@ object PhotoReader {
         return lat to lon
     }
 
+    /** Whether the photo's file can be opened at all (false for a MediaStore row whose file was deleted). */
+    fun fileExists(context: Context, photo: LocalPhoto): Boolean = try {
+        context.contentResolver.openInputStream(photo.uri)?.use { true } ?: false
+    } catch (e: Exception) {
+        false
+    }
+
     fun unreadableReason(context: Context, photo: LocalPhoto): String {
         if (photo.sizeBytes <= 0L) return AppText.s(R.string.md_empty)
         val opened = try {
