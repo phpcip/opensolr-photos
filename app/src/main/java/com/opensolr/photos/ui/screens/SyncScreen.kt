@@ -27,6 +27,8 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -107,8 +109,10 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
             SectionLabel(stringResource(R.string.sync_last))
             InfoRow(stringResource(R.string.sync_finished), Actions.formatDate(report.finishedAt))
             InfoRow(stringResource(R.string.sync_result), resultLabel(report.status))
-            InfoRow(stringResource(R.string.sync_photos_folders), Actions.formatCount(report.localCount.toLong()))
-            InfoRow(stringResource(R.string.sync_photos_index), Actions.formatCount(report.indexAfter.toLong()))
+            // read now, so a folder change shows at once instead of after the next sync
+            InfoRow(stringResource(R.string.sync_photos_folders), Actions.formatCount((state.liveFolderCount ?: report.localCount).toLong()))
+            InfoRow(stringResource(R.string.sync_photos_index), Actions.formatCount((state.liveIndexCount ?: report.indexAfter).toLong()))
+            if (state.parkedCount > 0) InfoRow(stringResource(R.string.sync_hidden), Actions.formatCount(state.parkedCount.toLong()))
             if (report.message.isNotBlank()) {
                 Spacer(Modifier.height(14.dp))
                 Notice(report.message)
@@ -164,7 +168,30 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
         Spacer(Modifier.height(28.dp))
 
         SectionLabel(stringResource(R.string.sync_folders))
-        state.selectedFolders.sorted().forEach { InfoRow(it.trimEnd('/').ifBlank { "/" }, "") }
+        val context = androidx.compose.ui.platform.LocalContext.current
+        com.opensolr.photos.search.SearchFilters.folderRoots(state.selectedFolders).forEach { root ->
+            FolderRow(root) { Actions.openFolder(context, root) }
+            // the folders with photos inside it, each with its full path and count
+            val inside = state.indexedFolders.filter { it.relativePath.startsWith(root, ignoreCase = true) && !it.relativePath.equals(root, ignoreCase = true) }
+            if (inside.isNotEmpty()) {
+                var open by androidx.compose.runtime.saveable.rememberSaveable(root) { mutableStateOf(false) }
+                Row(
+                    Modifier.fillMaxWidth().tapClickable { open = !open }.padding(start = 12.dp, top = 10.dp, bottom = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        androidx.compose.ui.res.pluralStringResource(R.plurals.sync_n_folders, inside.size, Actions.formatCount(inside.size.toLong())),
+                        style = MaterialTheme.typography.bodySmall, color = p.accent, modifier = Modifier.weight(1f),
+                    )
+                    Icon(
+                        if (open) androidx.compose.material.icons.Icons.Filled.KeyboardArrowUp else androidx.compose.material.icons.Icons.Filled.KeyboardArrowDown,
+                        contentDescription = null, tint = p.accent, modifier = Modifier.size(20.dp),
+                    )
+                }
+                HorizontalDivider(color = p.hairline, thickness = 1.dp)
+                if (open) inside.forEach { f -> SubFolderRow(f) { Actions.openFolder(context, f.relativePath) } }
+            }
+        }
         Spacer(Modifier.height(14.dp))
         GhostButton(stringResource(R.string.sync_change_folders), onClick = { viewModel.openFolders(Screen.Sync) }, modifier = Modifier.fillMaxWidth())
         Spacer(Modifier.height(40.dp))
@@ -262,4 +289,46 @@ private fun resultLabel(status: String): String = when (status) {
     "waiting_charger" -> stringResource(R.string.rs_charger)
     "retry_later" -> stringResource(R.string.rs_retry)
     else -> stringResource(R.string.rs_failed)
+}
+
+/** An indexed folder: its name, the full path under it; a tap opens it in the phone's files app. */
+@Composable
+private fun FolderRow(relative: String, onOpen: () -> Unit) {
+    val p = LocalPalette.current
+    val trimmed = relative.trim('/')
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().tapClickable(onClick = onOpen).padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(trimmed.substringAfterLast('/').ifBlank { "/" }, style = MaterialTheme.typography.bodyMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold), color = p.ink)
+                Text(Actions.fullFolderPath(relative), style = MaterialTheme.typography.bodySmall, color = p.muted)
+            }
+            Icon(painterResource(R.drawable.ic_open), contentDescription = null, tint = p.accent, modifier = Modifier.size(18.dp))
+        }
+        HorizontalDivider(color = p.hairline, thickness = 1.dp)
+    }
+}
+
+/** A folder with photos inside an indexed one: full path and how many photos, indented; a tap opens it. */
+@Composable
+private fun SubFolderRow(folder: com.opensolr.photos.media.PhotoFolder, onOpen: () -> Unit) {
+    val p = LocalPalette.current
+    Column(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.fillMaxWidth().tapClickable(onClick = onOpen).padding(start = 12.dp, top = 10.dp, bottom = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(Actions.fullFolderPath(folder.relativePath), style = MaterialTheme.typography.bodySmall, color = p.ink)
+                Text(
+                    androidx.compose.ui.res.pluralStringResource(R.plurals.ob_n_photos, folder.count, Actions.formatCount(folder.count.toLong())),
+                    style = MaterialTheme.typography.bodySmall, color = p.muted,
+                )
+            }
+            Icon(painterResource(R.drawable.ic_open), contentDescription = null, tint = p.accent, modifier = Modifier.size(16.dp))
+        }
+        HorizontalDivider(color = p.hairline, thickness = 1.dp)
+    }
 }

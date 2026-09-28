@@ -38,6 +38,8 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         db.execSQL(SET_PLACES_TABLE)
         db.execSQL(INCOMING_TABLE)
         db.execSQL(INCOMING_TAKEN_INDEX)
+        db.execSQL(PARKED_DOCS_TABLE)
+        db.execSQL(PARKED_WORDS_TABLE)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -131,6 +133,10 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         if (oldVersion < 21) {
             // places the app used to guess for new photos: kept for the index, never written into the files
             db.execSQL("UPDATE set_places SET written = 1 WHERE owner = 0")
+        }
+        if (oldVersion < 22) {
+            db.execSQL(PARKED_DOCS_TABLE)
+            db.execSQL(PARKED_WORDS_TABLE)
         }
     }
 
@@ -712,6 +718,78 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         writableDatabase.execSQL("UPDATE docs SET json = ? WHERE id = ?", arrayOf<Any>(updated, id))
     }
 
+    /**
+     * Photos of folders taken out of indexing but kept in the index: their rows leave the local clone for
+     * the parked tables, so nothing on the phone lists them, and come back as they were when the folder is
+     * added again. [roots] are the folders still indexed ("DCIM/", "Pictures/Trips/"). Returns how many moved.
+     */
+    fun parkOutside(roots: List<String>): Int = move("docs", "doc_words", "parked_docs", "parked_words", roots, inside = false)
+
+    /** Parked photos under [roots] back into the local clone. Returns how many came back. */
+    fun unparkInside(roots: List<String>): Int = move("parked_docs", "parked_words", "docs", "doc_words", roots, inside = true)
+
+    /** Ids of the photos in the local clone that lie outside [roots]. */
+    fun docIdsOutside(roots: List<String>): List<String> {
+        val (where, args) = underRoots(roots)
+        val out = ArrayList<String>()
+        readableDatabase.rawQuery("SELECT id FROM docs WHERE folder IS NOT NULL AND NOT ($where)", args).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        return out
+    }
+
+    fun parkedCount(): Int =
+        readableDatabase.rawQuery("SELECT COUNT(*) FROM parked_docs", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
+    /** Parked photos with their MediaStore id, to find the ones deleted from the phone meanwhile. Paged, never all at once. */
+    fun forEachParkedMedia(page: Int = MIGRATION_PAGE, block: (List<Triple<String, Long, String>>) -> Unit) {
+        var after = ""
+        while (true) {
+            val rows = ArrayList<Triple<String, Long, String>>(page)
+            readableDatabase.rawQuery("SELECT id, json FROM parked_docs WHERE id > ? ORDER BY id LIMIT $page", arrayOf(after)).use { c ->
+                while (c.moveToNext()) {
+                    val doc = runCatching { org.json.JSONObject(c.getString(1) ?: "{}") }.getOrNull()
+                    rows += Triple(c.getString(0), doc?.optLong("media_id") ?: 0L, doc?.optString("path").orEmpty())
+                }
+            }
+            if (rows.isEmpty()) return
+            block(rows)
+            after = rows.last().first
+            if (rows.size < page) return
+        }
+    }
+
+    fun dropParked(ids: Collection<String>) {
+        deleteByIds("parked_docs", ids)
+        deleteByIds("parked_words", ids)
+    }
+
+    private fun move(fromDocs: String, fromWords: String, toDocs: String, toWords: String, roots: List<String>, inside: Boolean): Int {
+        val (under, args) = underRoots(roots)
+        // a row whose folder is unknown is never parked
+        val where = if (inside) "($under)" else "folder IS NOT NULL AND NOT ($under)"
+        val cols = PARKED_COLUMNS
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.execSQL("INSERT OR REPLACE INTO $toWords (id, kind, word) SELECT w.id, w.kind, w.word FROM $fromWords w JOIN $fromDocs d ON d.id = w.id WHERE ${where.replace("folder", "d.folder")}", args)
+            db.execSQL("DELETE FROM $fromWords WHERE id IN (SELECT id FROM $fromDocs WHERE $where)", args)
+            db.execSQL("INSERT OR REPLACE INTO $toDocs ($cols) SELECT $cols FROM $fromDocs WHERE $where", args)
+            val moved = db.compileStatement("SELECT changes()").use { it.simpleQueryForLong().toInt() }
+            db.execSQL("DELETE FROM $fromDocs WHERE $where", args)
+            db.setTransactionSuccessful()
+            return moved
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** SQL for "the row's folder lies under one of [roots]"; no roots = nothing is under. */
+    private fun underRoots(roots: List<String>): Pair<String, Array<String>> {
+        if (roots.isEmpty()) return "0" to emptyArray()
+        val clause = roots.joinToString(" OR ") { "(COALESCE(folder, '') || '/') LIKE ? ESCAPE '\\'" }
+        val args = roots.map { r -> r.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%" }.toTypedArray()
+        return clause to args
+    }
+
     fun removeDocs(ids: Collection<String>) {
         deleteByIds("docs", ids)
         deleteByIds("doc_words", ids)
@@ -830,6 +908,8 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         writableDatabase.delete("incoming", null, null)
         writableDatabase.delete("doc_words", null, null)
         writableDatabase.delete("actions", null, null)
+        writableDatabase.delete("parked_docs", null, null)
+        writableDatabase.delete("parked_words", null, null)
     }
 
     fun wordCounts(): Triple<Map<String, Int>, Map<String, Int>, Map<String, Int>> {
@@ -1243,7 +1323,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
     companion object {
         private const val NAME = "photo_cache.db"
-        private const val VERSION = 21
+        private const val VERSION = 22
 
         @Volatile private var shared: PhotoCache? = null
 
@@ -1301,6 +1381,9 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         private const val INCOMING_TAKEN_INDEX = "CREATE INDEX IF NOT EXISTS incoming_taken_ms ON incoming (taken_ms)"
         private const val INCOMING_COLUMNS = "id, media_id, path, folder, file_name, mime, size_bytes, taken_ms, width, height"
         private const val INCOMING_TAKEN = "SELECT taken_ms FROM incoming WHERE taken_ms > 0 AND id NOT IN (SELECT id FROM docs)"
+        private const val PARKED_DOCS_TABLE = "CREATE TABLE IF NOT EXISTS parked_docs (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, indexed_at INTEGER NOT NULL, taken_at TEXT, tags_json TEXT, persons_json TEXT, meaning TEXT, ocr TEXT, city TEXT, country TEXT, json TEXT, modified INTEGER NOT NULL DEFAULT 0, taken_ms INTEGER NOT NULL DEFAULT 0, embed_model TEXT, file_hash TEXT, region TEXT, folder TEXT, camera TEXT, camera_model TEXT)"
+        private const val PARKED_WORDS_TABLE = "CREATE TABLE IF NOT EXISTS parked_words (id TEXT NOT NULL, kind TEXT NOT NULL, word TEXT NOT NULL, PRIMARY KEY (id, kind, word))"
+        private const val PARKED_COLUMNS = "id, size_bytes, indexed_at, taken_at, tags_json, persons_json, meaning, ocr, city, country, json, modified, taken_ms, embed_model, file_hash, region, folder, camera, camera_model"
         private const val WORD_RETRIES_TABLE = "CREATE TABLE IF NOT EXISTS word_retries (id TEXT PRIMARY KEY NOT NULL, attempts INTEGER NOT NULL, next_at INTEGER NOT NULL)"
     }
 }

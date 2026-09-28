@@ -61,4 +61,20 @@
     <string name="rs_retry">Geht gleich weiter</string>
     <string name="rs_failed">Nicht beendet</string>
     <string name="vm_resync_now">Werden jetzt gelesen: %1$s</string>
+    <string name="fo_remove_title">Ordner entfernt</string>
+    <plurals name="fo_remove_text">
+        <item quantity="one">%1$s Foto aus diesen Ordnern ist in deinem Index.</item>
+        <item quantity="other">%1$s Fotos aus diesen Ordnern sind in deinem Index.</item>
+    </plurals>
+    <string name="fo_keep">Im Index behalten, ausgeblendet</string>
+    <string name="fo_keep_sub">Sie erscheinen nicht mehr in der Suche und kommen sofort zurück, ohne erneut gelesen zu werden, wenn du den Ordner wieder hinzufügst.</string>
+    <string name="fo_delete">Aus dem Index löschen</string>
+    <string name="fo_delete_sub">Beschreibungen, Wörter und Orte gehen verloren. Fügst du den Ordner wieder hinzu, wird jedes Foto erneut gelesen, mit deinen KI-Anfragen.</string>
+    <string name="fo_delete_failed">Der Index war nicht erreichbar. Die Fotos bleiben ausgeblendet darin, bis du es erneut versuchst.</string>
+    <string name="sync_hidden">Aus entfernten Ordnern behalten</string>
+    <string name="fo_open_failed">Keine Datei-App auf diesem Telefon kann den Ordner öffnen.</string>
+    <plurals name="sync_n_folders">
+        <item quantity="one">%1$s Ordner mit Fotos</item>
+        <item quantity="other">%1$s Ordner mit Fotos</item>
+    </plurals>
 </resources>

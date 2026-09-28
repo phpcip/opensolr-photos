@@ -61,4 +61,18 @@
     <string name="rs_retry">まもなく再開</string>
     <string name="rs_failed">未完了</string>
     <string name="vm_resync_now">%1$s枚を今すぐ読み込みます</string>
+    <string name="fo_remove_title">外したフォルダ</string>
+    <plurals name="fo_remove_text">
+        <item quantity="other">これらのフォルダの写真 %1$s 枚がインデックスにあります。</item>
+    </plurals>
+    <string name="fo_keep">インデックスに残して非表示にする</string>
+    <string name="fo_keep_sub">検索には出なくなり、フォルダを戻すと読み直さずにすぐ戻ります。</string>
+    <string name="fo_delete">インデックスから削除する</string>
+    <string name="fo_delete_sub">説明、単語、場所は失われます。フォルダを戻すと、AI リクエストを使ってすべての写真を読み直します。</string>
+    <string name="fo_delete_failed">インデックスに接続できませんでした。写真は非表示のまま残り、次回もう一度試せます。</string>
+    <string name="sync_hidden">外したフォルダから保持</string>
+    <string name="fo_open_failed">このフォルダを開けるファイルアプリがありません。</string>
+    <plurals name="sync_n_folders">
+        <item quantity="other">写真のあるフォルダ %1$s 個</item>
+    </plurals>
 </resources>

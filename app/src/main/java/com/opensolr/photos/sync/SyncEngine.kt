@@ -340,6 +340,11 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                     onProgress(Progress(AppText.s(R.string.sy_reading_once), 0, 0))
                     withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { edits.readIndexIntoCache() }
                 }
+                // a folder added back brings its kept photos back as they were: nothing is read again
+                val roots = com.opensolr.photos.search.SearchFilters.folderRoots(prefs.folders)
+                cache.unparkInside(roots)
+                cache.parkOutside(roots)
+                dropGoneParked(solr)
                 val known = cache.docSizes()
                 indexedIds = known.keys
                 indexCount = known.size
@@ -527,6 +532,22 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
         if (waitMs > MINUTE_MS) throw RetryLaterException(waitMs / 1000)
         if (waitMs > 0) delay(waitMs)
         callTimes.addLast(System.currentTimeMillis())
+    }
+
+    /** Kept photos of removed folders that were deleted from the phone meanwhile leave the index too. */
+    private suspend fun dropGoneParked(solr: SolrClient) {
+        val gone = ArrayList<String>()
+        cache.forEachParkedMedia { rows ->
+            val alive = MediaScanner.existing(context, rows.map { it.second }.filter { it > 0 })
+            val missing = rows.filter { it.second <= 0 || it.second !in alive }
+            // a MediaStore id can change on a rescan: the file itself is looked for before anything is dropped
+            val onDisk = MediaScanner.existingPaths(context, missing.map { it.third }.filter { it.isNotEmpty() })
+            missing.forEach { (id, _, path) -> if (path !in onDisk) gone += id }
+        }
+        gone.chunked(500).forEach { batch ->
+            solr.delete(batch)
+            cache.dropParked(batch)
+        }
     }
 
     private suspend fun keepOwnersEdits(solr: SolrClient) {

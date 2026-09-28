@@ -340,6 +340,26 @@ fun FoldersScreen(state: UiState, viewModel: AppViewModel) {
             modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
         )
     }
+
+    // indexed photos the new choice leaves out: kept hidden, or deleted from the index
+    state.folderRemoval?.let { n ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { viewModel.cancelFolderRemoval() },
+            title = { Text(stringResource(R.string.fo_remove_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(pluralStringResource(R.plurals.fo_remove_text, n, Actions.formatCount(n.toLong())), color = p.ink)
+                    com.opensolr.photos.ui.ChoiceOption(stringResource(R.string.fo_keep), stringResource(R.string.fo_keep_sub)) { viewModel.applyFolders(keep = true) }
+                    com.opensolr.photos.ui.ChoiceOption(stringResource(R.string.fo_delete), stringResource(R.string.fo_delete_sub)) { viewModel.applyFolders(keep = false) }
+                }
+            },
+            confirmButton = {},
+            dismissButton = { com.opensolr.photos.ui.TextButton(onClick = { viewModel.cancelFolderRemoval() }) { Text(stringResource(R.string.cancel), color = p.ink) } },
+            containerColor = p.paper,
+            titleContentColor = p.ink,
+            textContentColor = p.muted,
+        )
+    }
 }
 
 @Composable

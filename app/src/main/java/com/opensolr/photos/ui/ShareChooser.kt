@@ -72,13 +72,13 @@ fun ShareChooser(hits: List<PhotoHit>, fullScreen: Boolean = false, onDismiss: (
                 }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    ShareOption(stringResource(R.string.sh_original), stringResource(R.string.sh_original_sub)) {
+                    ChoiceOption(stringResource(R.string.sh_original), stringResource(R.string.sh_original_sub)) {
                         scope.launch {
                             withContext(Dispatchers.IO) { Actions.sharePhotos(context, hits) }
                             onDismiss()
                         }
                     }
-                    ShareOption(stringResource(R.string.sh_small), stringResource(R.string.sh_small_sub)) {
+                    ChoiceOption(stringResource(R.string.sh_small), stringResource(R.string.sh_small_sub)) {
                         job = scope.launch {
                             withContext(Dispatchers.IO) {
                                 Actions.shareCopies(context, hits, Actions.SHARE_EDGE_PX) { n, _ -> done = n }
@@ -96,7 +96,7 @@ fun ShareChooser(hits: List<PhotoHit>, fullScreen: Boolean = false, onDismiss: (
 }
 
 @Composable
-private fun ShareOption(title: String, sub: String, onClick: () -> Unit) {
+internal fun ChoiceOption(title: String, sub: String, onClick: () -> Unit) {
     val p = LocalPalette.current
     Column(
         Modifier

@@ -78,6 +78,14 @@ data class UiState(
     val endReached: Boolean = false,
     val schedule: SyncSchedule = SyncSchedule.WEEKLY,
     val lastReport: SyncReport? = null,
+    /** Photos in the indexed folders right now, in the index right now, and kept from removed folders; null until read. */
+    val liveFolderCount: Int? = null,
+    val liveIndexCount: Int? = null,
+    val parkedCount: Int = 0,
+    /** Every folder with photos inside the indexed ones, with its count, for the Sync screen. */
+    val indexedFolders: List<PhotoFolder> = emptyList(),
+    /** Indexed photos a folder change would take out; the Folders screen asks what to do with them. */
+    val folderRemoval: Int? = null,
     val indexName: String? = null,
     val sync: SyncStatus = SyncStatus(false, false, "", 0, 0),
     val showBusyDialog: Boolean = false,
@@ -1267,15 +1275,76 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun saveFolders() {
         val selected = _state.value.selectedFolders
         if (selected.isEmpty()) return
-        prefs.folders = selected
-
-        prefs.facetsJson = null
         if (prefs.connection == null || _state.value.foldersReturnTo == Screen.Setup) {
+            prefs.folders = selected
+            prefs.facetsJson = null
             _state.update { it.copy(screen = Screen.Setup) }
             runSetup()
-        } else {
+            return
+        }
+        viewModelScope.launch {
+            // photos already in the index that the new choice leaves out: the owner decides what happens to them
+            val out = withContext(Dispatchers.IO) { photoCache.docIdsOutside(SearchFilters.folderRoots(selected)).size }
+            if (out > 0) _state.update { it.copy(folderRemoval = out) } else applyFolders(keep = true)
+        }
+    }
+
+    fun cancelFolderRemoval() {
+        _state.update { it.copy(folderRemoval = null) }
+    }
+
+    /** Saves the folder choice. Photos left out stay in the index hidden ([keep]) or are deleted from it. */
+    fun applyFolders(keep: Boolean) {
+        val selected = _state.value.selectedFolders
+        if (selected.isEmpty()) return
+        prefs.folders = selected
+        prefs.facetsJson = null
+        _state.update { it.copy(folderRemoval = null, screen = Screen.Sync) }
+        viewModelScope.launch {
+            val roots = SearchFilters.folderRoots(selected)
+            var failed = false
+            withContext(Dispatchers.IO) {
+                photoCache.unparkInside(roots)
+                if (keep) {
+                    photoCache.parkOutside(roots)
+                } else {
+                    val ids = photoCache.docIdsOutside(roots)
+                    try {
+                        val connection = prefs.connection ?: throw IllegalStateException()
+                        ids.chunked(500).forEach { batch ->
+                            com.opensolr.photos.net.SolrClient(connection).delete(batch, now = true)
+                            photoCache.removeDocs(batch)
+                            photoCache.clearActions(batch)
+                        }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        // the index could not be reached: what is left stays hidden, never shown as if still indexed
+                        photoCache.parkOutside(roots)
+                        failed = true
+                    }
+                }
+            }
+            searches.clearCache()
+            refreshFolderCounts()
+            if (failed) _state.update { it.copy(notice = AppText.s(R.string.fo_delete_failed)) }
             SyncScheduler.runNow(context)
-            _state.update { it.copy(screen = Screen.Sync) }
+        }
+    }
+
+    /** The numbers on the Sync screen, read now rather than from the last sync. */
+    fun refreshFolderCounts() {
+        viewModelScope.launch {
+            val roots = SearchFilters.folderRoots(prefs.folders)
+            val read = withContext(Dispatchers.IO) {
+                // one pass over MediaStore gives both the folders and the count
+                val inside = MediaScanner.listFolders(context).filter { f -> roots.any { f.relativePath.startsWith(it, ignoreCase = true) } }
+                    .sortedBy { it.relativePath.lowercase() }
+                Triple(inside, photoCache.docCount(), photoCache.parkedCount())
+            }
+            _state.update {
+                it.copy(liveFolderCount = read.first.sumOf { f -> f.count }, liveIndexCount = read.second, parkedCount = read.third, indexedFolders = read.first)
+            }
         }
     }
 
@@ -2342,6 +2411,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun open(screen: Screen) {
         _state.update { it.copy(screen = screen) }
         if (screen == Screen.Account) refreshAccount()
+        if (screen == Screen.Sync) refreshFolderCounts()
     }
 
     fun openIfSignedIn(screen: Screen) {
@@ -2387,6 +2457,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             searches.clearCache()
         }
         _state.update { it.copy(lastReport = report, account = prefs.account, planWarnings = prefs.account?.let { a -> PlanWatch.evaluate(a) } ?: emptyList(), indexName = prefs.connection?.indexName) }
+        refreshFolderCounts()
         if (report?.status == "sign_in_required") {
             signedOut(prefs.pendingNotice ?: AppText.s(R.string.vm_signed_out))
             prefs.pendingNotice = null

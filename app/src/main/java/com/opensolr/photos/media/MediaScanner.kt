@@ -71,6 +71,15 @@ object MediaScanner {
         return result
     }
 
+    /** How many photos lie in [folders], without keeping them. */
+    fun count(context: Context, folders: Set<String>): Int {
+        val prefixes = folders.map { normalizeFolder(it) }
+        if (prefixes.isEmpty()) return 0
+        var n = 0
+        query(context, keep = { folder -> prefixes.any { folder.startsWith(it, ignoreCase = true) } }) { n++ }
+        return n
+    }
+
     fun addedSince(context: Context, folders: Set<String>, sinceSec: Long): List<LocalPhoto> {
         val prefixes = folders.map { normalizeFolder(it) }
         if (prefixes.isEmpty()) return emptyList()
@@ -124,6 +133,29 @@ object MediaScanner {
                 }
             } catch (e: Exception) {
 
+            }
+        }
+        return out
+    }
+
+    /** Which of [paths] MediaStore still holds, in chunks. */
+    @Suppress("DEPRECATION")
+    fun existingPaths(context: Context, paths: Collection<String>): Set<String> {
+        if (paths.isEmpty()) return emptySet()
+        val out = HashSet<String>(paths.size)
+        paths.chunked(500).forEach { batch ->
+            val marks = batch.joinToString(",") { "?" }
+            try {
+                context.contentResolver.query(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    arrayOf(MediaStore.Images.Media.DATA),
+                    "${MediaStore.Images.Media.DATA} IN ($marks)",
+                    batch.toTypedArray(),
+                    null,
+                )?.use { c -> while (c.moveToNext()) out += c.getString(0) }
+            } catch (e: Exception) {
+                // unreadable: treat every path as still there, so nothing is dropped by mistake
+                out += batch
             }
         }
         return out

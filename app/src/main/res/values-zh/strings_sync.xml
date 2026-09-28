@@ -61,4 +61,18 @@
     <string name="rs_retry">稍后继续</string>
     <string name="rs_failed">未完成</string>
     <string name="vm_resync_now">正在立即读取 %1$s 张</string>
+    <string name="fo_remove_title">已移除的文件夹</string>
+    <plurals name="fo_remove_text">
+        <item quantity="other">这些文件夹中有 %1$s 张照片在你的索引中。</item>
+    </plurals>
+    <string name="fo_keep">保留在索引中并隐藏</string>
+    <string name="fo_keep_sub">它们不再出现在搜索中；重新添加文件夹时会立即回来，无需重新读取。</string>
+    <string name="fo_delete">从索引中删除</string>
+    <string name="fo_delete_sub">它们的描述、词语和地点会丢失。重新添加文件夹时，每张照片都会重新读取，并消耗你的 AI 请求。</string>
+    <string name="fo_delete_failed">无法连接索引。照片会隐藏保留在其中，直到你再次尝试。</string>
+    <string name="sync_hidden">从已移除文件夹保留</string>
+    <string name="fo_open_failed">这台手机上没有可以打开此文件夹的文件应用。</string>
+    <plurals name="sync_n_folders">
+        <item quantity="other">%1$s 个含照片的文件夹</item>
+    </plurals>
 </resources>

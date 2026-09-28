@@ -61,4 +61,22 @@
     <string name="rs_retry">Continuă în curând</string>
     <string name="rs_failed">Nu s-a terminat</string>
     <string name="vm_resync_now">Se citesc acum: %1$s</string>
+    <string name="fo_remove_title">Foldere scoase</string>
+    <plurals name="fo_remove_text">
+        <item quantity="one">%1$s poză din aceste foldere e în index.</item>
+        <item quantity="few">%1$s poze din aceste foldere sunt în index.</item>
+        <item quantity="other">%1$s de poze din aceste foldere sunt în index.</item>
+    </plurals>
+    <string name="fo_keep">Păstrează-le în index, ascunse</string>
+    <string name="fo_keep_sub">Nu mai apar în căutare și revin imediat, fără să fie citite din nou, când adaugi folderul înapoi.</string>
+    <string name="fo_delete">Șterge-le din index</string>
+    <string name="fo_delete_sub">Descrierile, cuvintele și locurile lor se pierd. Dacă adaugi folderul înapoi, fiecare poză e citită din nou, din cererile tale AI.</string>
+    <string name="fo_delete_failed">Indexul nu a răspuns. Pozele rămân în el, ascunse, până încerci din nou.</string>
+    <string name="sync_hidden">Păstrate din foldere scoase</string>
+    <string name="fo_open_failed">Nicio aplicație de fișiere de pe telefon nu poate deschide folderul.</string>
+    <plurals name="sync_n_folders">
+        <item quantity="one">%1$s folder cu poze</item>
+        <item quantity="few">%1$s foldere cu poze</item>
+        <item quantity="other">%1$s de foldere cu poze</item>
+    </plurals>
 </resources>

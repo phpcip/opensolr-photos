@@ -604,7 +604,7 @@ class SearchRepository(private val context: Context) {
         }
         params += "fq" to "{!bool ${clauses.joinToString(" ")}}"
         val out = ArrayList<PhotoHit>()
-        com.opensolr.photos.net.SolrClient(connection).forEachDoc("id,media_id,path,file_name,folder,mime", filters = params) { d ->
+        com.opensolr.photos.net.SolrClient(connection).forEachDoc("id,media_id,path,file_name,folder,mime", filters = visible(params)) { d ->
             out += PhotoHit(
                 id = d.optString("id"), mediaId = d.optLong("media_id", -1L), path = d.optString("path"),
                 fileName = d.optString("file_name"), folder = d.optString("folder"), mime = d.optString("mime"),
@@ -830,7 +830,24 @@ class SearchRepository(private val context: Context) {
         return hits to if (hits.isEmpty()) emptyList() else listOf(hits.size)
     }
 
-    private suspend fun select(params: List<Pair<String, String>>): JSONObject {
+    /**
+     * Only the photos of the folders being indexed: photos of a folder taken out but kept in the index stay
+     * out of every list, count, facet, map and duplicate group, and come back when the folder is added again.
+     */
+    private fun visible(params: List<Pair<String, String>>): List<Pair<String, String>> {
+        val roots = folderRoots()
+        if (roots.isEmpty() || params.any { it.first == "visv_0" }) return params
+        val out = ArrayList(params)
+        out += "fq" to "{!bool " + roots.indices.joinToString(" ") { "should=\$vis_$it" } + "}"
+        roots.forEachIndexed { i, root ->
+            out += "vis_$i" to "{!prefix f=folder v=\$visv_$i}"
+            out += "visv_$i" to root
+        }
+        return out
+    }
+
+    private suspend fun select(paramsIn: List<Pair<String, String>>): JSONObject {
+        val params = visible(paramsIn)
         val session = prefs.session ?: throw ServiceException(AppText.s(R.string.err_sign_in_to_search))
         val connection = prefs.connection ?: throw ServiceException(AppText.s(R.string.err_not_set_up))
 
@@ -860,7 +877,7 @@ class SearchRepository(private val context: Context) {
         val key = SearchCache.key(
             connection.indexName,
             "/duplicates",
-            listOf("field" to field, "cap" to cap.toString(), "within" to (within ?: "")) + base,
+            listOf("field" to field, "cap" to cap.toString(), "within" to (within ?: "")) + visible(base),
         )
         val ttl = prefs.cacheSeconds
 
@@ -882,7 +899,7 @@ class SearchRepository(private val context: Context) {
         }
 
         return withContext(NonCancellable) {
-            val found = SolrClient(connection).duplicateGroups(field, cap, MAX_GROUPS, within, base)
+            val found = SolrClient(connection).duplicateGroups(field, cap, MAX_GROUPS, within, visible(base))
             val groups = if (field in MULTI_KEY_FIELDS) withoutSharedPhotos(found) else found
             cache.put(key, JSONArray(groups.map { JSONArray(it) }).toString())
             rememberGroups(key, groups)

@@ -61,4 +61,22 @@
     <string name="rs_retry">Sigue en breve</string>
     <string name="rs_failed">No terminó</string>
     <string name="vm_resync_now">Leyendo ahora: %1$s</string>
+    <string name="fo_remove_title">Carpetas quitadas</string>
+    <plurals name="fo_remove_text">
+        <item quantity="one">%1$s foto de estas carpetas está en tu índice.</item>
+        <item quantity="many">%1$s fotos de estas carpetas están en tu índice.</item>
+        <item quantity="other">%1$s fotos de estas carpetas están en tu índice.</item>
+    </plurals>
+    <string name="fo_keep">Mantenerlas en el índice, ocultas</string>
+    <string name="fo_keep_sub">Dejan de aparecer en la búsqueda y vuelven al instante, sin leerse de nuevo, cuando vuelves a añadir la carpeta.</string>
+    <string name="fo_delete">Borrarlas del índice</string>
+    <string name="fo_delete_sub">Se pierden sus descripciones, palabras y lugares. Si vuelves a añadir la carpeta, cada foto se lee de nuevo, con tus solicitudes de IA.</string>
+    <string name="fo_delete_failed">No se pudo contactar con el índice. Las fotos siguen en él, ocultas, hasta que lo intentes de nuevo.</string>
+    <string name="sync_hidden">Conservadas de carpetas quitadas</string>
+    <string name="fo_open_failed">Ninguna app de archivos de este teléfono puede abrir la carpeta.</string>
+    <plurals name="sync_n_folders">
+        <item quantity="one">%1$s carpeta con fotos</item>
+        <item quantity="many">%1$s carpetas con fotos</item>
+        <item quantity="other">%1$s carpetas con fotos</item>
+    </plurals>
 </resources>

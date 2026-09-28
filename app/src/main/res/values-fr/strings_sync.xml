@@ -61,4 +61,22 @@
     <string name="rs_retry">Reprend bientôt</string>
     <string name="rs_failed">Non terminée</string>
     <string name="vm_resync_now">Lecture en cours : %1$s</string>
+    <string name="fo_remove_title">Dossiers retirés</string>
+    <plurals name="fo_remove_text">
+        <item quantity="one">%1$s photo de ces dossiers est dans ton index.</item>
+        <item quantity="many">%1$s photos de ces dossiers sont dans ton index.</item>
+        <item quantity="other">%1$s photos de ces dossiers sont dans ton index.</item>
+    </plurals>
+    <string name="fo_keep">Les garder dans l’index, masquées</string>
+    <string name="fo_keep_sub">Elles ne sortent plus dans la recherche et reviennent aussitôt, sans être relues, quand tu rajoutes le dossier.</string>
+    <string name="fo_delete">Les supprimer de l’index</string>
+    <string name="fo_delete_sub">Leurs descriptions, mots et lieux disparaissent. Si tu rajoutes le dossier, chaque photo est relue, avec tes requêtes IA.</string>
+    <string name="fo_delete_failed">L’index n’a pas répondu. Les photos y restent, masquées, jusqu’à ton prochain essai.</string>
+    <string name="sync_hidden">Gardées des dossiers retirés</string>
+    <string name="fo_open_failed">Aucune app de fichiers de ce téléphone ne peut ouvrir ce dossier.</string>
+    <plurals name="sync_n_folders">
+        <item quantity="one">%1$s dossier avec des photos</item>
+        <item quantity="many">%1$s dossiers avec des photos</item>
+        <item quantity="other">%1$s dossiers avec des photos</item>
+    </plurals>
 </resources>

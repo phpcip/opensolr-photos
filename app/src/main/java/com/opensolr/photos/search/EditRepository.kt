@@ -154,6 +154,8 @@ class EditRepository(private val context: Context) {
                 val id = d.optString("id")
                 if (id.isNotEmpty()) storeDoc(id, d, indexedAt = com.opensolr.photos.ui.Actions.solrDateMillis(d.optString("indexed_at")) ?: 0L)
             }
+        // photos kept in the index from folders no longer indexed stay parked, never read as deleted
+        cache.parkOutside(SearchFilters.folderRoots(prefs.folders))
 
         prefs.cloneComplete = true
     }

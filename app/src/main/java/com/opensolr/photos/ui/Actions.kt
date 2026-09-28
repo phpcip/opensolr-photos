@@ -181,6 +181,32 @@ object Actions {
         android.os.Handler(android.os.Looper.getMainLooper()).post { Toast.makeText(context, AppText.s(text), Toast.LENGTH_LONG).show() }
     }
 
+    /** "DCIM/Camera/" as the phone's full path, /storage/emulated/0/DCIM/Camera. */
+    @Suppress("DEPRECATION")
+    fun fullFolderPath(relative: String): String =
+        android.os.Environment.getExternalStorageDirectory().absolutePath.trimEnd('/') + "/" + relative.trim('/')
+
+    /** Opens a folder of the phone's shared storage in the default files app. */
+    fun openFolder(context: Context, relative: String) {
+        val doc = android.provider.DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:" + relative.trim('/'))
+        val attempts = listOf(
+            Intent(Intent.ACTION_VIEW).setDataAndType(doc, android.provider.DocumentsContract.Document.MIME_TYPE_DIR),
+            Intent(Intent.ACTION_VIEW).setDataAndType(doc, "resource/folder"),
+        )
+        for (intent in attempts) {
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            try {
+                context.startActivity(intent)
+                return
+            } catch (e: ActivityNotFoundException) {
+                // next way of asking
+            } catch (e: SecurityException) {
+                // next way of asking
+            }
+        }
+        toast(context, R.string.fo_open_failed)
+    }
+
     const val SHARE_EDGE_PX = 1024
     private const val SHARE_DIR = "share"
 
