@@ -664,6 +664,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
      * the file carries put on them, then the people already known matched. As one string for the index.
      */
     private fun readFaces(photo: LocalPhoto, people: Map<String, List<FloatArray>>, upright: android.graphics.Bitmap?): String? {
+        cache.adoptFaces(photo.id, photo.mediaId)
         if (!cache.faceScanned(photo.id, photo.sizeBytes)) {
             val bitmap = upright ?: return null
             val found = try { com.opensolr.photos.media.FaceEngine.of(context).analyze(bitmap) } catch (e: Exception) { return null }

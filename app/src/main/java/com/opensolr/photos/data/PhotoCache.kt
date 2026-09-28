@@ -47,6 +47,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         db.execSQL(FACES_TABLE)
         db.execSQL("CREATE INDEX IF NOT EXISTS faces_photo ON faces (photo_id)")
         db.execSQL("CREATE INDEX IF NOT EXISTS faces_person ON faces (person)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS faces_media ON faces (media_id)")
         db.execSQL(FACE_REJECTS_TABLE)
         db.execSQL(FACE_SCANNED_TABLE)
         db.execSQL(AUTO_WORDS_TABLE)
@@ -158,6 +159,9 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         }
         if (oldVersion < 28) {
             db.execSQL(AUTO_WORDS_TABLE)
+        }
+        if (oldVersion < 29) {
+            db.execSQL("CREATE INDEX IF NOT EXISTS faces_media ON faces (media_id)")
         }
         if (oldVersion < 24) {
             // who named a face: 0 the owner, 1 learned from the photos' tags, 2 the matcher on its own
@@ -1096,6 +1100,30 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         return moves.size
     }
 
+    /**
+     * Faces read for the same file under another photo id (the id rule changed, or the file moved): they become
+     * this photo's, names and all, in place of anything read anew without them. True when something was adopted.
+     */
+    fun adoptFaces(photoId: String, mediaId: Long): Boolean {
+        if (mediaId <= 0) return false
+        val old = readableDatabase.rawQuery("SELECT photo_id FROM faces WHERE media_id = ? AND photo_id != ? LIMIT 1", arrayOf(mediaId.toString(), photoId)).use { c ->
+            if (c.moveToFirst()) c.getString(0) else null
+        } ?: return false
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.delete("faces", "photo_id = ?", arrayOf(photoId))
+            db.delete("face_scanned", "photo_id = ?", arrayOf(photoId))
+            db.execSQL("UPDATE faces SET photo_id = ? WHERE photo_id = ?", arrayOf(photoId, old))
+            db.execSQL("UPDATE OR REPLACE face_scanned SET photo_id = ? WHERE photo_id = ?", arrayOf(photoId, old))
+            db.execSQL("UPDATE OR REPLACE auto_words SET photo_id = ? WHERE photo_id = ?", arrayOf(photoId, old))
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+        return true
+    }
+
     /** Faces the owner said are not [person]: never offered for them again. */
     fun rejectFaces(fids: Collection<Long>, person: String) {
         if (fids.isEmpty()) return
@@ -1719,7 +1747,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
     companion object {
         private const val NAME = "photo_cache.db"
-        private const val VERSION = 28
+        private const val VERSION = 29
 
         @Volatile private var shared: PhotoCache? = null
 

@@ -417,6 +417,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** The faces of [hit]; a photo whose faces were not read yet is read now. */
     suspend fun facesFor(hit: PhotoHit): List<com.opensolr.photos.data.PhotoCache.FaceRow> = withContext(Dispatchers.IO) {
+        if (photoCache.adoptFaces(hit.id, hit.mediaId)) { photoCache.queueAction(hit.id, com.opensolr.photos.data.PhotoCache.ACTION_WORDS); SyncScheduler.runNow(context) }
         if (!photoCache.faceScanned(hit.id, hit.sizeBytes) && hit.mediaId > 0) {
             val uri = android.content.ContentUris.withAppendedId(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, hit.mediaId)
             val bitmap = runCatching { PhotoReader.uprightBitmap(context, uri, com.opensolr.photos.media.FaceEngine.READ_EDGE) }.getOrNull()

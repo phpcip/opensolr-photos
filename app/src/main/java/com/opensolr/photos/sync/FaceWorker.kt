@@ -36,6 +36,9 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val cache = PhotoCache.of(ctx)
         val edits = EditRepository(ctx)
         val local = MediaScanner.scan(ctx, prefs.folders) ?: return Result.success()
+        // faces read for these files under an earlier id are taken over first, so nothing named is dropped
+        val adopted = local.values.filter { cache.adoptFaces(it.id, it.mediaId) }.map { it.id }
+        if (adopted.isNotEmpty()) { cache.queueActions(adopted, PhotoCache.ACTION_WORDS); SyncScheduler.runNow(ctx) }
         cache.dropFacesExcept(local.keys)
         return if (inputData.getBoolean(SCAN_ALL, false)) scanAll(ctx, prefs, cache, edits, local.values) else learn(ctx, cache, edits, local.values)
     }
