@@ -49,12 +49,15 @@ class FaceEngine private constructor(context: Context) {
         detect(letterbox(photo, scale, 0, 0), FACE_MIN_PX * scale).forEach { all += it.scaled(1f / scale, 0f, 0f) }
         if (max(photo.width, photo.height) > DETECT_SIZE) {
             for (y0 in tiles(photo.height)) for (x0 in tiles(photo.width)) {
-                detect(letterbox(photo, 1f, x0, y0), FACE_MIN_PX).forEach { all += it.scaled(1f, x0.toFloat(), y0.toFloat()) }
+                // a face touching the tile's edge is cut: a neighbouring tile (they overlap) or the whole frame sees it whole
+                detect(letterbox(photo, 1f, x0, y0), FACE_MIN_PX).filterNot { cut(it) }.forEach { all += it.scaled(1f, x0.toFloat(), y0.toFloat()) }
             }
         }
         all.sortByDescending { it.score }
         val found = ArrayList<Found>()
-        for (f in all) if (found.none { overlap(it, f) > NMS_IOU }) found += f
+        // one face seen by the whole frame and by a tile comes back twice, often at different sizes: a box mostly
+        // inside a kept one is the same face
+        for (f in all) if (found.none { overlap(it, f) > NMS_IOU || inside(it, f) > SAME_FACE || centred(it, f) }) found += f
         found.mapNotNull { f ->
             val vector = fingerprint(photo, f.points) ?: return@mapNotNull null
             Face(
@@ -136,6 +139,26 @@ class FaceEngine private constructor(context: Context) {
         return kept
     }
 
+    private fun cut(f: Found): Boolean =
+        f.x <= EDGE_PX || f.y <= EDGE_PX || f.x + f.w >= DETECT_SIZE - EDGE_PX || f.y + f.h >= DETECT_SIZE - EDGE_PX
+
+    /** Either box's centre inside the other: the same face. */
+    private fun centred(a: Found, b: Found): Boolean {
+        fun holds(o: Found, x: Float, y: Float) = x >= o.x && x <= o.x + o.w && y >= o.y && y <= o.y + o.h
+        return holds(a, b.x + b.w / 2, b.y + b.h / 2) || holds(b, a.x + a.w / 2, a.y + a.h / 2)
+    }
+
+    /** How much of the smaller box lies in the other one. */
+    private fun inside(a: Found, b: Found): Float {
+        val x1 = max(a.x, b.x)
+        val y1 = max(a.y, b.y)
+        val x2 = min(a.x + a.w, b.x + b.w)
+        val y2 = min(a.y + a.h, b.y + b.h)
+        val inter = max(0f, x2 - x1) * max(0f, y2 - y1)
+        val smaller = min(a.w * a.h, b.w * b.h)
+        return if (smaller > 0f) inter / smaller else 0f
+    }
+
     private fun overlap(a: Found, b: Found): Float {
         val x1 = max(a.x, b.x)
         val y1 = max(a.y, b.y)
@@ -197,14 +220,16 @@ class FaceEngine private constructor(context: Context) {
         /** The long edge a photo is read at: the finder works at 640, the fingerprint on this sharper copy. */
         const val READ_EDGE = 1600
 
-        /** Raised when the finder changes, so every photo is read again. 2 = tiles for small faces. */
-        const val VERSION = 2
+        /** Raised when the finder changes, so every photo is read again. 2 = tiles for small faces, 3-4 = one box per face. */
+        const val VERSION = 4
 
         private const val DETECT_SIZE = 640
         private const val ALIGN = 112
         private val STRIDES = intArrayOf(8, 16, 32)
         private const val SCORE_MIN = 0.8f
         private const val NMS_IOU = 0.3f
+        private const val SAME_FACE = 0.6f
+        private const val EDGE_PX = 2f
         /** Smaller faces (in the photo read at [READ_EDGE]) are too blurred to tell people apart and only bring false matches. */
         private const val FACE_MIN_PX = 40f
         private const val TILE_STEP = 512

@@ -43,6 +43,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.pluralStringResource
@@ -110,7 +111,13 @@ internal fun FaceBoxes(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
-                    .offset { androidx.compose.ui.unit.IntOffset(x.roundToInt(), (y + bh).roundToInt() + 4) }
+                    // under the face, but never past the edges of the photo's area
+                    .layout { measurable, c ->
+                        val placeable = measurable.measure(c.copy(minWidth = 0, maxWidth = w.roundToInt()))
+                        val px = x.roundToInt().coerceIn(0, maxOf(0, w.roundToInt() - placeable.width))
+                        val py = ((y + bh).roundToInt() + 4).coerceIn(0, maxOf(0, h.roundToInt() - placeable.height))
+                        layout(placeable.width, placeable.height) { placeable.place(px, py) }
+                    }
                     .background(Color(0xCC000000), RoundedCornerShape(2.dp))
                     .tapClickable { onTap(f) }
                     .padding(horizontal = 6.dp, vertical = 2.dp),

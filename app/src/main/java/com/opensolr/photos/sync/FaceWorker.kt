@@ -37,16 +37,18 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val local = MediaScanner.scan(ctx, prefs.folders)
         cache.dropFacesExcept(local.keys)
         val read = cache.faceScannedSizes()
-        val todo = local.values.filter { read[it.id] != it.sizeBytes }.sortedByDescending { it.dateTakenMs }
+        // what arrived last goes first: a photo without a date in it (WhatsApp, edited copies) never waits behind the rest
+        val todo = local.values.filter { read[it.id] != it.sizeBytes }
+            .sortedWith(compareByDescending<com.opensolr.photos.media.LocalPhoto> { it.addedSec }.thenByDescending { it.dateTakenMs })
         if (todo.isEmpty()) return Result.success()
 
         val engine = FaceEngine.of(ctx)
         // the people named for sure, read once per run: new faces close enough to one of them get the name
         val people = cache.facePeople().keys.associateWith { cache.personVectors(it, REFERENCES) }.filterValues { it.isNotEmpty() }
         val until = System.currentTimeMillis() + RUN_MS
-        try {
         for (photo in todo) {
-            if (isStopped) return Result.success()
+            // stopped by the system: the next run carries on where this one left off
+            if (isStopped) { next(ctx, continuation = true); return Result.success() }
             if (System.currentTimeMillis() > until) { next(ctx, continuation = true); return Result.success() }
             if (!charging(ctx) && battery(ctx) < BATTERY_MIN) { next(ctx, continuation = true, delayMinutes = WAIT_MINUTES); return Result.success() }
             val bitmap = try { PhotoReader.uprightBitmap(ctx, photo.uri, FaceEngine.READ_EDGE) } catch (e: Exception) { null }
@@ -59,14 +61,9 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             }
             autoName(ctx, cache, photo.id, rows, faces, people)
         }
-        } finally {
-            // names given here reach the index with the next sync, started now
-            if (namedAny) SyncScheduler.runNow(ctx)
-        }
         return Result.success()
     }
 
-    private var namedAny = false
 
     /** Unnamed faces very close to a person named for sure take that name, and the photo gets the person. */
     private fun autoName(
@@ -93,7 +90,8 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         }
         if (named.isNotEmpty()) {
             com.opensolr.photos.search.EditRepository(ctx).queueForAll(listOf(photoId), null, false, named, false)
-            namedAny = true
+            // the name reaches the index now, not when this run ends (a sync already queued takes it along)
+            SyncScheduler.runNow(ctx)
         }
     }
 
@@ -102,7 +100,7 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         const val AUTO = 0.6f
         private const val REFERENCES = 64
         private const val WORK = "faces"
-        private const val RUN_MS = 8 * 60 * 1000L
+        private const val RUN_MS = 4 * 60 * 1000L
         private const val BATTERY_MIN = 5
         private const val WAIT_MINUTES = 30L
 

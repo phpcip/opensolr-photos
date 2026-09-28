@@ -2645,11 +2645,11 @@ internal fun PhotoViewer(
 
                     // a photo still syncing shows its actions greyed out until its document is back
                     val on = !hit.pending
+                    ViewerIconAction(stringResource(R.string.fc_people), Icons.Filled.Face, on) { facesOn = !facesOn }
                     ViewerAction(stringResource(R.string.act_tag), R.drawable.ic_tag, on) { editFor = hit }
                     ViewerAction(stringResource(R.string.act_gallery), R.drawable.ic_open, on) { Actions.openPhoto(context, hit) }
                     ViewerAction(stringResource(R.string.act_similar), R.drawable.ic_duplicates, on) { onClose(); viewModel.showSimilar(hit) }
                     ViewerAction(stringResource(R.string.act_share), R.drawable.ic_share, on) { viewerShare = hit }
-                    ViewerIconAction(stringResource(R.string.fc_people), Icons.Filled.Face, on) { facesOn = !facesOn }
                     hit.latLon?.let { (lat, lon) ->
                         ViewerAction(stringResource(R.string.act_map), R.drawable.ic_map, on) { onClose(); viewModel.openMap(MapFocus(lat, lon, 15.0)) }
                         ViewerIconAction(stringResource(R.string.act_nearby), Icons.Filled.LocationOn, on) { onClose(); viewModel.searchNear(lat, lon, 5.0) }
