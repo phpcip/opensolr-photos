@@ -138,6 +138,7 @@
     <string name="dup_kind_words_camera">Erste %1$s Wörter gleich, gleiche Kamera</string>
     <string-array name="dup_kinds">
         <item>Gleiche Gesichter</item>
+        <item>Gleiche erste 2 Wörter, gleiche Kamera</item>
         <item>Gleiche erste 3 Wörter, gleiche Kamera</item>
         <item>Gleiche Beschreibung, gleiche Kamera</item>
         <item>Gleiches Foto (EXIF)</item>

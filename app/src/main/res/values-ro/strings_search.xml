@@ -141,6 +141,7 @@
     <string name="dup_kind_words_camera">Primele %1$s cuvinte la fel, aceeași cameră</string>
     <string-array name="dup_kinds">
         <item>Aceleași fețe</item>
+        <item>Aceleași primele 2 cuvinte, aceeași cameră</item>
         <item>Aceleași primele 3 cuvinte, aceeași cameră</item>
         <item>Aceeași descriere, aceeași cameră</item>
         <item>Aceeași poză (EXIF)</item>

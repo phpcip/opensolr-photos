@@ -1649,7 +1649,7 @@ private fun duplicateKindName(stop: Int): String = stringArrayResource(R.array.d
 
 private const val STOP_SLOP = 0.7f
 
-private const val DUPLICATE_EXIF_STOP = 3
+private const val DUPLICATE_EXIF_STOP = 4
 
 private val DUPLICATE_LOOSE_LIGHT = Color(0xFF111111)
 private val DUPLICATE_NEUTRAL_LIGHT = Color(0xFF495057)

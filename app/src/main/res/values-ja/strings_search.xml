@@ -135,6 +135,7 @@
     <string name="dup_kind_words_camera">最初の%1$s語が一致、同じカメラ</string>
     <string-array name="dup_kinds">
         <item>同じ顔</item>
+        <item>最初の2語と同じカメラ</item>
         <item>最初の3語と同じカメラ</item>
         <item>同じ説明、同じカメラ</item>
         <item>同じ写真（EXIF）</item>

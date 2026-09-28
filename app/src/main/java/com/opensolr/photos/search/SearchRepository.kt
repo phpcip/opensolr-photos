@@ -1180,6 +1180,7 @@ class SearchRepository(private val context: Context) {
         // the sentence, the EXIF, the exact file.
         val DUPLICATE_STOPS = listOf(
             DuplicateStop(FACES_FIELD),
+            DuplicateStop("dup_w2_hash", "camera_model"),
             DuplicateStop("dup_w3_hash", "camera_model"),
             DuplicateStop("dup_desc_hash"),
             DuplicateStop("dup_exif_hash"),
