@@ -1911,7 +1911,7 @@ private fun FilterSheet(
                     val chosen = draft.values(field)
                     if (!values.isNullOrEmpty() || chosen.isNotEmpty()) {
                         FilterGroup(facetTitle(field), chosen.size, title in open, { onToggleSection(title) }) {
-                            FacetValues(values, chosen, label = { facetLabel(context, field, it) }) { onChange(draft.toggled(field, it)) }
+                            FacetValues(values, chosen, label = { facetLabel(context, field, it) }, cap = if (field == "labels") MEANING_ROWS else Int.MAX_VALUE) { onChange(draft.toggled(field, it)) }
                         }
                     }
                 }
@@ -2745,13 +2745,14 @@ private fun FacetValues(
     values: List<FacetValue>?,
     selected: Set<String>,
     label: (String) -> String = { it },
+    cap: Int = Int.MAX_VALUE,
     onToggle: (String) -> Unit,
 ) {
     if (values.isNullOrEmpty() && selected.isEmpty()) return
     val view = LocalView.current
     val all = values.orEmpty().ifEmpty { selected.map { FacetValue(it, 0) } }
     if (all.size > FACET_SEARCH_OVER) {
-        FacetSearch(all, selected, label, onToggle)
+        FacetSearch(all, selected, label, cap, onToggle)
         return
     }
 
@@ -2780,6 +2781,7 @@ private fun FacetSearch(
     all: List<FacetValue>,
     selected: Set<String>,
     label: (String) -> String,
+    cap: Int,
     onToggle: (String) -> Unit,
 ) {
     val p = LocalPalette.current
@@ -2859,7 +2861,7 @@ private fun FacetSearch(
                 Text(stringResource(R.string.no_value), style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
             }
 
-            matches.take(FACET_SEARCH_ROWS).forEach { facet ->
+            matches.take(cap).forEach { facet ->
                 val on = facet.value in selected
                 Row(
                     Modifier
@@ -2882,9 +2884,9 @@ private fun FacetSearch(
                     if (on) Icon(Icons.Filled.Check, contentDescription = stringResource(R.string.cd_selected), tint = p.accent, modifier = Modifier.size(16.dp))
                 }
             }
-            if (matches.size > FACET_SEARCH_ROWS) {
+            if (matches.size > cap) {
                 Text(
-                    stringResource(R.string.more_values, Actions.formatCount((matches.size - FACET_SEARCH_ROWS).toLong())),
+                    stringResource(R.string.more_values, Actions.formatCount((matches.size - cap).toLong())),
                     style = MaterialTheme.typography.bodySmall, color = p.muted,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 )
@@ -3068,7 +3070,8 @@ private const val FACET_PREVIEW = 10
 
 private const val FACET_SEARCH_OVER = 50
 
-private const val FACET_SEARCH_ROWS = 50
+/** Only the meaning list is cut: its words run into the thousands. */
+private const val MEANING_ROWS = 500
 
 private val REBUILD_PHASES = setOf("Resetting your index", "Updating the index configuration", "Rebuilding your index")
 

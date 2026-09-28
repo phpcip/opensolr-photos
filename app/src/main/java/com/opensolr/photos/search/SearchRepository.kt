@@ -318,6 +318,7 @@ class SearchRepository(private val context: Context) {
         params += "facet.mincount" to "1"
 
         params += "facet.limit" to "-1"
+        params += "f.labels.facet.limit" to MEANING_FACET_LIMIT.toString()
         FACET_FIELDS.forEach { params += "facet.field" to it }
         addFolderFacets(params)
         params += "facet.sort" to "index"
@@ -332,7 +333,9 @@ class SearchRepository(private val context: Context) {
         params += "rows" to "0"
         params += "facet" to "true"
         params += "facet.mincount" to "1"
-        params += "facet.limit" to "20"
+        // every value of every list; only the meaning words are cut
+        params += "facet.limit" to "-1"
+        params += "f.labels.facet.limit" to MEANING_FACET_LIMIT.toString()
         FACET_FIELDS.filter { !legacy || it !in SearchFilters.NEWER_FACETS }
             .forEach { params += "facet.field" to "{!ex=$it key=$it}$it" }
         addFolderFacets(params)
@@ -407,6 +410,7 @@ class SearchRepository(private val context: Context) {
             params += "facet.mincount" to "1"
 
             params += "facet.limit" to "-1"
+            params += "f.labels.facet.limit" to MEANING_FACET_LIMIT.toString()
 
             params += "facet.sort" to "index"
             FACET_FIELDS.filter { !legacy || it !in SearchFilters.NEWER_FACETS }
@@ -1099,6 +1103,7 @@ class SearchRepository(private val context: Context) {
         const val PAGE = 60
 
         private val FACET_FIELDS = SearchFilters.FACETS.map { it.first }.toSet()
+        private const val MEANING_FACET_LIMIT = 500
 
         /** The most pins one view of the map holds: past that, zoom in and the area asks again. */
         const val MAP_ROWS = 1000
