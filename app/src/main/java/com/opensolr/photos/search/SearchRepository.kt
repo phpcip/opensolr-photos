@@ -819,33 +819,54 @@ class SearchRepository(private val context: Context) {
         return hits to listOf(hits.size)
     }
 
+    /** One thing a photo must have to be like the compared one: a person, or a face nobody named. */
+    private class Want(val refs: List<FloatArray>, val least: Float, val ids: Set<String>)
+
     /**
-     * The photos with the same faces as [photoId]: every face of the compared photo must be found (close enough)
-     * among the other photo's faces. Fingerprints and documents both come from the phone's clone: nothing is asked
-     * of the index. The compared photo comes first, the rest by how close they are.
+     * The photos with the same people as [photoId]. A face with a name stands for the person: a photo has them
+     * when it names them, or when one of its faces scores as them against the person's own faces (as the review
+     * does). A face without a name is looked for as itself. Every person of the compared photo must be in the
+     * photo. Names, fingerprints and documents all come from the phone's clone: nothing is asked of the index.
+     * The compared photo comes first, the rest by how close they are, all of them.
      */
     private suspend fun sameFaces(photoId: String): Pair<List<PhotoHit>, List<Int>> = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
         val photos = com.opensolr.photos.data.PhotoCache.of(context)
-        val source = photos.facesWithVectors(photoId).map { it.second }
-        if (source.isEmpty()) return@withContext anchorAlone(photoId)
-        val closest = HashMap<String, FloatArray>()
+        val faces = photos.facesWithVectors(photoId)
+        val named = LinkedHashMap<String, String>()
+        faces.mapNotNull { it.first.person }.forEach { named.putIfAbsent(it.lowercase(), it) }
+        (photos.getEdits(photoId)?.persons ?: photos.doc(photoId)?.persons).orEmpty().forEach { named.putIfAbsent(it.lowercase(), it) }
+        val wants = ArrayList<Want>()
+        named.values.forEach { name ->
+            val own = faces.filter { it.first.person.equals(name, true) }.map { it.second }
+            val refs = FaceMatcher.references(photos, name).ifEmpty { own }
+            wants += Want(refs, FaceMatcher.SAME, photos.idsWithPerson(name).toHashSet())
+        }
+        faces.filter { it.first.person == null }.forEach { wants += Want(listOf(it.second), SAME_FACE, emptySet()) }
+        if (wants.isEmpty()) return@withContext anchorAlone(photoId)
+        val scores = HashMap<String, FloatArray>()
+        wants.forEach { w -> w.ids.forEach { id -> if (id != photoId) scores.getOrPut(id) { FloatArray(wants.size) { -1f } } } }
         photos.forEachFace { page ->
             for ((row, vector) in page) {
                 if (row.photoId == photoId) continue
-                val best = closest.getOrPut(row.photoId) { FloatArray(source.size) { -1f } }
-                source.forEachIndexed { i, face ->
-                    val s = com.opensolr.photos.media.FaceEngine.similarity(face, vector)
+                val best = scores.getOrPut(row.photoId) { FloatArray(wants.size) { -1f } }
+                wants.forEachIndexed { i, w ->
+                    if (w.refs.isEmpty()) return@forEachIndexed
+                    val s = FaceMatcher.score(vector, w.refs)
                     if (s > best[i]) best[i] = s
                 }
             }
         }
-        val matched = closest.entries
-            .filter { e -> e.value.all { it >= SAME_FACE } }
-            .sortedByDescending { e -> e.value.average() }
-            .take(SIMILAR_ROWS)
-            .map { it.key }
+        val matched = scores.entries.mapNotNull { (id, best) ->
+            var sum = 0f
+            wants.forEachIndexed { i, w ->
+                val s = if (id in w.ids) maxOf(best[i], w.least) else best[i]
+                if (s < w.least) return@mapNotNull null
+                sum += s
+            }
+            id to sum / wants.size
+        }.sortedByDescending { it.second }
         val anchor = photos.doc(photoId)?.json?.let { runCatching { hitOf(JSONObject(it)) }.getOrNull() }
-        val hits = listOfNotNull(anchor) + matched.mapNotNull { id -> photos.doc(id)?.json?.let { runCatching { hitOf(JSONObject(it)) }.getOrNull() } }
+        val hits = listOfNotNull(anchor) + matched.mapNotNull { (id, _) -> photos.doc(id)?.json?.let { runCatching { hitOf(JSONObject(it)) }.getOrNull() } }
         if (hits.isEmpty()) return@withContext anchorAlone(photoId)
         hits to listOf(hits.size)
     }
@@ -1205,7 +1226,7 @@ class SearchRepository(private val context: Context) {
         const val FIRST_LIBRARY_LEVEL = 1
 
         const val DEFAULT_DUPLICATE_LEVEL = FIRST_LIBRARY_LEVEL
-        /** A face this close to one of the compared photo's faces is the same person. */
+        /** A face nobody named is looked for as itself: this close to it is the same person. */
         const val SAME_FACE = com.opensolr.photos.search.FaceMatcher.SURE
 
         const val GROUPS_PAGE = 20
