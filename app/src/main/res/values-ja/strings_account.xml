@@ -69,6 +69,10 @@
     <string name="acc_balance_plan">ご利用のプランには意味検索が含まれないため、検索は語句のみで行われ、この設定は効きません。</string>
     <string name="acc_semantic">意味</string>
     <string name="acc_lexical">語句</string>
+    <string name="acc_match">語句の一致</string>
+    <string name="acc_match_flexible">柔軟</string>
+    <string name="acc_match_balanced">標準</string>
+    <string name="acc_match_strict">厳格</string>
     <string name="acc_cache">検索キャッシュ</string>
     <string name="acc_cache_text">索引からの答えはこの端末に保存して再利用します。同じ問い合わせを二度支払う必要はありません。タグの編集、写真の削除、同期の完了で即座に消えます。</string>
     <string name="acc_cache_seconds">回答を再利用する秒数</string>
@@ -78,7 +82,11 @@
     <string name="acc_clear_cache">キャッシュを消去</string>
     <string name="acc_advanced">詳細</string>
     <string name="acc_regular_index">通常の Opensolr Index です。</string>
-    <string name="acc_open_index">opensolr.com でこのインデックスを開く</string>
+    <string name="acc_open_index">Opensolrアカウントでこのインデックスを管理</string>
+    <string name="acc_get_app_title">Opensolrアプリを入手しますか？</string>
+    <string name="acc_get_app_text">Opensolrアプリでアカウントのすべてのインデックスを管理できます。アプリがない場合はopensolr.comで開きます。</string>
+    <string name="acc_get_app_install">インストール</string>
+    <string name="acc_get_app_browser">ブラウザで開く</string>
     <string name="acc_sign_out">ログアウト</string>
     <string name="acc_sign_out_q">ログアウトしますか？</string>
     <string name="acc_sign_out_text">同期が止まり、この端末はOpensolrアカウントを忘れます。インデックスと写真はアカウントに残ります。</string>

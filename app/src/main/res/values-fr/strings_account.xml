@@ -69,6 +69,10 @@
     <string name="acc_balance_plan">Votre forfait n\'inclut pas la recherche par le sens ; la recherche n\'utilise que les mots et ce réglage n\'a pas d\'effet.</string>
     <string name="acc_semantic">Sémantique</string>
     <string name="acc_lexical">Lexical</string>
+    <string name="acc_match">Correspondance lexicale</string>
+    <string name="acc_match_flexible">Souple</string>
+    <string name="acc_match_balanced">Équilibrée</string>
+    <string name="acc_match_strict">Stricte</string>
     <string name="acc_cache">Cache de recherche</string>
     <string name="acc_cache_text">Les réponses de votre index restent sur ce téléphone et sont réutilisées, pour ne pas payer deux fois la même question. Vos tags, les photos supprimées et chaque synchronisation terminée le vident aussitôt.</string>
     <string name="acc_cache_seconds">Réutiliser une réponse pendant (secondes)</string>
@@ -78,7 +82,11 @@
     <string name="acc_clear_cache">Vider le cache</string>
     <string name="acc_advanced">Avancé</string>
     <string name="acc_regular_index">Un Opensolr Index ordinaire.</string>
-    <string name="acc_open_index">Ouvrir cet index sur opensolr.com</string>
+    <string name="acc_open_index">Gérer cet index dans votre compte Opensolr</string>
+    <string name="acc_get_app_title">Installer l\'app Opensolr ?</string>
+    <string name="acc_get_app_text">L\'app Opensolr gère tous les index de votre compte. Sans elle, vos index s\'ouvrent sur opensolr.com.</string>
+    <string name="acc_get_app_install">Installer</string>
+    <string name="acc_get_app_browser">Ouvrir dans le navigateur</string>
     <string name="acc_sign_out">Se déconnecter</string>
     <string name="acc_sign_out_q">Se déconnecter ?</string>
     <string name="acc_sign_out_text">La synchro s\'arrête et ce téléphone oublie votre compte Opensolr. Votre index et ses photos restent dans votre compte.</string>

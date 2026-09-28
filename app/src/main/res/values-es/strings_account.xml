@@ -69,6 +69,10 @@
     <string name="acc_balance_plan">Tu plan no incluye búsqueda por significado; la búsqueda solo usa palabras y esto no tiene efecto.</string>
     <string name="acc_semantic">Semántico</string>
     <string name="acc_lexical">Léxico</string>
+    <string name="acc_match">Coincidencia léxica</string>
+    <string name="acc_match_flexible">Flexible</string>
+    <string name="acc_match_balanced">Equilibrada</string>
+    <string name="acc_match_strict">Estricta</string>
     <string name="acc_cache">Caché de búsqueda</string>
     <string name="acc_cache_text">Las respuestas de tu índice se guardan en este teléfono y se reutilizan, para no pagar dos veces la misma pregunta. Tus etiquetas, las fotos borradas y cada sincronización terminada lo vacían al instante.</string>
     <string name="acc_cache_seconds">Reutilizar una respuesta durante (segundos)</string>
@@ -78,7 +82,11 @@
     <string name="acc_clear_cache">Vaciar caché</string>
     <string name="acc_advanced">Avanzado</string>
     <string name="acc_regular_index">Un Opensolr Index normal.</string>
-    <string name="acc_open_index">Abrir este índice en opensolr.com</string>
+    <string name="acc_open_index">Gestionar este índice en tu cuenta de Opensolr</string>
+    <string name="acc_get_app_title">¿Instalar la app de Opensolr?</string>
+    <string name="acc_get_app_text">La app de Opensolr gestiona todos los índices de tu cuenta. Sin ella, tus índices se abren en opensolr.com.</string>
+    <string name="acc_get_app_install">Instalar</string>
+    <string name="acc_get_app_browser">Abrir en el navegador</string>
     <string name="acc_sign_out">Cerrar sesión</string>
     <string name="acc_sign_out_q">¿Cerrar sesión?</string>
     <string name="acc_sign_out_text">La sincronización se detiene y este teléfono olvida tu cuenta de Opensolr. Tu índice y sus fotos siguen en tu cuenta.</string>

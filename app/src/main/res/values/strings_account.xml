@@ -69,6 +69,10 @@
     <string name="acc_balance_plan">Your plan does not include search by meaning, so search matches words only and this has no effect.</string>
     <string name="acc_semantic">Semantic</string>
     <string name="acc_lexical">Lexical</string>
+    <string name="acc_match">Lexical matching</string>
+    <string name="acc_match_flexible">Flexible</string>
+    <string name="acc_match_balanced">Balanced</string>
+    <string name="acc_match_strict">Strict</string>
     <string name="acc_cache">Search cache</string>
     <string name="acc_cache_text">Answers from your index are kept on this phone and reused, so the same question is not paid for twice. Your own tags, deleted photos and every finished sync empty it at once.</string>
     <string name="acc_cache_seconds">Reuse an answer for this many seconds</string>
@@ -78,7 +82,11 @@
     <string name="acc_clear_cache">Clear cache</string>
     <string name="acc_advanced">Advanced</string>
     <string name="acc_regular_index">A regular Opensolr Index.</string>
-    <string name="acc_open_index">Open this index on opensolr.com</string>
+    <string name="acc_open_index">Manage this index in your Opensolr account</string>
+    <string name="acc_get_app_title">Get the Opensolr app?</string>
+    <string name="acc_get_app_text">The Opensolr app manages every index on your account. Without it, your indexes open on opensolr.com.</string>
+    <string name="acc_get_app_install">Install</string>
+    <string name="acc_get_app_browser">Open in browser</string>
     <string name="acc_sign_out">Sign out</string>
     <string name="acc_sign_out_q">Sign out?</string>
     <string name="acc_sign_out_text">Syncing stops and this phone forgets your Opensolr account. Your index and the photos in it stay in your account.</string>

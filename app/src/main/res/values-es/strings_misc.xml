@@ -66,4 +66,5 @@
         <item quantity="many">%1$s fotos</item>
         <item quantity="other">%1$s fotos</item>
     </plurals>
+    <string name="rt_device_note">Así tus fotos y los recursos de tu cuenta de Opensolr quedan ligados a este teléfono.</string>
 </resources>

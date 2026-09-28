@@ -60,4 +60,5 @@
     <plurals name="rt_n_photos">
         <item quantity="other">%1$s 张照片</item>
     </plurals>
+    <string name="rt_device_note">这会让你的照片和 Opensolr 账户资源与这台手机绑定。</string>
 </resources>

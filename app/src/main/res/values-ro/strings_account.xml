@@ -69,6 +69,10 @@
     <string name="acc_balance_plan">Planul tău nu include căutarea după înțeles, așa că se caută doar după cuvinte și reglajul n-are efect.</string>
     <string name="acc_semantic">Semantic</string>
     <string name="acc_lexical">Lexical</string>
+    <string name="acc_match">Potrivire lexicală</string>
+    <string name="acc_match_flexible">Flexibilă</string>
+    <string name="acc_match_balanced">Echilibrată</string>
+    <string name="acc_match_strict">Strictă</string>
     <string name="acc_cache">Memorie de căutare</string>
     <string name="acc_cache_text">Răspunsurile din index rămân pe telefon și se refolosesc, ca aceeași întrebare să nu coste de două ori. Etichetele tale, pozele șterse și orice sync încheiat îl golesc pe loc.</string>
     <string name="acc_cache_seconds">Refolosește un răspuns atâtea secunde</string>
@@ -78,7 +82,11 @@
     <string name="acc_clear_cache">Golește memoria</string>
     <string name="acc_advanced">Avansat</string>
     <string name="acc_regular_index">Un Opensolr Index obișnuit.</string>
-    <string name="acc_open_index">Deschide acest index pe opensolr.com</string>
+    <string name="acc_open_index">Administrează acest index în contul tău Opensolr</string>
+    <string name="acc_get_app_title">Instalezi aplicația Opensolr?</string>
+    <string name="acc_get_app_text">Aplicația Opensolr administrează toți indecșii din contul tău. Fără ea, indecșii se deschid pe opensolr.com.</string>
+    <string name="acc_get_app_install">Instalează</string>
+    <string name="acc_get_app_browser">Deschide în browser</string>
     <string name="acc_sign_out">Deconectează-te</string>
     <string name="acc_sign_out_q">Te deconectezi?</string>
     <string name="acc_sign_out_text">Sincronizarea se oprește și telefonul uită contul tău Opensolr. Indexul și pozele din el rămân în cont.</string>

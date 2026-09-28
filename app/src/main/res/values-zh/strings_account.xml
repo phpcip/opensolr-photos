@@ -69,6 +69,10 @@
     <string name="acc_balance_plan">你的套餐不包含按含义搜索，搜索仅按文字匹配，此设置无效。</string>
     <string name="acc_semantic">语义</string>
     <string name="acc_lexical">词汇</string>
+    <string name="acc_match">词汇匹配</string>
+    <string name="acc_match_flexible">宽松</string>
+    <string name="acc_match_balanced">均衡</string>
+    <string name="acc_match_strict">严格</string>
     <string name="acc_cache">搜索缓存</string>
     <string name="acc_cache_text">索引的结果会保存在本机并重复使用，同一个问题不会花费两次。你的标签、删除照片以及每次同步完成都会立即清空它。</string>
     <string name="acc_cache_seconds">回答重复使用的秒数</string>
@@ -78,7 +82,11 @@
     <string name="acc_clear_cache">清空缓存</string>
     <string name="acc_advanced">高级</string>
     <string name="acc_regular_index">一个普通的 Opensolr Index。</string>
-    <string name="acc_open_index">在 opensolr.com 打开此索引</string>
+    <string name="acc_open_index">在你的 Opensolr 账户中管理此索引</string>
+    <string name="acc_get_app_title">安装 Opensolr 应用？</string>
+    <string name="acc_get_app_text">Opensolr 应用可管理你账户中的所有索引。没有它时，你的索引将在 opensolr.com 上打开。</string>
+    <string name="acc_get_app_install">安装</string>
+    <string name="acc_get_app_browser">在浏览器中打开</string>
     <string name="acc_sign_out">退出登录</string>
     <string name="acc_sign_out_q">退出登录？</string>
     <string name="acc_sign_out_text">同步将停止，本手机会忘记你的 Opensolr 账户。你的索引及其中的照片仍保留在账户中。</string>

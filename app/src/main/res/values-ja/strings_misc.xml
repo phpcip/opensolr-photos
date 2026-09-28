@@ -60,4 +60,5 @@
     <plurals name="rt_n_photos">
         <item quantity="other">写真 %1$s 枚</item>
     </plurals>
+    <string name="rt_device_note">写真とOpensolrアカウントのリソースをこの端末に紐づけておくためです。</string>
 </resources>

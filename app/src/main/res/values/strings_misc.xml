@@ -63,4 +63,5 @@
         <item quantity="one">%1$s photo</item>
         <item quantity="other">%1$s photos</item>
     </plurals>
+    <string name="rt_device_note">This keeps your photos and the resources of your Opensolr account tied to this phone.</string>
 </resources>

@@ -63,4 +63,5 @@
         <item quantity="one">%1$s Foto</item>
         <item quantity="other">%1$s Fotos</item>
     </plurals>
+    <string name="rt_device_note">So bleiben Ihre Fotos und die Ressourcen Ihres Opensolr-Kontos diesem Telefon zugeordnet.</string>
 </resources>
