@@ -725,18 +725,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             val docs = batch.map { json ->
                 runCatching { org.json.JSONObject(json).apply { PhotoCache.ANSWER_KEYS.forEach { remove(it) } }.toString() }.getOrDefault(json)
             }
-            var attempt = 0
-            val written = while (true) {
-                try {
-                    break api.photosRestore(session, connection.indexName, docs)
-                } catch (e: ServiceException) {
-                    if (++attempt >= RESTORE_TRIES) throw e
-                    delay(RESTORE_RETRY_MS)
-                } catch (e: java.io.IOException) {
-                    if (++attempt >= RESTORE_TRIES) throw e
-                    delay(RESTORE_RETRY_MS)
-                }
-            }
+            val written = restoreBatch(session, connection, docs)
             val refused = written.count { !it } + (docs.size - written.size).coerceAtLeast(0)
             if (refused > 0) throw RestoreRefusedException(refused)
             prefs.restoreAfter = lastId
@@ -744,6 +733,21 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             onProgress(Progress(AppText.s(R.string.sy_restoring), done, total))
         }
         prefs.restoreAfter = ""
+    }
+
+    /** One batch written back, tried again a few times when the service or the network fails for a moment. */
+    private suspend fun restoreBatch(session: Session, connection: IndexConnection, docs: List<String>): List<Boolean> {
+        var attempt = 0
+        while (true) {
+            try {
+                return api.photosRestore(session, connection.indexName, docs)
+            } catch (e: ServiceException) {
+                if (++attempt >= RESTORE_TRIES) throw e
+            } catch (e: java.io.IOException) {
+                if (++attempt >= RESTORE_TRIES) throw e
+            }
+            delay(RESTORE_RETRY_MS)
+        }
     }
 
     private class RestoreRefusedException(val refused: Int) : Exception()
