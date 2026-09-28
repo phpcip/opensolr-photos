@@ -1047,6 +1047,16 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         return out
     }
 
+    /** Every photo with a face nobody has named yet, newest first. */
+    fun photosWithUnnamedFaces(): List<String> {
+        val out = ArrayList<String>()
+        readableDatabase.rawQuery(
+            "SELECT DISTINCT f.photo_id FROM faces f LEFT JOIN docs d ON d.id = f.photo_id WHERE f.person IS NULL ORDER BY d.taken_ms DESC",
+            null,
+        ).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        return out
+    }
+
     /** Faces the owner said are not [person]: never offered for them again. */
     fun rejectFaces(fids: Collection<Long>, person: String) {
         if (fids.isEmpty()) return

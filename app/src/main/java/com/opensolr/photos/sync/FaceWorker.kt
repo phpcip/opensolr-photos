@@ -44,9 +44,8 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val undone = forgetGuesses(ctx, cache, edits)
         // people already on photos are put on their faces, on the phone only
         FaceMatcher.bindTagged(cache)
-        // photos read before a person was named get the name now: the newest ones, a bounded number
-        val recent = photos.sortedByDescending { it.addedSec }.take(RECHECK).map { it.id }
-        if (FaceMatcher.nameRecent(cache, edits, (undone + recent).distinct())) SyncScheduler.runNow(ctx)
+        // every photo with a face still unnamed is compared with the people known now: a name given once reaches all of them
+        if (FaceMatcher.nameRecent(cache, edits, (undone + cache.photosWithUnnamedFaces()).distinct())) SyncScheduler.runNow(ctx)
         return Result.success()
     }
 
@@ -118,8 +117,6 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         const val KEY_TOTAL = "total"
         private const val RUN_MS = 4 * 60 * 1000L
         private const val FORGOTTEN = "guesses_forgotten"
-        /** How many of the newest photos are checked again for people when someone is learned. */
-        private const val RECHECK = 1000
 
         private val _progress = MutableStateFlow(Progress(false, 0, 0))
         val progress: StateFlow<Progress> = _progress
