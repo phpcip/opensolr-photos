@@ -1,0 +1,9 @@
+- People are put on photos by naming faces: open a photo, tap the face button, name a face. Faces that clearly match get the name on their own; the rest are offered for you to confirm, with long press and drag to tick many at once.
+- A photo that already names a person shows that name on the matching face.
+- Remove a name from your whole library from the People filter.
+- Filters open as a screen of their own and never close on a swipe.
+- Similar photos start with the same faces, compared on the phone.
+- With the keyboard up, the first back only puts the keyboard away.
+- Every button answers a tap visibly.
+- A photo keeps its identity when its folders are copied to another phone; the app never removes photos from the index when the phone cannot be read, and asks before removing many at once.
+- Reset, Stop, Re-sync, Re-read and Documents stop everything first, do their work, then start again.
