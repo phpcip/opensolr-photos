@@ -20,4 +20,9 @@
         <item quantity="one">%1$s added to %2$s photo</item>
         <item quantity="other">%1$s added to %2$s photos</item>
     </plurals>
+    <string name="sy_restoring">Restoring your index</string>
+    <string name="fc_scan_all">Find faces in all photos</string>
+    <string name="fc_scan_text">Reads every photo once to find the faces in it. It runs only while the phone is charging, takes a while, and can be stopped here. Faces already read are kept in your index and never read again.</string>
+    <string name="fc_scan_start">Start</string>
+    <string name="fc_scan_progress">Reading faces: %1$s of %2$s</string>
 </resources>

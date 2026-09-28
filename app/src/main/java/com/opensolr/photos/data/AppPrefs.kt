@@ -91,6 +91,11 @@ class AppPrefs(context: Context) {
             prefs.edit().putString(KEY_REPORT, value?.toJson()).commit()
         }
 
+    /** Reset: the index was emptied and is to be filled again from the local clone at the next sync. */
+    var restoreFromClone: Boolean
+        get() = prefs.getBoolean("restore_from_clone", false)
+        set(value) { prefs.edit().putBoolean("restore_from_clone", value).commit() }
+
     var rebuildApproved: Boolean
         get() = prefs.getBoolean(KEY_REBUILD, false)
         set(value) {

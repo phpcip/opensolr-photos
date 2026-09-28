@@ -55,7 +55,8 @@
   <field name="custom_tags" type="string" indexed="true" stored="true" multiValued="true"/>
   <!-- The tags as words, for search: "luminita" finds the tag "Luminița". -->
   <field name="custom_tags_text" type="text_general" indexed="true" stored="false" multiValued="true"/>
-  <field name="embeddings" type="knn_vector" indexed="true" stored="false"/>
+  <!-- Stored as well: a document can be rewritten (faces, words) without the vector being made again -->
+  <field name="embeddings" type="knn_vector" indexed="true" stored="true"/>
   <field name="clip_model" type="string" indexed="true" stored="true"/>
   <!-- Duplicate keys (dup_w1_hash .. dup_exif_w5_hash, made on the server): the app's duplicates
        are one facet on the key the slider picks. docValues for the facet; not stored, nothing
@@ -126,6 +127,8 @@
   <dynamicField name="*_b" type="boolean" indexed="true" stored="true"/>
   <dynamicField name="*_dt" type="pdate" indexed="true" stored="true"/>
   <dynamicField name="*_t" type="text_general" indexed="true" stored="true"/>
+  <!-- Kept, never searched: the faces found in a photo (boxes, names, fingerprints), so a new install reads them back instead of finding them again -->
+  <dynamicField name="*_json" type="string" indexed="false" stored="true" docValues="false"/>
 
   <fieldType name="string" class="solr.StrField" sortMissingLast="true" docValues="true"/>
   <fieldType name="boolean" class="solr.BoolField" sortMissingLast="true" docValues="true"/>

@@ -22,4 +22,9 @@
         <item quantity="many">%1$s añadido a %2$s fotos</item>
         <item quantity="other">%1$s añadido a %2$s fotos</item>
     </plurals>
+    <string name="sy_restoring">Restaurando tu índice</string>
+    <string name="fc_scan_all">Buscar caras en todas las fotos</string>
+    <string name="fc_scan_text">Lee cada foto una vez para encontrar las caras. Solo funciona mientras el teléfono se carga, tarda un rato y se puede detener aquí. Las caras ya leídas se guardan en tu índice y no se vuelven a leer.</string>
+    <string name="fc_scan_start">Empezar</string>
+    <string name="fc_scan_progress">Leyendo caras: %1$s de %2$s</string>
 </resources>

@@ -49,7 +49,6 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         db.execSQL("CREATE INDEX IF NOT EXISTS faces_person ON faces (person)")
         db.execSQL(FACE_REJECTS_TABLE)
         db.execSQL(FACE_SCANNED_TABLE)
-        db.execSQL(FILE_WRITES_TABLE)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -151,15 +150,10 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         if (oldVersion < 23) {
             createFaceTables(db)
         }
-        if (oldVersion < 26) {
-            // one queue for everything the owner put on a photo that still has to reach its file
-            db.execSQL(FILE_WRITES_TABLE)
-            if (oldVersion >= 25) {
-                db.execSQL("INSERT OR IGNORE INTO file_writes (photo_id) SELECT photo_id FROM face_writes")
-                db.execSQL("DROP TABLE IF EXISTS face_writes")
-            }
-            db.execSQL("INSERT OR IGNORE INTO file_writes (photo_id) SELECT id FROM set_places WHERE written = 0")
-            db.execSQL("INSERT OR IGNORE INTO file_writes (photo_id) SELECT id FROM edits")
+        if (oldVersion < 27) {
+            // the photo's file is never written any more: the queues that fed those writes go
+            db.execSQL("DROP TABLE IF EXISTS file_writes")
+            db.execSQL("DROP TABLE IF EXISTS face_writes")
         }
         if (oldVersion < 24) {
             // who named a face: 0 the owner, 1 learned from the photos' tags, 2 the matcher on its own
@@ -583,6 +577,22 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         return rows.sortedByDescending { it.first }.take(limit.coerceAtLeast(1)).map { it.second }
     }
 
+    /** Every document of the clone, [batch] at a time, in id order; never all in memory. */
+    fun forEachDocJson(batch: Int, block: suspend (List<String>) -> Unit) = kotlinx.coroutines.runBlocking {
+        var after = ""
+        while (true) {
+            val page = ArrayList<String>(batch)
+            var last = after
+            readableDatabase.rawQuery("SELECT id, json FROM docs WHERE id > ? AND json IS NOT NULL ORDER BY id LIMIT $batch", arrayOf(after)).use { c ->
+                while (c.moveToNext()) { last = c.getString(0); page += c.getString(1) }
+            }
+            if (page.isEmpty()) return@runBlocking
+            block(page)
+            after = last
+            if (page.size < batch) return@runBlocking
+        }
+    }
+
     fun docsByIds(ids: Collection<String>): List<String> {
         val out = ArrayList<String>(ids.size)
         ids.chunked(500).forEach { chunk ->
@@ -905,7 +915,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
      * Names faces (or clears the name with null); a named face is no longer refused for that person. [sure] false
      * = named by the matcher on its own: shown and searchable, but never used to recognise anyone else.
      */
-    fun setFacePerson(fids: Collection<Long>, person: String?, sure: Boolean = true, how: Int = HOW_OWNER, toFile: Boolean = true) {
+    fun setFacePerson(fids: Collection<Long>, person: String?, sure: Boolean = true, how: Int = HOW_OWNER) {
         if (fids.isEmpty()) return
         val db = writableDatabase
         db.beginTransaction()
@@ -914,8 +924,6 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
                 val marks = batch.joinToString(",") { "?" }
                 val args = batch.map { it.toString() }.toTypedArray()
                 db.update("faces", ContentValues().apply { if (person == null) putNull("person") else put("person", person); put("sure", if (sure) 1 else 0); put("how", how) }, "fid IN ($marks)", args)
-                // the names in the photo's file follow: written there as soon as the owner allows it
-                if (toFile) db.execSQL("INSERT OR IGNORE INTO file_writes (photo_id) SELECT DISTINCT photo_id FROM faces WHERE fid IN ($marks)", args)
                 if (person != null) db.delete("face_rejects", "fid IN ($marks) AND person = ? COLLATE NOCASE", args + person)
             }
             db.setTransactionSuccessful()
@@ -960,38 +968,43 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         return out
     }
 
-    /** What was learned for [person] from the tags is forgotten, before it is learned again. */
-    fun clearLearned(person: String) {
-        writableDatabase.execSQL("UPDATE faces SET person = NULL, sure = 1, how = $HOW_OWNER WHERE how = $HOW_LEARNED AND person = ? COLLATE NOCASE", arrayOf(person))
+    /** The photo's faces as the index keeps them, or null when none were read yet. */
+    fun facesForIndex(photoId: String, sizeBytes: Long): String? {
+        val rows = facesWithVectors(photoId)
+        val flags = HashMap<Long, Pair<Boolean, Int>>()
+        readableDatabase.rawQuery("SELECT fid, sure, how FROM faces WHERE photo_id = ?", arrayOf(photoId)).use { c ->
+            while (c.moveToNext()) flags[c.getLong(0)] = (c.getInt(1) == 1) to c.getInt(2)
+        }
+        if (rows.isEmpty() && !faceScanned(photoId, sizeBytes)) return null
+        return FaceStore.encode(sizeBytes, com.opensolr.photos.media.FaceEngine.VERSION, rows, flags)
     }
 
-    /** Photos whose people, tags, wording, place or face areas still have to be written into the file, up to [limit]. */
-    fun pendingFileWrites(limit: Int): List<String> {
-        val out = ArrayList<String>()
-        readableDatabase.rawQuery("SELECT photo_id FROM file_writes LIMIT $limit", null).use { c -> while (c.moveToNext()) out += c.getString(0) }
-        return out
-    }
-
-    fun pendingFileWriteCount(): Int =
-        readableDatabase.rawQuery("SELECT COUNT(*) FROM file_writes", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
-
-    fun clearFileWrites(ids: Collection<String>) = deleteByIds("file_writes", ids, "photo_id")
-
-    fun queueFileWrites(ids: Collection<String>) {
-        if (ids.isEmpty()) return
+    /** Faces read back from the index for a photo this phone has not read itself: stored as they were, nothing computed. */
+    fun importFaces(photoId: String, mediaId: Long, stored: FaceStore.Stored) {
         val db = writableDatabase
         db.beginTransaction()
         try {
-            ids.forEach { db.insertWithOnConflict("file_writes", null, ContentValues().apply { put("photo_id", it) }, SQLiteDatabase.CONFLICT_IGNORE) }
+            db.delete("faces", "photo_id = ?", arrayOf(photoId))
+            stored.faces.forEach { f ->
+                db.insert("faces", null, ContentValues().apply {
+                    put("photo_id", photoId); put("media_id", mediaId); put("x", f.x); put("y", f.y); put("w", f.w); put("h", f.h); put("score", f.score)
+                    put("vec", toBytes(f.vector))
+                    if (f.person == null) putNull("person") else put("person", f.person)
+                    put("sure", if (f.sure) 1 else 0); put("how", f.how)
+                })
+            }
+            db.insertWithOnConflict("face_scanned", null, ContentValues().apply {
+                put("photo_id", photoId); put("size_bytes", stored.sizeBytes); put("faces", stored.faces.size)
+            }, SQLiteDatabase.CONFLICT_REPLACE)
             db.setTransactionSuccessful()
         } finally {
             db.endTransaction()
         }
     }
 
-    /** The file changed by our own write: its new size, so the faces are not read again for it. */
-    fun updateFaceScannedSize(photoId: String, sizeBytes: Long) {
-        writableDatabase.execSQL("UPDATE face_scanned SET size_bytes = ? WHERE photo_id = ?", arrayOf<Any>(sizeBytes, photoId))
+    /** What was learned for [person] from the tags is forgotten, before it is learned again. */
+    fun clearLearned(person: String) {
+        writableDatabase.execSQL("UPDATE faces SET person = NULL, sure = 1, how = $HOW_OWNER WHERE how = $HOW_LEARNED AND person = ? COLLATE NOCASE", arrayOf(person))
     }
 
     /** Faces the owner said are not [person]: never offered for them again. */
@@ -1097,8 +1110,6 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
             put("at", System.currentTimeMillis())
         }
         writableDatabase.insertWithOnConflict("set_places", null, values, SQLiteDatabase.CONFLICT_REPLACE)
-        // a place not in the file yet goes there too
-        if (!place.written) writableDatabase.insertWithOnConflict("file_writes", null, ContentValues().apply { put("photo_id", place.id) }, SQLiteDatabase.CONFLICT_IGNORE)
     }
 
     fun setPlaces(ids: Collection<String>): Map<String, SetPlace> {
@@ -1113,14 +1124,6 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         return out
     }
 
-    fun unwrittenPlaces(): List<SetPlace> =
-        readableDatabase.query("set_places", SET_PLACE_COLUMNS, "written = 0", null, null, null, "at").use { c ->
-            val out = ArrayList<SetPlace>(c.count)
-            while (c.moveToNext()) out += setPlaceOf(c)
-            out
-        }
-
-    fun markPlacesWritten(ids: Collection<String>) = markPlaces("written", ids)
 
     fun markPlacesSynced(ids: Collection<String>) = markPlaces("synced", ids)
 
@@ -1510,8 +1513,6 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
             put("updated", System.currentTimeMillis())
         }
         writableDatabase.insertWithOnConflict("edits", null, values, SQLiteDatabase.CONFLICT_REPLACE)
-        // what the owner wrote goes into the file as well as into the index
-        writableDatabase.insertWithOnConflict("file_writes", null, ContentValues().apply { put("photo_id", id) }, SQLiteDatabase.CONFLICT_IGNORE)
     }
 
     private fun readEdits(cursor: android.database.Cursor, offset: Int = 0): Edits {
@@ -1629,7 +1630,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
     companion object {
         private const val NAME = "photo_cache.db"
-        private const val VERSION = 26
+        private const val VERSION = 27
 
         @Volatile private var shared: PhotoCache? = null
 
@@ -1693,7 +1694,6 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         private const val FACES_TABLE = "CREATE TABLE IF NOT EXISTS faces (fid INTEGER PRIMARY KEY AUTOINCREMENT, photo_id TEXT NOT NULL, media_id INTEGER NOT NULL, x REAL NOT NULL, y REAL NOT NULL, w REAL NOT NULL, h REAL NOT NULL, score REAL NOT NULL, vec BLOB NOT NULL, person TEXT, sure INTEGER NOT NULL DEFAULT 1, how INTEGER NOT NULL DEFAULT 0)"
         private const val FACE_REJECTS_TABLE = "CREATE TABLE IF NOT EXISTS face_rejects (fid INTEGER NOT NULL, person TEXT NOT NULL COLLATE NOCASE, PRIMARY KEY (fid, person))"
         private const val FACE_SCANNED_TABLE = "CREATE TABLE IF NOT EXISTS face_scanned (photo_id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, faces INTEGER NOT NULL)"
-        private const val FILE_WRITES_TABLE = "CREATE TABLE IF NOT EXISTS file_writes (photo_id TEXT PRIMARY KEY NOT NULL)"
         private const val FACE_PAGE = 2000
         const val HOW_OWNER = 0
         const val HOW_LEARNED = 1

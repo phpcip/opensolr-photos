@@ -33,7 +33,7 @@
     <string name="tg_remove">Retirer</string>
     <string name="tg_n_more">+%1$s de plus</string>
     <string name="tg_edit">Modifier %1$s</string>
-    <string name="tg_saved_in_file">Enregistré dans la photo elle-même, pour que les autres apps voient aussi les noms.</string>
+    <string name="tg_saved_in_file">Enregistré dans ton index. La photo elle-même n\'est jamais modifiée.</string>
     <string name="tg_tags_hint">Tout ce que vous chercheriez. Chaque étiquette devient un album.</string>
     <string name="tg_shows">Ce que montre la photo</string>
     <string name="tg_words_hint">Mots séparés par des virgules. Votre formulation est gardée même si la photo est relue.</string>

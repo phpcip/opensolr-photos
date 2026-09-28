@@ -27,6 +27,7 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.material3.RadioButtonDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -152,6 +153,39 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
             color = p.muted,
         )
         Spacer(Modifier.height(28.dp))
+
+        // Faces in every photo: only when the owner asks, only on the charger, with progress and a stop
+        val faceScan by com.opensolr.photos.sync.FaceWorker.progress.collectAsState()
+        var confirmFaceScan by remember { mutableStateOf(false) }
+        SectionLabel(stringResource(R.string.fc_people))
+        Spacer(Modifier.height(4.dp))
+        if (faceScan.running) {
+            Text(stringResource(R.string.fc_scan_progress, Actions.formatCount(faceScan.done.toLong()), Actions.formatCount(faceScan.total.toLong())), style = MaterialTheme.typography.bodyMedium, color = p.ink)
+            Spacer(Modifier.height(8.dp))
+            LinearProgressIndicator(
+                progress = { if (faceScan.total == 0) 0f else faceScan.done.toFloat() / faceScan.total },
+                modifier = Modifier.fillMaxWidth().height(6.dp), color = p.accent, trackColor = p.chip, strokeCap = StrokeCap.Butt, gapSize = 0.dp, drawStopIndicator = {},
+            )
+            Spacer(Modifier.height(12.dp))
+            GhostButton(stringResource(R.string.sync_btn_stop), onClick = { viewModel.stopFaceScan() }, modifier = Modifier.fillMaxWidth())
+        } else {
+            GhostButton(stringResource(R.string.fc_scan_all), onClick = { confirmFaceScan = true }, modifier = Modifier.fillMaxWidth())
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(stringResource(R.string.fc_scan_text), style = MaterialTheme.typography.bodySmall, color = p.muted)
+        Spacer(Modifier.height(28.dp))
+        if (confirmFaceScan) {
+            AlertDialog(
+                onDismissRequest = { confirmFaceScan = false },
+                title = { Text(stringResource(R.string.fc_scan_all)) },
+                text = { Text(stringResource(R.string.fc_scan_text)) },
+                confirmButton = { TextButton(onClick = { confirmFaceScan = false; viewModel.startFaceScan() }) { Text(stringResource(R.string.fc_scan_start), color = p.accent) } },
+                dismissButton = { TextButton(onClick = { confirmFaceScan = false }) { Text(stringResource(R.string.sync_cancel), color = p.ink) } },
+                containerColor = p.paper,
+                titleContentColor = p.ink,
+                textContentColor = p.muted,
+            )
+        }
 
         SectionLabel(stringResource(R.string.sync_auto))
         Spacer(Modifier.height(4.dp))

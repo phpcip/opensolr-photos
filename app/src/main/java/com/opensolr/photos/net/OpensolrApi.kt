@@ -28,6 +28,8 @@ data class IngestItem(
     val persons: List<String> = emptyList(), val resetWording: Boolean = false,
     /** Which of the words are the owner's own current list on this phone (they replace the index's); the rest came from the file and are added to it. */
     val ownerTags: Boolean = false, val ownerPersons: Boolean = false, val ownerMeaning: Boolean = false,
+    /** The faces as the index keeps them (FaceStore), and the md5 of the picture's pixels alone. */
+    val faces: String? = null, val pixelHash: String? = null,
 )
 
 data class WordsItem(
@@ -39,6 +41,7 @@ data class WordsItem(
     val fileHash: String? = null,
 
     val location: Pair<Double, Double>? = null,
+    val faces: String? = null,
 )
 
 data class IngestResult(val words: Boolean, val place: Boolean, val doc: JSONObject? = null)
@@ -423,6 +426,8 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
                 if (item.ownerTags) put("owner_tags", true)
                 if (item.ownerPersons) put("owner_persons", true)
                 if (item.ownerMeaning) put("owner_meaning", true)
+                item.faces?.let { put("faces", it) }
+                item.pixelHash?.let { put("pixel_hash", it) }
                 if (p.modifiedSec > 0) put("modified_at", isoUtc(p.modifiedSec * 1000L))
                 put("width", p.width)
                 put("height", p.height)
@@ -457,6 +462,27 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         }
     }
 
+    /** Whole documents of the local clone written back into the emptied index; true for each that was written. */
+    suspend fun photosRestore(session: Session, name: String, docs: List<String>): List<Boolean> = withContext(Dispatchers.IO) {
+        val list = JSONArray()
+        docs.forEach { runCatching { JSONObject(it) }.getOrNull()?.let { list.put(it) } }
+        val body = JSONObject()
+            .put("email", session.email)
+            .put("api_key", session.apiKey)
+            .put("index_name", name)
+            .put("docs", list)
+        val request = Request.Builder().url(AI + "photos_restore").post(body.toString().toRequestBody(JSON)).build()
+        http.newCall(request).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            classify(response.code, text, response.header("Retry-After"))
+            if (response.code >= 400) throw ServiceException(platformMessage(text))
+            val json = parseObject(text)
+            if (!json.optBoolean("status")) throw ServiceException(platformMessage(text))
+            val results = json.optJSONArray("results") ?: throw ServiceException("The Opensolr AI service answered without results")
+            (0 until results.length()).map { results.optJSONObject(it)?.optBoolean("status") ?: false }
+        }
+    }
+
     suspend fun photosWords(session: Session, name: String, items: List<WordsItem>): List<JSONObject?> = withContext(Dispatchers.IO) {
         val photos = JSONArray()
         items.forEach { item ->
@@ -467,6 +493,7 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
                 item.meaning?.let { put("meaning", it) }
                 item.fileHash?.let { put("file_hash", it) }
                 item.location?.let { (lat, lon) -> put("location", JSONObject().put("lat", lat).put("lon", lon)) }
+                item.faces?.let { put("faces", it) }
             })
         }
         val body = JSONObject()

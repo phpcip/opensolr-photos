@@ -107,13 +107,17 @@ class EditRepository(private val context: Context) {
                 val edits = cache.getEdits(id)
 
                 val doc = cache.doc(id)
+                // only what the owner changed travels; a photo queued for its place or its faces alone sends no
+                // words, so the server keeps its vector instead of making it again
                 WordsItem(
                     id = id,
-                    tags = edits?.tags ?: doc?.tags,
-                    persons = edits?.persons ?: doc?.persons,
+                    tags = edits?.tags,
+                    persons = edits?.persons,
                     meaning = edits?.meaning,
                     fileHash = doc?.fileHash,
                     location = places[id]?.let { it.lat to it.lon },
+                    // the faces travel with the words: a name put on one changes both
+                    faces = cache.facesForIndex(id, doc?.sizeBytes ?: 0L),
                 )
             }
             val results = api.photosWords(session, connection.indexName, items)
@@ -161,6 +165,10 @@ class EditRepository(private val context: Context) {
     }
 
     fun storeDoc(id: String, answer: JSONObject, indexedAt: Long = System.currentTimeMillis()) {
+        // the faces the index keeps for this photo: taken as they are when this phone has none for this file
+        com.opensolr.photos.data.FaceStore.decode(answer.optString("faces_json").ifBlank { null })?.let { stored ->
+            if (!cache.faceScanned(id, stored.sizeBytes)) cache.importFaces(id, answer.optLong("media_id", -1L), stored)
+        }
         fun words(field: String): List<String> =
             answer.optJSONArray(field)?.let { a -> (0 until a.length()).map { a.optString(it) } }?.filter { it.isNotBlank() } ?: emptyList()
         val persons = words("persons_ss").ifEmpty {
@@ -204,6 +212,6 @@ class EditRepository(private val context: Context) {
             "taken_at,indexed_at,modified_at,year,month,width,height,orientation," +
             "camera_make,camera_model,lens,iso,exposure,f_number,focal_length,flash," +
             "has_location,location,altitude,city,region,province,community,country,country_code," +
-            "labels,meaning,ocr_t,persons_t,persons_ss,custom_tags,clip_model,embed_model"
+            "labels,meaning,ocr_t,persons_t,persons_ss,custom_tags,clip_model,embed_model,faces_json,pixel_hash"
     }
 }

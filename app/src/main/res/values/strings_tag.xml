@@ -33,7 +33,7 @@
     <string name="tg_remove">Remove</string>
     <string name="tg_n_more">+%1$s more</string>
     <string name="tg_edit">Edit %1$s</string>
-    <string name="tg_saved_in_file">Saved into the photo itself, so other apps see the names too.</string>
+    <string name="tg_saved_in_file">Saved in your index. The photo itself is never changed.</string>
     <string name="tg_tags_hint">Anything you would search for. Each tag becomes an album of its own.</string>
     <string name="tg_shows">What the photo shows</string>
     <string name="tg_words_hint">Words separated by commas. Your wording is kept even when the photo is read again.</string>

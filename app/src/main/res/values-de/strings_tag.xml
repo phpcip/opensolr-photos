@@ -33,7 +33,7 @@
     <string name="tg_remove">Entfernen</string>
     <string name="tg_n_more">+%1$s weitere</string>
     <string name="tg_edit">%1$s bearbeiten</string>
-    <string name="tg_saved_in_file">Im Foto selbst gespeichert, damit andere Apps die Namen auch sehen.</string>
+    <string name="tg_saved_in_file">In deinem Index gespeichert. Das Foto selbst wird nie verändert.</string>
     <string name="tg_tags_hint">Alles, wonach Sie suchen würden. Jeder Tag wird ein eigenes Album.</string>
     <string name="tg_shows">Was das Foto zeigt</string>
     <string name="tg_words_hint">Wörter durch Kommas getrennt. Ihre Formulierung bleibt, auch wenn das Foto neu gelesen wird.</string>

@@ -317,22 +317,9 @@ fun PlacePickerDialog(
     }
 }
 
+/** Nothing is written into the files any more; kept so the Me screen compiles unchanged, and never shown (placesToWrite is 0). */
 @Composable
-fun rememberPlaceWriter(viewModel: com.opensolr.photos.ui.AppViewModel): () -> Unit {
-    val scope = androidx.compose.runtime.rememberCoroutineScope()
-    val launcher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult()
-    ) { result -> viewModel.finishPlaceWrite(result.resultCode == android.app.Activity.RESULT_OK) }
-    return remember(viewModel) {
-        {
-            scope.launch {
-                val sender = viewModel.preparePlaceWrite() ?: return@launch
-                launcher.launch(androidx.activity.result.IntentSenderRequest.Builder(sender).build())
-            }
-            Unit
-        }
-    }
-}
+fun rememberPlaceWriter(viewModel: com.opensolr.photos.ui.AppViewModel): () -> Unit = remember { {} }
 
 @Composable
 fun rememberNoSheetDrag(): androidx.compose.ui.input.nestedscroll.NestedScrollConnection = remember {

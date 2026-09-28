@@ -22,4 +22,9 @@
         <item quantity="many">%1$s ajouté à %2$s photos</item>
         <item quantity="other">%1$s ajouté à %2$s photos</item>
     </plurals>
+    <string name="sy_restoring">Restauration de ton index</string>
+    <string name="fc_scan_all">Trouver les visages dans toutes les photos</string>
+    <string name="fc_scan_text">Lit chaque photo une fois pour y trouver les visages. Ne tourne que pendant la charge du téléphone, prend du temps et peut être arrêté ici. Les visages déjà lus restent dans ton index et ne sont jamais relus.</string>
+    <string name="fc_scan_start">Démarrer</string>
+    <string name="fc_scan_progress">Lecture des visages : %1$s sur %2$s</string>
 </resources>

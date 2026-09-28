@@ -193,23 +193,36 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             val aiAvailable = vectorAllowed && (limits == null || limits.maxAiRequests <= 0 || limits.aiRequestsUsed < limits.maxAiRequests)
             if (!aiAvailable) quotaHit = true
 
+            // The local clone is the source of truth: an index emptied for a new configuration (or by Reset,
+            // prefs.restoreFromClone) is filled again from it, and no photo is sent again.
+            var refill = false
             if (rebuild) {
-
+                // the clone is read before the index goes, so the index comes back from it and nothing is sent again
+                if (edits.cloneMissing()) {
+                    onProgress(Progress(AppText.s(R.string.sy_reading_once), 0, 0))
+                    withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { edits.readIndexIntoCache() }
+                }
                 onProgress(Progress(AppText.s(R.string.sy_resetting), 0, 0))
-                withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { com.opensolr.photos.data.OwnerWords.keep(context, cache, solr, local) }
                 solr.deleteAll()
                 indexes.applyConfig(session, connection) { onProgress(Progress(it, 0, 0)) }
                 noteIndexChecked(connection)
-
                 prefs.rebuildApproved = false
+                refill = cache.docCount() > 0
             }
+            if (prefs.restoreFromClone) refill = true
+            if (refill) {
+                withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { restoreFromClone(session, connection, onProgress) }
+                prefs.restoreFromClone = false
+                prefs.cloneComplete = true
+            }
+            val rebuilt = rebuild && !refill
 
             val forced = prefs.resyncIds
             val wordingReset = prefs.wordingResetIds
             forced.forEach { cache.clearWordRetry(it); cache.clearSkipped(it) }
             val skippedSizes = cache.skippedSizes()
             val rereadSince = prefs.rereadAllSince
-            val phase = if (rebuild) AppText.s(R.string.sy_rebuilding) else AppText.s(R.string.sy_indexing)
+            val phase = if (rebuilt) AppText.s(R.string.sy_rebuilding) else AppText.s(R.string.sy_indexing)
 
             val sent = HashSet<String>()
             val pending = ArrayList<LocalPhoto>(READ_BATCH)
@@ -230,6 +243,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
 
                 val placed = cache.setPlaces(batch.map { it.id })
                 val guessed = newPhotoPlaces(batch, placed.keys)
+                val people = com.opensolr.photos.search.FaceMatcher.people(cache)
                 for (photo in batch) {
                     val jpeg = try {
                         PhotoReader.copyForIngest(context, photo, placed[photo.id] ?: guessed[photo.id])
@@ -253,10 +267,16 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                     // "" = the owner reset their wording: neither theirs nor the file's is sent any more
                     val cleared = edits?.meaning == ""
                     val meaning = if (cleared) null else edits?.meaning ?: xmp?.meaning
-                    val names = edits?.persons ?: xmp?.persons ?: emptyList()
+                    var names = edits?.persons ?: xmp?.persons ?: emptyList()
+                    // the faces, read once here for a new or changed picture, go up with it and stay in the index
+                    val faces = readFaces(photo, people)
+                    if (faces != null && edits == null && names.isEmpty()) {
+                        names = cache.facesOf(photo.id).mapNotNull { it.person }.distinctBy { it.lowercase() }
+                    }
                     items += IngestItem(
                         photo, jpeg, tags, meaning, weighed[photo.id] ?: PhotoReader.fileMd5(context, photo), names, resetWording = cleared || photo.id in wordingReset,
                         ownerTags = edits != null, ownerPersons = edits?.persons != null, ownerMeaning = !edits?.meaning.isNullOrEmpty(),
+                        faces = faces, pixelHash = PhotoReader.pixelHash(context, photo.uri),
                     )
                 }
                 if (items.isNotEmpty()) {
@@ -270,7 +290,6 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                         failed += items.size
                         null
                     }
-                    val restore = ArrayList<LocalPhoto>()
                     results?.let { r ->
 
                       cache.inTransaction {
@@ -282,10 +301,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                                 added++
                                 cache.clearSkipped(item.photo.id)
 
-                                val wasIndexed = cache.docFileHash(item.photo.id) != null || cache.doc(item.photo.id) != null
                                 result.doc?.let { edits.storeDoc(item.photo.id, it) }
-                                // a file changed outside the app may have lost what the owner put on it: written back
-                                if (wasIndexed) restore += item.photo
                                 cache.clearActions(listOf(item.photo.id))
 
                                 if (item.photo.id in placed) cache.markPlacesSynced(listOf(item.photo.id))
@@ -300,8 +316,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                         }
                       }
                     }
-                    // outside the transaction: this reads the files
-                    restore.forEach { restoreIntoFile(it) }
+
                 }
                 progress(phase)
             }
@@ -344,7 +359,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
 
             val toDelete = ArrayList<String>(500)
             var indexedIds: Set<String> = emptySet()
-            if (!rebuild) {
+            if (!rebuilt) {
                 if (edits.cloneMissing()) {
                     onProgress(Progress(AppText.s(R.string.sy_reading_once), 0, 0))
                     withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { edits.readIndexIntoCache() }
@@ -380,13 +395,16 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                         return@forEach
                     }
                     if (changed && stamp != null) {
-
-                        val was = cache.docFileHash(photo.id)
-
+                        // the file changed: the same picture (its pixels) means only the metadata did, and a photo
+                        // is sent again only when the picture itself changed
                         val now = PhotoReader.fileMd5(context, photo)
                         if (now != null) weighed[photo.id] = now
-                        if (was != null && was == now) {
-                            cache.updateDocSize(photo.id, photo.sizeBytes, photo.modifiedSec)
+                        val wasPixels = cache.doc(photo.id)?.json?.let { runCatching { org.json.JSONObject(it).optString("pixel_hash") }.getOrNull() }?.ifBlank { null }
+                        val nowPixels = if (wasPixels == null) null else PhotoReader.pixelHash(context, photo.uri)
+                        val samePicture = (cache.docFileHash(photo.id)?.let { it == now } ?: false) || (wasPixels != null && wasPixels == nowPixels)
+                        if (samePicture) {
+                            cache.updateDocSize(photo.id, photo.sizeBytes, photo.modifiedSec, now)
+                            if (wasPixels != null) takeWordsFromFile(photo)
                             if (photo.id !in forced && photo.id !in needWords && photo.id !in reread) return@forEach
                         }
                     }
@@ -590,17 +608,52 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
         }
     }
 
-    /** After a changed file was read again: what the index holds and the file lacks is queued to go back into it. */
-    private fun restoreIntoFile(photo: LocalPhoto) {
+    /**
+     * The faces of a photo about to go up: read now unless this phone already has them for this file, the names
+     * the file carries put on them, then the people already known matched. As one string for the index.
+     */
+    private fun readFaces(photo: LocalPhoto, people: Map<String, List<FloatArray>>): String? {
+        if (!cache.faceScanned(photo.id, photo.sizeBytes)) {
+            val bitmap = try { PhotoReader.uprightBitmap(context, photo.uri, com.opensolr.photos.media.FaceEngine.READ_EDGE) } catch (e: Exception) { null } ?: return null
+            val found = try { com.opensolr.photos.media.FaceEngine.of(context).analyze(bitmap) } catch (e: Exception) { return null } finally { bitmap.recycle() }
+            com.opensolr.photos.search.FaceMatcher.fromFile(context, cache, photo.uri, cache.putFaces(photo.id, photo.mediaId, photo.sizeBytes, found))
+            val stored = cache.facesWithVectors(photo.id)
+            com.opensolr.photos.search.FaceMatcher.autoName(cache, edits, photo.id, stored.map { it.first }, stored.map { it.second }, people, queueWords = false)
+        }
+        return cache.facesForIndex(photo.id, photo.sizeBytes)
+    }
+
+    /** A file whose picture did not change but whose metadata did (tags, people, a place put in by another app): the index takes what is new. */
+    private fun takeWordsFromFile(photo: LocalPhoto) {
         val doc = cache.doc(photo.id) ?: return
-        if (!PhotoReader.canWriteExif(photo.mime)) return
         val file = runCatching { PhotoReader.xmpWordsIn(context, photo) }.getOrNull() ?: return
-        val tags = file.tags.orEmpty().map { it.lowercase() }.toSet()
-        val people = file.persons.map { it.lowercase() }.toSet()
-        if (doc.tags.any { it.lowercase() !in tags } || doc.persons.any { it.lowercase() !in people }) cache.queueFileWrites(listOf(photo.id))
-        val point = com.opensolr.photos.search.parseLatLon(runCatching { org.json.JSONObject(doc.json ?: "{}").optString("location") }.getOrNull())
-        if (point != null && cache.setPlaces(listOf(photo.id)).isEmpty() && PhotoReader.gpsState(context, photo.uri) == PhotoReader.GpsState.MISSING) {
-            cache.putSetPlace(PhotoCache.SetPlace(photo.id, point.first, point.second, owner = true, written = false, synced = true))
+        val had = cache.getEdits(photo.id)
+        val tags = ((had?.tags ?: doc.tags) + file.tags.orEmpty()).distinctBy { it.lowercase() }
+        val persons = ((had?.persons ?: doc.persons) + file.persons).distinctBy { it.lowercase() }
+        val meaning = had?.meaning ?: file.meaning?.takeIf { doc.meaning.isNullOrBlank() }
+        if (tags.size != (had?.tags ?: doc.tags).size || persons.size != (had?.persons ?: doc.persons).size || (meaning != null && meaning != had?.meaning)) {
+            cache.putEdits(photo.id, PhotoCache.Edits(tags, meaning, persons))
+            cache.queueAction(photo.id, PhotoCache.ACTION_WORDS)
+        }
+        if (cache.setPlaces(listOf(photo.id)).isEmpty() && doc.json?.contains("\"location\"") != true) {
+            PhotoReader.readMetadata(context, photo).let { m ->
+                if (m.latitude != null && m.longitude != null) {
+                    cache.putSetPlace(PhotoCache.SetPlace(photo.id, m.latitude, m.longitude, owner = true, written = true, synced = false))
+                    cache.queueAction(photo.id, PhotoCache.ACTION_WORDS)
+                }
+            }
+        }
+    }
+
+    /** The emptied index filled again from the local clone, in batches; the server makes the search vector and the place names again. */
+    private suspend fun restoreFromClone(session: Session, connection: IndexConnection, onProgress: suspend (Progress) -> Unit) {
+        val total = cache.docCount()
+        var done = 0
+        cache.forEachDocJson(RESTORE_BATCH) { batch ->
+            if (SyncWorker.stopRequested.get()) throw SyncStoppedException()
+            api.photosRestore(session, connection.indexName, batch)
+            done += batch.size
+            onProgress(Progress(AppText.s(R.string.sy_restoring), done, total))
         }
     }
 
@@ -671,6 +724,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
         SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(millis)
 
     companion object {
+        private const val RESTORE_BATCH = 50
 
         private const val NEAR_PHOTO_MS = 30 * 60 * 1000L
 

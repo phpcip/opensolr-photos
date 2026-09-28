@@ -235,19 +235,6 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         lifecycle.lifecycle.addObserver(observer)
         onDispose { lifecycle.lifecycle.removeObserver(observer) }
     }
-    // everything the owner puts on photos (people, tags, wording, places, faces) goes into the files, one request at a time
-    val faceWriteScope = rememberCoroutineScope()
-    val faceWriteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
-        viewModel.finishFileWrite(result.resultCode == android.app.Activity.RESULT_OK)
-    }
-    LaunchedEffect(state.faceWrites, state.faceWritesDeclined) {
-        if (state.faceWrites > 0 && !state.faceWritesDeclined) {
-            faceWriteScope.launch {
-                val sender = viewModel.prepareFileWrite() ?: return@launch
-                faceWriteLauncher.launch(IntentSenderRequest.Builder(sender).build())
-            }
-        }
-    }
 
     val systemBars = WindowInsets.systemBars.asPaddingValues()
     val topInset = systemBars.calculateTopPadding()
@@ -2945,36 +2932,11 @@ internal fun DetailsSheet(
     val context = LocalContext.current
 
     var picking by remember { mutableStateOf(false) }
-    var pendingPlace by remember { mutableStateOf<Pair<Double, Double>?>(null) }
-    val placeWriter = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
-        val point = pendingPlace
-        pendingPlace = null
-        // the place is saved either way: in the index now, in the file as soon as Android allows it
-        if (point != null) {
-            val written = result.resultCode == Activity.RESULT_OK && (Actions.contentUris(context, listOf(hit)).firstOrNull()
-                ?.let { com.opensolr.photos.media.PhotoReader.writeGps(context, it, hit.mime, point.first, point.second) } ?: false)
-            viewModel.setPlace(listOf(hit), point.first, point.second, if (written) setOf(hit.id) else emptySet())
-            onDismiss()
-        }
-    }
+    // the file is never touched: the place goes to the index only
     fun savePlace(lat: Double, lon: Double) {
         picking = false
-        val file = Actions.contentUris(context, listOf(hit)).firstOrNull()
-        when {
-            file == null || !com.opensolr.photos.media.PhotoReader.canWriteExif(hit.mime) -> {
-                viewModel.setPlace(listOf(hit), lat, lon, emptySet())
-                onDismiss()
-            }
-            Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
-                pendingPlace = lat to lon
-                placeWriter.launch(IntentSenderRequest.Builder(MediaStore.createWriteRequest(context.contentResolver, listOf(file)).intentSender).build())
-            }
-            else -> {
-                val written = com.opensolr.photos.media.PhotoReader.writeGps(context, file, hit.mime, lat, lon)
-                viewModel.setPlace(listOf(hit), lat, lon, if (written) setOf(hit.id) else emptySet())
-                onDismiss()
-            }
-        }
+        viewModel.setPlace(listOf(hit), lat, lon)
+        onDismiss()
     }
     ModalBottomSheet(onDismissRequest = onDismiss, containerColor = p.paper, shape = Corner) {
 

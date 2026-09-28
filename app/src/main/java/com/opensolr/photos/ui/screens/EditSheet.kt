@@ -164,15 +164,6 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
         }
         if (fromFile.isNotEmpty()) tags = (tags + fromFile).distinctWords()
     }
-    val writeLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
-        val namesChanged = persons != originalPersons
-        if (result.resultCode == Activity.RESULT_OK) {
-            Actions.contentUris(context, listOf(hit)).firstOrNull()?.let {
-                PhotoReader.writeXmp(context, it, hit.mime, if (namesChanged) persons else null, tags, ownWording(), clearMeaning = wordingCleared())
-            }
-        }
-        finishSave(if (namesChanged) persons else null)
-    }
 
     fun pick(tag: String) {
         tags = (tags + tag).distinctWords()
@@ -392,23 +383,9 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                         addTag()
                         addPerson()
 
+                        // the photo's file is never touched: the words go to the index only
                         val names = persons
-                        val namesChanged = names != originalPersons
-
-                        run {
-                            val uri = Actions.contentUris(context, listOf(hit)).firstOrNull()
-                            when {
-                                uri == null -> finishSave(if (namesChanged) names else null)
-                                Build.VERSION.SDK_INT >= Build.VERSION_CODES.R -> {
-                                    val request = MediaStore.createWriteRequest(context.contentResolver, listOf(uri))
-                                    writeLauncher.launch(IntentSenderRequest.Builder(request.intentSender).build())
-                                }
-                                else -> {
-                                    PhotoReader.writeXmp(context, uri, hit.mime, if (namesChanged) names else null, tags, ownWording(), clearMeaning = wordingCleared())
-                                    finishSave(if (namesChanged) names else null)
-                                }
-                            }
-                        }
+                        finishSave(if (names != originalPersons) names else null)
                     },
                     modifier = Modifier.weight(1f),
                     enabled = !state.editSaving,

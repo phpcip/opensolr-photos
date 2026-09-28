@@ -21,7 +21,7 @@
     <string name="sync_btn_reread">再読込</string>
     <string name="sync_btn_documents">書類</string>
     <string name="sync_btn_reset">リセット</string>
-    <string name="sync_buttons_text">Re-Sync：新規と削除のみ。停止：実行中の処理を終えます。再読込：索引を空にせず全写真を送り直します。ドキュメント：印字された文字を読み直します。リセット：索引を空にして全部読み直します。</string>
+    <string name="sync_buttons_text">Re-Sync：新規と削除された写真のみ。Stop：現在の実行を終了。Re-read：何も空にせず、すべての写真を再度 Opensolr に送信。Documents：印刷テキストを再読み込み。Reset：インデックスを空にして、この端末上のコピーから再び満たします。</string>
     <string name="sync_auto">自動再同期</string>
     <string name="sync_daily">毎日</string>
     <string name="sync_weekly">毎週</string>
@@ -36,7 +36,7 @@
     <string name="sync_reread_q">すべての写真を読み直しますか？</string>
     <string name="sync_reread_text">すべての写真をもう一度 Opensolr に通して書き直します（言葉・場所・人物・ベクトル）。索引は空になりません。検索は使え、タグは残り、写真は変わりません。途中で止めても安全です。</string>
     <string name="sync_reset_q">インデックスをリセットしますか？</string>
-    <string name="sync_reset_text">すべての写真を空にして読み直します（新しい AI リクエストとして数えます）。タグは残り、写真は変わりません。</string>
+    <string name="sync_reset_text">インデックスは空にされ、この端末上のコピーから再び満たされます。何も再送されず、検索ベクトルだけが作り直され、プランの AI リクエストとして数えられます。タグ、人物、場所、説明は保持され、写真は変更されません。</string>
     <string name="st_none">まだ同期していません。</string>
     <string name="st_no_photos">選んだフォルダーに写真が見つかりませんでした。</string>
     <string name="st_none_read">読み込めた写真はありません。何もインデックスされていません。</string>
@@ -46,7 +46,7 @@
     <string name="st_sign_in">一時停止: Opensolrに再ログインしてください。</string>
     <string name="st_rebuild">待機中: 新しいバージョンのため、インデックスのリセットと完全な再同期が必要です。写真画面を開くと開始します。</string>
     <string name="st_update">一時停止: 同期を続けるにはOpensolr Photosを更新してください。</string>
-    <string name="st_device">待機中: アプリを開き、この端末がどのデバイスかを選んでください。</string>
+    <string name="st_device">待機中: アプリを開き、Opensolrアカウントのインデックスを再利用するか選んでください。</string>
     <string name="st_charger">充電待ち: %1$s</string>
     <string name="st_retry">一時停止中: Opensolrから速度を落とすよう求められました。自動で再開します。</string>
     <string name="st_failed">前回の同期は完了しませんでした。次の再同期で再試行します。</string>

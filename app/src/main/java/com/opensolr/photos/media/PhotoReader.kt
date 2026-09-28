@@ -41,9 +41,8 @@ data class PhotoMetadata(
 object PhotoReader {
 
     private const val CLIP_EDGE_PX = 1024
+    private const val PIXEL_HASH_EDGE = 256
     private const val JPEG_QUALITY = 85
-    private const val WRITE_TRIES = 3
-    private const val WRITE_RETRY_MS = 250L
     private const val SHARE_JPEG_QUALITY = 92
 
     fun shrinkForClip(context: Context, uri: Uri, rotationDegrees: Int, edge: Int = CLIP_EDGE_PX, quality: Int = JPEG_QUALITY): ByteArray? {
@@ -82,6 +81,40 @@ object PhotoReader {
         val upright = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
         if (upright !== decoded) decoded.recycle()
         return upright
+    }
+
+    /**
+     * The md5 of the picture itself (its pixels, upright, at a small size), never of its metadata: the same photo
+     * with tags or a place written into it by any app hashes the same, an edited or cropped one does not.
+     */
+    fun pixelHash(context: Context, uri: Uri): String? = try {
+        val bitmap = uprightBitmap(context, uri, PIXEL_HASH_EDGE)
+        if (bitmap == null) null else {
+            val w = bitmap.width
+            val h = bitmap.height
+            val pixels = IntArray(w * h)
+            bitmap.getPixels(pixels, 0, w, 0, 0, w, h)
+            bitmap.recycle()
+            val digest = java.security.MessageDigest.getInstance("MD5")
+            val buffer = java.nio.ByteBuffer.allocate(pixels.size * 4).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+            // only the top bits of each channel: a re-save of the same picture must not count as a change
+            pixels.forEach { buffer.putInt(it and 0x00F0F0F0) }
+            digest.update(byteArrayOf((w shr 8).toByte(), w.toByte(), (h shr 8).toByte(), h.toByte()))
+            digest.update(buffer.array())
+            hex(digest.digest())
+        }
+    } catch (e: Exception) {
+        null
+    }
+
+    private fun hex(bytes: ByteArray): String {
+        val out = CharArray(bytes.size * 2)
+        for (i in bytes.indices) {
+            val v = bytes[i].toInt() and 0xff
+            out[i * 2] = HEX[v ushr 4]
+            out[i * 2 + 1] = HEX[v and 0x0f]
+        }
+        return String(out)
     }
 
     fun fileMd5(context: Context, photo: LocalPhoto): String? = fileMd5(context, photo.uri)
@@ -167,10 +200,7 @@ object PhotoReader {
         }
     }
 
-    fun canWriteExif(mime: String): Boolean = normal(mime) in setOf("image/jpeg", "image/png", "image/webp")
 
-    /** "image/jpg" (some apps write it) is a JPEG like any other. */
-    private fun normal(mime: String): String = mime.lowercase().let { if (it == "image/jpg" || it == "image/pjpeg") "image/jpeg" else it }
 
     enum class GpsState {
 
@@ -204,38 +234,6 @@ object PhotoReader {
         val lon = latLong.getOrNull(1) ?: return null
         if (!valid(lat, 90.0) || !valid(lon, 180.0) || (lat == 0.0 && lon == 0.0)) return null
         return lat to lon
-    }
-
-    /** Whether the app may change this file right now (Android already allowed it), so no new request is needed. */
-    fun mayWrite(context: Context, uri: Uri): Boolean =
-        Build.VERSION.SDK_INT < Build.VERSION_CODES.R ||
-            context.checkCallingOrSelfUriPermission(uri, android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION) == PackageManager.PERMISSION_GRANTED
-
-    /** [writeGps], tried again a few times: a file being read at the same moment (the sync) makes a write fail once. */
-    fun writeGps(context: Context, uri: Uri, mime: String, lat: Double, lon: Double): Boolean {
-        repeat(WRITE_TRIES) { attempt ->
-            if (writeGpsOnce(context, uri, mime, lat, lon)) return true
-            if (!canWriteExif(mime) || !valid(lat, 90.0) || !valid(lon, 180.0)) return false
-            Thread.sleep(WRITE_RETRY_MS * (attempt + 1))
-        }
-        return false
-    }
-
-    private fun writeGpsOnce(context: Context, uri: Uri, mime: String, lat: Double, lon: Double): Boolean {
-        if (!canWriteExif(mime)) return false
-        if (!valid(lat, 90.0) || !valid(lon, 180.0)) return false
-        return try {
-            context.contentResolver.openFileDescriptor(uri, "rw")?.use { pfd ->
-                val exif = ExifInterface(pfd.fileDescriptor)
-                exif.setLatLong(lat, lon)
-                exif.setAttribute(ExifInterface.TAG_GPS_ALTITUDE, null)
-                exif.setAttribute(ExifInterface.TAG_GPS_ALTITUDE_REF, null)
-                exif.saveAttributes()
-                true
-            } ?: false
-        } catch (e: Exception) {
-            false
-        }
     }
 
     fun unreadableReason(context: Context, photo: LocalPhoto): String {
@@ -283,90 +281,8 @@ object PhotoReader {
 
     private val XMP_LI = Regex("<rdf:li[^>]*>(.*?)</rdf:li>", RegexOption.DOT_MATCHES_ALL)
 
-    fun writeXmp(
-        context: Context,
-        uri: Uri,
-        mime: String,
-        persons: List<String>?,
-        tags: List<String>?,
-        meaning: String? = null,
-        clearMeaning: Boolean = false,
-        faces: List<FaceArea>? = null,
-    ): Boolean {
-        if (!canWriteExif(mime)) return false
-        if (persons == null && tags == null && meaning == null && !clearMeaning && faces == null) return true
-        return try {
-            context.contentResolver.openFileDescriptor(uri, "rw")?.use { pfd ->
-                val exif = ExifInterface(pfd.fileDescriptor)
-                var packet = exif.getAttributeBytes(ExifInterface.TAG_XMP)?.let { String(it, Charsets.UTF_8) }
-                if (persons != null) {
-                    packet = withProperty(packet, XMP_PERSONS, bag("Iptc4xmpExt:PersonInImage", "xmlns:Iptc4xmpExt=\"http://iptc.org/std/Iptc4xmpExt/2008-02-29/\"", persons))
-                }
-                if (tags != null) {
-                    packet = withProperty(packet, XMP_SUBJECT, bag("dc:subject", "xmlns:dc=\"http://purl.org/dc/elements/1.1/\"", tags))
-                    packet = withProperty(packet, XMP_OPENSOLR_TAGS, bag("opensolr:Tags", "xmlns:opensolr=\"$OPENSOLR_NS\"", tags))
-                }
-
-                if (faces != null) {
-                    // the face areas with their names, in the regions standard photo apps read (MWG), on the stored pixels
-                    val dims = storedSize(context, uri)
-                    val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-                    packet = withProperty(packet, XMP_REGIONS, if (faces.isEmpty() || dims == null) "" else regions(faces, dims, orientation))
-                }
-                if (meaning != null || clearMeaning) {
-                    val text = meaning?.trim()?.take(MEANING_MAX_CHARS).orEmpty()
-                    val property = if (text.isEmpty()) "" else "<opensolr:Meaning xmlns:opensolr=\"$OPENSOLR_NS\">${escapeXml(text)}</opensolr:Meaning>"
-                    packet = withProperty(packet, XMP_OPENSOLR_MEANING, property)
-                }
-                exif.setAttribute(ExifInterface.TAG_XMP, packet)
-                exif.saveAttributes()
-                if (normal(mime) == "image/jpeg" && packet != null) syncJpegXmpSegment(pfd.fileDescriptor, packet)
-                true
-            } ?: false
-        } catch (e: Exception) {
-            false
-        }
-    }
-
     /** A named face in the upright photo: box as shares of its width and height. */
     data class FaceArea(val name: String, val x: Float, val y: Float, val w: Float, val h: Float)
-
-    private fun storedSize(context: Context, uri: Uri): Pair<Int, Int>? {
-        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        context.contentResolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-        return if (bounds.outWidth > 0 && bounds.outHeight > 0) bounds.outWidth to bounds.outHeight else null
-    }
-
-    /**
-     * MWG face regions: centre and size as shares of the stored image (the Exif orientation not applied, as the
-     * standard says), so an app that turns the photo upright turns the areas with it.
-     */
-    private fun regions(faces: List<FaceArea>, dims: Pair<Int, Int>, orientation: Int): String {
-        fun stored(x: Float, y: Float): Pair<Float, Float> = when (orientation) {
-            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> (1 - x) to y
-            ExifInterface.ORIENTATION_ROTATE_180 -> (1 - x) to (1 - y)
-            ExifInterface.ORIENTATION_FLIP_VERTICAL -> x to (1 - y)
-            ExifInterface.ORIENTATION_TRANSPOSE -> y to x
-            ExifInterface.ORIENTATION_ROTATE_90 -> y to (1 - x)
-            ExifInterface.ORIENTATION_TRANSVERSE -> (1 - y) to (1 - x)
-            ExifInterface.ORIENTATION_ROTATE_270 -> (1 - y) to x
-            else -> x to y
-        }
-        val items = faces.joinToString("") { f ->
-            val a = stored(f.x, f.y)
-            val b = stored(f.x + f.w, f.y + f.h)
-            val w = kotlin.math.abs(b.first - a.first)
-            val h = kotlin.math.abs(b.second - a.second)
-            val cx = (a.first + b.first) / 2
-            val cy = (a.second + b.second) / 2
-            "<rdf:li rdf:parseType=\"Resource\"><mwg-rs:Name>${escapeXml(f.name)}</mwg-rs:Name><mwg-rs:Type>Face</mwg-rs:Type>" +
-                "<mwg-rs:Area stArea:x=\"${num(cx)}\" stArea:y=\"${num(cy)}\" stArea:w=\"${num(w)}\" stArea:h=\"${num(h)}\" stArea:unit=\"normalized\"/></rdf:li>"
-        }
-        return "<mwg-rs:Regions xmlns:mwg-rs=\"http://www.metadataworkinggroup.com/schemas/regions/\" xmlns:stArea=\"http://ns.adobe.com/xmp/sType/Area#\" " +
-            "xmlns:stDim=\"http://ns.adobe.com/xap/1.0/sType/Dimensions#\" rdf:parseType=\"Resource\">" +
-            "<mwg-rs:AppliedToDimensions stDim:w=\"${dims.first}\" stDim:h=\"${dims.second}\" stDim:unit=\"pixel\"/>" +
-            "<mwg-rs:RegionList><rdf:Bag>$items</rdf:Bag></mwg-rs:RegionList></mwg-rs:Regions>"
-    }
 
     /**
      * The named face areas written in the file (MWG regions, by this app or any other), turned upright: box as
@@ -409,43 +325,6 @@ object PhotoReader {
         emptyList()
     }
 
-    private fun num(v: Float): String = String.format(Locale.US, "%.5f", v.coerceIn(0f, 1f))
-
-    // ExifInterface reads a JPEG's standalone XMP segment but writes only the EXIF copy: the standalone one gets the same packet
-    private fun syncJpegXmpSegment(fd: java.io.FileDescriptor, packet: String) {
-        val input = java.io.FileInputStream(fd).channel
-        input.position(0)
-        val bytes = ByteArray(input.size().toInt())
-        val buffer = java.nio.ByteBuffer.wrap(bytes)
-        while (buffer.hasRemaining() && input.read(buffer) >= 0) { }
-        if (bytes.size < 4 || bytes[0] != 0xFF.toByte() || bytes[1] != 0xD8.toByte()) return
-        val header = "http://ns.adobe.com/xap/1.0/\u0000".toByteArray(Charsets.ISO_8859_1)
-        var at = 2
-        while (at + 4 <= bytes.size && bytes[at] == 0xFF.toByte()) {
-            val marker = bytes[at + 1].toInt() and 0xFF
-            if (marker == 0xDA || marker == 0xD9) return
-            val length = ((bytes[at + 2].toInt() and 0xFF) shl 8) or (bytes[at + 3].toInt() and 0xFF)
-            val end = at + 2 + length
-            if (length < 2 || end > bytes.size) return
-            val isXmp = marker == 0xE1 && length - 2 >= header.size &&
-                header.indices.all { bytes[at + 4 + it] == header[it] }
-            if (isXmp) {
-                val payload = header + packet.toByteArray(Charsets.UTF_8)
-                if (payload.size + 2 > 0xFFFF) return
-                val segment = byteArrayOf(0xFF.toByte(), 0xE1.toByte(), ((payload.size + 2) shr 8).toByte(), ((payload.size + 2) and 0xFF).toByte()) + payload
-                val rewritten = bytes.copyOfRange(0, at) + segment + bytes.copyOfRange(end, bytes.size)
-                val output = java.io.FileOutputStream(fd).channel
-                output.truncate(0)
-                output.position(0)
-                val out = java.nio.ByteBuffer.wrap(rewritten)
-                while (out.hasRemaining()) output.write(out)
-                output.force(true)
-                return
-            }
-            at = end
-        }
-    }
-
     fun tagsIn(context: Context, uri: Uri): List<String> = try {
         context.contentResolver.openInputStream(uri)?.use { ExifInterface(it) }
             ?.getAttributeBytes(ExifInterface.TAG_XMP)
@@ -477,19 +356,6 @@ object PhotoReader {
 
     private fun liValues(bag: String): List<String> =
         XMP_LI.findAll(bag).map { unescapeXml(it.groupValues[1]).trim() }.filter { it.isNotEmpty() }.distinct().toList()
-
-    private fun bag(name: String, namespace: String, values: List<String>): String =
-        if (values.isEmpty()) "" else
-            "<$name $namespace><rdf:Bag>" + values.joinToString("") { "<rdf:li>${escapeXml(it)}</rdf:li>" } + "</rdf:Bag></$name>"
-
-    private fun withProperty(packet: String?, existing: Regex, property: String): String {
-        val base = packet?.takeIf { it.contains("</rdf:Description>") }
-            ?: return "<x:xmpmeta xmlns:x=\"adobe:ns:meta/\"><rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">" +
-                "<rdf:Description rdf:about=\"\">$property</rdf:Description></rdf:RDF></x:xmpmeta>"
-        val cleared = existing.replace(base, "")
-        val at = cleared.indexOf("</rdf:Description>")
-        return cleared.substring(0, at) + property + cleared.substring(at)
-    }
 
     private fun escapeXml(text: String): String = buildString {
         text.codePoints().forEach { cp ->

@@ -22,4 +22,9 @@
         <item quantity="few">%1$s adăugat la %2$s poze</item>
         <item quantity="other">%1$s adăugat la %2$s de poze</item>
     </plurals>
+    <string name="sy_restoring">Se reface indexul</string>
+    <string name="fc_scan_all">Caută fețele în toate pozele</string>
+    <string name="fc_scan_text">Citește fiecare poză o dată ca să găsească fețele din ea. Rulează doar cât timp telefonul e la încărcat, durează, și poate fi oprit de aici. Fețele deja citite rămân în index și nu se mai citesc niciodată.</string>
+    <string name="fc_scan_start">Pornește</string>
+    <string name="fc_scan_progress">Se citesc fețele: %1$s din %2$s</string>
 </resources>

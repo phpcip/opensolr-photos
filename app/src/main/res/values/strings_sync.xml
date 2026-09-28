@@ -21,7 +21,7 @@
     <string name="sync_btn_reread">Re-read</string>
     <string name="sync_btn_documents">Documents</string>
     <string name="sync_btn_reset">Reset</string>
-    <string name="sync_buttons_text">Re-Sync: new and deleted photos only. Stop: ends the current run. Re-read: sends every photo through Opensolr again, without emptying anything. Documents: reads printed text again. Reset: empties the index and reads everything.</string>
+    <string name="sync_buttons_text">Re-Sync: new and deleted photos only. Stop: ends the current run. Re-read: sends every photo through Opensolr again, without emptying anything. Documents: reads printed text again. Reset: empties the index and fills it again from the copy on this phone.</string>
     <string name="sync_auto">Automatic Re-Sync</string>
     <string name="sync_daily">Every day</string>
     <string name="sync_weekly">Every week</string>
@@ -36,7 +36,7 @@
     <string name="sync_reread_q">Re-read all photos?</string>
     <string name="sync_reread_text">Every photo is sent through Opensolr again and written afresh: words, place, people, vector. Nothing is emptied, search keeps working, your tags and wording are kept, your photos are untouched. Stopping is safe.</string>
     <string name="sync_reset_q">Reset your index?</string>
-    <string name="sync_reset_text">Every photo is emptied out and read again, which counts as new AI requests. Your tags are kept, your photos untouched.</string>
+    <string name="sync_reset_text">The index is emptied and filled again from the copy on this phone: nothing is sent again, only the search vectors are made again, which counts toward your plan\'s AI requests. Your tags, people, places and wording are kept; your photos are untouched.</string>
     <string name="st_none">No sync has run yet.</string>
     <string name="st_no_photos">No photos were found in the folders you chose.</string>
     <string name="st_none_read">No photo could be read. Nothing was indexed.</string>
@@ -46,7 +46,7 @@
     <string name="st_sign_in">Paused: sign in to Opensolr again.</string>
     <string name="st_rebuild">Waiting: your index must be reset and fully re-synced for the new version. Open the app\'s photos screen to start it.</string>
     <string name="st_update">Paused: update Opensolr Photos to keep syncing.</string>
-    <string name="st_device">Waiting: open the app and say which one of your devices this phone is.</string>
+    <string name="st_device">Waiting: open the app and choose whether to re-use an index from your Opensolr account.</string>
     <string name="st_charger">Waiting for the charger: %1$s</string>
     <string name="st_retry">Paused for a moment: Opensolr asked the app to slow down. It continues on its own.</string>
     <string name="st_failed">The last sync did not finish. It is tried again at the next Re-Sync.</string>

@@ -33,7 +33,7 @@
     <string name="tg_remove">Scoate</string>
     <string name="tg_n_more">+încă %1$s</string>
     <string name="tg_edit">Editează %1$s</string>
-    <string name="tg_saved_in_file">Salvat în poza însăși, ca și alte aplicații să vadă numele.</string>
+    <string name="tg_saved_in_file">Salvat în indexul tău. Poza în sine nu se modifică niciodată.</string>
     <string name="tg_tags_hint">Orice ai căuta. Fiecare etichetă devine un album.</string>
     <string name="tg_shows">Ce arată poza</string>
     <string name="tg_words_hint">Cuvinte separate prin virgulă. Formularea ta rămâne chiar și când poza e recitită.</string>

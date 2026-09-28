@@ -21,7 +21,7 @@
     <string name="sync_btn_reread">Neu lesen</string>
     <string name="sync_btn_documents">Dokumente</string>
     <string name="sync_btn_reset">Reset</string>
-    <string name="sync_buttons_text">Re-Sync: nur neue und gelöschte Fotos. Stopp: beendet den laufenden Durchgang. Erneut lesen: schickt alle Fotos wieder durch Opensolr, ohne zu leeren. Dokumente: liest gedruckten Text neu. Zurücksetzen: leert den Index und liest alles.</string>
+    <string name="sync_buttons_text">Re-Sync: nur neue und gelöschte Fotos. Stop: beendet den laufenden Durchgang. Re-read: schickt jedes Foto erneut durch Opensolr, ohne etwas zu leeren. Documents: liest gedruckten Text erneut. Reset: leert den Index und füllt ihn aus der Kopie auf diesem Telefon neu.</string>
     <string name="sync_auto">Automatischer Neu-Sync</string>
     <string name="sync_daily">Täglich</string>
     <string name="sync_weekly">Wöchentlich</string>
@@ -36,7 +36,7 @@
     <string name="sync_reread_q">Alle Fotos neu lesen?</string>
     <string name="sync_reread_text">Jedes Foto geht erneut durch Opensolr und wird neu geschrieben: Wörter, Ort, Personen, Vektor. Nichts wird geleert, die Suche läuft weiter, Ihre Tags bleiben, Ihre Fotos bleiben unberührt. Abbrechen ist sicher.</string>
     <string name="sync_reset_q">Index zurücksetzen?</string>
-    <string name="sync_reset_text">Jedes Foto wird geleert und neu gelesen, das zählt als neue AI-Anfragen. Tags bleiben, Fotos unberührt.</string>
+    <string name="sync_reset_text">Der Index wird geleert und aus der Kopie auf diesem Telefon neu gefüllt: nichts wird erneut gesendet, nur die Suchvektoren werden neu erstellt, was als KI-Anfragen deines Plans zählt. Deine Tags, Personen, Orte und Beschreibungen bleiben; deine Fotos werden nicht angefasst.</string>
     <string name="st_none">Noch kein Sync gelaufen.</string>
     <string name="st_no_photos">In den gewählten Ordnern wurden keine Fotos gefunden.</string>
     <string name="st_none_read">Kein Foto konnte gelesen werden. Nichts wurde indexiert.</string>
@@ -46,7 +46,7 @@
     <string name="st_sign_in">Pausiert: Melden Sie sich erneut bei Opensolr an.</string>
     <string name="st_rebuild">Wartet: Ihr Index muss für die neue Version zurückgesetzt und neu synchronisiert werden. Öffnen Sie den Fotobildschirm der App, um zu starten.</string>
     <string name="st_update">Pausiert: Aktualisieren Sie Opensolr Photos, um weiter zu synchronisieren.</string>
-    <string name="st_device">Wartet: Öffnen Sie die App und wählen Sie, welches Ihrer Geräte dieses Telefon ist.</string>
+    <string name="st_device">Wartet: Öffnen Sie die App und wählen Sie, ob ein Index aus Ihrem Opensolr-Konto wiederverwendet werden soll.</string>
     <string name="st_charger">Wartet auf das Ladegerät: %1$s</string>
     <string name="st_retry">Kurz pausiert: Opensolr bat die App, langsamer zu werden. Es geht von selbst weiter.</string>
     <string name="st_failed">Der letzte Sync wurde nicht beendet. Er wird beim nächsten Neu-Sync wiederholt.</string>

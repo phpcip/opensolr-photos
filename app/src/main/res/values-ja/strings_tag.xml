@@ -33,7 +33,7 @@
     <string name="tg_remove">外す</string>
     <string name="tg_n_more">ほか %1$s 件</string>
     <string name="tg_edit">%1$s を編集</string>
-    <string name="tg_saved_in_file">写真そのものに保存されるので、他のアプリでも名前が見られます。</string>
+    <string name="tg_saved_in_file">インデックスに保存されました。写真そのものは変更されません。</string>
     <string name="tg_tags_hint">検索したい言葉なら何でも。タグごとにアルバムになります。</string>
     <string name="tg_shows">写真の内容</string>
     <string name="tg_words_hint">言葉はカンマで区切ります。写真を読み直しても、あなたの説明は保持されます。</string>

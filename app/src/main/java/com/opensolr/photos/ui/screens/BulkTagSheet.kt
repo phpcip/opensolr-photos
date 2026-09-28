@@ -140,25 +140,8 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
-    val writeLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult()
-    ) { result ->
-        viewModel.tagPhotos(typedTags(), tagsReplace, typedPersons(), personsReplace, writeFiles = result.resultCode == android.app.Activity.RESULT_OK)
-    }
-
     var placeOnlyMissing by remember { mutableStateOf(false) }
     var pickingPlace by remember { mutableStateOf(false) }
-    var pendingPlace by remember { mutableStateOf<Triple<Double, Double, List<com.opensolr.photos.search.PhotoHit>>?>(null) }
-    val placeWriteLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult()
-    ) { result ->
-        val (lat, lon, chosen) = pendingPlace ?: return@rememberLauncherForActivityResult
-        pendingPlace = null
-
-        // the place is saved either way: in the index now, in the files as soon as Android allows it
-        viewModel.placePhotos(chosen, lat, lon, writeFiles = result.resultCode == android.app.Activity.RESULT_OK)
-        onDismiss()
-    }
 
     var tagsDismissed by remember { mutableStateOf(false) }
     var peopleDismissed by remember { mutableStateOf(false) }
@@ -349,21 +332,9 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
                     onDismiss = { pickingPlace = false },
                     onPick = { lat, lon ->
                         pickingPlace = false
-                        val chosen = if (placeOnlyMissing) placeless else targets
-                        pendingPlace = Triple(lat, lon, chosen)
-                        scope.launch {
-                            val uris = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                Actions.contentUris(context, chosen.filter { com.opensolr.photos.media.PhotoReader.canWriteExif(it.mime) })
-                            }
-                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && uris.isNotEmpty()) {
-                                val request = android.provider.MediaStore.createWriteRequest(context.contentResolver, uris)
-                                placeWriteLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(request.intentSender).build())
-                            } else {
-                                pendingPlace = null
-                                viewModel.placePhotos(chosen, lat, lon, writeFiles = uris.isNotEmpty())
-                                onDismiss()
-                            }
-                        }
+                        // the files are never touched: the place goes to the index only
+                        viewModel.setPlace(if (placeOnlyMissing) placeless else targets, lat, lon)
+                        onDismiss()
                     },
                 )
             }
@@ -395,17 +366,7 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
                     stringResource(R.string.tg_save),
                     onClick = {
 
-                        scope.launch {
-                            val uris = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                                Actions.contentUris(context, targets)
-                            }
-                            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R && uris.isNotEmpty()) {
-                                val request = android.provider.MediaStore.createWriteRequest(context.contentResolver, uris)
-                                writeLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(request.intentSender).build())
-                            } else {
-                                viewModel.tagPhotos(typedTags(), tagsReplace, typedPersons(), personsReplace, writeFiles = true)
-                            }
-                        }
+                        viewModel.tagPhotos(typedTags(), tagsReplace, typedPersons(), personsReplace)
                     },
                     modifier = Modifier.weight(1f),
                     enabled = !state.bulkTagging && (typedTags() != null || typedPersons() != null),

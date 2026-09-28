@@ -33,7 +33,7 @@
     <string name="tg_remove">移除</string>
     <string name="tg_n_more">还有 %1$s 个</string>
     <string name="tg_edit">编辑 %1$s</string>
-    <string name="tg_saved_in_file">保存在照片本身中，其他应用也能看到这些名字。</string>
+    <string name="tg_saved_in_file">已保存到索引。照片本身永远不会被修改。</string>
     <string name="tg_tags_hint">任何你会搜索的内容。每个标签都会成为一个相册。</string>
     <string name="tg_shows">照片内容</string>
     <string name="tg_words_hint">用逗号分隔词语。即使重新读取照片，你的描述也会保留。</string>

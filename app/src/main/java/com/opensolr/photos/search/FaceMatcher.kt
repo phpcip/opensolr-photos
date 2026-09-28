@@ -71,7 +71,7 @@ object FaceMatcher {
      * Names the unnamed faces of one photo that are very close to a person (one person per photo at most once),
      * marks them as the matcher's own and puts the people on the photo. True when anything was named.
      */
-    fun autoName(cache: PhotoCache, edits: EditRepository, photoId: String, rows: List<PhotoCache.FaceRow>, vectors: List<FloatArray>, people: Map<String, List<FloatArray>>): Boolean {
+    fun autoName(cache: PhotoCache, edits: EditRepository, photoId: String, rows: List<PhotoCache.FaceRow>, vectors: List<FloatArray>, people: Map<String, List<FloatArray>>, queueWords: Boolean = true): Boolean {
         if (people.isEmpty()) return false
         val taken = rows.mapNotNull { it.person?.lowercase() }.toMutableSet()
         val named = ArrayList<String>()
@@ -92,7 +92,7 @@ object FaceMatcher {
             }
         }
         if (named.isEmpty()) return false
-        edits.queueForAll(listOf(photoId), null, false, named, false)
+        if (queueWords) edits.queueForAll(listOf(photoId), null, false, named, false)
         return true
     }
 
@@ -109,7 +109,7 @@ object FaceMatcher {
             val best = rows.filter { it.person == null && it.fid !in used }.maxByOrNull { overlap(it, area) } ?: return@forEach
             if (overlap(best, area) < 0.3f) return@forEach
             used += best.fid
-            cache.setFacePerson(listOf(best.fid), area.name, sure = true, how = PhotoCache.HOW_OWNER, toFile = false)
+            cache.setFacePerson(listOf(best.fid), area.name, sure = true, how = PhotoCache.HOW_OWNER)
         }
     }
 

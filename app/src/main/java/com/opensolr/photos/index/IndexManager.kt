@@ -169,6 +169,6 @@ class IndexManager(
     companion object {
         const val CONFIG_ASSET = "opensolr-photos-conf.zip"
 
-        const val CONFIG_VERSION = 11
+        const val CONFIG_VERSION = 12
     }
 }
