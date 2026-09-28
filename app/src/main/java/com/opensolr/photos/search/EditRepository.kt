@@ -57,11 +57,13 @@ class EditRepository(private val context: Context) {
         }
     }
 
-    fun queueForAll(ids: Collection<String>, tags: List<String>?, tagsReplace: Boolean, persons: List<String>?, personsReplace: Boolean, onProgress: (Int) -> Unit = {}) {
+    fun queueForAll(ids: Collection<String>, tags: List<String>?, tagsReplace: Boolean, persons: List<String>?, personsReplace: Boolean, auto: Boolean = false, onProgress: (Int) -> Unit = {}) {
         if (tags == null && persons == null) return
         val addTags = tags?.distinctWords()
         val addNames = persons?.distinctWords()
         cache.inTransaction {
+            // people the owner puts on are theirs from now on, even if the matcher had put them there first
+            if (!auto && addNames != null) cache.ownAutoWords(ids, if (personsReplace) null else addNames)
             var done = 0
             ids.forEach { id ->
                 val doc = cache.doc(id)

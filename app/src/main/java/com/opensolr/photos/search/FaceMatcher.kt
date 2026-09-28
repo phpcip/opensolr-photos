@@ -92,7 +92,8 @@ object FaceMatcher {
             }
         }
         if (named.isEmpty()) return false
-        if (queueWords) edits.queueForAll(listOf(photoId), null, false, named, false)
+        cache.noteAutoWords(photoId, named)
+        if (queueWords) edits.queueForAll(listOf(photoId), null, false, named, false, auto = true)
         return true
     }
 

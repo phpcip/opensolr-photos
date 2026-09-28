@@ -42,7 +42,7 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     }
 
     private fun learn(ctx: Context, cache: PhotoCache, edits: EditRepository, photos: Collection<com.opensolr.photos.media.LocalPhoto>): Result {
-        if (learnPeople(ctx, cache)) {
+        if (learnPeople(ctx, cache, edits)) {
             // photos read before a person was learned get the name now: the newest ones, a bounded number
             val recent = photos.sortedByDescending { it.addedSec }.take(RECHECK).map { it.id }
             if (FaceMatcher.nameRecent(cache, edits, recent)) SyncScheduler.runNow(ctx)
@@ -58,7 +58,7 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         _progress.value = Progress(true, done, total)
         try {
             if (todo.isEmpty()) return Result.success()
-            learnPeople(ctx, cache)
+            learnPeople(ctx, cache, edits)
             val engine = FaceEngine.of(ctx)
             val people = FaceMatcher.people(cache)
             val until = System.currentTimeMillis() + RUN_MS
@@ -71,8 +71,8 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                 FaceMatcher.fromFile(ctx, cache, photo.uri, cache.putFaces(photo.id, photo.mediaId, photo.sizeBytes, faces))
                 FaceMatcher.nameOnlyFace(cache, photo.id)
                 val stored = cache.facesWithVectors(photo.id)
-                FaceMatcher.autoName(cache, edits, photo.id, stored.map { it.first }, stored.map { it.second }, people, queueWords = false)
-                // the faces reach the index with the words path, in batches, one embedding call per fifty
+                // the people found go on the photo; the faces reach the index with the same words path, in batches
+                FaceMatcher.autoName(cache, edits, photo.id, stored.map { it.first }, stored.map { it.second }, people)
                 cache.queueAction(photo.id, PhotoCache.ACTION_WORDS)
                 done++
                 _progress.value = Progress(true, done, total)
@@ -87,22 +87,30 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     }
 
     /**
-     * Each tagged person's face is learned from their tagged photos, again whenever more of those photos have had
-     * their faces read (a tenth more, or the first time), so the references grow with the reading.
+     * Every tagged person's face is learned from their tagged photos, all people together, again whenever any of
+     * them has had more of those photos read (a tenth more, or the first time). Learning anew takes back what the
+     * matcher put on photos by itself with the old references; those photos are then named again with the new.
      */
-    private fun learnPeople(ctx: Context, cache: PhotoCache): Boolean {
+    private fun learnPeople(ctx: Context, cache: PhotoCache, edits: EditRepository): Boolean {
         val sp = ctx.getSharedPreferences("faces", Context.MODE_PRIVATE)
-        var learned = false
-        cache.taggedPeople().forEach { (person, count) ->
-            if (count < 3) return@forEach
-            val key = "learned:" + person.lowercase()
-            val was = sp.getInt(key, 0)
-            if (was > 0 && count < was + maxOf(3, was / 10)) return@forEach
-            FaceSeeder.learn(cache, person)
-            sp.edit().putInt(key, count).apply()
-            learned = true
+        val people = cache.taggedPeople().filterValues { it >= 3 }
+        val due = people.any { (person, count) ->
+            val was = sp.getInt("learned2:" + person.lowercase(), 0)
+            was == 0 || count >= was + maxOf(3, was / 10)
         }
-        return learned
+        if (!due) return false
+        val undo = cache.autoWords()
+        cache.clearAutoNames()
+        cache.clearAutoWords()
+        FaceSeeder.learnAll(cache, people.keys)
+        sp.edit().apply { people.forEach { (person, count) -> putInt("learned2:" + person.lowercase(), count) } }.apply()
+        undo.forEach { (id, names) ->
+            val gone = names.map { it.lowercase() }.toSet()
+            val keep = (cache.doc(id)?.persons ?: cache.getEdits(id)?.persons ?: return@forEach).filter { it.lowercase() !in gone }
+            edits.queueForAll(listOf(id), null, false, keep, true, auto = true)
+        }
+        FaceMatcher.nameRecent(cache, edits, undo.keys.toList())
+        return true
     }
 
     /** What the Sync screen shows while every photo is read. */
