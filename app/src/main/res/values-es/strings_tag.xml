@@ -48,4 +48,5 @@
         <item quantity="many">Solo las %1$s fotos marcadas sin lugar reciben el elegido; las demás conservan el suyo.</item>
         <item quantity="other">Solo las %1$s fotos marcadas sin lugar reciben el elegido; las demás conservan el suyo.</item>
     </plurals>
+    <string name="tg_people_by_face">Las personas se ponen en una foto nombrando una cara: abre la foto y toca el botón de la cara.</string>
 </resources>

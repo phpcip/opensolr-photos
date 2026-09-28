@@ -44,4 +44,5 @@
     <plurals name="tg_place_missing_text">
         <item quantity="other">只有 %1$s 张没有地点的勾选照片会获得所选地点，其他照片保持不变。</item>
     </plurals>
+    <string name="tg_people_by_face">通过给人脸命名把人物加到照片上：打开照片，点按人脸按钮。</string>
 </resources>

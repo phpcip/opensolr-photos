@@ -835,7 +835,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
     }
 
     /** A face found in a photo: box as shares of the upright photo, the person it was named as (null = nobody yet). */
-    data class FaceRow(val fid: Long, val photoId: String, val mediaId: Long, val x: Float, val y: Float, val w: Float, val h: Float, val person: String?, val similarity: Float = 0f, val score: Float = 0f, val how: Int = HOW_OWNER)
+    data class FaceRow(val fid: Long, val photoId: String, val mediaId: Long, val x: Float, val y: Float, val w: Float, val h: Float, val person: String?, val similarity: Float = 0f)
 
     /** The file size each photo had when its faces were read: a changed size means read them again. */
     fun faceScannedSizes(): Map<String, Long> {
@@ -936,59 +936,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         }
     }
 
-    /** Every person the photos are tagged with, and on how many photos whose faces were read. */
-    fun taggedPeople(): Map<String, Int> {
-        val out = LinkedHashMap<String, Int>()
-        readableDatabase.rawQuery(
-            "SELECT w.word, COUNT(*) FROM doc_words w JOIN face_scanned s ON s.photo_id = w.id WHERE w.kind = '$WORD_PERSON' AND s.faces > 0 GROUP BY w.word",
-            null,
-        ).use { c -> while (c.moveToNext()) out[c.getString(0)] = c.getInt(1) }
-        return out
-    }
-
-    /** The newest [limit] photos tagged [person] that have faces, with every face in them and its fingerprint. */
-    fun facesOfTagged(person: String, limit: Int): List<Pair<FaceRow, FloatArray>> {
-        val out = ArrayList<Pair<FaceRow, FloatArray>>()
-        readableDatabase.rawQuery(
-            "SELECT f.fid, f.photo_id, f.media_id, f.x, f.y, f.w, f.h, f.person, f.vec FROM faces f WHERE f.photo_id IN (" +
-                "SELECT w.id FROM doc_words w JOIN face_scanned s ON s.photo_id = w.id LEFT JOIN docs d ON d.id = w.id " +
-                "WHERE w.kind = '$WORD_PERSON' AND w.word = ? AND s.faces > 0 ORDER BY d.taken_ms DESC LIMIT $limit) " +
-                "AND NOT EXISTS (SELECT 1 FROM face_rejects r WHERE r.fid = f.fid AND r.person = ? COLLATE NOCASE)",
-            arrayOf(person, person),
-        ).use { c ->
-            while (c.moveToNext()) {
-                out += FaceRow(c.getLong(0), c.getString(1), c.getLong(2), c.getFloat(3), c.getFloat(4), c.getFloat(5), c.getFloat(6), c.getString(7)) to toFloats(c.getBlob(8))
-            }
-        }
-        return out
-    }
-
-    /** The newest [limit] photos tagged [person] whose faces were read. */
-    fun taggedPhotoIds(person: String, limit: Int): List<String> {
-        val out = ArrayList<String>()
-        readableDatabase.rawQuery(
-            "SELECT w.id FROM doc_words w JOIN face_scanned s ON s.photo_id = w.id LEFT JOIN docs d ON d.id = w.id " +
-                "WHERE w.kind = '$WORD_PERSON' AND w.word = ? AND s.faces > 0 ORDER BY d.taken_ms DESC LIMIT $limit",
-            arrayOf(person),
-        ).use { c -> while (c.moveToNext()) out += c.getString(0) }
-        return out
-    }
-
-    /** Every face of the given photos with its fingerprint, detection score and who named it. */
-    fun facesOfPhotos(ids: Collection<String>): List<Pair<FaceRow, FloatArray>> {
-        val out = ArrayList<Pair<FaceRow, FloatArray>>()
-        ids.chunked(DELETE_BATCH).forEach { batch ->
-            val marks = batch.joinToString(",") { "?" }
-            readableDatabase.rawQuery("SELECT fid, photo_id, media_id, x, y, w, h, person, vec, score, how FROM faces WHERE photo_id IN ($marks)", batch.toTypedArray()).use { c ->
-                while (c.moveToNext()) {
-                    out += FaceRow(c.getLong(0), c.getString(1), c.getLong(2), c.getFloat(3), c.getFloat(4), c.getFloat(5), c.getFloat(6), c.getString(7), score = c.getFloat(9), how = c.getInt(10)) to toFloats(c.getBlob(8))
-                }
-            }
-        }
-        return out
-    }
-
-    /** Names the seeder gave (sure, learned) go, so every person is learned again from nothing. */
+    /** Names once learned from the photos' tags go: a person is only the faces the owner named. */
     fun clearAllLearned() {
         writableDatabase.execSQL("UPDATE faces SET person = NULL, sure = 1, how = $HOW_OWNER WHERE how = $HOW_LEARNED AND sure = 1")
     }
@@ -1067,11 +1015,6 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         } finally {
             db.endTransaction()
         }
-    }
-
-    /** What was learned for [person] from the tags is forgotten, before it is learned again. */
-    fun clearLearned(person: String) {
-        writableDatabase.execSQL("UPDATE faces SET person = NULL, sure = 1, how = $HOW_OWNER WHERE how = $HOW_LEARNED AND person = ? COLLATE NOCASE", arrayOf(person))
     }
 
     /** Faces the owner said are not [person]: never offered for them again. */

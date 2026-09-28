@@ -86,25 +86,9 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
     var suggestions by remember { mutableStateOf(TagSuggestions(emptyList(), emptyList())) }
     var suggestionsLoading by remember { mutableStateOf(false) }
 
-    var persons by remember { mutableStateOf(emptyList<String>()) }
-    var newPerson by remember { mutableStateOf("") }
-    var personFieldFocused by remember { mutableStateOf(false) }
-    var personsReplace by remember { mutableStateOf(false) }
-    var personSuggestions by remember { mutableStateOf(emptyList<String>()) }
 
     LaunchedEffect(state.selectedIds) { viewModel.loadSelectionWords() }
 
-    LaunchedEffect(newPerson, personFieldFocused, persons) {
-        if (!personFieldFocused) return@LaunchedEffect
-        if (newPerson.isNotEmpty()) delay(250)
-        personSuggestions = viewModel.personSuggestions(newPerson, persons)
-    }
-    fun addPerson() {
-        val parts = newPerson.split(',').map { it.trim() }.filter { it.isNotEmpty() }
-        if (parts.isEmpty()) return
-        persons = (persons + parts).distinctWords()
-        newPerson = ""
-    }
 
     LaunchedEffect(newTag, tagFieldFocused, tags) {
         if (!tagFieldFocused) { suggestionsLoading = false; return@LaunchedEffect }
@@ -133,10 +117,6 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
         val all = (tags + newTag.split(',').map { it.trim() }.filter { it.isNotEmpty() }).distinctWords()
         return if (all.isEmpty() && !tagsReplace) null else all
     }
-    fun typedPersons(): List<String>? {
-        val all = (persons + newPerson.split(',').map { it.trim() }.filter { it.isNotEmpty() }).distinctWords()
-        return if (all.isEmpty() && !personsReplace) null else all
-    }
 
     val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
@@ -144,13 +124,11 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
     var pickingPlace by remember { mutableStateOf(false) }
 
     var tagsDismissed by remember { mutableStateOf(false) }
-    var peopleDismissed by remember { mutableStateOf(false) }
     val outside = com.opensolr.photos.ui.rememberOutsideTap(
         onInside = { area ->
             if (area == "tags") tagsDismissed = false
-            if (area == "people") peopleDismissed = false
         },
-        onOutside = { tagsDismissed = true; peopleDismissed = true },
+        onOutside = { tagsDismissed = true },
     )
 
     var started by remember { mutableStateOf(false) }
@@ -189,57 +167,7 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
             )
             Spacer(Modifier.height(20.dp))
 
-            ModeHeader(
-                title = stringResource(R.string.tg_people),
-                replace = personsReplace,
-                enabled = !state.bulkTagging,
-                onChange = { personsReplace = it },
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                if (personsReplace) stringResource(R.string.tg_people_replace)
-                else stringResource(R.string.tg_people_add),
-                style = MaterialTheme.typography.bodySmall,
-                color = if (personsReplace) p.accent else p.muted,
-            )
-            Spacer(Modifier.height(10.dp))
-            if (persons.isNotEmpty()) {
-                WordChips(persons, enabled = !state.bulkTagging) { persons = persons - it }
-                Spacer(Modifier.height(10.dp))
-            }
-            Row(with(outside) { Modifier.keep("people") }, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                com.opensolr.photos.ui.OutlinedTextBox(
-                    value = newPerson,
-                    onValueChange = { newPerson = it; peopleDismissed = false },
-                    modifier = Modifier.weight(1f).onFocusChanged { personFieldFocused = it.isFocused },
-                    placeholder = { Text(stringResource(R.string.tg_add_name), color = p.muted) },
-                    singleLine = true,
-                    enabled = !state.bulkTagging,
-                    shape = Corner,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    onImeAction = { addPerson() },
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = p.accent, unfocusedBorderColor = p.hairline, cursorColor = p.accent, focusedTextColor = p.ink, unfocusedTextColor = p.ink),
-                )
-                TextButton(onClick = { addPerson() }, enabled = newPerson.isNotBlank() && !state.bulkTagging) { Text(stringResource(R.string.tg_add), color = p.accent) }
-            }
-            if (personFieldFocused && !peopleDismissed && personSuggestions.isNotEmpty()) {
-                Spacer(Modifier.height(6.dp))
-                Column(
-                    with(outside) { Modifier.keep("peopleList") }
-                        .fillMaxWidth()
-                        .background(p.paper, Corner)
-                        .border(1.dp, p.hairline, Corner)
-                ) {
-                    BulkSuggestionHeading(stringResource(R.string.tg_people_in_photos))
-                    personSuggestions.forEach { name ->
-                        BulkSuggestionRow(name, onPick = {
-                            persons = (persons + name).distinctWords()
-                            newPerson = ""
-                        })
-                    }
-                }
-            }
-
+            // people are put on photos only by naming faces, one photo at a time
             Spacer(Modifier.height(24.dp))
 
             ModeHeader(
@@ -366,10 +294,10 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
                     stringResource(R.string.tg_save),
                     onClick = {
 
-                        viewModel.tagPhotos(typedTags(), tagsReplace, typedPersons(), personsReplace)
+                        viewModel.tagPhotos(typedTags(), tagsReplace, null, false)
                     },
                     modifier = Modifier.weight(1f),
-                    enabled = !state.bulkTagging && (typedTags() != null || typedPersons() != null),
+                    enabled = !state.bulkTagging && typedTags() != null,
                 )
             }
 

@@ -44,4 +44,5 @@
     <plurals name="tg_place_missing_text">
         <item quantity="other">場所のない %1$s 枚だけに選んだ場所が付き、他の写真はそのままです。</item>
     </plurals>
+    <string name="tg_people_by_face">人物は顔に名前を付けて写真に追加します。写真を開いて顔ボタンをタップしてください。</string>
 </resources>

@@ -48,4 +48,5 @@
         <item quantity="many">Seules les %1$s photos cochées sans lieu reçoivent celui choisi ; les autres gardent le leur.</item>
         <item quantity="other">Seules les %1$s photos cochées sans lieu reçoivent celui choisi ; les autres gardent le leur.</item>
     </plurals>
+    <string name="tg_people_by_face">On met une personne sur une photo en nommant un visage : ouvrez la photo et touchez le bouton visage.</string>
 </resources>

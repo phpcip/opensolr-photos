@@ -46,4 +46,5 @@
         <item quantity="one">Nur das %1$s ausgewählte Foto ohne Ort bekommt den gewählten; die anderen behalten ihren.</item>
         <item quantity="other">Nur die %1$s ausgewählten Fotos ohne Ort bekommen den gewählten; die anderen behalten ihren.</item>
     </plurals>
+    <string name="tg_people_by_face">Personen kommen auf ein Foto, indem ein Gesicht benannt wird: Foto öffnen und auf die Gesichtstaste tippen.</string>
 </resources>

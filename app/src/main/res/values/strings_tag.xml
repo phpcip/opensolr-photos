@@ -46,4 +46,5 @@
         <item quantity="one">Only the %1$s ticked photo with no place gets the one you choose; the others keep theirs.</item>
         <item quantity="other">Only the %1$s ticked photos with no place get the one you choose; the others keep theirs.</item>
     </plurals>
+    <string name="tg_people_by_face">People are put on a photo by naming a face: open the photo and tap the face button.</string>
 </resources>

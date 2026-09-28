@@ -103,18 +103,8 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
 
     val context = LocalContext.current
     val originalPersons = remember(hit.id) { hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() } }
+    // people are put on a photo only by naming a face; here a name can only be taken off
     var persons by remember(hit.id) { mutableStateOf(originalPersons) }
-    var newPerson by remember(hit.id) { mutableStateOf("") }
-
-    var personFieldFocused by remember(hit.id) { mutableStateOf(false) }
-
-    var peopleDismissed by remember(hit.id) { mutableStateOf(false) }
-    var personSuggestions by remember(hit.id) { mutableStateOf(emptyList<String>()) }
-    LaunchedEffect(newPerson, personFieldFocused, persons) {
-        if (!personFieldFocused) return@LaunchedEffect
-        if (newPerson.isNotEmpty()) delay(250)
-        personSuggestions = viewModel.personSuggestions(newPerson, persons)
-    }
 
     var tagFieldFocused by remember(hit.id) { mutableStateOf(false) }
     var suggestions by remember(hit.id) { mutableStateOf(TagSuggestions(emptyList(), emptyList())) }
@@ -126,7 +116,6 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
     var sheetCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var tagRowCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var suggestionListCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
-    var personAreaCoords by remember { mutableStateOf<LayoutCoordinates?>(null) }
 
     LaunchedEffect(newTag, tagFieldFocused, tags, suggestionsDismissed) {
         if (!tagFieldFocused || suggestionsDismissed) { suggestionsLoading = false; return@LaunchedEffect }
@@ -138,13 +127,6 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
 
             suggestionsLoading = false
         }
-    }
-
-    fun addPerson() {
-        val parts = newPerson.split(',').map { it.trim() }.filter { it.isNotEmpty() }
-        if (parts.isEmpty()) return
-        persons = (persons + parts).distinctWords()
-        newPerson = ""
     }
 
     // New wording only when the owner changed the text; untouched text is never sent as theirs
@@ -198,16 +180,10 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                         fun inside(target: LayoutCoordinates?): Boolean =
                             sheet != null && target != null && sheet.isAttached && target.isAttached &&
                                 sheet.localBoundingBoxOf(target, clipBounds = false).contains(down.position)
-                        if (inside(personAreaCoords)) {
-                            peopleDismissed = false
-                            suggestionsDismissed = true
-                        } else if (inside(tagRowCoords)) {
-                            peopleDismissed = true
-
+                        if (inside(tagRowCoords)) {
                             suggestionsDismissed = false
                         } else if (!inside(suggestionListCoords)) {
                             suggestionsDismissed = true
-                            peopleDismissed = true
                             focusManager.clearFocus(force = true)
                         }
                     }
@@ -245,39 +221,7 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                 }
                 Spacer(Modifier.height(10.dp))
             }
-            Column(Modifier.onGloballyPositioned { personAreaCoords = it }) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                com.opensolr.photos.ui.OutlinedTextBox(
-                    value = newPerson,
-                    onValueChange = { newPerson = it; peopleDismissed = false },
-                    modifier = Modifier.weight(1f).onFocusChanged { personFieldFocused = it.isFocused },
-                    placeholder = { Text(stringResource(R.string.tg_add_name), color = p.muted) },
-                    singleLine = true,
-                    shape = Corner,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    onImeAction = { addPerson() },
-                    colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = p.accent, unfocusedBorderColor = p.hairline, cursorColor = p.accent, focusedTextColor = p.ink, unfocusedTextColor = p.ink),
-                )
-                TextButton(onClick = { addPerson() }, enabled = newPerson.isNotBlank()) { Text(stringResource(R.string.tg_add), color = p.accent) }
-            }
-            if (personFieldFocused && !peopleDismissed && personSuggestions.isNotEmpty()) {
-                Spacer(Modifier.height(6.dp))
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(p.paper, Corner)
-                        .border(1.dp, p.hairline, Corner)
-                ) {
-                    SuggestionHeading(stringResource(R.string.tg_people_in_photos))
-                    personSuggestions.forEach { name ->
-                        SuggestionRow(name, onPick = {
-                            persons = (persons + name).distinctWords()
-                            newPerson = ""
-                        })
-                    }
-                }
-            }
-            }
+            Text(stringResource(R.string.tg_people_by_face), style = MaterialTheme.typography.bodySmall, color = p.muted)
             Text(stringResource(R.string.tg_saved_in_file), style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.padding(top = 6.dp))
             Spacer(Modifier.height(20.dp))
 
@@ -381,7 +325,6 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
                     if (state.editSaving) stringResource(R.string.tg_saving) else stringResource(R.string.tg_save),
                     onClick = {
                         addTag()
-                        addPerson()
 
                         // the photo's file is never touched: the words go to the index only
                         val names = persons

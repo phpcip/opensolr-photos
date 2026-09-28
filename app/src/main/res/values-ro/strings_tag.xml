@@ -48,4 +48,5 @@
         <item quantity="few">Doar cele %1$s poze bifate fără loc primesc locul ales; celelalte îl păstrează pe al lor.</item>
         <item quantity="other">Doar cele %1$s de poze bifate fără loc primesc locul ales; celelalte îl păstrează pe al lor.</item>
     </plurals>
+    <string name="tg_people_by_face">Persoanele se pun pe o poză numind o față: deschide poza și apasă butonul cu fața.</string>
 </resources>

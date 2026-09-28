@@ -15,14 +15,13 @@ import com.opensolr.photos.media.MediaScanner
 import com.opensolr.photos.media.PhotoReader
 import com.opensolr.photos.search.EditRepository
 import com.opensolr.photos.search.FaceMatcher
-import com.opensolr.photos.search.FaceSeeder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 /**
  * Faces in the background, two jobs and nothing else, ever:
- *  - LEARN, after every sync: each tagged person's face is learned from their tagged photos and the newest
- *    photos get the names they match. No photo is read, only fingerprints already on the phone are compared.
+ *  - NAME, after every sync: the newest photos get the names of the people they match. A person is only ever
+ *    the faces the owner named; no photo is read, only fingerprints already on the phone are compared.
  *  - SCAN_ALL, started by the owner from the Sync screen: every photo without faces in the index is read once,
  *    only while the phone is charging, in short runs, with progress, stoppable. The faces go to the index with
  *    the words path, so no phone reads them a second time.
@@ -42,11 +41,10 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     }
 
     private fun learn(ctx: Context, cache: PhotoCache, edits: EditRepository, photos: Collection<com.opensolr.photos.media.LocalPhoto>): Result {
-        if (learnPeople(ctx, cache, edits)) {
-            // photos read before a person was learned get the name now: the newest ones, a bounded number
-            val recent = photos.sortedByDescending { it.addedSec }.take(RECHECK).map { it.id }
-            if (FaceMatcher.nameRecent(cache, edits, recent)) SyncScheduler.runNow(ctx)
-        }
+        val undone = forgetGuesses(ctx, cache, edits)
+        // photos read before a person was named get the name now: the newest ones, a bounded number
+        val recent = photos.sortedByDescending { it.addedSec }.take(RECHECK).map { it.id }
+        if (FaceMatcher.nameRecent(cache, edits, (undone + recent).distinct())) SyncScheduler.runNow(ctx)
         return Result.success()
     }
 
@@ -58,7 +56,7 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         _progress.value = Progress(true, done, total)
         try {
             if (todo.isEmpty()) return Result.success()
-            learnPeople(ctx, cache, edits)
+            forgetGuesses(ctx, cache, edits)
             val engine = FaceEngine.of(ctx)
             val people = FaceMatcher.people(cache)
             val until = System.currentTimeMillis() + RUN_MS
@@ -87,30 +85,24 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     }
 
     /**
-     * Every tagged person's face is learned from their tagged photos, all people together, again whenever any of
-     * them has had more of those photos read (a tenth more, or the first time). Learning anew takes back what the
-     * matcher put on photos by itself with the old references; those photos are then named again with the new.
+     * Once: people used to be guessed from the photos' tags, and those guesses named other faces in turn. All of
+     * that goes; only faces the owner named stay. People the guesses put on photos are taken off again, and the
+     * photos are returned so they can be named anew with the owner's faces. Empty when nothing was to undo.
      */
-    private fun learnPeople(ctx: Context, cache: PhotoCache, edits: EditRepository): Boolean {
+    private fun forgetGuesses(ctx: Context, cache: PhotoCache, edits: EditRepository): List<String> {
         val sp = ctx.getSharedPreferences("faces", Context.MODE_PRIVATE)
-        val people = cache.taggedPeople().filterValues { it >= 3 }
-        val due = people.any { (person, count) ->
-            val was = sp.getInt("learned2:" + person.lowercase(), 0)
-            was == 0 || count >= was + maxOf(3, was / 10)
-        }
-        if (!due) return false
+        if (sp.getBoolean(FORGOTTEN, false)) return emptyList()
         val undo = cache.autoWords()
+        cache.clearAllLearned()
         cache.clearAutoNames()
         cache.clearAutoWords()
-        FaceSeeder.learnAll(cache, people.keys)
-        sp.edit().apply { people.forEach { (person, count) -> putInt("learned2:" + person.lowercase(), count) } }.apply()
         undo.forEach { (id, names) ->
             val gone = names.map { it.lowercase() }.toSet()
             val keep = (cache.doc(id)?.persons ?: cache.getEdits(id)?.persons ?: return@forEach).filter { it.lowercase() !in gone }
             edits.queueForAll(listOf(id), null, false, keep, true, auto = true)
         }
-        FaceMatcher.nameRecent(cache, edits, undo.keys.toList())
-        return true
+        sp.edit().putBoolean(FORGOTTEN, true).apply()
+        return undo.keys.toList()
     }
 
     /** What the Sync screen shows while every photo is read. */
@@ -123,13 +115,14 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         const val KEY_DONE = "done"
         const val KEY_TOTAL = "total"
         private const val RUN_MS = 4 * 60 * 1000L
+        private const val FORGOTTEN = "guesses_forgotten"
         /** How many of the newest photos are checked again for people when someone is learned. */
         private const val RECHECK = 1000
 
         private val _progress = MutableStateFlow(Progress(false, 0, 0))
         val progress: StateFlow<Progress> = _progress
 
-        /** After a sync: learn the people, name the newest photos. Nothing is read. */
+        /** After a sync: name the newest photos with the people known. Nothing is read. */
         fun next(context: Context, scanAll: Boolean = false, continuation: Boolean = false) {
             if (!scanAll) {
                 WorkManager.getInstance(context).enqueueUniqueWork(WORK_LEARN, ExistingWorkPolicy.KEEP, OneTimeWorkRequestBuilder<FaceWorker>().build())
