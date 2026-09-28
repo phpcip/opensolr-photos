@@ -659,7 +659,11 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
         var done = 0
         cache.forEachDocJson(RESTORE_BATCH) { batch ->
             if (SyncWorker.stopRequested.get()) throw SyncStoppedException()
-            api.photosRestore(session, connection.indexName, batch)
+            // the clone keeps a document as the server answered it, answer keys included: those are not fields
+            val docs = batch.map { json ->
+                runCatching { org.json.JSONObject(json).apply { ANSWER_KEYS.forEach { remove(it) } }.toString() }.getOrDefault(json)
+            }
+            api.photosRestore(session, connection.indexName, docs)
             done += batch.size
             onProgress(Progress(AppText.s(R.string.sy_restoring), done, total))
         }
@@ -733,6 +737,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
 
     companion object {
         private const val RESTORE_BATCH = 50
+        private val ANSWER_KEYS = listOf("status", "msg", "error", "results")
 
         private const val NEAR_PHOTO_MS = 30 * 60 * 1000L
 
