@@ -29,7 +29,7 @@
     <string name="err_no_region">Aucun environnement Opensolr avec recherche vectorielle n\'est disponible pour l\'instant</string>
     <string name="sy_sign_in">Connectez-vous à Opensolr pour synchroniser.</string>
     <string name="sy_checking">Vérification de votre index</string>
-    <string name="sy_device">Ouvrez Opensolr Photos et indiquez lequel de vos appareils est ce téléphone.</string>
+    <string name="sy_device">Ouvrez Opensolr Photos et choisissez de réutiliser ou non un index de votre compte Opensolr.</string>
     <string name="sy_newer">Votre index a été configuré par une version plus récente d\'Opensolr Photos. Mettez l\'app à jour pour continuer à synchroniser.</string>
     <string name="sy_rebuild">Cette version d\'Opensolr Photos apporte une nouvelle configuration d\'index. Votre index doit être réinitialisé et entièrement resynchronisé avant de continuer.</string>
     <string name="sy_looking">Recherche des photos</string>
@@ -102,7 +102,7 @@
     <string name="vm_signin_failed">La connexion a échoué. Touchez à nouveau Se connecter.</string>
     <string name="vm_need_photos">Opensolr Photos a besoin d\'accéder à vos photos pour les indexer. Autorisez-le pour continuer.</string>
     <string name="vm_connecting">Connexion à Opensolr</string>
-    <string name="vm_which_device">Lequel de ces appareils est le vôtre ?</string>
+    <string name="vm_which_device">Réutiliser l\'un de ces index de votre compte Opensolr ?</string>
     <string name="vm_signed_out">Votre connexion Opensolr ne fonctionne plus. Reconnectez-vous.</string>
     <string name="vm_setup_failed">L\'index n\'a pas pu être configuré.</string>
     <string name="vm_search_failed">La recherche a échoué.</string>
@@ -118,7 +118,7 @@
     <string name="vm_empty_failed">L\'index n\'a pas pu être vidé : %1$s</string>
     <string name="vm_try_again">réessayez</string>
     <string name="vm_no_documents">Aucune photo ressemblant à un document à relire.</string>
-    <string name="vm_sync_stopped">Synchro arrêtée. Elle redémarre seule, ou touchez Resync.</string>
+    <string name="vm_sync_stopped">Synchro arrêtée. Rien ne tourne tant que vous ne touchez pas Sync, Reset ou une autre action.</string>
     <string name="vm_dup_failed">La recherche de photos similaires a échoué.</string>
     <string name="vm_nothing_similar">Rien d\'autre dans votre index ne ressemble à cette photo avec ce réglage.</string>
     <string name="vm_no_dups">Aucune photo similaire de ce type dans votre index.</string>
@@ -158,4 +158,5 @@
     <string name="sh_small">1024 px</string>
     <string name="sh_small_sub">Copies plus petites, 1024 px sur le grand côté</string>
     <string name="sh_preparing">Préparation %1$s sur %2$s</string>
+    <string name="vm_stopping">Arrêt de tout…</string>
 </resources>

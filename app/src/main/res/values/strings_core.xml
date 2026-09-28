@@ -29,7 +29,7 @@
     <string name="err_no_region">No Opensolr environment with vector search is available right now</string>
     <string name="sy_sign_in">Sign in to Opensolr to sync.</string>
     <string name="sy_checking">Checking your index</string>
-    <string name="sy_device">Open Opensolr Photos and say which one of your devices this phone is.</string>
+    <string name="sy_device">Open Opensolr Photos and choose whether to re-use an index from your Opensolr account.</string>
     <string name="sy_newer">Your index was set up by a newer version of Opensolr Photos. Update the app to keep syncing.</string>
     <string name="sy_rebuild">This version of Opensolr Photos comes with a new index configuration. Your index must be reset and fully re-synced before syncing continues.</string>
     <string name="sy_looking">Looking for photos</string>
@@ -102,7 +102,7 @@
     <string name="vm_signin_failed">Sign-in failed. Tap Sign in again.</string>
     <string name="vm_need_photos">Opensolr Photos needs access to your photos to index them. Allow it to continue.</string>
     <string name="vm_connecting">Connecting to Opensolr</string>
-    <string name="vm_which_device">Which one of these is your device?</string>
+    <string name="vm_which_device">Re-use one of these indexes from your Opensolr account?</string>
     <string name="vm_signed_out">Your Opensolr sign-in stopped working. Sign in again.</string>
     <string name="vm_setup_failed">The index could not be set up.</string>
     <string name="vm_search_failed">Search failed.</string>
@@ -118,7 +118,7 @@
     <string name="vm_empty_failed">The index could not be emptied: %1$s</string>
     <string name="vm_try_again">try again</string>
     <string name="vm_no_documents">No photos that look like documents to read again.</string>
-    <string name="vm_sync_stopped">Sync stopped. It starts again on its own, or press Force Re-Sync.</string>
+    <string name="vm_sync_stopped">Sync stopped. Nothing runs until you press Sync, Reset or another action.</string>
     <string name="vm_dup_failed">Looking for similar photos failed.</string>
     <string name="vm_nothing_similar">Nothing else in your index is like this photo at this setting.</string>
     <string name="vm_no_dups">No similar photos of this kind in your index.</string>
@@ -152,4 +152,5 @@
     <string name="sh_small">1024 px</string>
     <string name="sh_small_sub">Smaller copies, 1024 px on the long edge</string>
     <string name="sh_preparing">Preparing %1$s of %2$s</string>
+    <string name="vm_stopping">Stopping everything…</string>
 </resources>

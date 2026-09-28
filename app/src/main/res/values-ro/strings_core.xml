@@ -29,7 +29,7 @@
     <string name="err_no_region">Momentan nu e disponibil niciun mediu Opensolr cu căutare vectorială</string>
     <string name="sy_sign_in">Autentifică-te în Opensolr ca să sincronizezi.</string>
     <string name="sy_checking">Se verifică indexul</string>
-    <string name="sy_device">Deschide Opensolr Photos și spune care dintre dispozitivele tale e acest telefon.</string>
+    <string name="sy_device">Deschide Opensolr Photos și alege dacă refolosești un index din contul tău Opensolr.</string>
     <string name="sy_newer">Indexul a fost configurat de o versiune mai nouă a Opensolr Photos. Actualizează aplicația ca să continui sincronizarea.</string>
     <string name="sy_rebuild">Această versiune Opensolr Photos vine cu o nouă configurație a indexului. Indexul trebuie resetat și sincronizat complet înainte să continue.</string>
     <string name="sy_looking">Se caută pozele</string>
@@ -102,7 +102,7 @@
     <string name="vm_signin_failed">Autentificarea a eșuat. Atinge din nou Autentifică-te.</string>
     <string name="vm_need_photos">Opensolr Photos are nevoie de acces la poze ca să le indexeze. Permite-l ca să continui.</string>
     <string name="vm_connecting">Conectare la Opensolr</string>
-    <string name="vm_which_device">Care dintre acestea e dispozitivul tău?</string>
+    <string name="vm_which_device">Refolosești unul dintre acești indecși din contul tău Opensolr?</string>
     <string name="vm_signed_out">Autentificarea Opensolr nu mai merge. Autentifică-te din nou.</string>
     <string name="vm_setup_failed">Indexul nu s-a putut configura.</string>
     <string name="vm_search_failed">Căutarea a eșuat.</string>
@@ -118,7 +118,7 @@
     <string name="vm_empty_failed">Indexul nu s-a putut goli: %1$s</string>
     <string name="vm_try_again">încearcă din nou</string>
     <string name="vm_no_documents">Nu sunt poze care arată a documente de recitit.</string>
-    <string name="vm_sync_stopped">Sync oprit. Pornește singur din nou sau atinge Re-Sync.</string>
+    <string name="vm_sync_stopped">Sync oprit. Nu mai pornește nimic până nu apeși Sync, Reset sau altă acțiune.</string>
     <string name="vm_dup_failed">Căutarea pozelor asemănătoare a eșuat.</string>
     <string name="vm_nothing_similar">Nimic altceva din index nu seamănă cu această poză la această setare.</string>
     <string name="vm_no_dups">Nicio poză asemănătoare de acest fel în index.</string>
@@ -158,4 +158,5 @@
     <string name="sh_small">1024 px</string>
     <string name="sh_small_sub">Copii mai mici, 1024 px pe latura lungă</string>
     <string name="sh_preparing">Se pregătește %1$s din %2$s</string>
+    <string name="vm_stopping">Se oprește tot…</string>
 </resources>

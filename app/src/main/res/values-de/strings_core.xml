@@ -29,7 +29,7 @@
     <string name="err_no_region">Derzeit ist keine Opensolr-Umgebung mit Vektorsuche verfügbar</string>
     <string name="sy_sign_in">Melden Sie sich bei Opensolr an, um zu synchronisieren.</string>
     <string name="sy_checking">Index wird geprüft</string>
-    <string name="sy_device">Öffnen Sie Opensolr Photos und wählen Sie, welches Ihrer Geräte dieses Telefon ist.</string>
+    <string name="sy_device">Öffnen Sie Opensolr Photos und wählen Sie, ob ein Index aus Ihrem Opensolr-Konto wiederverwendet werden soll.</string>
     <string name="sy_newer">Ihr Index wurde von einer neueren Version von Opensolr Photos eingerichtet. Aktualisieren Sie die App, um weiter zu synchronisieren.</string>
     <string name="sy_rebuild">Diese Version von Opensolr Photos bringt eine neue Indexkonfiguration. Ihr Index muss zurückgesetzt und komplett neu synchronisiert werden, bevor es weitergeht.</string>
     <string name="sy_looking">Fotos werden gesucht</string>
@@ -102,7 +102,7 @@
     <string name="vm_signin_failed">Anmeldung fehlgeschlagen. Tippen Sie erneut auf Anmelden.</string>
     <string name="vm_need_photos">Opensolr Photos braucht Zugriff auf Ihre Fotos, um sie zu indexieren. Erlauben Sie ihn, um fortzufahren.</string>
     <string name="vm_connecting">Verbindung zu Opensolr</string>
-    <string name="vm_which_device">Welches davon ist Ihr Gerät?</string>
+    <string name="vm_which_device">Einen dieser Indizes aus Ihrem Opensolr-Konto wiederverwenden?</string>
     <string name="vm_signed_out">Ihre Opensolr-Anmeldung funktioniert nicht mehr. Melden Sie sich erneut an.</string>
     <string name="vm_setup_failed">Der Index konnte nicht eingerichtet werden.</string>
     <string name="vm_search_failed">Suche fehlgeschlagen.</string>
@@ -118,7 +118,7 @@
     <string name="vm_empty_failed">Der Index konnte nicht geleert werden: %1$s</string>
     <string name="vm_try_again">erneut versuchen</string>
     <string name="vm_no_documents">Keine Fotos, die wie Dokumente aussehen, zum erneuten Lesen.</string>
-    <string name="vm_sync_stopped">Sync gestoppt. Er startet von selbst wieder, oder tippen Sie auf Neu-Sync.</string>
+    <string name="vm_sync_stopped">Sync gestoppt. Nichts läuft, bis Sie Sync, Reset oder eine andere Aktion antippen.</string>
     <string name="vm_dup_failed">Die Suche nach ähnlichen Fotos ist fehlgeschlagen.</string>
     <string name="vm_nothing_similar">Nichts anderes in Ihrem Index ähnelt diesem Foto bei dieser Einstellung.</string>
     <string name="vm_no_dups">Keine ähnlichen Fotos dieser Art in Ihrem Index.</string>
@@ -152,4 +152,5 @@
     <string name="sh_small">1024 px</string>
     <string name="sh_small_sub">Kleinere Kopien, 1024 px an der langen Seite</string>
     <string name="sh_preparing">Vorbereitung %1$s von %2$s</string>
+    <string name="vm_stopping">Alles wird angehalten…</string>
 </resources>

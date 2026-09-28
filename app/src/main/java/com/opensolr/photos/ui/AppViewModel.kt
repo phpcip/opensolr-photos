@@ -806,10 +806,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun approveRebuild() {
+    fun approveRebuild() = afterStoppingEverything {
         prefs.rebuildApproved = true
         _state.update { it.copy(rebuildRequired = false) }
-        SyncScheduler.runNow(context)
+        true
     }
 
     fun postponeRebuild() {
@@ -1962,81 +1962,68 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         search(reset = true)
     }
 
-    fun forceResync() {
-        if (_state.value.sync.running || com.opensolr.photos.sync.SyncWorker.running.get()) {
-            _state.update { it.copy(showBusyDialog = true) }
-            return
-        }
-        SyncScheduler.restartNow(context)
-    }
+    fun forceResync() = afterStoppingEverything { true }
 
-    fun syncNow() {
-        if (_state.value.sync.running || com.opensolr.photos.sync.SyncWorker.running.get()) return
-        SyncScheduler.runNow(context)
-    }
-
-    fun rereadAll() {
-        if (_state.value.sync.running || com.opensolr.photos.sync.SyncWorker.running.get()) {
-            _state.update { it.copy(showBusyDialog = true) }
-            return
-        }
-
-        prefs.rereadAllSince = System.currentTimeMillis() - 10 * 60 * 1000L
-        SyncScheduler.restartNow(context)
-    }
-
-    fun resetIndex() {
-
-        if (_state.value.sync.running || com.opensolr.photos.sync.SyncWorker.running.get()) {
-            _state.update { it.copy(showBusyDialog = true) }
-            return
-        }
+    /**
+     * Every button that touches the index works the same way: everything running is stopped and waited for,
+     * the button's own work is done, then the machinery starts again. Nothing is ever refused as "busy".
+     */
+    private fun afterStoppingEverything(work: suspend () -> Boolean) {
         viewModelScope.launch {
-            try {
-                val connection = prefs.connection ?: return@launch
-                // Reset is about the index only: emptied, then filled again from the local clone by the sync that
-                // starts now. The clone, the source of truth, is not touched and no photo is sent again.
-                com.opensolr.photos.net.SolrClient(connection).deleteAll()
-                prefs.restoreFromClone = true
-                searches.clearCache()
-            } catch (e: Exception) {
+            _state.update { it.copy(notice = AppText.s(R.string.vm_stopping)) }
+            withContext(Dispatchers.IO) { SyncScheduler.stopAndWait(context, pause = false) }
+            val go = try { work() } catch (e: kotlinx.coroutines.CancellationException) { throw e } catch (e: Exception) {
                 _state.update { it.copy(notice = AppText.s(R.string.vm_empty_failed, friendlyMessage(e, AppText.s(R.string.vm_try_again)))) }
-                return@launch
+                false
             }
-
-            _state.update { it.copy(hits = emptyList(), numFound = 0, duplicateGroups = emptyList(), duplicatesMode = false, similarToId = null, similarToHit = null) }
-            SyncScheduler.runNow(context)
+            SyncScheduler.resume(context)
+            if (go) SyncScheduler.restartNow(context)
         }
     }
 
-    fun rebuildOcr() {
-        if (_state.value.sync.running || com.opensolr.photos.sync.SyncWorker.running.get()) {
-            _state.update { it.copy(showBusyDialog = true) }
-            return
-        }
-        viewModelScope.launch {
+    fun syncNow() = afterStoppingEverything { true }
+
+    fun rereadAll() = afterStoppingEverything {
+        prefs.rereadAllSince = System.currentTimeMillis() - 10 * 60 * 1000L
+        true
+    }
+
+    fun resetIndex() = afterStoppingEverything {
+        val connection = prefs.connection ?: return@afterStoppingEverything false
+        // Reset is about the index only: emptied, then filled again from the local clone by the sync that
+        // starts now. The clone, the source of truth, is not touched and no photo is sent again.
+        withContext(Dispatchers.IO) { com.opensolr.photos.net.SolrClient(connection).deleteAll() }
+        prefs.restoreFromClone = true
+        searches.clearCache()
+        _state.update { it.copy(notice = null, hits = emptyList(), numFound = 0, duplicateGroups = emptyList(), duplicatesMode = false, similarToId = null, similarToHit = null) }
+        true
+    }
+
+    fun rebuildOcr() = afterStoppingEverything {
+        run {
 
             // Whether a photo carries text is tesseract's verdict, not a word in its description:
             // this reads again exactly the photos that have printed text in the index.
             val ids = withContext(Dispatchers.IO) { photoCache.docsWithText() }
             if (ids.isEmpty()) {
                 _state.update { it.copy(notice = AppText.s(R.string.vm_no_documents)) }
-                return@launch
+                return@afterStoppingEverything true
             }
             withContext(Dispatchers.IO) { photoCache.queueActions(ids, com.opensolr.photos.data.PhotoCache.ACTION_INDEX) }
             searches.clearCache()
             _state.update {
                 it.copy(notice = AppText.p(R.plurals.vm_documents_n, ids.size, Actions.formatCount(ids.size.toLong())))
             }
-            SyncScheduler.runNow(context)
+            true
         }
     }
 
+    /** Stop: everything running or queued stops, and nothing starts on its own until the owner presses a button. */
     fun stopSync() {
-
-        com.opensolr.photos.sync.SyncWorker.stopRequested.set(true)
-        SyncScheduler.stopNow(context)
-        _state.update { it.copy(notice = AppText.s(R.string.vm_sync_stopped)) }
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { SyncScheduler.stopAndWait(context, pause = true) }
+            _state.update { it.copy(notice = AppText.s(R.string.vm_sync_stopped)) }
+        }
     }
 
     private fun loadMoreDuplicates() {
@@ -2394,8 +2381,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         // A sync already running is no reason to refuse: the photos asked for here are read with
         // the next batch of that sync (SyncEngine.readNow), ahead of everything still queued.
         flash(AppText.s(R.string.vm_resync_now, Actions.formatCount(ids.size.toLong())))
-        if (_state.value.sync.running || com.opensolr.photos.sync.SyncWorker.running.get()) return
-        SyncScheduler.restartNow(context)
+        afterStoppingEverything { true }
     }
 
     fun dismissBusyDialog() {

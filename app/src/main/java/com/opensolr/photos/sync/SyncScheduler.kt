@@ -43,7 +43,34 @@ object SyncScheduler {
         .setRequiredNetworkType(NetworkType.CONNECTED)
         .build()
 
+    /**
+     * Everything stopped: the running sync is told to stop and every queued sync and face job is cancelled.
+     * With [pause], nothing starts again on its own until the owner presses a button.
+     */
+    fun haltAll(context: Context, pause: Boolean) {
+        if (pause) com.opensolr.photos.data.AppPrefs(context).syncPaused = true
+        SyncWorker.stopRequested.set(true)
+        val manager = WorkManager.getInstance(context)
+        manager.cancelAllWorkByTag(TAG)
+        FaceWorker.cancelAll(context)
+    }
+
+    /** [haltAll], then waits (bounded) until the sync worker has really finished its last step. */
+    suspend fun stopAndWait(context: Context, pause: Boolean, timeoutMs: Long = 90_000L) {
+        haltAll(context, pause)
+        val until = System.currentTimeMillis() + timeoutMs
+        while (SyncWorker.running.get() && System.currentTimeMillis() < until) kotlinx.coroutines.delay(200)
+    }
+
+    /** The owner started something: the pause is over. */
+    fun resume(context: Context) {
+        com.opensolr.photos.data.AppPrefs(context).syncPaused = false
+    }
+
+    private fun paused(context: Context): Boolean = com.opensolr.photos.data.AppPrefs(context).syncPaused
+
     fun runNow(context: Context) {
+        if (paused(context)) return
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(constraints)
             // started by the owner or by a new photo: runs at once, not when the system gets to it
@@ -56,6 +83,7 @@ object SyncScheduler {
     }
 
     fun watchMedia(context: Context) {
+        if (paused(context)) return
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(
                 Constraints.Builder()
@@ -73,6 +101,7 @@ object SyncScheduler {
     }
 
     fun runLater(context: Context, delayMs: Long) {
+        if (paused(context)) return
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(constraints)
             .setInitialDelay(delayMs.coerceAtLeast(1000L), TimeUnit.MILLISECONDS)
@@ -84,6 +113,7 @@ object SyncScheduler {
     }
 
     fun runWhenCharging(context: Context) {
+        if (paused(context)) return
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(
                 Constraints.Builder()
@@ -122,6 +152,7 @@ object SyncScheduler {
     }
 
     fun restartNow(context: Context) {
+        if (paused(context)) return
         val manager = WorkManager.getInstance(context)
         manager.cancelAllWorkByTag(TAG)
         val request = OneTimeWorkRequestBuilder<SyncWorker>()

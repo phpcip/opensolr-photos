@@ -124,8 +124,17 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         private val _progress = MutableStateFlow(Progress(false, 0, 0))
         val progress: StateFlow<Progress> = _progress
 
+        /** Every face job, queued or running, cancelled: the owner stopped everything. */
+        fun cancelAll(context: Context) {
+            val manager = WorkManager.getInstance(context)
+            manager.cancelUniqueWork(WORK_LEARN)
+            manager.cancelUniqueWork(WORK_SCAN)
+            _progress.value = Progress(false, _progress.value.done, _progress.value.total)
+        }
+
         /** After a sync: name the newest photos with the people known. Nothing is read. */
         fun next(context: Context, scanAll: Boolean = false, continuation: Boolean = false) {
+            if (AppPrefs(context).syncPaused) return
             if (!scanAll) {
                 WorkManager.getInstance(context).enqueueUniqueWork(WORK_LEARN, ExistingWorkPolicy.KEEP, OneTimeWorkRequestBuilder<FaceWorker>().build())
                 return
@@ -140,6 +149,7 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
         /** The owner asked for every photo to be read: starts the scan (it waits for the charger). */
         fun scanAll(context: Context) {
+            SyncScheduler.resume(context)
             _progress.value = Progress(true, _progress.value.done, _progress.value.total)
             next(context, scanAll = true)
         }

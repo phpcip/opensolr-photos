@@ -29,7 +29,7 @@
     <string name="err_no_region">現在、ベクトル検索に対応したOpensolr環境を利用できません</string>
     <string name="sy_sign_in">同期するにはOpensolrにログインしてください。</string>
     <string name="sy_checking">インデックスを確認中</string>
-    <string name="sy_device">Opensolr Photosを開き、この端末がどのデバイスかを選んでください。</string>
+    <string name="sy_device">Opensolr Photosを開き、Opensolrアカウントのインデックスを再利用するか選んでください。</string>
     <string name="sy_newer">インデックスは新しいバージョンのOpensolr Photosで設定されています。同期を続けるにはアプリを更新してください。</string>
     <string name="sy_rebuild">このバージョンのOpensolr Photosには新しいインデックス設定が含まれます。続行する前に、インデックスのリセットと完全な再同期が必要です。</string>
     <string name="sy_looking">写真を探しています</string>
@@ -102,7 +102,7 @@
     <string name="vm_signin_failed">ログインに失敗しました。もう一度ログインしてください。</string>
     <string name="vm_need_photos">Opensolr Photosが写真をインデックスするには、写真へのアクセスが必要です。許可して続けてください。</string>
     <string name="vm_connecting">Opensolrに接続中</string>
-    <string name="vm_which_device">どれがあなたのデバイスですか？</string>
+    <string name="vm_which_device">Opensolrアカウントのこれらのインデックスのいずれかを再利用しますか？</string>
     <string name="vm_signed_out">Opensolrのログインが無効になりました。再ログインしてください。</string>
     <string name="vm_setup_failed">インデックスを設定できませんでした。</string>
     <string name="vm_search_failed">検索に失敗しました。</string>
@@ -118,7 +118,7 @@
     <string name="vm_empty_failed">インデックスを空にできませんでした: %1$s</string>
     <string name="vm_try_again">再試行してください</string>
     <string name="vm_no_documents">読み直す書類のような写真はありません。</string>
-    <string name="vm_sync_stopped">同期を停止しました。自動で再開するか、再同期をタップしてください。</string>
+    <string name="vm_sync_stopped">同期を停止しました。同期、リセット、または他の操作を押すまで何も実行されません。</string>
     <string name="vm_dup_failed">類似の写真の検索に失敗しました。</string>
     <string name="vm_nothing_similar">この設定では、インデックスにこの写真と似たものはありません。</string>
     <string name="vm_no_dups">インデックスにこの種類の類似の写真はありません。</string>
@@ -146,4 +146,5 @@
     <string name="sh_small">1024 px</string>
     <string name="sh_small_sub">縮小コピー（長辺 1024 px）</string>
     <string name="sh_preparing">準備中 %1$s / %2$s</string>
+    <string name="vm_stopping">すべて停止しています…</string>
 </resources>

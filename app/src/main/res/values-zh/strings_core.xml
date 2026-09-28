@@ -29,7 +29,7 @@
     <string name="err_no_region">目前没有支持向量搜索的 Opensolr 环境可用</string>
     <string name="sy_sign_in">登录 Opensolr 才能同步。</string>
     <string name="sy_checking">正在检查你的索引</string>
-    <string name="sy_device">打开 Opensolr Photos 并选择这台手机是你的哪台设备。</string>
+    <string name="sy_device">打开 Opensolr Photos，选择是否重新使用你 Opensolr 账户中的索引。</string>
     <string name="sy_newer">你的索引由更新版本的 Opensolr Photos 设置。请更新应用以继续同步。</string>
     <string name="sy_rebuild">此版本的 Opensolr Photos 带来新的索引配置。继续之前，必须重置索引并完整重新同步。</string>
     <string name="sy_looking">正在查找照片</string>
@@ -102,7 +102,7 @@
     <string name="vm_signin_failed">登录失败。请再次点按登录。</string>
     <string name="vm_need_photos">Opensolr Photos 需要访问你的照片才能建立索引。请允许以继续。</string>
     <string name="vm_connecting">正在连接 Opensolr</string>
-    <string name="vm_which_device">哪一台是你的设备？</string>
+    <string name="vm_which_device">重新使用你 Opensolr 账户中的其中一个索引？</string>
     <string name="vm_signed_out">你的 Opensolr 登录已失效。请重新登录。</string>
     <string name="vm_setup_failed">无法设置索引。</string>
     <string name="vm_search_failed">搜索失败。</string>
@@ -118,7 +118,7 @@
     <string name="vm_empty_failed">无法清空索引：%1$s</string>
     <string name="vm_try_again">请重试</string>
     <string name="vm_no_documents">没有需要重新读取的文档类照片。</string>
-    <string name="vm_sync_stopped">同步已停止。它会自动重新开始，或点按“重新同步”。</string>
+    <string name="vm_sync_stopped">同步已停止。在你点按同步、重置或其他操作前不会运行任何内容。</string>
     <string name="vm_dup_failed">查找相似照片失败。</string>
     <string name="vm_nothing_similar">在此设置下，索引中没有与这张照片相似的其他照片。</string>
     <string name="vm_no_dups">索引中没有此类相似照片。</string>
@@ -146,4 +146,5 @@
     <string name="sh_small">1024 px</string>
     <string name="sh_small_sub">较小的副本，长边 1024 像素</string>
     <string name="sh_preparing">正在准备 %1$s / %2$s</string>
+    <string name="vm_stopping">正在停止所有内容…</string>
 </resources>

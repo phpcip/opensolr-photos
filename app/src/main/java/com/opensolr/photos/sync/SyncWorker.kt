@@ -18,6 +18,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     private var lastNotified = 0L
 
     override suspend fun doWork(): Result {
+        if (AppPrefs(applicationContext).syncPaused) return Result.success()
         if (!running.compareAndSet(false, true)) return Result.success()
         stopRequested.set(false)
         try {

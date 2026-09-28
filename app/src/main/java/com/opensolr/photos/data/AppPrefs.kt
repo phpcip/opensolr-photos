@@ -106,6 +106,11 @@ class AppPrefs(context: Context) {
         get() = prefs.getInt("missing_held", 0)
         set(value) { prefs.edit().putInt("missing_held", value).commit() }
 
+    /** The owner pressed Stop: nothing starts on its own until they press Sync, Reset or any other action. */
+    var syncPaused: Boolean
+        get() = prefs.getBoolean("sync_paused", false)
+        set(value) { prefs.edit().putBoolean("sync_paused", value).commit() }
+
     /** Reset: the index was emptied and is to be filled again from the local clone at the next sync. */
     var restoreFromClone: Boolean
         get() = prefs.getBoolean("restore_from_clone", false)
