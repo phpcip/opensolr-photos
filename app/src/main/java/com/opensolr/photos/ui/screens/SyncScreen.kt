@@ -114,7 +114,8 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
             if (state.parkedCount > 0) InfoRow(stringResource(R.string.sync_hidden), Actions.formatCount(state.parkedCount.toLong()))
             if (report.message.isNotBlank()) {
                 Spacer(Modifier.height(14.dp))
-                Notice(report.message)
+                // the notice says when it was written: a sync running now has not replaced it yet
+                Notice(Actions.formatDate(report.finishedAt) + " · " + report.message)
             }
             if (state.missingHeld > 0) {
                 Spacer(Modifier.height(10.dp))
