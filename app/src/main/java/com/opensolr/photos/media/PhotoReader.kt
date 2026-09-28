@@ -167,7 +167,10 @@ object PhotoReader {
         }
     }
 
-    fun canWriteExif(mime: String): Boolean = mime in setOf("image/jpeg", "image/png", "image/webp")
+    fun canWriteExif(mime: String): Boolean = normal(mime) in setOf("image/jpeg", "image/png", "image/webp")
+
+    /** "image/jpg" (some apps write it) is a JPEG like any other. */
+    private fun normal(mime: String): String = mime.lowercase().let { if (it == "image/jpg" || it == "image/pjpeg") "image/jpeg" else it }
 
     enum class GpsState {
 
@@ -290,7 +293,7 @@ object PhotoReader {
         clearMeaning: Boolean = false,
         faces: List<FaceArea>? = null,
     ): Boolean {
-        if (mime !in setOf("image/jpeg", "image/png", "image/webp")) return false
+        if (!canWriteExif(mime)) return false
         if (persons == null && tags == null && meaning == null && !clearMeaning && faces == null) return true
         return try {
             context.contentResolver.openFileDescriptor(uri, "rw")?.use { pfd ->
@@ -317,7 +320,7 @@ object PhotoReader {
                 }
                 exif.setAttribute(ExifInterface.TAG_XMP, packet)
                 exif.saveAttributes()
-                if (mime == "image/jpeg" && packet != null) syncJpegXmpSegment(pfd.fileDescriptor, packet)
+                if (normal(mime) == "image/jpeg" && packet != null) syncJpegXmpSegment(pfd.fileDescriptor, packet)
                 true
             } ?: false
         } catch (e: Exception) {
