@@ -42,6 +42,8 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
     private fun learn(ctx: Context, cache: PhotoCache, edits: EditRepository, photos: Collection<com.opensolr.photos.media.LocalPhoto>): Result {
         val undone = forgetGuesses(ctx, cache, edits)
+        // people already on photos are put on their faces, on the phone only
+        FaceMatcher.bindTagged(cache)
         // photos read before a person was named get the name now: the newest ones, a bounded number
         val recent = photos.sortedByDescending { it.addedSec }.take(RECHECK).map { it.id }
         if (FaceMatcher.nameRecent(cache, edits, (undone + recent).distinct())) SyncScheduler.runNow(ctx)

@@ -137,6 +137,32 @@ object FaceMatcher {
         if (people.size == 1) cache.setFacePerson(listOf(rows[0].fid), people[0], sure = false, how = PhotoCache.HOW_LEARNED)
     }
 
+    /** A person the photo already names is surely in it: this much likeness is enough to pick their face. */
+    private const val BIND = 0.30f
+
+    /**
+     * Photos that name a person without any face carrying the name: the unnamed face that looks most like the
+     * person's own faces gets the name, as a label only (never a reference). Nothing leaves the phone. How many.
+     */
+    fun bindTagged(cache: PhotoCache, photoId: String? = null, people: Map<String, List<FloatArray>> = people(cache)): Int {
+        if (people.isEmpty()) return 0
+        val refs = people.entries.associate { it.key.lowercase() to it }
+        var bound = 0
+        cache.openTaggedFaces(photoId).forEach { (id, names) ->
+            val open = cache.facesWithVectors(id).filter { it.first.person == null }.toMutableList()
+            for (name in names) {
+                val (person, vectors) = refs[name.lowercase()] ?: continue
+                if (open.isEmpty()) break
+                val best = open.maxByOrNull { score(it.second, vectors) } ?: break
+                if (score(best.second, vectors) < BIND) continue
+                cache.setFacePerson(listOf(best.first.fid), person, sure = false, how = PhotoCache.HOW_LEARNED)
+                open.remove(best)
+                bound++
+            }
+        }
+        return bound
+    }
+
     /** [autoName] over photos already read ([photoIds]), with the people as they are now. True when anything was named. */
     fun nameRecent(cache: PhotoCache, edits: EditRepository, photoIds: List<String>): Boolean {
         val people = people(cache)

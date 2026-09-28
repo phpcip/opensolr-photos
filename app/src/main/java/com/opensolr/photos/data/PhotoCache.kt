@@ -1035,6 +1035,18 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         db.delete("auto_words", "person = ? COLLATE NOCASE", arrayOf(person))
     }
 
+    /** Photos with a person on them who is on none of their faces while some face is still unnamed: photo to those people. */
+    fun openTaggedFaces(photoId: String? = null): Map<String, List<String>> {
+        val out = LinkedHashMap<String, MutableList<String>>()
+        readableDatabase.rawQuery(
+            "SELECT DISTINCT w.id, w.word FROM doc_words w WHERE w.kind = '$WORD_PERSON'" + (if (photoId != null) " AND w.id = ?" else "") +
+                " AND EXISTS (SELECT 1 FROM faces f WHERE f.photo_id = w.id AND f.person IS NULL)" +
+                " AND NOT EXISTS (SELECT 1 FROM faces o WHERE o.photo_id = w.id AND o.person = w.word COLLATE NOCASE)",
+            if (photoId != null) arrayOf(photoId) else null,
+        ).use { c -> while (c.moveToNext()) out.getOrPut(c.getString(0)) { ArrayList() } += c.getString(1) }
+        return out
+    }
+
     /** Faces the owner said are not [person]: never offered for them again. */
     fun rejectFaces(fids: Collection<Long>, person: String) {
         if (fids.isEmpty()) return

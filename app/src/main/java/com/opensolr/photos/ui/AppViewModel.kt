@@ -429,6 +429,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             }
         }
         com.opensolr.photos.search.FaceMatcher.nameOnlyFace(photoCache, hit.id)
+        com.opensolr.photos.search.FaceMatcher.bindTagged(photoCache, hit.id)
         photoCache.facesOf(hit.id)
     }
 
@@ -454,6 +455,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             searches.clearCache()
             _state.update { s -> s.copy(hits = s.hits.map { if (it.id == hit.id) it.copy(persons = people.joinToString(", ")) else it }) }
             SyncScheduler.runNow(context)
+            // the new name goes on that person's faces in every photo that already names them, in the background
+            com.opensolr.photos.sync.FaceWorker.next(context)
             if (clean != null) reviewPerson(clean)
         }
     }
