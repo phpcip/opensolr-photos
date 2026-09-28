@@ -47,7 +47,7 @@ fun ShareChooser(hits: List<PhotoHit>, fullScreen: Boolean = false, onDismiss: (
         confirmButton = {},
         dismissButton = { TextButton(onClick = { close() }) { Text(stringResource(R.string.cancel), color = p.ink) } },
         title = { Text(pluralStringResource(R.plurals.sh_title, hits.size, Actions.formatCount(hits.size.toLong()))) },
-        text = {
+        text = { com.opensolr.photos.ui.KeyboardBack();
             // over the full screen viewer the status bar stays hidden
             if (fullScreen) HideStatusBar()
             if (preparing) {

@@ -27,6 +27,8 @@ class MainActivity : ComponentActivity() {
         setContent {
             OpensolrPhotosTheme {
                 AppRoot(viewModel)
+                // composed after the screens, so with the keyboard up it answers back before any of them
+                com.opensolr.photos.ui.KeyboardBack()
             }
         }
     }

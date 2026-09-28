@@ -931,7 +931,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text(pluralStringResource(R.plurals.delete_title, chosen, Actions.formatCount(chosen.toLong()))) },
-            text = { Text(stringResource(R.string.delete_text)) },
+            text = { com.opensolr.photos.ui.KeyboardBack(); Text(stringResource(R.string.delete_text)) },
             confirmButton = { TextButton(onClick = { confirmDelete = false; deleteSelected() }) { Text(stringResource(R.string.delete), color = p.accent) } },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.cancel), color = p.ink) } },
             containerColor = p.paper,
@@ -1045,7 +1045,7 @@ private fun SearchOperatorsDialog(onDismiss: () -> Unit) {
                 Text(stringResource(R.string.ops_sub), style = MaterialTheme.typography.bodyMedium, color = p.muted)
             }
         },
-        text = {
+        text = { com.opensolr.photos.ui.KeyboardBack();
             val example = stringResource(R.string.ops_example)
             val phraseToo = stringResource(R.string.ops_phrase_too)
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1890,7 +1890,7 @@ private fun FilterSheet(
     val context = LocalContext.current
 
     val draft = current
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = p.paper, shape = Corner) {
+    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = p.paper, shape = Corner) { com.opensolr.photos.ui.KeyboardBack();
         Column(
             Modifier
                 .fillMaxWidth()
@@ -2415,7 +2415,7 @@ internal fun PhotoViewer(
     Dialog(
         onDismissRequest = onClose,
         properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
-    ) {
+    ) { com.opensolr.photos.ui.KeyboardBack();
         val overflow = viewerWindowOverflow()
         BoxWithConstraints(Modifier.fillMaxSize()) {
             val closeAt = with(LocalDensity.current) { maxHeight.toPx() } * VIEWER_DISMISS_SHARE
@@ -2940,7 +2940,7 @@ internal fun DetailsSheet(
         viewModel.setPlace(listOf(hit), lat, lon)
         onDismiss()
     }
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = p.paper, shape = Corner) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = p.paper, shape = Corner) { com.opensolr.photos.ui.KeyboardBack();
 
         if (picking) {
             PlacePickerDialog(start = hit.latLon, viewModel = viewModel, onDismiss = { picking = false }, onPick = { lat, lon -> savePlace(lat, lon) })

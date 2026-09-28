@@ -143,7 +143,7 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
         containerColor = p.paper,
         shape = Corner,
         dragHandle = null,
-    ) {
+    ) { com.opensolr.photos.ui.KeyboardBack();
         Column(
             with(outside) { Modifier.root() }
                 .fillMaxWidth()

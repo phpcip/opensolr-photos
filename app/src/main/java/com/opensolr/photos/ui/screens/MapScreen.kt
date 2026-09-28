@@ -291,7 +291,7 @@ private fun GroupSheet(cluster: PhotoCluster, onDismiss: () -> Unit, onShowPhoto
         sheetState = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = false),
         containerColor = p.paper,
         shape = RoundedCornerShape(2.dp),
-    ) {
+    ) { com.opensolr.photos.ui.KeyboardBack();
         Column(Modifier.fillMaxWidth().fillMaxHeight().padding(horizontal = 20.dp).navigationBarsPadding()) {
             SectionLabel(pluralStringResource(R.plurals.mp_n_here, cluster.pins.size, Actions.formatCount(cluster.pins.size.toLong())))
 

@@ -178,7 +178,7 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
             AlertDialog(
                 onDismissRequest = { confirmFaceScan = false },
                 title = { Text(stringResource(R.string.fc_scan_all)) },
-                text = { Text(stringResource(R.string.fc_scan_text)) },
+                text = { com.opensolr.photos.ui.KeyboardBack(); Text(stringResource(R.string.fc_scan_text)) },
                 confirmButton = { TextButton(onClick = { confirmFaceScan = false; viewModel.startFaceScan() }) { Text(stringResource(R.string.fc_scan_start), color = p.accent) } },
                 dismissButton = { TextButton(onClick = { confirmFaceScan = false }) { Text(stringResource(R.string.sync_cancel), color = p.ink) } },
                 containerColor = p.paper,
@@ -212,7 +212,7 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
         AlertDialog(
             onDismissRequest = { confirmRebuildOcr = false },
             title = { Text(stringResource(R.string.sync_ocr_q)) },
-            text = { Text(stringResource(R.string.sync_ocr_text)) },
+            text = { com.opensolr.photos.ui.KeyboardBack(); Text(stringResource(R.string.sync_ocr_text)) },
             confirmButton = { TextButton(onClick = { confirmRebuildOcr = false; viewModel.rebuildOcr() }) { Text(stringResource(R.string.sync_rebuild), color = p.accent) } },
             dismissButton = { TextButton(onClick = { confirmRebuildOcr = false }) { Text(stringResource(R.string.sync_cancel), color = p.ink) } },
             containerColor = p.paper,
@@ -225,7 +225,7 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
         AlertDialog(
             onDismissRequest = { confirmReread = false },
             title = { Text(stringResource(R.string.sync_reread_q)) },
-            text = {
+            text = { com.opensolr.photos.ui.KeyboardBack();
                 Text(
                     stringResource(R.string.sync_reread_text)
                 )
@@ -242,7 +242,7 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
         AlertDialog(
             onDismissRequest = { confirmReset = false },
             title = { Text(stringResource(R.string.sync_reset_q)) },
-            text = { Text(stringResource(R.string.sync_reset_text)) },
+            text = { com.opensolr.photos.ui.KeyboardBack(); Text(stringResource(R.string.sync_reset_text)) },
             confirmButton = { TextButton(onClick = { confirmReset = false; viewModel.resetIndex() }) { Text(stringResource(R.string.sync_btn_reset), color = p.accent) } },
             dismissButton = { TextButton(onClick = { confirmReset = false }) { Text(stringResource(R.string.sync_cancel), color = p.ink) } },
             containerColor = p.paper,

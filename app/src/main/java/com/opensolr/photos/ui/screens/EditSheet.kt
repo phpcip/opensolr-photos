@@ -165,7 +165,7 @@ fun EditSheet(hit: PhotoHit, state: UiState, viewModel: AppViewModel, onDismiss:
         containerColor = p.paper,
         shape = Corner,
         dragHandle = null,
-    ) {
+    ) { com.opensolr.photos.ui.KeyboardBack();
 
         Column(
             Modifier

@@ -246,7 +246,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
             onDismissRequest = { confirmDelete = false },
             containerColor = p.paper,
             title = { Text(stringResource(R.string.al_delete_q), color = p.ink) },
-            text = { Text(deleteWarning(LocalContext.current, state), color = p.ink, style = MaterialTheme.typography.bodyMedium) },
+            text = { com.opensolr.photos.ui.KeyboardBack(); Text(deleteWarning(LocalContext.current, state), color = p.ink, style = MaterialTheme.typography.bodyMedium) },
             confirmButton = {
                 TextButton(onClick = {
                     confirmDelete = false

@@ -171,7 +171,7 @@ internal fun FaceNameDialog(
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(face.person ?: stringResource(R.string.fc_who)) },
-        text = {
+        text = { com.opensolr.photos.ui.KeyboardBack();
             com.opensolr.photos.ui.HideStatusBar()
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 // the face being named, so there is no doubt which one it is

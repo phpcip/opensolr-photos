@@ -130,7 +130,7 @@ fun PlacePickerDialog(
         }
     }
 
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) {
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)) { com.opensolr.photos.ui.KeyboardBack();
 
         val view = androidx.compose.ui.platform.LocalView.current
         androidx.compose.runtime.SideEffect {

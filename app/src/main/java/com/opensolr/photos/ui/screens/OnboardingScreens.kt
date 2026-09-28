@@ -346,7 +346,7 @@ fun FoldersScreen(state: UiState, viewModel: AppViewModel) {
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { viewModel.cancelFolderRemoval() },
             title = { Text(stringResource(R.string.fo_remove_title)) },
-            text = {
+            text = { com.opensolr.photos.ui.KeyboardBack()
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(pluralStringResource(R.plurals.fo_remove_text, n, Actions.formatCount(n.toLong())), color = p.ink)
                     com.opensolr.photos.ui.ChoiceOption(stringResource(R.string.fo_keep), stringResource(R.string.fo_keep_sub)) { viewModel.applyFolders(keep = true) }
