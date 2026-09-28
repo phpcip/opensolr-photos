@@ -72,7 +72,4 @@
     <string name="fo_delete_failed">インデックスに接続できませんでした。写真は非表示のまま残り、次回もう一度試せます。</string>
     <string name="sync_hidden">外したフォルダから保持</string>
     <string name="fo_open_failed">このフォルダを開けるファイルアプリがありません。</string>
-    <plurals name="sync_n_folders">
-        <item quantity="other">写真のあるフォルダ %1$s 個</item>
-    </plurals>
 </resources>

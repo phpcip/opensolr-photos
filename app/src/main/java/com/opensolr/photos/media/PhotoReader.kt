@@ -45,6 +45,18 @@ object PhotoReader {
     private const val SHARE_JPEG_QUALITY = 92
 
     fun shrinkForClip(context: Context, uri: Uri, rotationDegrees: Int, edge: Int = CLIP_EDGE_PX, quality: Int = JPEG_QUALITY): ByteArray? {
+        val upright = decodeUpright(context, uri, rotationDegrees, edge) ?: return null
+        val out = ByteArrayOutputStream()
+        upright.compress(Bitmap.CompressFormat.JPEG, quality, out)
+        upright.recycle()
+        return out.toByteArray()
+    }
+
+    /** The photo upright, long edge at most [edge] px, as the face finder reads it. */
+    fun uprightBitmap(context: Context, uri: Uri, edge: Int): Bitmap? =
+        decodeUpright(context, uri, openExif(context, uri)?.rotationDegrees ?: 0, edge)
+
+    private fun decodeUpright(context: Context, uri: Uri, rotationDegrees: Int, edge: Int): Bitmap? {
         val resolver = context.contentResolver
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         val stream = resolver.openInputStream(uri) ?: return null
@@ -64,14 +76,10 @@ object PhotoReader {
             if (scale != 1f) postScale(scale, scale)
             if (rotationDegrees != 0) postRotate(rotationDegrees.toFloat())
         }
-        val upright = if (matrix.isIdentity) decoded else
-            Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
-
-        val out = ByteArrayOutputStream()
-        upright.compress(Bitmap.CompressFormat.JPEG, quality, out)
-        if (upright !== decoded) upright.recycle()
-        decoded.recycle()
-        return out.toByteArray()
+        if (matrix.isIdentity) return decoded
+        val upright = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+        if (upright !== decoded) decoded.recycle()
+        return upright
     }
 
     fun fileMd5(context: Context, photo: LocalPhoto): String? = fileMd5(context, photo.uri)

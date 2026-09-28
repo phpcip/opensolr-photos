@@ -49,17 +49,7 @@ fun ShareChooser(hits: List<PhotoHit>, fullScreen: Boolean = false, onDismiss: (
         title = { Text(pluralStringResource(R.plurals.sh_title, hits.size, Actions.formatCount(hits.size.toLong()))) },
         text = {
             // over the full screen viewer the status bar stays hidden
-            if (fullScreen) {
-                val dialogView = androidx.compose.ui.platform.LocalView.current
-                androidx.compose.runtime.SideEffect {
-                    (dialogView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.let { w ->
-                        androidx.core.view.WindowCompat.getInsetsController(w, w.decorView).apply {
-                            systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                            hide(androidx.core.view.WindowInsetsCompat.Type.statusBars())
-                        }
-                    }
-                }
-            }
+            if (fullScreen) HideStatusBar()
             if (preparing) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(stringResource(R.string.sh_preparing, Actions.formatCount(done.toLong()), Actions.formatCount(hits.size.toLong())), color = p.ink)
@@ -112,3 +102,17 @@ internal fun ChoiceOption(title: String, sub: String, onClick: () -> Unit) {
 }
 
 private val OptionCorner = RoundedCornerShape(2.dp)
+
+/** Keeps the status bar hidden while the dialog this is composed in is shown (over the full screen viewer). */
+@Composable
+internal fun HideStatusBar() {
+    val dialogView = androidx.compose.ui.platform.LocalView.current
+    androidx.compose.runtime.SideEffect {
+        (dialogView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.let { w ->
+            androidx.core.view.WindowCompat.getInsetsController(w, w.decorView).apply {
+                systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                hide(androidx.core.view.WindowInsetsCompat.Type.statusBars())
+            }
+        }
+    }
+}

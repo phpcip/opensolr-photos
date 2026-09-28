@@ -73,8 +73,4 @@
     <string name="fo_delete_failed">The index could not be reached. The photos stay in it, hidden, until you try again.</string>
     <string name="sync_hidden">Kept from removed folders</string>
     <string name="fo_open_failed">No files app on this phone can open this folder.</string>
-    <plurals name="sync_n_folders">
-        <item quantity="one">%1$s folder with photos</item>
-        <item quantity="other">%1$s folders with photos</item>
-    </plurals>
 </resources>

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="fc_people">Fețe</string>
+    <string name="fc_who">Cine e?</string>
+    <string name="fc_hint">Nume</string>
+    <string name="fc_save">Salvează</string>
+    <string name="fc_clear">Scoate numele</string>
+    <string name="fc_more">Caută-l pe %1$s în alte poze</string>
+    <string name="fc_title">E %1$s?</string>
+    <string name="fc_lead">Bifează fiecare față care e %1$s. Cele nebifate nu mai sunt propuse niciodată pentru %1$s.</string>
+    <string name="fc_none">Nu s-au găsit alte poze cu %1$s deocamdată. Pozele noi sunt verificate pe măsură ce apar.</string>
+    <string name="fc_no_faces">Nicio față găsită în această poză.</string>
+    <string name="fc_reading">Se caută fețele…</string>
+    <string name="fc_tap">Atinge o față ca să-i dai un nume</string>
+    <plurals name="fc_add">
+        <item quantity="one">Adaugă la %1$s poză</item>
+        <item quantity="few">Adaugă la %1$s poze</item>
+        <item quantity="other">Adaugă la %1$s de poze</item>
+    </plurals>
+    <plurals name="fc_added">
+        <item quantity="one">%1$s adăugat la %2$s poză</item>
+        <item quantity="few">%1$s adăugat la %2$s poze</item>
+        <item quantity="other">%1$s adăugat la %2$s de poze</item>
+    </plurals>
+</resources>

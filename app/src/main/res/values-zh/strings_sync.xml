@@ -72,7 +72,4 @@
     <string name="fo_delete_failed">无法连接索引。照片会隐藏保留在其中，直到你再次尝试。</string>
     <string name="sync_hidden">从已移除文件夹保留</string>
     <string name="fo_open_failed">这台手机上没有可以打开此文件夹的文件应用。</string>
-    <plurals name="sync_n_folders">
-        <item quantity="other">%1$s 个含照片的文件夹</item>
-    </plurals>
 </resources>

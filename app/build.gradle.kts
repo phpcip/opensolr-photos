@@ -29,6 +29,8 @@ android {
         targetSdk = 36
         versionCode = 114
         versionName = "3.15.1"
+        // the face models run natively, on phones (arm)
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
 
     flavorDimensions += "store"
@@ -127,4 +129,5 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.coil.compose)
     implementation(libs.osmdroid)
+    implementation(libs.litert)
 }

@@ -73,8 +73,4 @@
     <string name="fo_delete_failed">Der Index war nicht erreichbar. Die Fotos bleiben ausgeblendet darin, bis du es erneut versuchst.</string>
     <string name="sync_hidden">Aus entfernten Ordnern behalten</string>
     <string name="fo_open_failed">Keine Datei-App auf diesem Telefon kann den Ordner öffnen.</string>
-    <plurals name="sync_n_folders">
-        <item quantity="one">%1$s Ordner mit Fotos</item>
-        <item quantity="other">%1$s Ordner mit Fotos</item>
-    </plurals>
 </resources>

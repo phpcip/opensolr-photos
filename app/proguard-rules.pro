@@ -3,3 +3,5 @@
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
 -dontwarn org.osmdroid.**
+-keep class com.opensolr.photos.sync.FaceWorker { <init>(...); }
+-keep class org.tensorflow.lite.** { *; }

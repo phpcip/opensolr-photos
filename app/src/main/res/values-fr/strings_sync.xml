@@ -74,9 +74,4 @@
     <string name="fo_delete_failed">L’index n’a pas répondu. Les photos y restent, masquées, jusqu’à ton prochain essai.</string>
     <string name="sync_hidden">Gardées des dossiers retirés</string>
     <string name="fo_open_failed">Aucune app de fichiers de ce téléphone ne peut ouvrir ce dossier.</string>
-    <plurals name="sync_n_folders">
-        <item quantity="one">%1$s dossier avec des photos</item>
-        <item quantity="many">%1$s dossiers avec des photos</item>
-        <item quantity="other">%1$s dossiers avec des photos</item>
-    </plurals>
 </resources>

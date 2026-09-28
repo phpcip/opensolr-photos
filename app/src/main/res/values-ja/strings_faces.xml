@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="fc_people">顔</string>
+    <string name="fc_who">この人は誰？</string>
+    <string name="fc_hint">名前</string>
+    <string name="fc_save">保存</string>
+    <string name="fc_clear">名前を外す</string>
+    <string name="fc_more">他の写真で %1$s を探す</string>
+    <string name="fc_title">%1$s ですか？</string>
+    <string name="fc_lead">%1$s の顔をすべてチェックしてください。チェックしなかった顔は %1$s として二度と提案されません。</string>
+    <string name="fc_none">%1$s の他の写真はまだ見つかりません。新しい写真は届くたびに確認されます。</string>
+    <string name="fc_no_faces">この写真に顔は見つかりませんでした。</string>
+    <string name="fc_reading">顔を探しています…</string>
+    <string name="fc_tap">顔をタップして名前を付けます</string>
+    <plurals name="fc_add">
+        <item quantity="other">%1$s 枚の写真に追加</item>
+    </plurals>
+    <plurals name="fc_added">
+        <item quantity="other">%1$s を %2$s 枚の写真に追加しました</item>
+    </plurals>
+</resources>

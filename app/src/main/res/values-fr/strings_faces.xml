@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="fc_people">Visages</string>
+    <string name="fc_who">Qui est-ce ?</string>
+    <string name="fc_hint">Nom</string>
+    <string name="fc_save">Enregistrer</string>
+    <string name="fc_clear">Retirer le nom</string>
+    <string name="fc_more">Trouver %1$s dans d’autres photos</string>
+    <string name="fc_title">Est-ce %1$s ?</string>
+    <string name="fc_lead">Coche chaque visage qui est %1$s. Ceux laissés décochés ne seront plus proposés pour %1$s.</string>
+    <string name="fc_none">Aucune autre photo de %1$s trouvée pour l’instant. Les nouvelles photos sont vérifiées à leur arrivée.</string>
+    <string name="fc_no_faces">Aucun visage trouvé dans cette photo.</string>
+    <string name="fc_reading">Recherche des visages…</string>
+    <string name="fc_tap">Touche un visage pour le nommer</string>
+    <plurals name="fc_add">
+        <item quantity="one">Ajouter à %1$s photo</item>
+        <item quantity="many">Ajouter à %1$s photos</item>
+        <item quantity="other">Ajouter à %1$s photos</item>
+    </plurals>
+    <plurals name="fc_added">
+        <item quantity="one">%1$s ajouté à %2$s photo</item>
+        <item quantity="many">%1$s ajouté à %2$s photos</item>
+        <item quantity="other">%1$s ajouté à %2$s photos</item>
+    </plurals>
+</resources>

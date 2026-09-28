@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="fc_people">Faces</string>
+    <string name="fc_who">Who is this?</string>
+    <string name="fc_hint">Name</string>
+    <string name="fc_save">Save</string>
+    <string name="fc_clear">Remove the name</string>
+    <string name="fc_more">Find %1$s in other photos</string>
+    <string name="fc_title">Is this %1$s?</string>
+    <string name="fc_lead">Tick every face that is %1$s. The ones left unticked are never offered for %1$s again.</string>
+    <string name="fc_none">No other photos of %1$s were found yet. New photos are checked as they arrive.</string>
+    <string name="fc_no_faces">No faces found in this photo.</string>
+    <string name="fc_reading">Looking for faces…</string>
+    <string name="fc_tap">Tap a face to name it</string>
+    <plurals name="fc_add">
+        <item quantity="one">Add to %1$s photo</item>
+        <item quantity="other">Add to %1$s photos</item>
+    </plurals>
+    <plurals name="fc_added">
+        <item quantity="one">%1$s added to %2$s photo</item>
+        <item quantity="other">%1$s added to %2$s photos</item>
+    </plurals>
+</resources>

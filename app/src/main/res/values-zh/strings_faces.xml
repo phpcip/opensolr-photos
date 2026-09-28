@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="fc_people">人脸</string>
+    <string name="fc_who">这是谁？</string>
+    <string name="fc_hint">名字</string>
+    <string name="fc_save">保存</string>
+    <string name="fc_clear">移除名字</string>
+    <string name="fc_more">在其他照片中查找 %1$s</string>
+    <string name="fc_title">这是 %1$s 吗？</string>
+    <string name="fc_lead">勾选每一张是 %1$s 的脸。未勾选的将不再作为 %1$s 推荐。</string>
+    <string name="fc_none">暂未找到 %1$s 的其他照片。新照片到达时会自动检查。</string>
+    <string name="fc_no_faces">这张照片中没有找到人脸。</string>
+    <string name="fc_reading">正在查找人脸…</string>
+    <string name="fc_tap">点按一张脸来命名</string>
+    <plurals name="fc_add">
+        <item quantity="other">添加到 %1$s 张照片</item>
+    </plurals>
+    <plurals name="fc_added">
+        <item quantity="other">已将 %1$s 添加到 %2$s 张照片</item>
+    </plurals>
+</resources>

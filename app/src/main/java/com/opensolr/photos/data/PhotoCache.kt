@@ -40,6 +40,15 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         db.execSQL(INCOMING_TAKEN_INDEX)
         db.execSQL(PARKED_DOCS_TABLE)
         db.execSQL(PARKED_WORDS_TABLE)
+        createFaceTables(db)
+    }
+
+    private fun createFaceTables(db: SQLiteDatabase) {
+        db.execSQL(FACES_TABLE)
+        db.execSQL("CREATE INDEX IF NOT EXISTS faces_photo ON faces (photo_id)")
+        db.execSQL("CREATE INDEX IF NOT EXISTS faces_person ON faces (person)")
+        db.execSQL(FACE_REJECTS_TABLE)
+        db.execSQL(FACE_SCANNED_TABLE)
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
@@ -137,6 +146,9 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         if (oldVersion < 22) {
             db.execSQL(PARKED_DOCS_TABLE)
             db.execSQL(PARKED_WORDS_TABLE)
+        }
+        if (oldVersion < 23) {
+            createFaceTables(db)
         }
     }
 
@@ -790,6 +802,168 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         return clause to args
     }
 
+    /** A face found in a photo: box as shares of the upright photo, the person it was named as (null = nobody yet). */
+    data class FaceRow(val fid: Long, val photoId: String, val mediaId: Long, val x: Float, val y: Float, val w: Float, val h: Float, val person: String?, val similarity: Float = 0f)
+
+    /** The file size each photo had when its faces were read: a changed size means read them again. */
+    fun faceScannedSizes(): Map<String, Long> {
+        val out = HashMap<String, Long>()
+        readableDatabase.rawQuery("SELECT photo_id, size_bytes FROM face_scanned", null).use { c -> while (c.moveToNext()) out[c.getString(0)] = c.getLong(1) }
+        return out
+    }
+
+    /**
+     * The faces of one photo, replacing what it had. A face that sits where a named one sat keeps its name,
+     * so an edited file does not lose who is in it. Returns the rows as stored.
+     */
+    fun putFaces(photoId: String, mediaId: Long, sizeBytes: Long, faces: List<com.opensolr.photos.media.FaceEngine.Face>): List<FaceRow> {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            val before = facesOf(photoId).filter { it.person != null }
+            db.delete("faces", "photo_id = ?", arrayOf(photoId))
+            val rows = faces.map { f ->
+                val named = before.maxByOrNull { boxOverlap(it, f) }?.takeIf { boxOverlap(it, f) > 0.5f }?.person
+                val values = ContentValues().apply {
+                    put("photo_id", photoId); put("media_id", mediaId); put("x", f.x); put("y", f.y); put("w", f.w); put("h", f.h); put("score", f.score)
+                    put("vec", toBytes(f.vector))
+                    if (named == null) putNull("person") else put("person", named)
+                }
+                val fid = db.insert("faces", null, values)
+                FaceRow(fid, photoId, mediaId, f.x, f.y, f.w, f.h, named)
+            }
+            db.insertWithOnConflict("face_scanned", null, ContentValues().apply {
+                put("photo_id", photoId); put("size_bytes", sizeBytes); put("faces", faces.size)
+            }, SQLiteDatabase.CONFLICT_REPLACE)
+            db.setTransactionSuccessful()
+            return rows
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    private fun boxOverlap(a: FaceRow, b: com.opensolr.photos.media.FaceEngine.Face): Float {
+        val x1 = maxOf(a.x, b.x); val y1 = maxOf(a.y, b.y)
+        val x2 = minOf(a.x + a.w, b.x + b.w); val y2 = minOf(a.y + a.h, b.y + b.h)
+        val inter = maxOf(0f, x2 - x1) * maxOf(0f, y2 - y1)
+        val union = a.w * a.h + b.w * b.h - inter
+        return if (union > 0f) inter / union else 0f
+    }
+
+    fun facesOf(photoId: String): List<FaceRow> {
+        val out = ArrayList<FaceRow>()
+        readableDatabase.rawQuery("SELECT fid, photo_id, media_id, x, y, w, h, person FROM faces WHERE photo_id = ? ORDER BY x", arrayOf(photoId)).use { c ->
+            while (c.moveToNext()) out += FaceRow(c.getLong(0), c.getString(1), c.getLong(2), c.getFloat(3), c.getFloat(4), c.getFloat(5), c.getFloat(6), c.getString(7))
+        }
+        return out
+    }
+
+    fun faceScanned(photoId: String): Boolean =
+        readableDatabase.rawQuery("SELECT 1 FROM face_scanned WHERE photo_id = ?", arrayOf(photoId)).use { it.moveToFirst() }
+
+    /**
+     * Names faces (or clears the name with null); a named face is no longer refused for that person. [sure] false
+     * = named by the matcher on its own: shown and searchable, but never used to recognise anyone else.
+     */
+    fun setFacePerson(fids: Collection<Long>, person: String?, sure: Boolean = true) {
+        if (fids.isEmpty()) return
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            fids.chunked(DELETE_BATCH).forEach { batch ->
+                val marks = batch.joinToString(",") { "?" }
+                val args = batch.map { it.toString() }.toTypedArray()
+                db.update("faces", ContentValues().apply { if (person == null) putNull("person") else put("person", person); put("sure", if (sure) 1 else 0) }, "fid IN ($marks)", args)
+                if (person != null) db.delete("face_rejects", "fid IN ($marks) AND person = ? COLLATE NOCASE", args + person)
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** Faces the owner said are not [person]: never offered for them again. */
+    fun rejectFaces(fids: Collection<Long>, person: String) {
+        if (fids.isEmpty()) return
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            fids.forEach { fid ->
+                db.insertWithOnConflict("face_rejects", null, ContentValues().apply { put("fid", fid); put("person", person) }, SQLiteDatabase.CONFLICT_IGNORE)
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    /** Up to [limit] fingerprints of faces already named [person], the clearest first. */
+    fun personVectors(person: String, limit: Int): List<FloatArray> {
+        val out = ArrayList<FloatArray>()
+        readableDatabase.rawQuery("SELECT vec FROM faces WHERE person = ? COLLATE NOCASE AND sure = 1 ORDER BY score DESC LIMIT $limit", arrayOf(person)).use { c ->
+            while (c.moveToNext()) out += toFloats(c.getBlob(0))
+        }
+        return out
+    }
+
+    /** Every person named for sure, with how many faces carry the name. */
+    fun facePeople(): Map<String, Int> {
+        val out = LinkedHashMap<String, Int>()
+        readableDatabase.rawQuery("SELECT person, COUNT(*) n FROM faces WHERE person IS NOT NULL AND sure = 1 GROUP BY person COLLATE NOCASE ORDER BY n DESC", null).use { c ->
+            while (c.moveToNext()) out[c.getString(0)] = c.getInt(1)
+        }
+        return out
+    }
+
+    /**
+     * Unnamed faces not refused for [person], in pages (id order), never all in memory at once: the matcher
+     * compares each page against the person's fingerprints and keeps only what is close.
+     */
+    fun forEachOpenFace(person: String, page: Int = FACE_PAGE, block: (List<Pair<FaceRow, FloatArray>>) -> Unit) {
+        var after = 0L
+        while (true) {
+            val rows = ArrayList<Pair<FaceRow, FloatArray>>(page)
+            readableDatabase.rawQuery(
+                "SELECT f.fid, f.photo_id, f.media_id, f.x, f.y, f.w, f.h, f.vec FROM faces f WHERE f.fid > ? AND f.person IS NULL " +
+                    "AND NOT EXISTS (SELECT 1 FROM face_rejects r WHERE r.fid = f.fid AND r.person = ? COLLATE NOCASE) " +
+                    "AND NOT EXISTS (SELECT 1 FROM faces o WHERE o.photo_id = f.photo_id AND o.person = ? COLLATE NOCASE) " +
+                    "ORDER BY f.fid LIMIT $page",
+                arrayOf(after.toString(), person, person),
+            ).use { c ->
+                while (c.moveToNext()) {
+                    rows += FaceRow(c.getLong(0), c.getString(1), c.getLong(2), c.getFloat(3), c.getFloat(4), c.getFloat(5), c.getFloat(6), null) to toFloats(c.getBlob(7))
+                }
+            }
+            if (rows.isEmpty()) return
+            block(rows)
+            after = rows.last().first.fid
+            if (rows.size < page) return
+        }
+    }
+
+    /** Faces and their read marks of photos no longer on the phone nor kept hidden in the index. */
+    fun dropFacesExcept(keep: Set<String>) {
+        val stale = ArrayList<String>()
+        readableDatabase.rawQuery("SELECT photo_id FROM face_scanned WHERE photo_id NOT IN (SELECT id FROM parked_docs)", null).use { c ->
+            while (c.moveToNext()) c.getString(0).let { if (it !in keep) stale += it }
+        }
+        if (stale.isEmpty()) return
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            stale.chunked(DELETE_BATCH).forEach { batch ->
+                val marks = batch.joinToString(",") { "?" }
+                val args = batch.toTypedArray()
+                db.execSQL("DELETE FROM face_rejects WHERE fid IN (SELECT fid FROM faces WHERE photo_id IN ($marks))", args)
+                db.delete("faces", "photo_id IN ($marks)", args)
+                db.delete("face_scanned", "photo_id IN ($marks)", args)
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     fun removeDocs(ids: Collection<String>) {
         deleteByIds("docs", ids)
         deleteByIds("doc_words", ids)
@@ -1323,7 +1497,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
     companion object {
         private const val NAME = "photo_cache.db"
-        private const val VERSION = 22
+        private const val VERSION = 23
 
         @Volatile private var shared: PhotoCache? = null
 
@@ -1384,6 +1558,10 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         private const val PARKED_DOCS_TABLE = "CREATE TABLE IF NOT EXISTS parked_docs (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, indexed_at INTEGER NOT NULL, taken_at TEXT, tags_json TEXT, persons_json TEXT, meaning TEXT, ocr TEXT, city TEXT, country TEXT, json TEXT, modified INTEGER NOT NULL DEFAULT 0, taken_ms INTEGER NOT NULL DEFAULT 0, embed_model TEXT, file_hash TEXT, region TEXT, folder TEXT, camera TEXT, camera_model TEXT)"
         private const val PARKED_WORDS_TABLE = "CREATE TABLE IF NOT EXISTS parked_words (id TEXT NOT NULL, kind TEXT NOT NULL, word TEXT NOT NULL, PRIMARY KEY (id, kind, word))"
         private const val PARKED_COLUMNS = "id, size_bytes, indexed_at, taken_at, tags_json, persons_json, meaning, ocr, city, country, json, modified, taken_ms, embed_model, file_hash, region, folder, camera, camera_model"
+        private const val FACES_TABLE = "CREATE TABLE IF NOT EXISTS faces (fid INTEGER PRIMARY KEY AUTOINCREMENT, photo_id TEXT NOT NULL, media_id INTEGER NOT NULL, x REAL NOT NULL, y REAL NOT NULL, w REAL NOT NULL, h REAL NOT NULL, score REAL NOT NULL, vec BLOB NOT NULL, person TEXT, sure INTEGER NOT NULL DEFAULT 1)"
+        private const val FACE_REJECTS_TABLE = "CREATE TABLE IF NOT EXISTS face_rejects (fid INTEGER NOT NULL, person TEXT NOT NULL COLLATE NOCASE, PRIMARY KEY (fid, person))"
+        private const val FACE_SCANNED_TABLE = "CREATE TABLE IF NOT EXISTS face_scanned (photo_id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, faces INTEGER NOT NULL)"
+        private const val FACE_PAGE = 2000
         private const val WORD_RETRIES_TABLE = "CREATE TABLE IF NOT EXISTS word_retries (id TEXT PRIMARY KEY NOT NULL, attempts INTEGER NOT NULL, next_at INTEGER NOT NULL)"
     }
 }

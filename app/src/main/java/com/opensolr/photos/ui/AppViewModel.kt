@@ -46,6 +46,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.security.MessageDigest
 
+data class FaceReview(val person: String, val faces: List<com.opensolr.photos.data.PhotoCache.FaceRow>)
+
 enum class Screen { SignIn, Welcome, Permissions, Folders, Setup, Search, Sync, Account, Map, Albums, Stats }
 
 data class UiState(
@@ -82,10 +84,10 @@ data class UiState(
     val liveFolderCount: Int? = null,
     val liveIndexCount: Int? = null,
     val parkedCount: Int = 0,
-    /** Every folder with photos inside the indexed ones, with its count, for the Sync screen. */
-    val indexedFolders: List<PhotoFolder> = emptyList(),
     /** Indexed photos a folder change would take out; the Folders screen asks what to do with them. */
     val folderRemoval: Int? = null,
+    /** Faces that look like a person just named, waiting for the owner to confirm them. */
+    val faceReview: FaceReview? = null,
     val indexName: String? = null,
     val sync: SyncStatus = SyncStatus(false, false, "", 0, 0),
     val showBusyDialog: Boolean = false,
@@ -408,8 +410,92 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // ---------------- faces ----------------
+
+    /** The faces of [hit]; a photo whose faces were not read yet is read now. */
+    suspend fun facesFor(hit: PhotoHit): List<com.opensolr.photos.data.PhotoCache.FaceRow> = withContext(Dispatchers.IO) {
+        if (!photoCache.faceScanned(hit.id) && hit.mediaId > 0) {
+            val uri = android.content.ContentUris.withAppendedId(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, hit.mediaId)
+            val bitmap = runCatching { PhotoReader.uprightBitmap(context, uri, com.opensolr.photos.media.FaceEngine.READ_EDGE) }.getOrNull()
+            if (bitmap != null) {
+                val faces = try { com.opensolr.photos.media.FaceEngine.of(context).analyze(bitmap) } finally { bitmap.recycle() }
+                photoCache.putFaces(hit.id, hit.mediaId, hit.sizeBytes, faces)
+            }
+        }
+        photoCache.facesOf(hit.id)
+    }
+
+    /**
+     * Names one face ([name] null = takes the name away). The photo's people follow: the new name is added,
+     * an old one leaves unless another face in the photo still carries it. Then the rest of the photos are
+     * searched for the person and offered for review.
+     */
+    fun nameFace(hit: PhotoHit, face: com.opensolr.photos.data.PhotoCache.FaceRow, name: String?, onSaved: () -> Unit = {}) {
+        val clean = name?.trim()?.takeIf { it.isNotEmpty() }
+        viewModelScope.launch {
+            val people = withContext(Dispatchers.IO) {
+                photoCache.setFacePerson(listOf(face.fid), clean)
+                val had = photoCache.doc(hit.id)?.persons ?: hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+                val old = face.person
+                val stillThere = old != null && photoCache.facesOf(hit.id).any { it.fid != face.fid && it.person.equals(old, ignoreCase = true) }
+                val next = (had.filterNot { old != null && !stillThere && it.equals(old, ignoreCase = true) } + listOfNotNull(clean))
+                    .distinctBy { it.lowercase() }
+                edits.queueForAll(listOf(hit.id), null, false, next, true)
+                next
+            }
+            onSaved()
+            searches.clearCache()
+            _state.update { s -> s.copy(hits = s.hits.map { if (it.id == hit.id) it.copy(persons = people.joinToString(", ")) else it }) }
+            SyncScheduler.runNow(context)
+            if (clean != null) reviewPerson(clean)
+        }
+    }
+
+    /** Every other photo where [person] seems to be, for the owner to confirm. */
+    fun reviewPerson(person: String) {
+        viewModelScope.launch {
+            val found = com.opensolr.photos.search.FaceMatcher.candidates(photoCache, person)
+            if (found.isEmpty()) flash(AppText.s(R.string.fc_none, person))
+            else _state.update { it.copy(faceReview = FaceReview(person, found)) }
+        }
+    }
+
+    fun closeFaceReview() {
+        _state.update { it.copy(faceReview = null) }
+    }
+
+    /** The ticked faces are the person, the others are not: those are never offered for them again. */
+    fun confirmFaceReview(chosen: Set<Long>, onSaved: () -> Unit = {}) {
+        val review = _state.value.faceReview ?: return
+        _state.update { it.copy(faceReview = null) }
+        viewModelScope.launch {
+            val yes = review.faces.filter { it.fid in chosen }
+            val no = review.faces.filter { it.fid !in chosen }
+            withContext(Dispatchers.IO) {
+                photoCache.setFacePerson(yes.map { it.fid }, review.person)
+                photoCache.rejectFaces(no.map { it.fid }, review.person)
+                if (yes.isNotEmpty()) edits.queueForAll(yes.map { it.photoId }.distinct(), null, false, listOf(review.person), false)
+            }
+            onSaved()
+            if (yes.isEmpty()) return@launch
+            searches.clearCache()
+            val ids = yes.map { it.photoId }.toSet()
+            _state.update { s ->
+                s.copy(hits = s.hits.map { h ->
+                    if (h.id in ids && h.persons.split(',').none { it.trim().equals(review.person, ignoreCase = true) })
+                        h.copy(persons = (h.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() } + review.person).joinToString(", "))
+                    else h
+                })
+            }
+            flash(AppText.p(R.plurals.fc_added, yes.size, review.person, Actions.formatCount(yes.size.toLong())))
+            SyncScheduler.runNow(context)
+        }
+    }
+
     fun onAppResumed() {
         if (prefs.session == null || prefs.connection == null) return
+        // faces of photos not read yet (the first time: all of them) are read in the background
+        com.opensolr.photos.sync.FaceWorker.next(context)
         viewModelScope.launch {
             val stamp = withContext(Dispatchers.IO) { MediaScanner.folderStamp(context, prefs.folders) }
             if (stamp != null && stamp != prefs.folderStamp) {
@@ -1335,16 +1421,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     /** The numbers on the Sync screen, read now rather than from the last sync. */
     fun refreshFolderCounts() {
         viewModelScope.launch {
-            val roots = SearchFilters.folderRoots(prefs.folders)
             val read = withContext(Dispatchers.IO) {
-                // one pass over MediaStore gives both the folders and the count
-                val inside = MediaScanner.listFolders(context).filter { f -> roots.any { f.relativePath.startsWith(it, ignoreCase = true) } }
-                    .sortedBy { it.relativePath.lowercase() }
-                Triple(inside, photoCache.docCount(), photoCache.parkedCount())
+                Triple(MediaScanner.count(context, prefs.folders), photoCache.docCount(), photoCache.parkedCount())
             }
-            _state.update {
-                it.copy(liveFolderCount = read.first.sumOf { f -> f.count }, liveIndexCount = read.second, parkedCount = read.third, indexedFolders = read.first)
-            }
+            _state.update { it.copy(liveFolderCount = read.first, liveIndexCount = read.second, parkedCount = read.third) }
         }
     }
 

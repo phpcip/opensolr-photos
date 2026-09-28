@@ -89,6 +89,7 @@ import com.opensolr.photos.ui.Haptics
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.material.icons.filled.Face
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.input.pointer.pointerInput
 import kotlinx.coroutines.launch
@@ -1478,7 +1479,7 @@ private const val VIEWER_DOUBLE_TAP_MS = 260
 private const val VIEWER_DOUBLE_TAP_SCALE = 3f
 
 @Composable
-private fun viewerWindowOverflow(): Dp {
+internal fun viewerWindowOverflow(): Dp {
     val view = LocalView.current
     val density = LocalDensity.current
     var overflowPx by remember { mutableIntStateOf(0) }
@@ -1524,7 +1525,7 @@ private fun viewerWindowOverflow(): Dp {
 
 private val PREFETCH_REMAINING = com.opensolr.photos.search.SearchRepository.PAGE / 2
 
-private val VIEWER_MIN_BOTTOM = 28.dp
+internal val VIEWER_MIN_BOTTOM = 28.dp
 
 private const val FAST_SCROLL_MIN_ROWS = 60
 
@@ -2390,6 +2391,18 @@ internal fun PhotoViewer(
 
     var sheetFor by remember { mutableStateOf<PhotoHit?>(null) }
     var viewerShare by remember { mutableStateOf<PhotoHit?>(null) }
+    // faces: shown on demand on the photo on screen, a tap on one names it
+    var facesOn by remember { mutableStateOf(false) }
+    var faces by remember { mutableStateOf<List<com.opensolr.photos.data.PhotoCache.FaceRow>?>(null) }
+    var faceToName by remember { mutableStateOf<com.opensolr.photos.data.PhotoCache.FaceRow?>(null) }
+    var facesVersion by remember { mutableIntStateOf(0) }
+    val viewerState by viewModel.state.collectAsState()
+    LaunchedEffect(facesOn, pager.currentPage, facesVersion, hits.size) {
+        faces = null
+        if (!facesOn) return@LaunchedEffect
+        val hit = hits.getOrNull(pager.currentPage) ?: return@LaunchedEffect
+        faces = runCatching { viewModel.facesFor(hit) }.getOrDefault(emptyList())
+    }
 
     var editFor by remember { mutableStateOf<PhotoHit?>(null) }
 
@@ -2574,6 +2587,9 @@ internal fun PhotoViewer(
                     offset = { offset },
                     lift = { if (page == pager.currentPage) dismiss.value else 0f },
                 )
+                if (facesOn && page == pager.currentPage) {
+                    faces?.let { shown -> FaceBoxes(baseSize, shown, { scale }, { offset }) { faceToName = it } }
+                }
                 }
             }
 
@@ -2633,6 +2649,7 @@ internal fun PhotoViewer(
                     ViewerAction(stringResource(R.string.act_gallery), R.drawable.ic_open, on) { Actions.openPhoto(context, hit) }
                     ViewerAction(stringResource(R.string.act_similar), R.drawable.ic_duplicates, on) { onClose(); viewModel.showSimilar(hit) }
                     ViewerAction(stringResource(R.string.act_share), R.drawable.ic_share, on) { viewerShare = hit }
+                    ViewerIconAction(stringResource(R.string.fc_people), Icons.Filled.Face, on) { facesOn = !facesOn }
                     hit.latLon?.let { (lat, lon) ->
                         ViewerAction(stringResource(R.string.act_map), R.drawable.ic_map, on) { onClose(); viewModel.openMap(MapFocus(lat, lon, 15.0)) }
                         ViewerIconAction(stringResource(R.string.act_nearby), Icons.Filled.LocationOn, on) { onClose(); viewModel.searchNear(lat, lon, 5.0) }
@@ -2652,6 +2669,40 @@ internal fun PhotoViewer(
 
             // composed inside the viewer's window, so the choice shows above the photo
             viewerShare?.let { one -> com.opensolr.photos.ui.ShareChooser(listOf(one), fullScreen = true) { viewerShare = null } }
+
+            // what the face finder saw, or that it is still looking
+            if (facesOn && showActions) {
+                val note = when {
+                    faces == null -> stringResource(R.string.fc_reading)
+                    faces.isNullOrEmpty() -> stringResource(R.string.fc_no_faces)
+                    else -> stringResource(R.string.fc_tap)
+                }
+                Text(
+                    note, color = Color.White, style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = maxOf(topInset, 24.dp) + 8.dp)
+                        .background(Color(0xCC000000), androidx.compose.foundation.shape.RoundedCornerShape(2.dp)).padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+            faceToName?.let { face ->
+                val hit = hits.firstOrNull { it.id == face.photoId }
+                FaceNameDialog(
+                    face = face,
+                    suggest = { typed -> viewModel.personSuggestions(typed, emptyList()) },
+                    onSave = { name -> faceToName = null; if (hit != null) viewModel.nameFace(hit, face, name) { facesVersion++ } },
+                    onClear = { faceToName = null; if (hit != null) viewModel.nameFace(hit, face, null) { facesVersion++ } },
+                    onFindMore = { name -> faceToName = null; viewModel.reviewPerson(name) },
+                    onDismiss = { faceToName = null },
+                )
+            }
+            viewerState.faceReview?.let { review ->
+                FaceReviewPanel(
+                    review,
+                    topPad = maxOf(topInset, 24.dp),
+                    bottomPad = maxOf(bottomInset, VIEWER_MIN_BOTTOM) + overflow,
+                    onConfirm = { viewModel.confirmFaceReview(it) { facesVersion++ } },
+                    onDismiss = { viewModel.closeFaceReview() },
+                )
+            }
 
             editFor?.let { held ->
                 val photo = hits.firstOrNull { it.id == held.id } ?: held
