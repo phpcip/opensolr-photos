@@ -42,6 +42,8 @@ object PhotoReader {
 
     private const val CLIP_EDGE_PX = 1024
     private const val JPEG_QUALITY = 85
+    private const val WRITE_TRIES = 3
+    private const val WRITE_RETRY_MS = 250L
     private const val SHARE_JPEG_QUALITY = 92
 
     fun shrinkForClip(context: Context, uri: Uri, rotationDegrees: Int, edge: Int = CLIP_EDGE_PX, quality: Int = JPEG_QUALITY): ByteArray? {
@@ -201,7 +203,22 @@ object PhotoReader {
         return lat to lon
     }
 
+    /** Whether the app may change this file right now (Android already allowed it), so no new request is needed. */
+    fun mayWrite(context: Context, uri: Uri): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.R ||
+            context.checkCallingOrSelfUriPermission(uri, android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION) == PackageManager.PERMISSION_GRANTED
+
+    /** [writeGps], tried again a few times: a file being read at the same moment (the sync) makes a write fail once. */
     fun writeGps(context: Context, uri: Uri, mime: String, lat: Double, lon: Double): Boolean {
+        repeat(WRITE_TRIES) { attempt ->
+            if (writeGpsOnce(context, uri, mime, lat, lon)) return true
+            if (!canWriteExif(mime) || !valid(lat, 90.0) || !valid(lon, 180.0)) return false
+            Thread.sleep(WRITE_RETRY_MS * (attempt + 1))
+        }
+        return false
+    }
+
+    private fun writeGpsOnce(context: Context, uri: Uri, mime: String, lat: Double, lon: Double): Boolean {
         if (!canWriteExif(mime)) return false
         if (!valid(lat, 90.0) || !valid(lon, 180.0)) return false
         return try {

@@ -42,6 +42,8 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         // what arrived last goes first: a photo without a date in it (WhatsApp, edited copies) never waits behind the rest
         val todo = local.values.filter { read[it.id] != it.sizeBytes }
             .sortedWith(compareByDescending<com.opensolr.photos.media.LocalPhoto> { it.addedSec }.thenByDescending { it.dateTakenMs })
+        // what is in the index but not yet in the files (from before, or from another phone) is queued for the files, once
+        if (!reconcileFiles(ctx, cache, local.values)) { next(ctx, continuation = true); return Result.success() }
         if (learnPeople(ctx, cache)) {
             // photos read before a person was learned get the name now: the newest ones, a bounded number
             val recent = local.values.sortedByDescending { it.addedSec }.take(RECHECK).map { it.id }
@@ -70,6 +72,50 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
 
     /**
+     * Walks every photo once: people, tags, the owner's own wording or a place that the index has and the file does
+     * not are queued to be written into the file. Resumes where it stopped; true when every photo was looked at.
+     */
+    private fun reconcileFiles(ctx: Context, cache: PhotoCache, photos: Collection<com.opensolr.photos.media.LocalPhoto>): Boolean {
+        val sp = ctx.getSharedPreferences("faces", Context.MODE_PRIVATE)
+        if (sp.getInt("reconciled", 0) >= RECONCILE_VERSION) return true
+        var after = sp.getString("reconcile_after", "") ?: ""
+        val until = System.currentTimeMillis() + RECONCILE_MS
+        val queue = ArrayList<String>()
+        for (photo in photos.sortedBy { it.id }) {
+            if (photo.id <= after) continue
+            if (isStopped || System.currentTimeMillis() > until) {
+                cache.queueFileWrites(queue)
+                sp.edit().putString("reconcile_after", after).apply()
+                return false
+            }
+            after = photo.id
+            val doc = cache.doc(photo.id) ?: continue
+            if (!PhotoReader.canWriteExif(photo.mime)) continue
+            val file = runCatching { PhotoReader.xmpWordsIn(ctx, photo) }.getOrNull() ?: continue
+            val fileTags = file.tags.orEmpty().map { it.lowercase() }.toSet()
+            val filePeople = file.persons.map { it.lowercase() }.toSet()
+            var missing = doc.tags.any { it.lowercase() !in fileTags } || doc.persons.any { it.lowercase() !in filePeople }
+            // the owner's own wording: a meaning that is not just the labels joined
+            val json = runCatching { org.json.JSONObject(doc.json ?: "{}") }.getOrNull()
+            val labels = json?.optJSONArray("labels")?.let { a -> (0 until a.length()).joinToString(", ") { a.optString(it) } }.orEmpty()
+            val own = doc.meaning?.takeIf { it.isNotBlank() && it != labels }
+            if (own != null && file.meaning != own && cache.getEdits(photo.id)?.meaning == null) {
+                cache.putEdits(photo.id, PhotoCache.Edits(doc.tags, own, doc.persons))
+            }
+            // a place the index has and the file does not: set by the owner or found by the app, it goes into the file
+            val point = com.opensolr.photos.search.parseLatLon(json?.optString("location"))
+            if (point != null && PhotoReader.gpsState(ctx, photo.uri) == PhotoReader.GpsState.MISSING && cache.setPlaces(listOf(photo.id)).isEmpty()) {
+                cache.putSetPlace(PhotoCache.SetPlace(photo.id, point.first, point.second, owner = true, written = false, synced = true))
+            }
+            if (missing) queue += photo.id
+            if (queue.size >= 500) { cache.queueFileWrites(queue); queue.clear() }
+        }
+        cache.queueFileWrites(queue)
+        sp.edit().putInt("reconciled", RECONCILE_VERSION).remove("reconcile_after").apply()
+        return true
+    }
+
+    /**
      * Each tagged person's face is learned from their tagged photos, again whenever more of those photos have had
      * their faces read (a tenth more, or the first time), so the references grow with the reading.
      */
@@ -91,6 +137,8 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     companion object {
         private const val WORK = "faces"
         private const val RUN_MS = 4 * 60 * 1000L
+        private const val RECONCILE_VERSION = 1
+        private const val RECONCILE_MS = 3 * 60 * 1000L
         /** How many of the newest photos are checked again for people when someone is learned. */
         private const val RECHECK = 1000
         private const val BATTERY_MIN = 5

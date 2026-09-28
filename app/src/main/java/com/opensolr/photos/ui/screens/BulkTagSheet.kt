@@ -155,10 +155,9 @@ fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit)
         val (lat, lon, chosen) = pendingPlace ?: return@rememberLauncherForActivityResult
         pendingPlace = null
 
-        if (result.resultCode == android.app.Activity.RESULT_OK) {
-            viewModel.placePhotos(chosen, lat, lon, writeFiles = true)
-            onDismiss()
-        }
+        // the place is saved either way: in the index now, in the files as soon as Android allows it
+        viewModel.placePhotos(chosen, lat, lon, writeFiles = result.resultCode == android.app.Activity.RESULT_OK)
+        onDismiss()
     }
 
     var tagsDismissed by remember { mutableStateOf(false) }

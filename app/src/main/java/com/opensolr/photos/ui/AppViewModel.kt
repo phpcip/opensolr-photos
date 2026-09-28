@@ -564,100 +564,83 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         refreshPlacesToWrite()
     }
 
-    private var pendingPlaceWrite: List<Triple<String, android.net.Uri, PhotoCache.SetPlace>> = emptyList()
+    /** The owner's go-ahead for the files (Me screen, place writing): the one queue of everything waiting for its file. */
+    suspend fun preparePlaceWrite(): android.content.IntentSender? = prepareFileWrite()
 
-    suspend fun preparePlaceWrite(): android.content.IntentSender? = withContext(Dispatchers.IO) {
-        val places = photoCache.unwrittenPlaces()
-        if (places.isEmpty()) return@withContext null
-        val hits = photoCache.docsByIds(places.map { it.id }).map { searches.hitOf(org.json.JSONObject(it)) }
-        val uris = Actions.contentUrisByPhoto(context, hits)
-        val byId = places.associateBy { it.id }
-        pendingPlaceWrite = hits.mapNotNull { hit ->
-            val uri = uris[hit.id] ?: return@mapNotNull null
-            byId[hit.id]?.let { Triple(hit.mime, uri, it) }
-        }
-        if (pendingPlaceWrite.isEmpty()) return@withContext null
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
-            writePendingPlaces()
-            return@withContext null
-        }
-        android.provider.MediaStore.createWriteRequest(context.contentResolver, pendingPlaceWrite.map { it.second }).intentSender
-    }
+    fun finishPlaceWrite(allowed: Boolean) = finishFileWrite(allowed)
 
-    fun finishPlaceWrite(allowed: Boolean) {
-        if (!allowed) {
-            pendingPlaceWrite = emptyList()
-            _state.update { it.copy(placesDeclined = true) }
-            return
-        }
+    fun refreshFaceWrites() = refreshFileWrites()
+
+    fun refreshFileWrites() {
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { writePendingPlaces() }
-            refreshPlacesToWrite()
-        }
-    }
-
-    private fun writePendingPlaces() {
-        val done = ArrayList<String>(pendingPlaceWrite.size)
-        pendingPlaceWrite.forEach { (mime, uri, place) ->
-            val writable = PhotoReader.canWriteExif(mime)
-            if (writable && PhotoReader.writeGps(context, uri, mime, place.lat, place.lon)) {
-                val (size, modified) = fileStampOf(uri)
-                photoCache.updateDocSize(place.id, size, modified, fileHashOf(uri))
-                done += place.id
-            } else if (!writable) {
-                done += place.id
-            }
-        }
-        photoCache.markPlacesWritten(done)
-        pendingPlaceWrite = emptyList()
-    }
-
-    fun refreshFaceWrites() {
-        viewModelScope.launch {
-            val n = withContext(Dispatchers.IO) { photoCache.pendingFaceWriteCount() }
+            val n = withContext(Dispatchers.IO) { photoCache.pendingFileWriteCount() }
             _state.update { it.copy(faceWrites = n) }
         }
     }
 
-    private var pendingFaceWrite: List<Pair<PhotoHit, android.net.Uri>> = emptyList()
+    private var pendingFileWrite: List<Pair<PhotoHit, android.net.Uri>> = emptyList()
 
-    /** The files that need the people written into them, and Android's request to let the app change them (null = nothing to ask). */
-    suspend fun prepareFaceWrite(): android.content.IntentSender? = withContext(Dispatchers.IO) {
-        val ids = photoCache.pendingFaceWrites(FACE_WRITE_BATCH)
+    /**
+     * The files still missing what the owner put on them (people, tags, wording, place, face areas). Those Android
+     * already lets the app change are written at once; for the rest one request is returned (null = nothing to ask).
+     */
+    suspend fun prepareFileWrite(): android.content.IntentSender? = withContext(Dispatchers.IO) {
+        val ids = photoCache.pendingFileWrites(FILE_WRITE_BATCH)
         if (ids.isEmpty()) return@withContext null
         val hits = photoCache.docsByIds(ids).map { searches.hitOf(org.json.JSONObject(it)) }
         val uris = Actions.contentUrisByPhoto(context, hits)
-        // photos no longer on the phone, or without a document, have nothing to write into
-        photoCache.clearFaceWrites(ids.filter { id -> hits.none { it.id == id } || uris[id] == null })
-        pendingFaceWrite = hits.mapNotNull { h -> uris[h.id]?.let { h to it } }
-        if (pendingFaceWrite.isEmpty()) return@withContext null
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
-            writePendingFaces()
+        // photos no longer on the phone, or not indexed, have no file to write into
+        photoCache.clearFileWrites(ids.filter { id -> hits.none { it.id == id } || uris[id] == null })
+        val all = hits.mapNotNull { h -> uris[h.id]?.let { h to it } }
+        if (all.isEmpty()) return@withContext null
+        val (allowed, ask) = all.partition { PhotoReader.mayWrite(context, it.second) }
+        if (allowed.isNotEmpty()) {
+            pendingFileWrite = allowed
+            writePendingFiles()
+        }
+        pendingFileWrite = ask
+        if (ask.isEmpty()) {
+            withContext(Dispatchers.Main) { refreshFileWrites(); refreshPlacesToWrite() }
             return@withContext null
         }
-        android.provider.MediaStore.createWriteRequest(context.contentResolver, pendingFaceWrite.map { it.second }).intentSender
+        android.provider.MediaStore.createWriteRequest(context.contentResolver, ask.map { it.second }).intentSender
     }
 
-    fun finishFaceWrite(allowed: Boolean) {
+    fun finishFileWrite(allowed: Boolean) {
         if (!allowed) {
-            pendingFaceWrite = emptyList()
-            _state.update { it.copy(faceWritesDeclined = true) }
+            pendingFileWrite = emptyList()
+            _state.update { it.copy(faceWritesDeclined = true, placesDeclined = true) }
             return
         }
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { writePendingFaces() }
-            refreshFaceWrites()
+            withContext(Dispatchers.IO) { writePendingFiles() }
+            refreshFileWrites()
+            refreshPlacesToWrite()
         }
     }
 
-    /** The photo's people (IPTC PersonInImage) and each named face's area (MWG regions) into the file itself. */
-    private fun writePendingFaces() {
-        val done = ArrayList<String>(pendingFaceWrite.size)
-        pendingFaceWrite.forEach { (hit, uri) ->
+    /** Everything the owner put on each photo, written into the file itself, in one go per file. */
+    private fun writePendingFiles() {
+        val done = ArrayList<String>(pendingFileWrite.size)
+        val places = photoCache.setPlaces(pendingFileWrite.map { it.first.id })
+        val placed = ArrayList<String>()
+        pendingFileWrite.forEach { (hit, uri) ->
             if (!PhotoReader.canWriteExif(hit.mime)) { done += hit.id; return@forEach }
-            val people = photoCache.doc(hit.id)?.persons ?: hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+            val doc = photoCache.doc(hit.id)
+            val edits = photoCache.getEdits(hit.id)
+            val people = doc?.persons ?: hit.persons.split(',').map { it.trim() }.filter { it.isNotEmpty() }
+            val tags = doc?.tags ?: hit.customTags
             val areas = photoCache.facesOf(hit.id).mapNotNull { f -> f.person?.let { PhotoReader.FaceArea(it, f.x, f.y, f.w, f.h) } }
-            if (PhotoReader.writeXmp(context, uri, hit.mime, people, null, faces = areas)) {
+            var ok = PhotoReader.writeXmp(
+                context, uri, hit.mime, people, tags,
+                meaning = edits?.meaning?.takeIf { it.isNotEmpty() },
+                clearMeaning = edits?.meaning == "",
+                faces = areas.takeIf { it.isNotEmpty() },
+            )
+            places[hit.id]?.takeIf { !it.written }?.let { place ->
+                if (PhotoReader.writeGps(context, uri, hit.mime, place.lat, place.lon)) placed += hit.id else ok = false
+            }
+            if (ok) {
                 val (size, modified) = fileStampOf(uri)
                 // our own change to the file: no new sync of it, no new face reading of it
                 photoCache.updateDocSize(hit.id, size, modified, fileHashOf(uri))
@@ -665,8 +648,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 done += hit.id
             }
         }
-        photoCache.clearFaceWrites(done)
-        pendingFaceWrite = emptyList()
+        photoCache.markPlacesWritten(placed)
+        photoCache.clearFileWrites(done)
+        pendingFileWrite = emptyList()
     }
 
     private fun refreshSkippedCount() {
@@ -948,6 +932,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 flash(AppText.s(R.string.vm_saved))
                 SyncScheduler.runNow(context)
+                refreshFileWrites()
                 onDone()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -984,6 +969,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 flash(if (hits.size == 1) AppText.s(R.string.vm_place_saved) else AppText.p(R.plurals.vm_place_saved_n, hits.size, Actions.formatCount(hits.size.toLong())))
                 SyncScheduler.runNow(context)
+                refreshFileWrites()
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1074,6 +1060,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
 
                 val tagged = ids.toSet()
+                refreshFileWrites()
                 _state.update { s ->
                     s.copy(
                         bulkTagging = false,
@@ -2621,6 +2608,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         _state.update { it.copy(lastReport = report, account = prefs.account, planWarnings = prefs.account?.let { a -> PlanWatch.evaluate(a) } ?: emptyList(), indexName = prefs.connection?.indexName) }
         refreshFolderCounts()
+        // places the sync set on new photos go into the files too
+        refreshFileWrites()
         if (report?.status == "sign_in_required") {
             signedOut(prefs.pendingNotice ?: AppText.s(R.string.vm_signed_out))
             prefs.pendingNotice = null
@@ -2649,7 +2638,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         /** Most files one of Android's "allow changes" requests covers. */
-        private const val FACE_WRITE_BATCH = 500
+        private const val FILE_WRITE_BATCH = 2000
 
         private const val UPDATE_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000L
         private val CODE_PATTERN = Regex("^[A-Za-z0-9_-]{43}$")

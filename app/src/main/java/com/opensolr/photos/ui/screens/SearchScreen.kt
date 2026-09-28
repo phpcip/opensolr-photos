@@ -226,7 +226,6 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     var viewing by remember { mutableStateOf<PhotoHit?>(null) }
     val view = LocalView.current
 
-    val writePlaces = rememberPlaceWriter(viewModel)
 
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current
     DisposableEffect(lifecycle) {
@@ -236,18 +235,15 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         lifecycle.lifecycle.addObserver(observer)
         onDispose { lifecycle.lifecycle.removeObserver(observer) }
     }
-    LaunchedEffect(state.placesToWrite, state.placesDeclined) {
-        if (state.placesToWrite > 0 && !state.placesDeclined) writePlaces()
-    }
-    // the people named in photos go into the files too, as soon as Android lets the app change them
+    // everything the owner puts on photos (people, tags, wording, places, faces) goes into the files, one request at a time
     val faceWriteScope = rememberCoroutineScope()
     val faceWriteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
-        viewModel.finishFaceWrite(result.resultCode == android.app.Activity.RESULT_OK)
+        viewModel.finishFileWrite(result.resultCode == android.app.Activity.RESULT_OK)
     }
     LaunchedEffect(state.faceWrites, state.faceWritesDeclined) {
         if (state.faceWrites > 0 && !state.faceWritesDeclined) {
             faceWriteScope.launch {
-                val sender = viewModel.prepareFaceWrite() ?: return@launch
+                val sender = viewModel.prepareFileWrite() ?: return@launch
                 faceWriteLauncher.launch(IntentSenderRequest.Builder(sender).build())
             }
         }
@@ -2953,9 +2949,10 @@ internal fun DetailsSheet(
     val placeWriter = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
         val point = pendingPlace
         pendingPlace = null
-        if (point != null && result.resultCode == Activity.RESULT_OK) {
-            val written = Actions.contentUris(context, listOf(hit)).firstOrNull()
-                ?.let { com.opensolr.photos.media.PhotoReader.writeGps(context, it, hit.mime, point.first, point.second) } ?: false
+        // the place is saved either way: in the index now, in the file as soon as Android allows it
+        if (point != null) {
+            val written = result.resultCode == Activity.RESULT_OK && (Actions.contentUris(context, listOf(hit)).firstOrNull()
+                ?.let { com.opensolr.photos.media.PhotoReader.writeGps(context, it, hit.mime, point.first, point.second) } ?: false)
             viewModel.setPlace(listOf(hit), point.first, point.second, if (written) setOf(hit.id) else emptySet())
             onDismiss()
         }
