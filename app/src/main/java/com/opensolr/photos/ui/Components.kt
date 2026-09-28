@@ -53,10 +53,10 @@ private val Corner = RoundedCornerShape(2.dp)
 
 // Every tap has to be seen: the control shrinks a little while the finger is down and the
 // press ripple keeps its own colour. PRESS_SCALE is the whole effect, in one place.
-private const val PRESS_SCALE = 0.90f
+private const val PRESS_SCALE = 0.86f
 
 /** How much of the accent washes over a control while it is held. */
-private const val PRESS_TINT = 0.28f
+private const val PRESS_TINT = 0.6f
 
 /** A press source and the scale it drives: pass the source to the control, the modifier to its layout. */
 @Composable

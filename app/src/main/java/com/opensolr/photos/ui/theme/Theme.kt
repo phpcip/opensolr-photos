@@ -151,11 +151,17 @@ private fun scheme(p: Palette, dark: Boolean): ColorScheme {
     )
 }
 
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun OpensolrPhotosTheme(content: @Composable () -> Unit) {
     val dark = isSystemInDarkTheme()
     val palette = if (dark) DarkPalette else LightPalette
-    CompositionLocalProvider(LocalPalette provides palette) {
+    // every press in the app, Material button or plain clickable, flashes the accent hard: one setting for all
+    val ripple = androidx.compose.material3.RippleConfiguration(
+        color = palette.accent,
+        rippleAlpha = androidx.compose.material.ripple.RippleAlpha(pressedAlpha = 0.55f, focusedAlpha = 0.3f, draggedAlpha = 0.3f, hoveredAlpha = 0.2f),
+    )
+    CompositionLocalProvider(LocalPalette provides palette, androidx.compose.material3.LocalRippleConfiguration provides ripple) {
         MaterialTheme(
             colorScheme = scheme(palette, dark),
             typography = AppTypography,
