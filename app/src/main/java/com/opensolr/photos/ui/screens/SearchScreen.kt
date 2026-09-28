@@ -97,6 +97,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.animation.core.Animatable
@@ -1893,14 +1894,23 @@ private fun FilterSheet(
     val context = LocalContext.current
 
     val draft = current
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = p.paper, shape = Corner) { com.opensolr.photos.ui.KeyboardBack();
+    // a screen of its own: it closes on Done or back, never by a swipe
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false),
+    ) {
+        com.opensolr.photos.ui.KeyboardBack()
         Column(
             Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
+                .background(p.paper)
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 20.dp)
+                .statusBarsPadding()
                 .navigationBarsPadding()
+                .imePadding()
         ) {
+            Spacer(Modifier.height(12.dp))
             Text(stringResource(R.string.filters), style = MaterialTheme.typography.headlineSmall, color = p.ink)
 
             Spacer(Modifier.height(8.dp))
