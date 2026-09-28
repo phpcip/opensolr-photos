@@ -69,7 +69,8 @@ object FaceMatcher {
 
     /**
      * Names the unnamed faces of one photo that are very close to a person (one person per photo at most once),
-     * marks them as the matcher's own and puts the people on the photo. True when anything was named.
+     * marks them as the matcher's own and puts the people on the photo, only when the owner put nobody on it yet:
+     * the owner's people are never added to or taken from. True when the photo's people changed.
      */
     fun autoName(cache: PhotoCache, edits: EditRepository, photoId: String, rows: List<PhotoCache.FaceRow>, vectors: List<FloatArray>, people: Map<String, List<FloatArray>>, queueWords: Boolean = true): Boolean {
         if (people.isEmpty()) return false
@@ -92,6 +93,9 @@ object FaceMatcher {
             }
         }
         if (named.isEmpty()) return false
+        // a photo the owner already put people on is theirs: the faces get their labels, the photo's people stay as they are
+        val tagged = (cache.getEdits(photoId)?.persons ?: cache.doc(photoId)?.persons).orEmpty().isNotEmpty()
+        if (tagged) return false
         cache.noteAutoWords(photoId, named)
         if (queueWords) edits.queueForAll(listOf(photoId), null, false, named, false, auto = true)
         return true
