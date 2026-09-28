@@ -624,6 +624,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             val bitmap = try { PhotoReader.uprightBitmap(context, photo.uri, com.opensolr.photos.media.FaceEngine.READ_EDGE) } catch (e: Exception) { null } ?: return null
             val found = try { com.opensolr.photos.media.FaceEngine.of(context).analyze(bitmap) } catch (e: Exception) { return null } finally { bitmap.recycle() }
             com.opensolr.photos.search.FaceMatcher.fromFile(context, cache, photo.uri, cache.putFaces(photo.id, photo.mediaId, photo.sizeBytes, found))
+            com.opensolr.photos.search.FaceMatcher.nameOnlyFace(cache, photo.id)
             val stored = cache.facesWithVectors(photo.id)
             com.opensolr.photos.search.FaceMatcher.autoName(cache, edits, photo.id, stored.map { it.first }, stored.map { it.second }, people, queueWords = false)
         }

@@ -69,6 +69,7 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                 val faces = if (bitmap == null) emptyList() else try { engine.analyze(bitmap) } catch (e: Exception) { emptyList() } finally { bitmap.recycle() }
                 // the names the file carries come first; the matcher only names what is left
                 FaceMatcher.fromFile(ctx, cache, photo.uri, cache.putFaces(photo.id, photo.mediaId, photo.sizeBytes, faces))
+                FaceMatcher.nameOnlyFace(cache, photo.id)
                 val stored = cache.facesWithVectors(photo.id)
                 FaceMatcher.autoName(cache, edits, photo.id, stored.map { it.first }, stored.map { it.second }, people, queueWords = false)
                 // the faces reach the index with the words path, in batches, one embedding call per fifty

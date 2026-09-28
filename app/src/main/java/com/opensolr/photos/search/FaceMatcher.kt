@@ -121,6 +121,17 @@ object FaceMatcher {
         return if (union > 0f) inter / union else 0f
     }
 
+    /**
+     * A photo with one face and one person on it: that face is that person, no matching needed. Marked as learned,
+     * so a mistake in the tag never becomes a reference for recognising others.
+     */
+    fun nameOnlyFace(cache: PhotoCache, photoId: String) {
+        val rows = cache.facesOf(photoId)
+        if (rows.size != 1 || rows[0].person != null) return
+        val people = cache.doc(photoId)?.persons.orEmpty().distinctBy { it.lowercase() }
+        if (people.size == 1) cache.setFacePerson(listOf(rows[0].fid), people[0], sure = false, how = PhotoCache.HOW_LEARNED)
+    }
+
     /** [autoName] over photos already read ([photoIds]), with the people as they are now. True when anything was named. */
     fun nameRecent(cache: PhotoCache, edits: EditRepository, photoIds: List<String>): Boolean {
         val people = people(cache)
