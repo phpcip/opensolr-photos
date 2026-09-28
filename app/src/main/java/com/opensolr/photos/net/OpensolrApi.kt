@@ -23,7 +23,12 @@ import javax.crypto.spec.SecretKeySpec
 
 data class ClipResult(val text: String, val labels: List<String>, val model: String)
 
-data class IngestItem(val photo: com.opensolr.photos.media.LocalPhoto, val jpeg: ByteArray, val tags: List<String>?, val meaning: String?, val fileHash: String? = null, val persons: List<String> = emptyList(), val resetWording: Boolean = false)
+data class IngestItem(
+    val photo: com.opensolr.photos.media.LocalPhoto, val jpeg: ByteArray, val tags: List<String>?, val meaning: String?, val fileHash: String? = null,
+    val persons: List<String> = emptyList(), val resetWording: Boolean = false,
+    /** Which of the words are the owner's own current list on this phone (they replace the index's); the rest came from the file and are added to it. */
+    val ownerTags: Boolean = false, val ownerPersons: Boolean = false, val ownerMeaning: Boolean = false,
+)
 
 data class WordsItem(
     val id: String,
@@ -414,7 +419,10 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
 
                 item.fileHash?.let { put("file_hash", it) }
 
-                if (item.persons.isNotEmpty()) put("persons", JSONArray(item.persons))
+                if (item.persons.isNotEmpty() || item.ownerPersons) put("persons", JSONArray(item.persons))
+                if (item.ownerTags) put("owner_tags", true)
+                if (item.ownerPersons) put("owner_persons", true)
+                if (item.ownerMeaning) put("owner_meaning", true)
                 if (p.modifiedSec > 0) put("modified_at", isoUtc(p.modifiedSec * 1000L))
                 put("width", p.width)
                 put("height", p.height)

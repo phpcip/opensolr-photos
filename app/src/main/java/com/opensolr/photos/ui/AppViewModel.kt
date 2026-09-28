@@ -429,10 +429,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             val bitmap = runCatching { PhotoReader.uprightBitmap(context, uri, com.opensolr.photos.media.FaceEngine.READ_EDGE) }.getOrNull()
             if (bitmap != null) {
                 val faces = try { com.opensolr.photos.media.FaceEngine.of(context).analyze(bitmap) } finally { bitmap.recycle() }
-                val rows = photoCache.putFaces(hit.id, hit.mediaId, hit.sizeBytes, faces)
-                // a photo read here, before the background pass, is named the same way
+                // a photo read here, before the background pass, is named the same way: the file's names, then the matcher
+                com.opensolr.photos.search.FaceMatcher.fromFile(context, photoCache, uri, photoCache.putFaces(hit.id, hit.mediaId, hit.sizeBytes, faces))
+                val stored = photoCache.facesWithVectors(hit.id)
                 val people = com.opensolr.photos.search.FaceMatcher.people(photoCache)
-                if (com.opensolr.photos.search.FaceMatcher.autoName(photoCache, edits, hit.id, rows, faces.map { it.vector }, people)) SyncScheduler.runNow(context)
+                if (com.opensolr.photos.search.FaceMatcher.autoName(photoCache, edits, hit.id, stored.map { it.first }, stored.map { it.second }, people)) SyncScheduler.runNow(context)
             }
         }
         photoCache.facesOf(hit.id)
@@ -2097,6 +2098,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val connection = prefs.connection ?: return@launch
+                // everything the owner put on the photos is kept on the phone first, then sent again and written into the files
+                withContext(Dispatchers.IO) {
+                    com.opensolr.photos.data.OwnerWords.keep(context, photoCache, com.opensolr.photos.net.SolrClient(connection), MediaScanner.scan(context, prefs.folders))
+                }
                 com.opensolr.photos.net.SolrClient(connection).deleteAll()
 
                 searches.clearCache()

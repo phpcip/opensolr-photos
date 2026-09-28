@@ -196,7 +196,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             if (rebuild) {
 
                 onProgress(Progress(AppText.s(R.string.sy_resetting), 0, 0))
-                withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { keepOwnersEdits(solr) }
+                withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { com.opensolr.photos.data.OwnerWords.keep(context, cache, solr, local) }
                 solr.deleteAll()
                 indexes.applyConfig(session, connection) { onProgress(Progress(it, 0, 0)) }
                 noteIndexChecked(connection)
@@ -254,7 +254,10 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                     val cleared = edits?.meaning == ""
                     val meaning = if (cleared) null else edits?.meaning ?: xmp?.meaning
                     val names = edits?.persons ?: xmp?.persons ?: emptyList()
-                    items += IngestItem(photo, jpeg, tags, meaning, weighed[photo.id] ?: PhotoReader.fileMd5(context, photo), names, resetWording = cleared || photo.id in wordingReset)
+                    items += IngestItem(
+                        photo, jpeg, tags, meaning, weighed[photo.id] ?: PhotoReader.fileMd5(context, photo), names, resetWording = cleared || photo.id in wordingReset,
+                        ownerTags = edits != null, ownerPersons = edits?.persons != null, ownerMeaning = !edits?.meaning.isNullOrEmpty(),
+                    )
                 }
                 if (items.isNotEmpty()) {
                     val results = try {
@@ -267,6 +270,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                         failed += items.size
                         null
                     }
+                    val restore = ArrayList<LocalPhoto>()
                     results?.let { r ->
 
                       cache.inTransaction {
@@ -278,7 +282,10 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                                 added++
                                 cache.clearSkipped(item.photo.id)
 
+                                val wasIndexed = cache.docFileHash(item.photo.id) != null || cache.doc(item.photo.id) != null
                                 result.doc?.let { edits.storeDoc(item.photo.id, it) }
+                                // a file changed outside the app may have lost what the owner put on it: written back
+                                if (wasIndexed) restore += item.photo
                                 cache.clearActions(listOf(item.photo.id))
 
                                 if (item.photo.id in placed) cache.markPlacesSynced(listOf(item.photo.id))
@@ -293,6 +300,8 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                         }
                       }
                     }
+                    // outside the transaction: this reads the files
+                    restore.forEach { restoreIntoFile(it) }
                 }
                 progress(phase)
             }
@@ -396,6 +405,8 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             }
 
             if (toDelete.isNotEmpty()) {
+                // a photo moved or renamed is the same file under a new name: what the owner put on it moves with it
+                carryOver(toDelete, local.values.filter { it.id !in indexedIds })
                 toDelete.chunked(500).forEach { batch ->
                     solr.delete(batch)
                     cache.removeDocs(batch)
@@ -550,17 +561,46 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
         }
     }
 
-    private suspend fun keepOwnersEdits(solr: SolrClient) {
+    /**
+     * Photos about to leave the index whose file is still on the phone under another name (same md5): their tags,
+     * people, wording and place are given to the new name before it is read, so they are sent and written again.
+     */
+    private fun carryOver(leaving: Collection<String>, arriving: List<LocalPhoto>) {
+        if (arriving.isEmpty()) return
+        val byHash = HashMap<String, String>()
+        leaving.forEach { id -> cache.docFileHash(id)?.let { byHash[it] = id } }
+        if (byHash.isEmpty()) return
+        // only files of a size one of the leaving photos had are hashed, so a big import costs nothing extra
+        val sizes = leaving.mapNotNull { cache.doc(it)?.sizeBytes }.toHashSet()
+        for (photo in arriving) {
+            if (photo.sizeBytes !in sizes) continue
+            val hash = PhotoReader.fileMd5(context, photo) ?: continue
+            val from = byHash[hash] ?: continue
+            val doc = cache.doc(from) ?: continue
+            val own = cache.getEdits(from)
+            // the owner's wording: theirs on this phone, else a meaning that is not just the model's labels joined
+            val labels = runCatching { org.json.JSONObject(doc.json ?: "{}").optJSONArray("labels") }.getOrNull()
+                ?.let { a -> (0 until a.length()).joinToString(", ") { a.optString(it) } }.orEmpty()
+            val wording = own?.meaning ?: doc.meaning?.takeIf { it.isNotBlank() && it != labels }
+            cache.putEdits(photo.id, PhotoCache.Edits(own?.tags ?: doc.tags, wording, own?.persons ?: doc.persons))
+            val place = cache.setPlaces(listOf(from))[from]
+                ?: com.opensolr.photos.search.parseLatLon(runCatching { org.json.JSONObject(doc.json ?: "{}").optString("location") }.getOrNull())
+                    ?.let { PhotoCache.SetPlace(photo.id, it.first, it.second, owner = true, written = false) }
+            place?.let { cache.putSetPlace(it.copy(id = photo.id, written = false, synced = false)) }
+        }
+    }
 
-        val alreadyMine = cache.editedIds()
-        solr.forEachDoc("id,custom_tags,meaning,labels") { doc ->
-            val id = doc.optString("id")
-            if (id.isEmpty() || id in alreadyMine) return@forEachDoc
-            val tags = doc.optJSONArray("custom_tags")?.let { a -> (0 until a.length()).map { a.optString(it).trim() }.filter { it.isNotEmpty() } } ?: emptyList()
-            val labels = doc.optJSONArray("labels")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList()
-            val meaning = doc.optString("meaning").trim()
-            val own = meaning.takeIf { it.isNotEmpty() && it != labels.joinToString(", ") }
-            if (tags.isNotEmpty() || own != null) cache.putEdits(id, PhotoCache.Edits(tags, own))
+    /** After a changed file was read again: what the index holds and the file lacks is queued to go back into it. */
+    private fun restoreIntoFile(photo: LocalPhoto) {
+        val doc = cache.doc(photo.id) ?: return
+        if (!PhotoReader.canWriteExif(photo.mime)) return
+        val file = runCatching { PhotoReader.xmpWordsIn(context, photo) }.getOrNull() ?: return
+        val tags = file.tags.orEmpty().map { it.lowercase() }.toSet()
+        val people = file.persons.map { it.lowercase() }.toSet()
+        if (doc.tags.any { it.lowercase() !in tags } || doc.persons.any { it.lowercase() !in people }) cache.queueFileWrites(listOf(photo.id))
+        val point = com.opensolr.photos.search.parseLatLon(runCatching { org.json.JSONObject(doc.json ?: "{}").optString("location") }.getOrNull())
+        if (point != null && cache.setPlaces(listOf(photo.id)).isEmpty() && PhotoReader.gpsState(context, photo.uri) == PhotoReader.GpsState.MISSING) {
+            cache.putSetPlace(PhotoCache.SetPlace(photo.id, point.first, point.second, owner = true, written = false, synced = true))
         }
     }
 

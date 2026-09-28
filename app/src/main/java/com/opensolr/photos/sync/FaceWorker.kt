@@ -64,8 +64,10 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             if (!charging(ctx) && battery(ctx) < BATTERY_MIN) { next(ctx, continuation = true, delayMinutes = WAIT_MINUTES); return Result.success() }
             val bitmap = try { PhotoReader.uprightBitmap(ctx, photo.uri, FaceEngine.READ_EDGE) } catch (e: Exception) { null }
             val faces = if (bitmap == null) emptyList() else try { engine.analyze(bitmap) } catch (e: Exception) { emptyList() } finally { bitmap.recycle() }
-            val rows = cache.putFaces(photo.id, photo.mediaId, photo.sizeBytes, faces)
-            if (com.opensolr.photos.search.FaceMatcher.autoName(cache, edits, photo.id, rows, faces.map { it.vector }, people)) SyncScheduler.runNow(ctx)
+            // the names the file carries come first; the matcher only names what is left
+            com.opensolr.photos.search.FaceMatcher.fromFile(ctx, cache, photo.uri, cache.putFaces(photo.id, photo.mediaId, photo.sizeBytes, faces))
+            val stored = cache.facesWithVectors(photo.id)
+            if (com.opensolr.photos.search.FaceMatcher.autoName(cache, edits, photo.id, stored.map { it.first }, stored.map { it.second }, people)) SyncScheduler.runNow(ctx)
         }
         return Result.success()
     }

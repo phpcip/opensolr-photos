@@ -905,7 +905,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
      * Names faces (or clears the name with null); a named face is no longer refused for that person. [sure] false
      * = named by the matcher on its own: shown and searchable, but never used to recognise anyone else.
      */
-    fun setFacePerson(fids: Collection<Long>, person: String?, sure: Boolean = true, how: Int = HOW_OWNER) {
+    fun setFacePerson(fids: Collection<Long>, person: String?, sure: Boolean = true, how: Int = HOW_OWNER, toFile: Boolean = true) {
         if (fids.isEmpty()) return
         val db = writableDatabase
         db.beginTransaction()
@@ -915,7 +915,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
                 val args = batch.map { it.toString() }.toTypedArray()
                 db.update("faces", ContentValues().apply { if (person == null) putNull("person") else put("person", person); put("sure", if (sure) 1 else 0); put("how", how) }, "fid IN ($marks)", args)
                 // the names in the photo's file follow: written there as soon as the owner allows it
-                db.execSQL("INSERT OR IGNORE INTO file_writes (photo_id) SELECT DISTINCT photo_id FROM faces WHERE fid IN ($marks)", args)
+                if (toFile) db.execSQL("INSERT OR IGNORE INTO file_writes (photo_id) SELECT DISTINCT photo_id FROM faces WHERE fid IN ($marks)", args)
                 if (person != null) db.delete("face_rejects", "fid IN ($marks) AND person = ? COLLATE NOCASE", args + person)
             }
             db.setTransactionSuccessful()

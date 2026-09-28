@@ -365,6 +365,47 @@ object PhotoReader {
             "<mwg-rs:RegionList><rdf:Bag>$items</rdf:Bag></mwg-rs:RegionList></mwg-rs:Regions>"
     }
 
+    /**
+     * The named face areas written in the file (MWG regions, by this app or any other), turned upright: box as
+     * shares of the upright photo. Empty when there are none.
+     */
+    fun faceAreasIn(context: Context, uri: Uri): List<FaceArea> = try {
+        val exif = openExif(context, uri)
+        val packet = exif?.getAttributeBytes(ExifInterface.TAG_XMP)?.let { String(it, Charsets.UTF_8) }
+        val block = packet?.let { XMP_REGIONS.find(it)?.groupValues?.get(2) }
+        if (block == null) emptyList() else {
+            val orientation = exif.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+            fun value(item: String, name: String): Float? =
+                (Regex("$name=\"([-0-9.eE]+)\"").find(item) ?: Regex("<$name>([-0-9.eE]+)</$name>").find(item))?.groupValues?.get(1)?.toFloatOrNull()
+            fun upright(x: Float, y: Float): Pair<Float, Float> = when (orientation) {
+                ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> (1 - x) to y
+                ExifInterface.ORIENTATION_ROTATE_180 -> (1 - x) to (1 - y)
+                ExifInterface.ORIENTATION_FLIP_VERTICAL -> x to (1 - y)
+                ExifInterface.ORIENTATION_TRANSPOSE -> y to x
+                ExifInterface.ORIENTATION_ROTATE_90 -> (1 - y) to x
+                ExifInterface.ORIENTATION_TRANSVERSE -> (1 - y) to (1 - x)
+                ExifInterface.ORIENTATION_ROTATE_270 -> y to (1 - x)
+                else -> x to y
+            }
+            XMP_LI.findAll(block).mapNotNull { li ->
+                val item = li.groupValues[1]
+                val name = Regex("<([A-Za-z0-9_-]+:)?Name>(.*?)</([A-Za-z0-9_-]+:)?Name>").find(item)?.groupValues?.get(2)?.let { unescapeXml(it).trim() }
+                if (name.isNullOrEmpty()) return@mapNotNull null
+                val type = Regex("<([A-Za-z0-9_-]+:)?Type>(.*?)</").find(item)?.groupValues?.get(2)
+                if (type != null && !type.equals("Face", ignoreCase = true)) return@mapNotNull null
+                val cx = value(item, "stArea:x") ?: return@mapNotNull null
+                val cy = value(item, "stArea:y") ?: return@mapNotNull null
+                val w = value(item, "stArea:w") ?: return@mapNotNull null
+                val h = value(item, "stArea:h") ?: return@mapNotNull null
+                val a = upright(cx - w / 2, cy - h / 2)
+                val b = upright(cx + w / 2, cy + h / 2)
+                FaceArea(name, minOf(a.first, b.first), minOf(a.second, b.second), kotlin.math.abs(b.first - a.first), kotlin.math.abs(b.second - a.second))
+            }.toList()
+        }
+    } catch (e: Exception) {
+        emptyList()
+    }
+
     private fun num(v: Float): String = String.format(Locale.US, "%.5f", v.coerceIn(0f, 1f))
 
     // ExifInterface reads a JPEG's standalone XMP segment but writes only the EXIF copy: the standalone one gets the same packet

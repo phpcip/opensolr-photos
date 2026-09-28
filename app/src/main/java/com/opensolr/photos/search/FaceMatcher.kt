@@ -96,6 +96,31 @@ object FaceMatcher {
         return true
     }
 
+    /**
+     * Names the faces of a photo as its file says (face areas written by this app before, or by any other app):
+     * the owner's names, kept across a new install or a new phone. Nothing is written back, the file has them.
+     */
+    fun fromFile(context: android.content.Context, cache: PhotoCache, uri: android.net.Uri, rows: List<PhotoCache.FaceRow>) {
+        if (rows.none { it.person == null }) return
+        val areas = com.opensolr.photos.media.PhotoReader.faceAreasIn(context, uri)
+        if (areas.isEmpty()) return
+        val used = HashSet<Long>()
+        areas.forEach { area ->
+            val best = rows.filter { it.person == null && it.fid !in used }.maxByOrNull { overlap(it, area) } ?: return@forEach
+            if (overlap(best, area) < 0.3f) return@forEach
+            used += best.fid
+            cache.setFacePerson(listOf(best.fid), area.name, sure = true, how = PhotoCache.HOW_OWNER, toFile = false)
+        }
+    }
+
+    private fun overlap(f: PhotoCache.FaceRow, a: com.opensolr.photos.media.PhotoReader.FaceArea): Float {
+        val x1 = maxOf(f.x, a.x); val y1 = maxOf(f.y, a.y)
+        val x2 = minOf(f.x + f.w, a.x + a.w); val y2 = minOf(f.y + f.h, a.y + a.h)
+        val inter = maxOf(0f, x2 - x1) * maxOf(0f, y2 - y1)
+        val union = f.w * f.h + a.w * a.h - inter
+        return if (union > 0f) inter / union else 0f
+    }
+
     /** [autoName] over photos already read ([photoIds]), with the people as they are now. True when anything was named. */
     fun nameRecent(cache: PhotoCache, edits: EditRepository, photoIds: List<String>): Boolean {
         val people = people(cache)
