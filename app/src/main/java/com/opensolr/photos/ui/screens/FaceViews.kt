@@ -329,7 +329,7 @@ private fun androidx.compose.foundation.layout.BoxScope.GridScroller(state: andr
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     val view = androidx.compose.ui.platform.LocalView.current
     var dragging by remember { mutableStateOf(false) }
-    val alpha by androidx.compose.animation.core.animateFloatAsState(if (dragging || state.isScrollInProgress) 1f else 0f, label = "gridScroller")
+    val alpha = com.opensolr.photos.ui.scrollThumbAlpha(dragging || state.isScrollInProgress)
     BoxWithConstraints(Modifier.align(Alignment.CenterEnd).fillMaxSize()) {
         val density = LocalDensity.current
         val travelPx = with(density) { (maxHeight - com.opensolr.photos.ui.SCROLL_THUMB_HEIGHT).toPx() }.coerceAtLeast(1f)

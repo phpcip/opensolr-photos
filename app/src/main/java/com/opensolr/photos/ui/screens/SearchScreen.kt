@@ -2063,11 +2063,7 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
 
     if (total < FAST_SCROLL_MIN_ROWS) return
 
-    val alpha by animateFloatAsState(
-        targetValue = if (dragging || gridState.isScrollInProgress) 1f else 0f,
-        animationSpec = tween(durationMillis = if (dragging) 0 else 450),
-        label = "fastScrollerAlpha",
-    )
+    val alpha = com.opensolr.photos.ui.scrollThumbAlpha(dragging || gridState.isScrollInProgress)
 
     val density = LocalDensity.current
     val learned = remember { mutableStateMapOf<Int, Float>() }

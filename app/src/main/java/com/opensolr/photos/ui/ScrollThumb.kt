@@ -11,6 +11,8 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -36,6 +38,27 @@ fun ScrollThumb(dragging: Boolean, alpha: Float, modifier: Modifier = Modifier) 
         }
     }
 }
+
+/**
+ * The handle's opacity: full while the list moves or the handle is held, then it lingers a while before it fades,
+ * so it is still there when the finger goes back for it. One timing for every scroller in the app.
+ */
+@Composable
+fun scrollThumbAlpha(active: Boolean): Float {
+    var shown by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(active) }
+    androidx.compose.runtime.LaunchedEffect(active) {
+        if (active) shown = true
+        else { kotlinx.coroutines.delay(SCROLL_THUMB_LINGER_MS); shown = false }
+    }
+    val alpha by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = if (shown) 1f else 0f,
+        animationSpec = androidx.compose.animation.core.tween(durationMillis = if (shown) 0 else 450),
+        label = "scrollThumbAlpha",
+    )
+    return alpha
+}
+
+private const val SCROLL_THUMB_LINGER_MS = 2000L
 
 private val ThumbCorner = RoundedCornerShape(2.dp)
 
