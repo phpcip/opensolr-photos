@@ -1,0 +1,2 @@
+- Similar photos, first stop: the photos with the same people as the compared one. A named face stands for the person, so every photo naming them or showing them is found, not only the ones closest to that single face; no cap on how many.
+- Faces are read on emulators too.
