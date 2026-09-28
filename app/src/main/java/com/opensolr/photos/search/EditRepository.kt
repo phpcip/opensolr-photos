@@ -173,7 +173,7 @@ class EditRepository(private val context: Context) {
             cache.clearActions(done)
             cache.markPlacesSynced(placed)
             if (rewrite.isNotEmpty()) {
-                val docs = rewrite.map { json -> runCatching { JSONObject(json).apply { ANSWER_KEYS.forEach { remove(it) } }.toString() }.getOrDefault(json) }
+                val docs = rewrite.map { json -> runCatching { JSONObject(json).apply { PhotoCache.ANSWER_KEYS.forEach { remove(it) } }.toString() }.getOrDefault(json) }
                 api.photosRestore(session, connection.indexName, docs)
                 // the words stay queued: the place and the faces go on the rewritten document at the next pass
             }
@@ -200,7 +200,9 @@ class EditRepository(private val context: Context) {
         prefs.cloneComplete = true
     }
 
-    fun storeDoc(id: String, answer: JSONObject, indexedAt: Long = System.currentTimeMillis()) {
+    fun storeDoc(id: String, answered: JSONObject, indexedAt: Long = System.currentTimeMillis()) {
+        // the document alone is kept: what the server said about the call travels no further
+        val answer = JSONObject(answered.toString()).apply { PhotoCache.ANSWER_KEYS.forEach { remove(it) } }
         // the faces the index keeps for this photo: taken as they are when this phone has none for this file
         com.opensolr.photos.data.FaceStore.decode(answer.optString("faces_json").ifBlank { null })?.let { stored ->
             if (!cache.faceScanned(id, stored.sizeBytes)) cache.importFaces(id, answer.optLong("media_id", -1L), stored)
@@ -244,7 +246,6 @@ class EditRepository(private val context: Context) {
 
         const val WORDS_BATCH = 50
         const val CLONE_PAGE = 10000
-        val ANSWER_KEYS = listOf("status", "msg", "error", "results", "score", "_version_")
 
         const val CLONE_FIELDS = "id,media_id,path,file_name,folder,mime,size_bytes,file_hash," +
             "taken_at,indexed_at,modified_at,year,month,width,height,orientation," +

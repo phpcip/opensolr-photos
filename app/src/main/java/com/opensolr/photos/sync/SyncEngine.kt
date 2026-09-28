@@ -718,7 +718,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             if (SyncWorker.stopRequested.get()) throw SyncStoppedException()
             // the clone keeps a document as the server answered it, answer keys included: those are not fields
             val docs = batch.map { json ->
-                runCatching { org.json.JSONObject(json).apply { ANSWER_KEYS.forEach { remove(it) } }.toString() }.getOrDefault(json)
+                runCatching { org.json.JSONObject(json).apply { PhotoCache.ANSWER_KEYS.forEach { remove(it) } }.toString() }.getOrDefault(json)
             }
             val written = api.photosRestore(session, connection.indexName, docs)
             val refused = written.count { !it } + (docs.size - written.size).coerceAtLeast(0)
@@ -798,7 +798,6 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
 
     companion object {
         private const val RESTORE_BATCH = 50
-        private val ANSWER_KEYS = listOf("status", "msg", "error", "results", "score", "_version_")
 
         private const val NEAR_PHOTO_MS = 30 * 60 * 1000L
 

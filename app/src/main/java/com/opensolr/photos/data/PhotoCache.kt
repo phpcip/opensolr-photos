@@ -1846,6 +1846,8 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         /** People the matcher put on photos by itself: taken off again when the people are learned anew. */
         private const val AUTO_WORDS_TABLE = "CREATE TABLE IF NOT EXISTS auto_words (photo_id TEXT NOT NULL, person TEXT NOT NULL COLLATE NOCASE, PRIMARY KEY (photo_id, person))"
         private const val FACE_PAGE = 2000
+        /** Keys the server's answers carry beside a document: never part of the document itself. */
+        val ANSWER_KEYS = listOf("status", "msg", "words", "place", "error", "results", "charged", "score", "_version_")
         const val HOW_OWNER = 0
         const val HOW_LEARNED = 1
         const val HOW_AUTO = 2
