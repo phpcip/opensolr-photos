@@ -471,8 +471,12 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
 @Composable
 private fun UpdateButton(state: UiState, newer: com.opensolr.photos.net.UpdateCheck.Update, viewModel: AppViewModel) {
     val context = LocalContext.current
-    if (com.opensolr.photos.net.SelfUpdate.fromPlay(context)) {
-        AccentButton(stringResource(R.string.acc_update_now, newer.version), onClick = { com.opensolr.photos.net.SelfUpdate.openPlay(context) }, modifier = Modifier.fillMaxWidth())
+    if (com.opensolr.photos.net.SelfUpdate.fromStore(context)) {
+        AccentButton(stringResource(R.string.acc_update_now, newer.version), onClick = { com.opensolr.photos.net.SelfUpdate.openStore(context) }, modifier = Modifier.fillMaxWidth())
+        return
+    }
+    if (com.opensolr.photos.BuildConfig.PLAY_BUILD) {
+        AccentButton(stringResource(R.string.acc_update_now, newer.version), onClick = { com.opensolr.photos.net.SelfUpdate.openRelease(context, newer.pageUrl) }, modifier = Modifier.fillMaxWidth())
         return
     }
     val progress = state.updateProgress

@@ -44,25 +44,36 @@ object SelfUpdate {
     }
     private const val ACTION_RESULT = "com.opensolr.photos.SELF_UPDATE_RESULT"
 
-    /** True when Google Play installed this copy: then Play does the updating, not the app. */
-    fun fromPlay(context: Context): Boolean {
-        if (com.opensolr.photos.BuildConfig.PLAY_BUILD) return true
+    private const val PLAY = "com.android.vending"
+    private const val APPGALLERY = "com.huawei.appmarket"
+
+    /** The store that installed this copy (Google Play or AppGallery), or null: sideloaded or from GitHub. */
+    private fun storeInstaller(context: Context): String? {
         val installer = try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) context.packageManager.getInstallSourceInfo(context.packageName).installingPackageName
             else @Suppress("DEPRECATION") context.packageManager.getInstallerPackageName(context.packageName)
         } catch (e: Exception) {
             null
         }
-        return installer == "com.android.vending"
+        return installer?.takeIf { it == PLAY || it == APPGALLERY }
     }
 
-    fun openPlay(context: Context) {
-        val market = Intent(Intent.ACTION_VIEW, Uri.parse("market://details?id=" + context.packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    /** True when a store installed this copy: then that store does the updating, not the app. */
+    fun fromStore(context: Context): Boolean = storeInstaller(context) != null
+
+    /** Opens this app's page in the store that installed it. */
+    fun openStore(context: Context) {
+        val uri = if (storeInstaller(context) == APPGALLERY) "appmarket://details?id=" + context.packageName else "market://details?id=" + context.packageName
         try {
-            context.startActivity(market)
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(uri)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (e: Exception) {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://play.google.com/store/apps/details?id=" + context.packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
+    }
+
+    /** The store build cannot install APKs itself: a sideloaded copy of it gets the GitHub release page. */
+    fun openRelease(context: Context, pageUrl: String) {
+        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(pageUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
     fun canInstall(context: Context): Boolean = !com.opensolr.photos.BuildConfig.PLAY_BUILD && context.packageManager.canRequestPackageInstalls()
