@@ -6,29 +6,28 @@ calls a group a duplicate, because only the last stop can prove one.
 
 ## The slider
 
-9 stops, from 0 to 8, with the name of the kind under it, the same in the library-wide view and in *Similar to this photo*. Both open at stop 0.
+6 stops, from 0 to 5, with the name of the kind under it. Stop 0 needs a photo to compare with, so it is
+offered only in *Similar to this photo*, which opens there; the library-wide view starts at stop 1
+(`SearchRepository.FIRST_LIBRARY_LEVEL`).
 
 | Stop | Name | Photos are grouped when… | Field |
 |---|---|---|---|
-| 0 | *Same first 2 words* | the image model's first 2 labels match, in any order | `dup_w2_hash` |
-| 1 | *Same first 2 words, same camera* | as above, and `camera_model` is the same | `dup_w2_hash` + `camera_model` |
-| 2 | *Same first 3 words* | the first 3 labels match | `dup_w3_hash` |
-| 3 | *Same first 3 words, same camera* | as above, and the camera is the same | `dup_w3_hash` + `camera_model` |
-| 4 | *Full description match* | the whole reading of the photo is the same: lowercased, split on commas, repeats dropped, sorted; never your own wording | `dup_desc_hash` |
-| 5 | *Same photo (EXIF)* | EXIF: time taken, camera make, camera model, lens, ISO, exposure, f-number, focal length, GPS position, altitude | `dup_exif_hash` |
-| 6 | *Same file name* | file name only, without the folder, since several folders can be indexed | `file_name` |
-| 7 | *Same file size* | size in bytes. Not the same as the same file: a camera pads its files to whole blocks, so unrelated photos share a size exactly | `size_bytes` |
-| 8 | *Same file (exact copy)* | the md5 of the original file, worked out on the phone — the server only ever sees the 1024 px copy | `file_hash` |
+| 0 | *Same faces* | the photo shows the same people as the one being compared (only in *Similar to this photo*; worked out on the phone) | `faces`, [below](#similar-to-one-photo) |
+| 1 | *Same first 2 words, same camera* | the image model's first 2 labels match, in any order, and `camera_model` is the same | `dup_w2_hash` + `camera_model` |
+| 2 | *Same first 3 words, same camera* | the first 3 labels match, and the camera is the same; a group of more than 10 photos is dropped (`MAX_WORD_GROUP`): at that size three labels describe a theme, not a repeat | `dup_w3_hash` + `camera_model` |
+| 3 | *Same description, same camera* | the whole reading of the photo and the camera that took it: lowercased, split on commas, repeats dropped, sorted; never your own wording | `dup_desc_hash` |
+| 4 | *Same photo (EXIF)* | EXIF: time taken, camera make, camera model, lens, ISO, exposure, f-number, focal length, GPS position, altitude | `dup_exif_hash` |
+| 5 | *Same file (exact copy)* | the md5 of the original file, worked out on the phone — the server only ever sees the 1024 px copy | `file_hash` |
 
 There are no stops past three words: an image model that names two or three things has nothing to say at
-"first 4", and the server writes no key for them.
+"first 4", and the server writes no key for them. The stops on file name and file size are gone.
 
 The EXIF key leaves out file size, pixel size, orientation and modification time, so a photo that went
 through a simple edit keeps it.
 
-The slider's colour follows the stop: the loosest tone at 0, through green at the EXIF stop; the three file
-stops are neutral, being on a scale of their own. The scale has one set of colours for the light theme and
-another for the dark one (`DUPLICATE_*_LIGHT` / `DUPLICATE_*_DARK`).
+The slider's colour follows the stop: the loosest tone at the first stop, through green at the EXIF stop;
+the exact-copy stop is neutral. The scale has one set of colours for the light theme and another for the dark
+one (`DUPLICATE_*_LIGHT` / `DUPLICATE_*_DARK`).
 
 ## How the groups are found
 
@@ -37,13 +36,14 @@ The keys are written by the server when a photo is indexed (`photos_ingest`) or 
 fields with docValues, not stored ([index schema](index-schema.md)).
 
 The server writes only these keys (`Api_lib::_photos_duplicate_hashes`): `dup_w2_hash` and `dup_w3_hash`, the
-labels lowercased, repeats dropped, sorted, md5; `dup_desc_hash`, the whole reading; and `dup_exif_hash`. The
+labels lowercased, repeats dropped, sorted, md5; `dup_desc_hash`, the whole reading with the camera model;
+and `dup_exif_hash`. The same-faces stop has no key: it is answered on the phone. The
 labels are only the object names the image model finds, as many as it finds, never a sentence, and a key
 exists only when the photo really has that many labels: a photo with two labels has no *first 3*.
 
 The library-wide view answers **inside what is on screen**: the typed words (as words, without the vector)
-and every active filter narrow the groups. *Similar to this photo* does not, since its question is one
-photo.
+and every active filter narrow the groups. *Similar to this photo* drops the typed words and the filters when
+it opens: the comparison is about the photo alone.
 
 Each stop is **one facet request** on its field, sent 300 ms after the slider settles; values seen more than
 once are the groups, biggest first. The answer is held for the cache's lifetime, so walking the slider back
@@ -76,12 +76,11 @@ can look them over. The selection bar then shares, deletes or re-syncs them as u
 *Similar*, in the row of actions of a photo's details, opens the same slider anchored to that photo
 (`AppViewModel.showSimilar`, `SearchRepository.similarTo`). Each stop is two requests instead of one facet:
 the photo's own key for that stop (`fl=<field>`, which a schema of version 1.6 returns from docValues), then
-`fq={!field f=<field> v=$anchorKey}` for everything carrying it, newest first, up to 200 photos. `{!field}`
-rather than `{!term}`, because `size_bytes` is a `plong` and `{!term}` does not read a points field.
+`fq={!field f=<field> v=$anchorKey}` for everything carrying it, newest first, up to 200 photos.
 
-It opens at stop 0, the loosest one, rather than inheriting wherever the slider was left.
+It opens at stop 0, *Same faces*, rather than inheriting wherever the slider was left.
 
-Under a single photo the slider has one more stop before all of the above: **Same faces**
+**Same faces**
 (`SearchRepository.sameFaces`, `FACES_FIELD`), which asks which photos show the same people. A face with a
 name stands for the person: a photo has them when it names them (`idsWithPerson`) or when one of its faces
 scores as them against the person's references (`FaceMatcher.score` ≥ `SAME`). A face nobody named is looked
@@ -89,8 +88,8 @@ for as itself (≥ `SURE`). Every person of the anchor must be in a result. It i
 phone's copy, faces table and documents alike, with no request and no cap on the number of results.
 
 The anchor photo is ringed in the grid and labelled *This one*; **Back to search** above the slider leaves
-the view and runs the search that was in force again, with its query and filters (`AppViewModel.backToSearch`
-→ `clearDuplicates`). A photo's details are reopened with a long press, as everywhere else. The count line
+the view for the plain photo grid (`AppViewModel.backToSearch` → `clearDuplicates`): the words and filters
+that were in force were dropped when the view opened. A photo's details are reopened with a long press, as everywhere else. The count line
 reads *N like IMG_1234.jpg*, and *Select 1 of each group* is not drawn at all, since there is a single
 group. A stop where nothing else carries the key says *Nothing else in your index is like this photo at this
 setting.*

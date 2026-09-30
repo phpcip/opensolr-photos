@@ -171,35 +171,30 @@ wrote the names on the files, in the XMP property `PersonInImage`; those names a
 matching faces (`FaceMatcher.fromFile`). The names land in `persons_t`, copied into `text`, and `persons_ss`,
 so typing a name finds that person's photos. Accent folding applies as everywhere else.
 
-People can still be named without a face, in **Edit** under *People* or on many photos at once from
-**Tag** in the selection bar; a photo with one face and one name binds them (`FaceMatcher.nameOnlyFace`,
-`bindTagged`). A name comes off the whole library from the People filter (`unnameFaces`). Two spellings of
-one name (case, diacritics, spaces: `Words.fold` on the phone, `Api_lib::photos_word_key` on the server) are
+People go on a photo **only by naming faces**: the tag dialogs take no typed names, and the app never
+guesses a person from a photo's tags. In **Edit** a name can only be taken off a photo; a photo with one face
+and one name binds them (`FaceMatcher.nameOnlyFace`, `bindTagged`). A person the owner already put on a photo
+is put on the face that looks most like them, and the matcher only names a photo the owner put nobody on.
+A name comes off the whole library from the People filter: an X beside each name, confirmed first, off every
+photo and face (`unnameFaces`), sent with the usual sync. Two spellings of one name (case, diacritics,
+spaces: `Words.fold` on the phone, `Api_lib::photos_word_key` on the server) are kept once. The names go
+into `persons_t` and `persons_ss` in the index and into the phone's copy; nothing is written into the file.
 
-kept once. They are written into the
-file's XMP (`PhotoReader.writeXmp`, after Android asks once for permission to change the photo), so
-any other app sees them too, and into `persons_t` in the index at once. Names outside ASCII are written
-as XML character references, which every XMP reader turns back into letters. They are in the phone's copy
-of the index as well, so a later read of the photo sends them again.
+Names another app wrote into a file are read on the phone rather than carried on the 1024 px copy:
+`ExifInterface` converts the XMP packet to a `String` as ASCII, which turns a name with diacritics into
+question marks, so the raw bytes are decoded as UTF-8 and the names travel to `photos_ingest` as JSON, in the
+`persons` field of the photo.
 
-The names are read on the phone rather than carried on the 1024 px copy: `ExifInterface` converts the XMP
-packet to a `String` as ASCII, which turns a name with diacritics into question marks. `PhotoReader
-.personsIn` decodes the raw bytes as UTF-8 and the names travel to `photos_ingest` as JSON, in the `persons`
-field of the photo.
+## Your tags and wording
 
-## Tags written into the photos
-
-Saving tags (Edit, or Tag on a selection) writes them into the file's XMP on the phone, after Android's
-write request, twice: as `dc:subject`, the keywords every photo manager shows, and as `opensolr:Tags` in
-the app's own namespace (`https://opensolr.com/ns/photos/1.0/`), which other apps neither show nor change.
-At indexing only `opensolr:Tags` is read (`PhotoReader.opensolrTagsIn`), so the owner's tags come back after
-a reinstall and keywords written by other apps never reach the index. The editor does show the `dc:subject`
-keywords of the file, to keep or remove; they go in only when saved. Edit writes exactly the saved list.
+Saving tags (Edit, or Tag on a selection) keeps them on the phone and in the index (`custom_tags`), never in
+the file. The editor does show the keywords other apps wrote into the file (`dc:subject`), to keep or
+remove; they reach the index only when saved. Edit writes exactly the saved list.
 
 ### Tag on a selection
 
-The sheet for many photos at once carries *People* first, then *My tags (Albums)*. Each of the two has its
-own **Add / Replace** switch:
+The sheet for many photos at once carries *My tags (Albums)* with an **Add / Replace** switch (and a place,
+for photos with a wrong position or none):
 
 - **Add** puts the words on top of what each photo already carries.
 - **Replace** makes them the whole of that field on every ticked photo, and the sheet says so before you
@@ -209,12 +204,11 @@ Under the form is what the ticked photos already carry — the names and the tag
 ticked photos it is on — so you can see what you are about to add to or replace. That list is read from the
 phone's copy of the index and costs no request.
 
-The owner's own wording of what a photo shows goes into the file too, as `opensolr:Meaning`, capped at
+The owner's own wording of what a photo shows is kept the same way, in `meaning`, capped at
 `PhotoReader.MEANING_MAX_CHARS` (2,000, the same ceiling `photos_ingest` applies). Only a wording the owner
-changed is written; what the model read is not, since the server can always produce it again, and *Reset* in
-the editor removes the property. Tag on a selection has no wording field: it writes the wording this phone
-keeps for a photo, if any, and otherwise leaves the property alone. At indexing the phone's own copy wins,
-then `opensolr:Meaning` from the file (`PhotoReader.opensolrMeaningIn`), then the image model.
+changed is kept as theirs; *Reset* in the editor drops it and the image model's sentence comes back. Tag on
+a selection has no wording field. At indexing the phone's own copy wins, then the wording an older version of
+the app wrote into the file (`opensolr:Meaning`, read only), then the image model.
 
 ## The AI switch
 
@@ -287,9 +281,12 @@ separator=| v=$f_year}` with `f_year=2025|2026`) and AND-ed across fields. Value
 parameters, so no value can change the query. Each field's facet excludes that field's own filter
 (`facet.field={!ex=year key=year}year`), so a section keeps offering all its values.
 
-On the filter sheet every tap applies at once. Values are listed alphabetically (years oldest first), up
-to 80 per field; long lists show the first twelve with *Show all*. Every group on the sheet carries the same heading the grid gives it, folds away with a tap, and shows
-a badge with how many of its own filters are on. All groups are folded when the sheet is first opened, and
+The filters are a screen of their own, closed with *Done* or Back, never by a swipe. Every tap applies at
+once. Every value is listed (`facet.limit=-1`), alphabetically (years oldest first); only *Meaning* stops at
+500. A field shows its first 10 values with *Show all (N)*; a field with more than 50 values, and *People*,
+get a search box over the list, and *People* an X beside each name to take it off the whole library. Every
+group carries the same heading the grid gives it, folds away with a tap, and shows a badge with how many of
+its own filters are on. All groups are folded when the sheet is first opened, and
 what you unfold is remembered between visits. Small **Clear all** and **Done (N)** buttons, where N is the
 number of photos shown with the current filters, sit both at the top and at the bottom of the sheet. Active
 filters show as removable pills on one horizontally scrolling row.
@@ -351,13 +348,15 @@ downloaded to draw the grid.
   set in its own order — the whole reason it exists: the gallery knows nothing about your search, so
   swiping there walks the camera roll. Nearing the end of what is loaded asks for the next page, so the
   swipe runs as far as the results do. Inside it: a tap shows every action of the photo as a row of icons
-  (*Tag*, *Gallery*, *Similar*, *Share*, *Map* and *Nearby* with a GPS position, *Delete*), a swipe up opens
+  (*Tags, people and words*, *Open in gallery*, *Similar photos*, *Share* — originals or 1024 px copies —,
+  *Show on map* and *Photos nearby* with a GPS position, *Faces*, *Delete*), a swipe up opens
   the details, which carry no buttons — the people first, as chips, then *My tags (Albums)*, then what the
   photo shows as plain text, then the rest of what is known about the file — a swipe down returns to the
   grid — drawn over it, so its scroll position is never disturbed. *Gallery* is `ACTION_VIEW` on the photo's
   MediaStore URI with read permission granted; if the stored id went stale the app finds the photo again by
   its path, and if it is gone from the phone it says so and the next Re-Sync removes it from the index.
-  - **Zoom**: pinch with no ceiling, magnifying about the point between the fingers, double tap to magnify
+  - **Zoom**: at full resolution once magnified (the sharp layer is decoded from the original), pinch with no
+    ceiling, magnifying about the point between the fingers, double tap to magnify
     on the point touched and again to come back, one finger to move a magnified photo about (held inside
     its own edges). Zooming out stops at the whole
     picture — it is not a way to leave. The pager only scrolls while the photo is whole, so a finger on a
@@ -385,7 +384,7 @@ downloaded to draw the grid.
 - **Reload**: swipe down on the grid, tap the reload icon next to the count, or come back from another
   screen; the results are read again. The swipe and the icon are asked for by hand
   (`AppViewModel.forceRefresh`), so they empty the [search cache](#search-cache) first and always reach
-  the index. The swipe down also starts a sync; if a sync is already running it only reloads.
+  the index. The swipe down also starts a sync; a sync that is running is stopped first and started again.
 - **Duplicates**: the duplicates icon on the count line switches the grid to groups of alike photos
   ([duplicates](duplicates.md)). Every step of its slider answers with a light tap.
 - **Could not be read**: a red icon next to it, only when there are such photos, lists the photos the phone
@@ -405,6 +404,7 @@ them back. If that delete fails, the next sync removes them anyway.
 
 *Edit* in the details sheet (`EditSheet.kt`, `EditRepository.kt`) opens the editor at full height:
 
+- **People**: the names on the photo, each removable with a tap; a name is added only by naming a face.
 - **My tags**: one per entry (commas split), removed with a tap. Stored in `custom_tags`; `custom_tags_text`
   is its tokenised copy, first in `qf` with boost 5.
 - **Tag suggestions**: focusing the tag field lists suggestions under it. With nothing typed, the 5 most
@@ -421,15 +421,11 @@ them back. If that delete fails, the next sync removes them anyway.
   words changed, to the `photos_words` endpoint. The server builds the vector again on
   vector plans, from the same text as at indexing (`Api_lib::_photos_embedding_text`). Nothing on screen waits for the network.
 
-Writing the words into the photo files themselves is the one part that still happens on the spot: Android
-asks for permission to change the files and a progress bar counts them through.
+Nothing is written into the photo files.
 
 `SyncEngine.applyEdits` puts the edits over what the model read every time a photo is written again, so the owner's
 words always win. After a reinstall the whole copy is pulled down once from the index, so the tags and names
 the photos carried are back before anything is edited.
-
-A photo with no date of its own no longer jumps to today when its tags are written into it: the index keeps
-the date the photo already had.
 
 ## Search cache
 

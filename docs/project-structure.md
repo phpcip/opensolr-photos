@@ -37,9 +37,10 @@ From 2.5 the app is offline-first. The phone keeps a copy of every document its 
 
 ## The phone's copy of the index
 
-Since 2.5 the phone holds its own copy of every document its index holds: everything except the search vector and the duplicate keys — the id, the path, the file name, the size, the dates, the camera and EXIF, the place, the words the photo was read into, the printed text, the people, the owner's tags and the md5 of the file.
+Since 2.5 the phone holds its own copy of every document its index holds: everything except the search vector and the duplicate keys — the id, the path, the file name, the size, the dates, the camera and EXIF, the place, the words the photo was read into, the printed text, the people and their faces, the owner's tags and wording, and the md5 of the file.
 
-- It is read from the index **once**: at install, at reinstall, and after a reset. From then on it is kept in step by every write, and the index is never walked again.
+- It is read from the index **once**: at install and at reinstall, ten thousand documents at a time. From then on it is kept in step by every write, and the index is never walked again.
+- It is the source of truth. *Reset* and a new configuration empty only the index and fill it back from the copy (`SyncEngine.restoreFromClone`, 50 documents per request, carrying on where it stopped); a document the index lost is rewritten from it. The app never writes to a photo file: the copy and the index are the only places the owner's words live.
 - Two files own it. `data/PhotoCache.kt` is the store (the SQLite `docs` table and the queue of writes still to go up). `search/EditRepository.kt` fills it and pushes from it: `cloneMissing()`, `readIndexIntoCache()`, `storeDoc()` and the `CLONE_FIELDS` list of what a copy holds.
 - What makes it safe is one invariant: **this app is the only writer of that index**. Nothing else can change a document behind the phone's back, so a copy brought in step by every write cannot drift.
 - `AppPrefs.cloneComplete` says the copy is whole, and `KEY_CLONE_FORMAT` says which shape it has. Changing the shape forces the copy to be read again.
@@ -57,24 +58,26 @@ Everything below lives under `app/src/main/java/com/opensolr/photos/`. The packa
 - `SecureStore.kt` — encrypts and decrypts the two secrets with a Keystore key. `AppPrefs` calls it; nothing else should store a secret any other way.
 - `PhotoCache.kt` — the biggest file in the package, and the app's local database: the phone's copy of the index plus the queue of writes still to go up. The `docs` table (`putDoc`, `doc`, `docSizes`, `docFileHash`, `takenTimes`, `docsBetween`, `docCount`, `docsWithoutWords`, `docsLikeDocuments`, `docsIndexedBefore`, `updateDocSize`, `removeDocs`, `clearDocs`); the word counts the suggestions are built from (`wordCounts`, `wordCountsOf`, a `GROUP BY` over the `doc_words` table, one row per tag, name and word of a photo); the queue (`queueAction`, `queueActions`, `actionOf`, `actions`, `clearActions`, with the kinds `ACTION_INDEX`, `ACTION_WORDS` and `ACTION_DELETE`); and the owner's edits, the skipped photos, the word-retry stamps and the places. It also still holds the vectors already paid for, so a photo is never read twice. There is one handle on it for the whole app, `PhotoCache.of(context)`; the constructor is private. Since 2.5.2 (database version 13) the questions a sync and the grid ask all the time — photos in a stretch of time, photos without words, size and date per photo, the file's md5 — are answered from columns and indexes of their own (`taken_ms`, `embed_model`, `file_hash`), never by reading the stored documents; the upgrade fills them once, in pages, from what the phone already holds. Since 3.5 (database version 19) `libraryStats()` answers the Stats screen with six grouped queries: the words each photo was read into are `label` rows of `doc_words`, the camera model has a column of its own (`camera_model`), and `docs_camera` and `docs_place` index the camera and the place; `LibraryStats.kt` holds the result.
 - `Words.kt` — `Words.fold()`, `Words.tidy()` and `List<String>.distinctWords()`: the one place two spellings of a tag or a name are decided to be the same word. Everything that saves tags or people goes through it.
+- `FaceStore.kt` — the faces of every photo read: frames, fingerprints, the names the owner gave and the faces refused for a person; they travel to the index as `faces_json`.
 - `SearchCache.kt` — one handle for the whole app, `SearchCache.of(context)`: a SQLite table of answers the index already gave, keyed by the request itself and reused for as many seconds as the owner chose (`AppPrefs.cacheSeconds`). Only the reads in `SearchRepository` go through it; writes, the schema checks and the one-off read of the index into the phone's copy never do. See [the search cache](https://opensolr.com/opensolr-photos-docs/search#search-cache).
 
 ### `net/` — talking to Opensolr
 
 - `Http.kt` — the one shared HTTP client, with its timeouts and no redirects.
 - `OpensolrApi.kt` — one function per Opensolr call: token exchange, index list, create, config upload, connection details, account summary, `photos_ingest` (`photosIngest()`, the call a sync sends photos with), `photos_words` (`photosWords()`, words only, fifty photos per call and no pictures), `image_index`, `batch_embed`, `embed`. It also turns the platform's refusals into typed errors.
-- `SolrClient.kt` — talks straight to the phone's index: search, add, delete, empty, commit, check the schema and its configuration version, autocomplete, duplicate groups. The method that matters in 2.5 is `forEachDoc(fields, ...)`, the one-off read of the whole index into the phone's copy of it (and the read that keeps the owner's edits before a reset). `allIds()` is no longer part of a sync.
-- `UpdateCheck.kt` — compares the app with the latest release on GitHub: once a day in the background, and on demand from the account screen. `check()` returns a `Result`, so a failed check is never reported as "up to date".
+- `SolrClient.kt` — talks straight to the phone's index: search, add, delete, empty, commit, check the schema and its configuration version, autocomplete, duplicate groups. The method that matters since 2.5 is `forEachDoc(fields, ...)`, the one-off read of the whole index into the phone's copy of it. `allIds()` is no longer part of a sync.
+- `UpdateCheck.kt` and `SelfUpdate.kt` — in a copy installed from GitHub, compare the app with the latest release there (once a day in the background, and on demand from the account screen), download the APK and hand it to the system installer; a copy installed by Google Play or AppGallery (`installingPackageName`) is left to that store. `check()` returns a `Result`, so a failed check is never reported as "up to date".
 - `Errors.kt` — the exceptions, named after what the app has to do about them (sign in again, quota used up, plan limit, rate limited, photo rejected...).
 
 ### `media/` — photos on the phone
 
-- `MediaScanner.kt` — lists folders, scans the chosen ones, and holds `photoId()`, the one place a photo's id is computed.
-- `PhotoReader.kt` — reads EXIF metadata and makes the upright 1024 px copy sent to be read.
+- `MediaScanner.kt` — lists folders, scans the chosen ones, and holds `photoId()`, the one place a photo's id is computed: the md5 of the path inside the storage volume.
+- `PhotoReader.kt` — reads EXIF metadata, makes the upright 1024 px copy sent to be read, the pixel hash, and reads what other apps wrote into the file (names, keywords, face regions). It never writes to the file.
+- `FaceEngine.kt` — finds the faces in a photo and fingerprints them, on the phone (YuNet and SFace on LiteRT).
 
 ### `index/` — the phone's index
 
-- `IndexManager.kt` — the index name, finding it, creating it, choosing its environment, uploading the configuration, and re-reading its password. The rule “only create when certainly missing” lives here.
+- `IndexManager.kt` — the index name, finding it, offering the indexes of other phones for re-use (`NEEDS_CHOICE`), creating it in the region the platform flags as nearest, uploading the configuration, and re-reading its password. The rule “only create when certainly missing” lives here.
 
 ### `auth/` — signing in
 
@@ -85,6 +88,7 @@ Everything below lives under `app/src/main/java/com/opensolr/photos/`. The packa
 
 - `SyncEngine.kt` — the sync algorithm itself, from “is the index there” to the final commit, including every stop condition. This is the heart of the app. In 2.5 the comparison is entirely local: `MediaScanner.scan()` against `PhotoCache.docSizes()`, with `EditRepository.readIndexIntoCache()` run once when `cloneMissing()` is true. A file that looks touched is weighed by its md5 before anything is sent, so a file this app rewrote itself is not read again. Every document the server answers with goes straight into the phone's copy through `EditRepository.storeDoc()`, and after the commit the engine calls `EditRepository.sendWords()` to carry queued word changes up. A plan without vector search sends no picture at all: photos are indexed from what the phone knows.
 - `SyncWorker.kt` — runs the engine as a background job with a progress notification, and makes sure only one runs at a time.
+- `FaceWorker.kt` — names the newest faces from the people known so far after each sync, and, on request, reads the faces of every photo once (`SCAN_ALL`), only while charging, in short runs.
 - `SyncScheduler.kt` — starts a sync now, sets the weekly or monthly schedule, and exposes the live status the screens show.
 - `Notifier.kt` — every notification the app posts.
 - `PlanWatch.kt` — the warnings at 90% and at a plan limit, each posted once.
@@ -93,12 +97,13 @@ Everything below lives under `app/src/main/java/com/opensolr/photos/`. The packa
 
 - `SearchRepository.kt` — builds the Solr request from the text and the filters (words, meaning, facets) and parses the answer into results; also the albums facet and the duplicate groups. It is only reached by a typed query or a filter. Tag, name and wording suggestions no longer come from here: they are counted on the phone, in `AppViewModel.localWords()` / `cachedWordCounts()` over `PhotoCache.wordCounts()` and `wordCountsOf(ids)`. `browseFacets()` is asked once and kept in `AppPrefs.facetsJson` until a sync writes something. Every read it makes passes through `SearchCache` first, and anything the app writes empties that cache.
 - `EditRepository.kt` — two jobs, despite the name. It saves the owner's words without touching the index: `saveLocal()` for one photo and `queueForAll()` for many write the edits, bring the phone's copy of the document in step and queue `ACTION_WORDS`; `sendWords()`, called by the sync, drains that queue through `photos_words`, fifty photos per call and no pictures. It is also the owner of the phone's copy of the index: `cloneMissing()`, `readIndexIntoCache()`, `storeDoc()` and `CLONE_FIELDS`. Nothing here reads a document back from the index and nothing here computes a vector.
+- `FaceMatcher.kt` — the people learned from the faces the owner named: a person's references, the sure matches named on their own, the candidates offered under *Is this X?*, and the *Same faces* stop of similar photos. Everything is compared on the phone.
 
 ### `ui/` — the screens
 
 - `AppViewModel.kt` — the brain of the interface: one `UiState` value holding everything the screens draw, and one function per thing the user can do (sign in, save folders, search, force a re-sync, sign out...).
 - `AppRoot.kt` — picks which screen to draw from `UiState.screen`.
-- `screens/` — the screens: sign-in, welcome, permissions, folders and setup in `OnboardingScreens.kt`; `SearchScreen.kt` with the header, the filter and details sheets, the duplicates view and the selection bar; `EditSheet.kt` for one photo; `BulkTagSheet.kt` for many at once (People and My tags, each with its Add or Replace switch, and what the ticked photos already carry underneath); `AlbumsScreen.kt` (no longer on the header); `StatsScreen.kt` (the charts, drawn with Compose's own Canvas, and their tables); `MapScreen.kt`; `SyncScreen.kt`; `AccountScreen.kt`.
+- `screens/` — the screens: sign-in, welcome, permissions, folders and setup in `OnboardingScreens.kt`; `SearchScreen.kt` with the header, the filter and details sheets, the duplicates view and the selection bar; `EditSheet.kt` for one photo; `BulkTagSheet.kt` for many at once (My tags with its Add or Replace switch, a place, and the people and tags the ticked photos already carry underneath); `FaceViews.kt` (the faces of a photo in the viewer, naming them, and the *Is this X?* review); `ViewerSharpLayer.kt` (the full-resolution layer of a magnified photo); `AlbumsScreen.kt` (no longer on the header); `StatsScreen.kt` (the charts, drawn with Compose's own Canvas, and their tables); `MapScreen.kt`; `SyncScreen.kt`; `AccountScreen.kt`.
 - `map/PhotoClusterOverlay.kt` — groups the map's photos into thumbnail markers.
 - `Components.kt` — the shared building blocks: buttons, notices, labelled rows, usage bars, headers.
 - `Haptics.kt` — the taps the fast scroller gives back while a finger drags through the months and days.
@@ -124,7 +129,7 @@ Everything below lives under `app/src/main/java/com/opensolr/photos/`. The packa
 
 - `SyncScheduler.runNow()` (or the schedule) starts `SyncWorker`, which runs `SyncEngine.run()`.
 - `IndexManager.ensure()` makes sure the index exists, using `OpensolrApi`.
-- On a fresh install, a reinstall or after a reset, `EditRepository.cloneMissing()` is true, so `readIndexIntoCache()` walks the index once through `SolrClient.forEachDoc(CLONE_FIELDS)`.
+- On a fresh install or a reinstall, `EditRepository.cloneMissing()` is true, so `readIndexIntoCache()` walks the index once through `SolrClient.forEachDoc(CLONE_FIELDS)`.
 - `MediaScanner.scan()` lists the photos; `PhotoCache.docSizes()` is the phone's copy of what the index holds. The two are compared on the phone — no request. A photo that looks changed is checked against `PhotoCache.docFileHash()` and `PhotoReader.fileMd5()` first.
 - Ids gone from the phone go to `SolrClient.delete()`; ids to be indexed are queued as `PhotoCache.ACTION_INDEX`.
 - For each queued photo: `PhotoReader.copyForIngest()` → `OpensolrApi.photosIngest()`, where the server reads the picture, embeds it, builds the document and writes it → `EditRepository.storeDoc()` puts that document into the phone's copy. Without vector search on the plan nothing is sent to be read; the photo is indexed from its date, camera, place, file name and the owner's words.
@@ -150,7 +155,7 @@ Everything below lives under `app/src/main/java/com/opensolr/photos/`. The packa
 - `EditSheet` (one photo) or `BulkTagSheet` (the ticked ones) → `AppViewModel.saveEdits()` / `tagPhotos()`.
 - `EditRepository.saveLocal()` or `queueForAll()` writes the edits, brings the phone's copy of each document in step and queues `PhotoCache.ACTION_WORDS`. The save is finished there, on the phone.
 - A sync starts straight after and `EditRepository.sendWords()` carries the change up through `photos_words`.
-- Writing the words into the photo files themselves is a separate, synchronous branch: `PhotoReader.writeXmp()` called from `AppViewModel`, with Android's permission dialog and a progress bar, and `PhotoCache.updateDocSize()` afterwards so the next sync does not take the rewritten file for a changed picture.
+- Nothing is written into the photo files. People are not typed here: they go on a photo only by naming a face in the viewer (`FaceViews.kt`, `FaceMatcher`).
 - Suggestions and the "already on these photos" counts under the form come from `AppViewModel.localWords()` over `PhotoCache.wordCounts()`.
 
 ## Where to go to change something

@@ -1,4 +1,4 @@
-Opensolr Photos turns the photo folders on your phone into a search engine. Type "dog on the beach", "birthday cake" or "snow in the mountains" and the matching photos come up. Tap one and it opens in Google Photos or your phone's own gallery.
+Opensolr Photos turns the photo folders on your phone into a search engine. Type "dog on the beach", "birthday cake" or "snow in the mountains" and the matching photos come up. Tap one and it opens full screen, and a swipe walks your results in their own order.
 
 <b>How it works</b>
 
@@ -7,16 +7,20 @@ Pick the folders you want. Every photo is read into words describing what it sho
 <b>What you get</b>
 
 - Search by meaning: "puppy" also finds the photos read as "dog"
+- The text printed in your photos is searchable: find a receipt by the shop, the total or its number
+- People by their faces: name a face once and the app finds that person in your other photos, on the phone
 - Autocomplete and "Did you mean", built from your own photos
-- Filters: year, folder, camera make and model, city, region, country, orientation, photos with a location, a radius around a point
+- Filters: year, days taken, people, your tags, meaning, camera model, city, country, orientation, photos with printed text, tagged, with people or with a location, a radius around a point
+- Similar photos and exact copies, from the same faces to the same file byte for byte
+- Stats: your library in numbers, counted on the phone
 - A map of every photo with a GPS position, grouped into thumbnail markers, with "Search this area"
-- Your own tags and words on any photo (a name, an event). Your words always win over what the model saw
+- Your own tags and words on any photo or a whole selection. Your words always win over what the model saw, and they live in your own index, never inside anyone else's database
 - Automatic sync when your photos change, plus a daily, weekly or monthly safety net
 - Photo details: when, which camera, where, and the words the photo was read into
 
 <b>Your data</b>
 
-The originals never leave the phone. A 640 px copy of each new photo is sent once, with its EXIF, to be read; it is processed in memory and not stored. No photo backup, no Google account, no ads, no analytics. The index lives in your Opensolr account: you can see it, download it or empty it from the Opensolr control panel. The map uses OpenStreetMap tiles, requested only while the map is open.
+The originals never leave the phone, and the app never writes to your photo files. A 1024 px copy of each new photo is sent once, with its EXIF, to be read; it is processed in memory and not stored. Faces are found and compared on the phone only. No photo backup, no Google account, no ads, no analytics. The index lives in your Opensolr account: plain Apache Solr you can see, query, back up or empty from the Opensolr control panel, and a new phone reads your tags and people back from it. The map uses OpenStreetMap tiles, requested only while the map is open.
 
 <b>Requirements</b>
 

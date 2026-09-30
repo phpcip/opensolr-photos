@@ -16,8 +16,8 @@ The account's API key changed or the account is not active. Sign in again; your 
 ## Setup
 
 **"Your Opensolr plan cannot hold another index."**
-Every phone uses one index. Delete an index you no longer use in the Opensolr control panel, or
-[upgrade](https://opensolr.com/pricing), then tap **Try again**.
+Every phone uses one index. Remove an index you no longer use in the Opensolr control panel (or pick a
+larger plan on [opensolr.com/pricing](https://opensolr.com/pricing)), then tap **Try again**.
 
 **"An index named photos_…__dense already exists in another Opensolr account."**
 This phone's index belongs to a different Opensolr account. Sign in with that account, or delete that
@@ -65,9 +65,15 @@ runs, so nothing is lost, but it only advances while the app is open. Fix it onc
 the app, battery set to **No restrictions** (Xiaomi: *Battery saver* → *No restrictions*, and *Autostart*
 on). Details per brand: https://dontkillmyapp.com
 
-**"A sync is already running."**
-Only one sync runs at a time. It finishes on its own; watch it on the Sync screen. Pulling the grid down
-also starts a sync, and that pull is ignored while one is already running.
+**I pressed a button while a sync was running.**
+Only one sync runs at a time, and no button is refused as busy: Sync, Reset, Re-read, Documents and Re-sync
+stop what is running first, do their work, then start again. **Stop** halts every sync and face job and
+holds them until you press a button again.
+
+**"N indexed photos are not on this phone any more. Nothing was removed from the index."**
+More than half of the indexed photos went missing at once. That is almost always a phone that cannot see
+them (a storage card not mounted, a permission taken away), not photos you deleted, so the app removes
+nothing. If you did delete them, tap **Remove the N missing photos from the index** on the Sync screen.
 
 **Sync paused: AI requests used up.**
 New photos wait for next month's allowance or an upgrade. Everything already indexed stays searchable, and
@@ -86,9 +92,10 @@ the file is recognised by its md5 and the words and printed text already read ou
 they were.
 
 **"Your index will be reset."**
-This version of the app comes with a new index configuration. **Reset and re-sync** keeps your tags and
-words, empties the index, uploads the new configuration and syncs every photo again; search keeps working
-while the photos are added back. **Later** leaves the index as it is, but syncing waits until you agree.
+This version of the app comes with a new index configuration. **Reset and re-sync** empties the index,
+uploads the new configuration and fills the index again from the copy on this phone: no photo is sent again,
+no AI requests are used, and your tags, people and words are kept. **Later** leaves the index as it is, but
+syncing waits until you agree.
 
 **Some photos are counted as skipped.**
 They could not be opened or decoded on the phone (damaged files, unusual formats). The red icon next to the
@@ -110,8 +117,8 @@ instead of its values: tap it for the 50 most frequent, or type to find the rest
 
 **A photo I edited in the gallery no longer shows up in the same search.**
 Expected. An edit saved as a copy is a new file, so a new photo to the app (its id is the md5 of its path),
-read from scratch. It does not carry the tags, people or wording of the original either: gallery editors
-re-encode the picture and drop the XMP those live in. A filter or a crop can also change what the photo is
+read from scratch. It does not carry the tags, people or wording of the original either: those belong to the
+original's document in your index. A filter or a crop can also change what the photo is
 read as, so a kiss in the woods may still be found by "kiss" and no longer by "woods". Search for what the
 edited photo shows, or tag it again. An edit that overwrites the original keeps your own words.
 
@@ -138,8 +145,8 @@ away, and **Clear cache** on the account screen throws away everything. See
 [the search cache](search.md#search-cache).
 
 **"No duplicates of this kind in your index."**
-No two photos share the key of this slider stop. Move the slider to a looser stop, such as *Same first
-word*. See [duplicates](duplicates.md).
+No two photos share the key of this slider stop. Move the slider to a looser stop, such as *Same first 2
+words, same camera*. See [duplicates](duplicates.md).
 
 **Finding duplicates asks for an index reset.**
 The duplicate keys come with the newest index configuration. Approve *Reset and re-sync* on the photos
@@ -169,20 +176,22 @@ straight after carries them up, 50 photos to a call and with no pictures attache
 signal and while a sync is paused. If that sync cannot run, the words are on the phone and not yet in the
 index; they go up with the next sync that does run.
 
-**Writing the words into the photo files stopped, or Android asked for permission.**
-Writing your words into the photo files themselves is a separate step from the index, and it happens on the
-spot: Android asks you to allow the change and a progress bar follows it. If you refuse the dialog or the
-write is interrupted, the tags are still saved on the phone and still go to the index; only the files are
-left as they were. Tag the photos again to be asked again. See [search](search.md).
+**I cannot type a person's name in the tag sheet.**
+People go on a photo only by naming a face: open the photo, tap *Faces*, tap a face and give it a name. The
+app then finds that person in your other photos and offers the ones it is not sure about under *Is this
+Anna?*. In the editor a name can only be taken off a photo, and from the People filter off the whole library.
+
+**My tags are not in the photo file.**
+Expected. The app never writes to your photo files: tags, people and wording live on the phone and in your
+own Opensolr Index, where a new phone or a reinstall reads them back.
 
 **Replace wiped tags I wanted to keep.**
-In the sheet for several photos at once, People and **My tags (Albums)** each have an **Add** or **Replace**
-switch. Add puts what you type on top of whatever each photo already carries. Replace makes what you type
+In the sheet for several photos at once, **My tags (Albums)** has an **Add** or **Replace** switch. Add puts what you type on top of whatever each photo already carries. Replace makes what you type
 the whole of that field on every ticked photo. Under the form the sheet lists what the ticked photos carry
 already, with counts, so check that list before using Replace.
 
 **A photo without a date of its own jumped to today after I tagged it.**
-Fixed in 2.5. The index keeps the date the photo had when its tags are written into the file.
+Fixed in 2.5. The index keeps the date the photo had. (The app no longer writes to photo files at all.)
 
 **A tag I had just saved disappeared from the grid until the sync finished.**
 Fixed in 2.5.2. A save now updates the whole document the grid draws from, not only the tag columns.

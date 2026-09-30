@@ -29,7 +29,7 @@
     <rect x="440" y="310" width="320" height="190" rx="2" fill="#ffffff" stroke="#c05520" stroke-width="2"/>
     <text x="464" y="348" font-size="16" font-weight="700" letter-spacing="1.3" fill="#c05520">API.OPENSOLR.COM</text>
     <line x1="464" y1="364" x2="736" y2="364" stroke="#d9d4cc" stroke-width="1.5"/>
-    <text x="464" y="400" font-size="17" fill="#111111">Reads a 640 px copy</text>
+    <text x="464" y="400" font-size="17" fill="#111111">Reads a 1024 px copy</text>
     <text x="464" y="430" font-size="17" fill="#111111">Words you edit, no picture</text>
     <text x="464" y="460" font-size="17" fill="#111111">Writes into your index</text>
     <text x="464" y="488" font-size="17" font-weight="700" fill="#c05520">Nothing stored</text>

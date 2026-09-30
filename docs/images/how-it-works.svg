@@ -8,7 +8,7 @@
     <text x="58" y="146" font-size="17" fill="#4a4540">the app</text>
     <text x="58" y="186" font-size="17" fill="#111111">Photo in a folder</text>
     <text x="58" y="212" font-size="17" fill="#111111">EXIF read here</text>
-    <text x="58" y="238" font-size="17" fill="#111111">640 px copy made</text>
+    <text x="58" y="238" font-size="17" fill="#111111">1024 px copy made</text>
     <text x="58" y="264" font-size="17" fill="#c05520">Keeps a copy of the index</text>
 
     <line x1="256" y1="172" x2="276" y2="172" stroke="#c05520" stroke-width="2"/>

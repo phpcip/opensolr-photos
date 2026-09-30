@@ -10,7 +10,7 @@
 
     <text x="40" y="202" font-size="30" font-weight="700" fill="#c05520">02</text>
     <text x="110" y="190" font-size="19" font-weight="700" fill="#111111">Scan the chosen folders</text>
-    <text x="110" y="216" font-size="16" fill="#4a4540">Through MediaStore. Every photo gets its id: md5 of its absolute path.</text>
+    <text x="110" y="216" font-size="16" fill="#4a4540">Through MediaStore. Every photo gets its id: md5 of its path in storage.</text>
     <line x1="40" y1="238" x2="1160" y2="238" stroke="#d9d4cc" stroke-width="1.5"/>
 
     <text x="40" y="292" font-size="30" font-weight="700" fill="#c05520">03</text>

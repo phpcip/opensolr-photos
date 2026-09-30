@@ -36,5 +36,5 @@ of change goes.
 - Secrets are stored only through `SecureStore`, never logged, never put in a URL.
 - HTTPS only; no redirects followed on credentialed calls.
 - No analytics, advertising, tracking or crash-reporting code.
-- The app only reads photos; it never writes, moves or deletes them.
+- The app only reads photos; it never writes to or moves them, and deletes one only when the owner asks, after its own warning.
 - Vulnerabilities are reported privately as described in [SECURITY.md](SECURITY.md).

@@ -8,7 +8,7 @@
 
 | Data | Goes to | Kept there? |
 |---|---|---|
-| A 1024 px JPEG copy of each new photo, re-encoded from pixels and carrying the original's EXIF, with the file's name, folder and size, the names of any people already written on the file, and your tags and words for it when this phone has them, five per call — vector search plans only | api.opensolr.com `photos_ingest` | No: processed in memory, the document it produces goes into your index |
+| A 1024 px JPEG copy of each new photo, re-encoded from pixels and carrying the original's EXIF, with the file's name, folder and size, the names of any people another app already wrote into the file, the faces found on the phone (frames, names, fingerprints, no picture), and your tags and words for it when this phone has them, five per call — vector search plans only | api.opensolr.com `photos_ingest` | No: processed in memory, the document it produces goes into your index |
 | The same 1024 px copy is also read for printed words — vector search plans only | opensolr.com `image_ocr`, then one Opensolr Solr server for the reading itself | No: read in memory on a temporary file that is deleted immediately; the text it produces goes into your index. The reading is cached against the picture's md5 so the same photo is never sent twice |
 | The words you saved on up to 50 photos at a time — their id, tags, people, wording and the file's md5, as text, with no picture attached | api.opensolr.com `photos_words` | No: the server reads each document, puts the words in, makes the vector again and writes it back to your index |
 | Your typed searches | api.opensolr.com `embed` (vector search plans), then your index `/select` | Not by the app; the query goes to your own index like any search on it |
@@ -36,9 +36,10 @@ not.
 index, and anything about how you use the app. The app has no analytics, no advertising, no crash reporting
 and no third-party SDKs that talk to the network.
 
-The one other host it ever contacts is `api.github.com`, for the latest release of the app: once a day, and
-whenever you tap **Check for updates** on the account screen. The request is unauthenticated and carries
-nothing about you or your photos.
+The one other host it ever contacts is `api.github.com`, for the latest release of the app, and only in a
+copy installed from GitHub: once a day, and whenever you tap **Check for updates** on the account screen.
+The request is unauthenticated and carries nothing about you or your photos. A copy installed from Google
+Play or AppGallery leaves updates to that store.
 
 ## What stays on the phone
 
@@ -64,7 +65,7 @@ nothing about you or your photos.
 What clears what:
 
 - **Clear cache** on the account screen empties the search cache only. The copy of the index survives it.
-- **Reset** empties the index and the copy together.
+- **Reset** empties the index only, and fills it back from the copy on the phone: no photo is sent again.
 - **Signing out** forgets the account and the index connection — the API key and the index password
   go with it — and empties the photo cache, the places already looked up and the lists of skipped
   photos. It deliberately leaves two things behind: the copy of the index and the words you gave
@@ -105,12 +106,11 @@ What you type is only ever sent to Solr as a bound parameter (`v=$uq`), and ever
 | Internet, network state | Opensolr | Yes |
 | Foreground service (data sync) | So Android does not stop a long sync half way | Yes |
 
-The app never moves your photos and never changes the pictures. The only thing it writes into a file is the
-owner's own words, in XMP (`dc:subject` and `opensolr:Tags` for tags, `PersonInImage` for names,
-`opensolr:Meaning` for wording). Saving the words is finished on the phone; writing them into the files is a
-separate step taken on the spot, after Android's write request, with a progress bar. It deletes one
-only when you select it and press *Delete*, after its own warning; on Android 11 and newer Android
-asks for confirmation again and does the deleting.
+The app never moves your photos and never writes to a photo file: your tags, the people you name and your
+wording are kept on the phone and in your own index. It only reads what other apps wrote into a file (the
+names in `PersonInImage`, the keywords in `dc:subject`, offered in the editor). It deletes a photo only when
+you select it and press *Delete*, after its own warning; on Android 11 and newer Android asks for
+confirmation again and does the deleting.
 
 ## Threat model, briefly
 

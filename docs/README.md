@@ -9,10 +9,10 @@
 | [How it works](how-it-works.md) | The whole picture: components, hosts, every call the app makes |
 | [Sign-in](sign-in.md) | OAuth 2.0 authorization code flow with PKCE, step by step |
 | [Sync and Re-Sync](sync.md) | The algorithm, photo ids, schedule, Force Re-Sync, index recreation and reset |
-| [Search](search.md) | The header, query building, grouping, filters, autocomplete, deleting, editing tags, the search cache |
+| [Search](search.md) | The header, query building, people by their faces, grouping, filters, autocomplete, the viewer, deleting, editing tags, the search cache |
 | [Map](map.md) | Markers, groups, Search this area, what the map sends |
 | [Stats](stats.md) | Your library in numbers, counted on the phone: years, months, days, hours, people, tags, things, places, cameras |
-| [Similar photos](duplicates.md) | The 7 slider stops, the keys behind them, the caps on a group, Select 1 of each group |
+| [Similar photos](duplicates.md) | The 6 slider stops (same faces to exact copy), the keys behind them, the caps on a group, Select 1 of each group |
 | [Index schema](index-schema.md) | Every field of the index, the analyzers, the vector field, the duplicate keys |
 | [Plan limits](plan-limits.md) | AI requests, disk space, bandwidth, indexes, and what happens at a limit |
 | [Privacy and security](privacy-and-security.md) | What is stored where, what travels, how it is protected |

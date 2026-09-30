@@ -32,7 +32,7 @@
     <text x="844" y="324" font-size="17" font-family="Menlo, Consolas, monospace" fill="#111111">d5e6…</text>
     <text x="1136" y="324" font-size="17" font-weight="700" fill="#111111" text-anchor="end">delete</text>
 
-    <text x="40" y="430" font-size="17" fill="#111111">id = md5 of the photo's absolute path, built by one function for the phone and for the index.</text>
+    <text x="40" y="430" font-size="17" fill="#111111">id = md5 of the photo's path in storage, built by one function for the phone and for the index.</text>
     <text x="40" y="462" font-size="17" fill="#4a4540">A first Sync is the same comparison with an empty index: everything on the phone is added.</text>
   </g>
 </svg>

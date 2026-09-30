@@ -44,16 +44,18 @@ The APK is in `app/build/outputs/apk/github/release/app-github-release.apk`, the
 `app/build/outputs/bundle/playRelease/app-play-release.aab`, both shrunk with R8 and signed. Without
 `signing.properties` they are built unsigned.
 
-There are two flavors, `github` and `play`, with the same code and the same version. The `github` build
-updates itself from the latest GitHub release; the `play` build leaves updating to Google Play and does not
-declare `REQUEST_INSTALL_PACKAGES` (`app/src/play/AndroidManifest.xml`).
+There are two flavors, `github` and `play`, with the same code, the same version and the same package name,
+`com.opensolr.photos.main`. The `github` build updates itself from the latest GitHub release, unless Google
+Play or AppGallery installed it, in which case that store updates it; the `play` build leaves updating to
+the store and does not declare `REQUEST_INSTALL_PACKAGES` (`app/src/play/AndroidManifest.xml`).
 
 ## The Solr configuration
 
 `solr/conf` is zipped into the APK's assets by the `solrConfigZip` Gradle task on every build, as
 `opensolr-photos-conf.zip`. Change the schema there, and raise `config_version` in `solrconfig.xml`
-together with `IndexManager.CONFIG_VERSION` (both 9 now): a new index gets the configuration at creation,
-and an existing one on an older version is reset and fully re-synced, with the owner's consent
+together with `IndexManager.CONFIG_VERSION` (both 12 now): a new index gets the configuration at creation,
+and an existing one on an older version is emptied and filled back from the phone's copy, with the owner's
+consent
 ([sync](sync.md#the-index)).
 
 ## Dependencies

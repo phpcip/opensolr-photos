@@ -8,8 +8,8 @@ APK, so the app always uploads exactly what is in the repository.
 
 | Field | Type | Content |
 |---|---|---|
-| `id` | string | md5 of the absolute path, lower-case hex |
-| `path` | string | Absolute path on the phone |
+| `id` | string | md5 of the path inside the storage volume (e.g. `DCIM/Camera/IMG_1.jpg`), lower-case hex, so the same folders on another phone keep every identity |
+| `path` | string | Absolute path on the phone that last synced the photo |
 | `folder` | string | MediaStore folder, e.g. `DCIM/Camera/` |
 | `file_name` | string | File name |
 | `media_id` | long | MediaStore id, to open the photo |
@@ -17,7 +17,7 @@ APK, so the app always uploads exactly what is in the repository.
 | `size_bytes` | long | File size |
 | `width`, `height` | int | Pixels, as the photo is displayed (EXIF rotation applied) |
 | `orientation` | string | `landscape`, `portrait` or `square` |
-| `taken_at` | date | EXIF DateTimeOriginal with its offset when present, else MediaStore's date. On a words-only rewrite the date already in the document is kept, so a photo with no date of its own does not land on today when its tags are written into the file |
+| `taken_at` | date | EXIF DateTimeOriginal with its offset when present, else MediaStore's date. On a words-only rewrite the date already in the document is kept, so a photo with no date of its own does not land on today |
 | `year`, `month` | int | From `taken_at`, in the phone's time zone |
 | `modified_at` | date | File modification time |
 | `camera_make`, `camera_model`, `lens` | string | EXIF |
@@ -29,17 +29,18 @@ APK, so the app always uploads exactly what is in the repository.
 | `location` | location | `lat,lon`, a spatial field: radius searches with `{!geofilt}` |
 | `city`, `region`, `province`, `community`, `country`, `country_code` | string | The nearest named place, from `nearby_places` |
 | `altitude` | float | EXIF, metres |
-| `meaning` | text | The one sentence the image model wrote about the photo, or the owner's own wording |
+| `meaning` | text | The one sentence the image model wrote about the photo, or the owner's own wording (kept here and on the phone; never written into the file) |
 | `ocr_t` | text | The text printed **in** the photo, read with tesseract on Opensolr's OCR servers: a gas receipt, an invoice, a shelf label, a screenshot. Separate from `meaning`, which is what the photo *shows* |
 | `labels` | string, multi | The object names the image model found, one by one (none, one or up to five; never a sentence) |
 | `labels_t` | text (`*_t`) | The same labels as one searchable text, written by the server; in the search's `qf` |
-| `custom_tags` | string, multi | The owner's tags; `custom_tags_text` is their tokenised copy for search |
-| `persons_t` | text | The names of the people in the photo, as one line, given by naming a face in the app, or read from the XMP property `PersonInImage` that whatever recognised the faces before wrote on the file. No declared field of its own: it matches the `*_t` dynamic field |
-| `faces_json` | string, stored | The faces the phone found in the photo, as one string: file size they were read from, face model version, and per face its frame, name, whether the owner confirmed it, and its fingerprint. Written and read by phones only; the server checks its shape and never compares anything |
+| `custom_tags` | string, multi | The owner's tags, kept here and on the phone (never written into the file); `custom_tags_text` is their tokenised copy for search |
+| `persons_t` | text | The names of the people in the photo, as one line, given by naming a face in the app, or read from the XMP property `PersonInImage` that another app wrote into the file (read only: the app never writes to the file). No declared field of its own: it matches the `*_t` dynamic field |
+| `faces_json` | string, stored (`*_json`: not indexed) | The faces the phone found in the photo, as one string: file size they were read from, face model version, and per face its frame, name, whether the owner confirmed it, and its fingerprint. Written and read by phones only; the server checks its shape and never compares anything |
 | `persons_ss` | string, multi | The same names, each kept whole. No declared field of its own: it matches the `*_ss` dynamic field. The People filter and the phone's copy read it; `persons_t` is analysed text and gives words |
 | `embeddings` | dense vector, 1024, cosine | Vector of `meaning`. On a plan without vector search nothing is sent to be read at all, so `meaning`, `labels`, `ocr_t` and `embeddings` all stay empty: the document is date, camera, place, file name and the owner's own words, and search is lexical |
 | `clip_model`, `embed_model` | string | What produced the labels and the vector |
 | `dup_w2_hash`, `dup_w3_hash`, `dup_desc_hash`, `dup_exif_hash` | string (`*_hash`) | The keys groups of alike photos are made of, written by the server ([similar photos](duplicates.md)) |
+| `pixel_hash` | string (`*_hash`) | md5 of the picture's pixels alone, from the phone: a file whose md5 changed is compared by it, so a file rewritten by another app without changing the picture is not read again |
 | `file_hash` | string (`*_hash`) | md5 of the original file, from the phone; the strictest duplicates stop. It is also the identity check on every sync: a photo whose size or modification time changed is weighed against the md5 the index already holds, and if it matches the picture is not read again. It is the key by which the words already in the document (`meaning`, `labels`, `ocr_t`) survive a pass that cannot read the photo |
 | `indexed_at` | date | When the document was written |
 
@@ -69,20 +70,21 @@ so the keys never come down to the phone at all. The old `meaning_hash` field an
 ## The copy on the phone
 
 Since 2.5 the phone keeps a copy of every document its index holds: every field except the vector and the
-duplicate keys. It is read once, at install, reinstall or after a reset, with `q=*:*`, `sort=id asc`,
-`rows=1000` and `cursorMark` paging, and a named field list:
+duplicate keys. It is read once, at install or reinstall, with `q=*:*`, `sort=id asc`,
+`rows=10000` and `cursorMark` paging, and a named field list:
 
 ```
 id,media_id,path,file_name,folder,mime,size_bytes,file_hash,
 taken_at,indexed_at,modified_at,year,month,width,height,orientation,
 camera_make,camera_model,lens,iso,exposure,f_number,focal_length,flash,
 has_location,location,altitude,city,region,province,community,country,country_code,
-labels,meaning,ocr_t,persons_t,persons_ss,custom_tags,clip_model,embed_model
+labels,meaning,ocr_t,persons_t,persons_ss,custom_tags,clip_model,embed_model,faces_json,pixel_hash
 ```
 
 From then on syncing and browsing never walk the index again: every write keeps the copy in step with what
-the server says it wrote. Only one path still reads it whole, and it is not an ordinary sync: the
-rescue of the owner's tags and wording before a reset.
+the server says it wrote. The copy is the source of truth: *Reset* and a new configuration empty only the
+index and write it back from the copy, 50 documents per request, without the server's answer keys (which
+Solr would refuse as unknown fields), and a document the index lost is rewritten from it.
 
 The schema is what makes the copy possible. Every field in that list is `stored="true"`, so it can be read
 back. The two exclusions are schema facts, not a product choice: `embeddings` is `stored="false"` and could
@@ -139,17 +141,16 @@ server reads the document, puts the words in, remakes the vector, writes it back
 wrote. That is the read-back-and-rewrite the stored `ocr_t` and the docValues `*_hash` fields above exist
 for: the printed text, the labels and the duplicate keys all survive an edit.
 
-`/opensolr-photos-config` answers `config_version`, the version of these files (currently 11). When any of
-them changes, raise it together with `IndexManager.CONFIG_VERSION`: existing indexes are then reset and
-fully re-synced at their next sync, with the owner's consent ([sync](sync.md#the-index)). Remote
+`/opensolr-photos-config` answers `config_version`, the version of these files (currently 12). When any of
+them changes, raise it together with `IndexManager.CONFIG_VERSION`: existing indexes are then emptied and
+filled back from the phone's copy at their next sync, with the owner's consent ([sync](sync.md#the-index)). Remote
 streaming and stream bodies are disabled. No `<lib>` directives, no script processors, no response writers
 that run templates.
 
 ## Looking at the index yourself
 
-It is a regular Opensolr Index in your account. Open it from the app (Account → Open this index on
-opensolr.com) or from the Opensolr control panel to query it, back it up or empty it. Where you empty it
-from matters. Emptied from the app, or rebuilt, the phone's copy is cleared with it and the next sync writes
-everything again. Emptied from the Opensolr control panel, the phone's copy still lists every document, the
-sync compares your folders against that copy and finds nothing to do, and the index stays empty. To recover
-from that, empty it from the app or let it rebuild, so the copy goes too.
+It is a regular Opensolr Index in your account, plain Apache Solr: query it or export every document with
+any Solr client, back it up, and run it anywhere. Open it from the app (Me → *Manage this index in your
+Opensolr account*, which opens the Opensolr app, or opensolr.com without it) or from the Opensolr control
+panel. Emptied from anywhere, including the control panel, the next sync finds the index empty while the
+phone's copy holds the photos, and fills it back from the copy; no photo is sent again.

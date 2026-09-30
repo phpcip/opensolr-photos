@@ -8,8 +8,8 @@
 
 Opensolr Photos is a free, open source Android app that turns the photo folders on your phone into a
 search engine. Twenty thousand photos and scanned documents become searchable in plain words, receipts
-are found by the number printed on them, your people, places and tags are written **into the photo files
-themselves**, and the duplicates you have been carrying for years finally go.
+are found by the number printed on them, your people, places and tags are kept in **an index of your
+own**, and the duplicates you have been carrying for years finally go.
 
 The search engine behind it is **your own Opensolr Index**, created by the app in your Opensolr account,
 one per phone — and the free Opensolr account, which costs nothing and never expires, already runs it.
@@ -35,13 +35,13 @@ Six problems, in the order they mattered. Everything in the feature table below 
 3. **"I need the gas receipt from September 3."** The words printed inside every receipt, invoice
    and contract are read and indexed. Search the shop, the total or the receipt number, find it, share
    it from the app. Your accountant gets it in about fifteen seconds.
-4. **Metadata belongs in the photo, not in a sidecar.** Google keeps your people, places and labels in
-   its own database and hands you a JSON file on the way out. Here every name goes into XMP
-   `Iptc4xmpExt:PersonInImage`, every tag into `dc:subject`, your own wording into `opensolr:Meaning`,
-   and a corrected position into the photo's own EXIF GPS. Copy the file anywhere and the work goes
-   with it; reinstall and the app reads your words back out of the files.
-5. **The same picture, thirty times.** One slider walks seven steps, from photos that merely show the
-   same thing to the same file byte for byte. *Select 1 of each group* ticks one photo per group and
+4. **Your metadata is yours.** Google keeps your people, places and labels in its own database and hands
+   you a JSON file on the way out. Here every name, tag, word and corrected position is kept in the
+   Opensolr Index on your own account, with a copy on the phone: plain Apache Solr, which you can query,
+   export, back up and run anywhere. A reinstall or a new phone reads it all back from your index. The
+   photo files themselves are never written to.
+5. **The same picture, thirty times.** One slider walks from photos with the same faces, or that merely
+   show the same thing, to the same file byte for byte. *Select 1 of each group* ticks one photo per group and
    leaves the first alone, so a group can never be emptied by accident.
 6. **Nothing you have to take on trust.** Every line is here, MIT licensed. Read exactly what leaves
    the phone in [docs/privacy-and-security.md](docs/privacy-and-security.md), or build the APK yourself.
@@ -52,24 +52,25 @@ Six problems, in the order they mattered. Everything in the feature table below 
 
 | | |
 |---|---|
-| **The index, on the phone** | The phone keeps its own copy of every document its index holds: id, path, file name, size, dates, camera, EXIF, place, the words the photo was read into, the printed text, the people, your tags and the file's md5. Only the search vector and the duplicate keys stay behind. It is read from the index once, at install or reinstall, and every write keeps it in step. |
+| **The index, on the phone** | The phone keeps its own copy of every document its index holds: id, path, file name, size, dates, camera, EXIF, place, the words the photo was read into, the printed text, the people and their faces, your tags and the file's md5. Only the search vector and the duplicate keys stay behind. It is read from the index once, at install or reinstall, ten thousand documents at a time, and every write keeps it in step. It is also the source the index is filled back from when it has to be emptied. |
 | **Search by meaning** | On a plan with vector search, every photo is read into words describing what it shows, and your query is matched on meaning too, so *puppy* finds the photos read as *dog*. |
 | **Search the text in your photos** | Receipts, invoices, shelf labels, screenshots, business cards: on a plan with vector search, the words printed in a photo are read on Opensolr's side and become searchable. A gas receipt is found by the station, the total or its number. Only photos that carry text are read, and it costs no more than any other photo. |
-| **Filters** | Year, taken between two days, people, your own tags, meaning, camera model, city, country, orientation, a radius around a point, and switches for photos with printed text, tagged, with people and with a location. The filter values come from your own photos and are listed alphabetically. Every group carries the same heading as the grid, folds away (all folded to start with), is remembered between visits, and shows a badge with how many of its own filters are on. Choosing years narrows the *Taken between* calendar to those years and opens it there; choosing days puts the years aside. |
+| **Filters** | A screen of their own, closed with *Done* or Back. Year, taken between two days, people, your own tags, meaning, camera model, city, country, orientation, a radius around a point, and switches for photos with printed text, tagged, with people and with a location. The filter values come from your own photos, every value listed (meaning stops at 500), alphabetically. Every group carries the same heading as the grid, folds away (all folded to start with), is remembered between visits, and shows a badge with how many of its own filters are on. A name can be taken off the whole library from the People filter. Choosing years narrows the *Taken between* calendar to those years and opens it there; choosing days puts the years aside. |
 | **Best matches first** | A typed search splits its results into *Best matches* and *Also similar*. Browsing without a query has three levels, Year, then Month, then Day, with Today, Yesterday and the last few days above the years. Every month is spelled out by its days, even a month with a single day, and group headings fold and are remembered. |
 | **Selecting photos** | A long press starts a selection and it ends by itself when the last tick goes, or at once with a tap on the ✓ count above the grid. A tick on a group heading takes the whole group, a year, a month or a day, not only the photos loaded on screen. In a typed search, *Best matches* and *Also similar* have no group tick: their boundary moves as more results arrive. |
-| **Your own tags and words** | Tag the selected photos: People first, then *My tags (Albums)*, each with an Add / Replace switch. Add puts your words on top of what each photo carries; Replace makes them the whole of that field on every ticked photo, and says so. Under the form, what the ticked photos already carry, with counts. Saving is finished on the phone; the sync that starts straight after carries the change up. Your words always win over what Opensolr saw. Writing them into the photo files themselves happens on the spot, with Android's permission dialog and a progress bar, and a photo with no date of its own keeps the date the index has for it instead of jumping to today. |
+| **People, by their faces** | Faces are found and told apart on the phone (YuNet and SFace, no picture goes to Opensolr's AI for this). Name a face in the viewer and the app finds that person in the rest of the library: sure matches get the name, the others are offered under *Is this Anna?*. People go on a photo only by naming faces. Faces already read are kept in your index; photos indexed before faces existed are read once on request, only while charging. |
+| **Your own tags and words** | Tag the selected photos with *My tags (Albums)*, with an Add / Replace switch. Add puts your words on top of what each photo carries; Replace makes them the whole of that field on every ticked photo, and says so. Under the form, the people and tags the ticked photos already carry, with counts. Saving is finished on the phone; the sync that starts straight after carries the change up to your index. Your words always win over what Opensolr saw. Nothing is written into the photo files. |
 | **Autocomplete and spelling** | As you type in the search box, your tags, the words your photos were read into, the cameras and the places are offered by the index, and the same prefix typed again is answered from the phone; a misspelt search gets a *Did you mean*. In the tagging sheet, the tags and the names offered come from the phone's own copy, without a request. |
 | **Stats** | Your library in numbers, counted on the phone with no request: photos, size, tagged, with people, with a place, with text; then per year, month, weekday and hour, and the people, tags, things, countries, cities and cameras, each a chart with its full table. Tap a line and its photos open; Back returns to the same spot. |
 | **Marks on the thumbnails** | A person mark on photos with people named on them, a tag mark on photos you tagged. |
-| **Similar photos** | A seven-step slider groups alike photos, from *Same first 3 words* through *Any 4 words the same*, *All 5 words the same*, *Same photo (EXIF)*, *Same file name* and *Same file size* to *Same file (exact copy)*; *Select 1 of each group* ticks one photo per group, leaving the first alone, for review, sharing or deleting. The keys come from the picture and its EXIF only, never from your tags. |
+| **Similar photos** | A slider groups alike photos: *Same faces* (around one photo, compared on the phone), *Same first 2 words, same camera*, *Same first 3 words, same camera*, *Same description, same camera*, *Same photo (EXIF)* and *Same file (exact copy)*. Around one photo the comparison is about that photo alone: typed words and filters are left aside. *Select 1 of each group* ticks one photo per group, leaving the first alone, for review, sharing or deleting. The keys come from the picture and its EXIF only, never from your tags. |
 | **Delete** | Delete selected photos from the phone and the index at once, after the app's own warning (and Android's, on Android 11 and newer). |
 | **A map** | Every photo with a GPS position, grouped into thumbnail markers on OpenStreetMap. Tap a group and its photos open straight away, in a sheet that drags up to the whole screen and says where *here* is, in city and country; or *Search this area*. The night map is dimmed rather than colour-inverted, so the sea stays blue. The place is written into the index in words (city, region, country). |
-| **Opens in your gallery** | Tap a result: it opens in Google Photos or your phone's gallery app. Its details show the people first, as chips, then *My tags (Albums)*, then what the photo shows, as plain text. |
-| **Keeps itself in step** | A sync runs on its own a minute after photos change in the folders you chose (a screenshot elsewhere costs nothing); a daily, weekly or monthly Re-Sync stands behind it, and Force Re-Sync is one tap away. Pulling the grid down reloads it and starts a sync too, unless one is already running. The sync no longer walks the index: it compares your folders with the phone's copy, on the phone, so a sync with nothing to do makes no request at all (before 2.5, about 21 requests and ~1.8 MB every time, for a library of 10,000 photos). New photos are added, edited photos are read again, deleted photos leave the index, and you can pick photos to have them read again. The printed text and the words already read out of a photo are kept when a later pass cannot read it, as long as it is the same file, checked by its md5. |
-| **Updates itself** | Once a day the app looks at the latest release on GitHub, and **Check for updates** in Me asks on the spot. A newer version shows what is new and an **Update to X** button: the app downloads the APK itself, with a progress bar, checks that it is signed with the same key and is really newer, and hands it to Android's installer. Android asks once to allow installs from Opensolr Photos, then confirms the update. A copy installed from Google Play is updated by Play instead. |
-| **One index per phone** | `photos_<ANDROID_ID>__dense` in your Opensolr account. Reinstall on the same phone and it finds its index again. |
-| **Plan limits, in plain numbers** | Right after sign-in, and on the account screen: photos per month, disk space, search bandwidth, and where to upgrade. |
+| **A viewer that follows your search** | Tap a result: it opens full screen inside the app, and a swipe walks your results in their own order. Pinch or double tap to zoom, at full resolution. Its actions: tags, *Open in gallery*, similar photos, share (originals or 1024 px copies), map, photos nearby, faces, delete. Swipe up for the details: the people first, as chips, then *My tags (Albums)*, then what the photo shows. |
+| **Keeps itself in step** | A sync runs on its own a minute after photos change in the folders you chose (a screenshot elsewhere costs nothing); a daily, weekly or monthly Re-Sync stands behind it, and Force Re-Sync is one tap away. Pulling the grid down reloads it and starts a sync too. The sync never walks the index: it compares your folders with the phone's copy, on the phone, so a sync with nothing to do makes no request at all. New photos are added, edited photos are read again, deleted photos leave the index, and you can pick photos to have them read again. When more than half of the indexed photos are suddenly missing, nothing is removed until you say so on the Sync screen. **Stop** halts every sync and face job until you press a button again. The printed text and the words already read out of a photo are kept when a later pass cannot read it, as long as it is the same file, checked by its md5. |
+| **Updates itself** | Installed from GitHub: once a day the app looks at the latest release there, and **Check for updates** in Me asks on the spot. A newer version shows what is new and an **Update to X** button: the app downloads the APK itself, with a progress bar, checks that it is signed with the same key and is really newer, and hands it to Android's installer. Android asks once to allow installs from Opensolr Photos, then confirms the update. A copy installed from Google Play or AppGallery is updated by that store instead. Every build has the same package name, `com.opensolr.photos.main`. |
+| **One index per phone** | `photos_<ANDROID_ID>__dense` in your Opensolr account, created on the Opensolr server nearest to you. Reinstall on the same phone and it finds its index again; a new phone can re-use the index of another phone on the account, and every photo keeps its identity, because a photo's id is its path inside the phone's storage. |
+| **Plan limits, in plain numbers** | Right after sign-in, and on the account screen: photos per month, disk space, search bandwidth. *Manage this index* opens it in the Opensolr app, or on opensolr.com without it. |
 | **Spends less of your bandwidth** | A sync with nothing to do, all plain browsing (the years, the months, the days, their counts and the photos in them), the tag and name suggestions and the *already on these photos* list in the tagging sheet are answered from the phone's copy and cost nothing. The filter lists are asked for once and kept until a sync actually writes something. What is left, a typed search and a filtered view, is kept on the phone and reused for as long as you choose (at least a minute), so asking the same thing twice does not spend your plan's search bandwidth twice. Swiping down reloads the grid and starts a sync. |
 
 ## How it works
@@ -89,9 +90,10 @@ Six problems, in the order they mattered. Everything in the feature table below 
 5. **Sync.** The app compares the folders you chose with its own copy, on the phone, without asking the
    index anything. For every photo the copy does not have, it makes a 1024 px copy carrying the original's
    EXIF and hands it, five at a time, to Opensolr's `photos_ingest` endpoint, together with the names of
-   any people already written on the file, and your tags and words for it when this phone has them. The server does the rest: reads the EXIF, asks the image model what the
-   photo shows, turns that reading into a search vector, reads the text printed in the photo when there is
-   there is any, turns the GPS position into a place, keeps the tags and words already in the index, and
+   any people other apps already wrote into the file, the faces found on the phone, and your tags and words
+   for it when this phone has them. The server does the rest: reads the EXIF, asks the image model what the
+   photo shows, turns that reading into a search vector, reads the text printed in the photo when there
+   is any, turns the GPS position into a place, keeps the tags and words already in the index, and
    writes the complete document into your index itself. The phone's part ends with the upload
    ([sync](docs/sync.md)).
 6. **Words you changed go up on their own.** Tags, names and wording are saved on the phone and finished
@@ -136,13 +138,15 @@ The APK is signed with the Opensolr Photos release key. SHA-256 of the signing c
 </p>
 
 - **Originals never leave the phone.** Only a 1024 px re-encoded copy is sent to be indexed, carrying the
-  original's EXIF (time, camera, position) and the names of any people already written on the file; the copy is processed in memory and
-  not stored. The position, rounded, is turned into a place name on the server.
+  original's EXIF (time, camera, position) and the names of any people other apps already wrote into the file;
+  the copy is processed in memory and not stored. Faces are found and compared on the phone only. The position, rounded, is turned into a place name on the server.
 - **The map** draws OpenStreetMap tiles, requested only while the map screen is open. That is the only
   host besides Opensolr the app ever talks to.
 - **The index is yours**: labels, a search vector, date, camera, place, path, file name, size, the dates,
-  the EXIF, the text printed in the photo, the people, your own tags and the file's md5. It lives in your
-  Opensolr account, you can see it, back it up or empty it in the Opensolr control panel.
+  the EXIF, the text printed in the photo, the people and their faces, your own tags and wording, and the
+  file's md5. It lives in your Opensolr account: plain Apache Solr, which you can query and export with any
+  Solr client, back up or empty from the Opensolr control panel, and run anywhere.
+- **Your photo files are never written to.** Everything you add lives in the index and in the phone's copy.
 - **A copy of it sits on the phone.** Every document of your index, field for field, except the search
   vector and the duplicate keys, which the phone has no use for. It is what makes browsing, suggestions
   and an idle sync free of requests. It goes when the app does.
@@ -161,7 +165,7 @@ Full account: [privacy and security](docs/privacy-and-security.md).
 | [Search](docs/search.md) | The header, how a query is built, grouping, filters, autocomplete, spelling, deleting, editing tags |
 | [Map](docs/map.md) | Markers, groups, Search this area, what the map sends |
 | [Stats](docs/stats.md) | Your library in numbers, counted on the phone, and how every line opens its photos |
-| [Duplicates](docs/duplicates.md) | The 13 slider stops, the keys behind them, Select 1 of each duplicate |
+| [Duplicates](docs/duplicates.md) | The slider stops, the keys behind them, Select 1 of each duplicate |
 | [Index schema](docs/index-schema.md) | Every field, the analyzers, the vector field, the duplicate keys, the configset |
 | [Plan limits](docs/plan-limits.md) | What counts against your plan and what the app does at a limit |
 | [Privacy and security](docs/privacy-and-security.md) | Data flows, storage, network, threat model |
@@ -188,9 +192,9 @@ app/src/main/java/com/opensolr/photos/
   auth/     browser sign-in (PKCE) and the callback activity
   data/     preferences, Keystore encryption, the phone's copy of the index, models
   index/    finding, creating and setting up the phone's index
-  media/    MediaStore scanning, EXIF, the 1024 px copy
+  media/    MediaStore scanning, EXIF, the 1024 px copy, faces (FaceEngine)
   net/      Opensolr REST API and direct Solr client
-  search/   query building, albums, duplicates, tag edits and result parsing
+  search/   query building, duplicates, face matching, tag edits and result parsing
   sync/     the sync engine, WorkManager worker, schedule, notifications
   ui/       Jetpack Compose screens and theme
 solr/conf/  schema.xml, solrconfig.xml and analyzer files uploaded to the index

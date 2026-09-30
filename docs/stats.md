@@ -11,7 +11,7 @@ the numbers are six grouped queries on the phone's database, each answered from 
 database, so they come back at once on a library of any size. They are worked out again every time the
 screen opens, so a sync that just ran is already counted.
 
-While the phone is still reading its copy of the index (right after an install or a reset), a note at the
+While the phone is still reading its copy of the index (right after an install or a reinstall), a note at the
 top says the numbers are still growing.
 
 | Section | What is counted |
