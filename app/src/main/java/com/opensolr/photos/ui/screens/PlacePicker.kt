@@ -257,7 +257,7 @@ fun PlacePickerDialog(
                                     hits = emptyList()
                                     searched = false
 
-                                    mapView.controller.setZoom(if (hit.kind == "city") 13.0 else 9.0)
+                                    mapView.controller.setZoom(when (hit.kind) { "address" -> 18.0; "city" -> 13.0; else -> 9.0 })
                                     mapView.controller.setCenter(GeoPoint(hit.lat, hit.lon))
                                     centre = hit.lat to hit.lon
                                 }
@@ -269,12 +269,14 @@ fun PlacePickerDialog(
                                 color = p.ink,
                                 maxLines = 2,
                             )
-                            if (hit.label in repeated) {
+                            val repeat = hit.label in repeated
+                            if (hit.postalCode != null || repeat) {
                                 Text(
                                     listOfNotNull(
-                                        hit.population.takeIf { it > 0 }?.let { Actions.formatCount(it.toLong()) + " \u00b7 " },
-                                        String.format(Locale.US, "%.4f, %.4f", hit.lat, hit.lon),
-                                    ).joinToString(""),
+                                        hit.postalCode,
+                                        hit.population.takeIf { repeat && it > 0 }?.let { Actions.formatCount(it.toLong()) },
+                                        if (repeat) String.format(Locale.US, "%.4f, %.4f", hit.lat, hit.lon) else null,
+                                    ).joinToString(" \u00b7 "),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = p.muted,
                                     maxLines = 1,

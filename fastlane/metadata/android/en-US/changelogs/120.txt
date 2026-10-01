@@ -1,0 +1,1 @@
+- Place search on the map shows the postal code under every street address, so the same street in different towns is told apart; picking an address zooms in to the building.

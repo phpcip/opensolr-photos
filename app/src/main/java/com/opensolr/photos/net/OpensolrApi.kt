@@ -71,9 +71,11 @@ data class PlaceHit(
     val kind: String,
 
     val population: Int = 0,
+    val locality: String? = null,
+    val postalCode: String? = null,
 ) {
 
-    val label: String get() = listOfNotNull(name, province, region, country).distinct().joinToString(", ")
+    val label: String get() = listOfNotNull(name, locality, province, region, country).distinct().joinToString(", ")
 
     companion object {
 
@@ -90,6 +92,8 @@ data class PlaceHit(
                 h.region?.let { o.put("region", it) }
                 h.country?.let { o.put("country", it) }
                 if (h.population > 0) o.put("population", h.population)
+                h.locality?.let { o.put("locality", it) }
+                h.postalCode?.let { o.put("postal_code", it) }
                 put(o)
             }
         }.toString()
@@ -110,6 +114,8 @@ data class PlaceHit(
                     lon = o.optDouble("lon", Double.NaN),
                     kind = o.optString("kind").ifBlank { "city" },
                     population = o.optInt("population", 0),
+                    locality = o.optString("locality").ifBlank { null },
+                    postalCode = o.optString("postal_code").ifBlank { null },
                 ).takeIf { !it.lat.isNaN() && !it.lon.isNaN() }
             }
         }
@@ -356,6 +362,8 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
                 lon = o.optDouble("lon", Double.NaN),
                 kind = o.optString("kind").ifBlank { "city" },
                 population = o.optInt("population", 0),
+                locality = o.optString("locality").ifBlank { null },
+                postalCode = o.optString("postal_code").ifBlank { null },
             ).takeIf { !it.lat.isNaN() && !it.lon.isNaN() }
         }
     }
