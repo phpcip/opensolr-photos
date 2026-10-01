@@ -1811,7 +1811,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         private const val SET_PLACES_TABLE = "CREATE TABLE IF NOT EXISTS set_places (id TEXT PRIMARY KEY NOT NULL, lat REAL NOT NULL, lon REAL NOT NULL, owner INTEGER NOT NULL, written INTEGER NOT NULL, at INTEGER NOT NULL, synced INTEGER NOT NULL DEFAULT 1)"
         private val SET_PLACE_COLUMNS = arrayOf("id", "lat", "lon", "owner", "written", "synced")
 
-        private val PLACE_NAME_FIELDS = listOf("city", "region", "province", "community", "country", "country_code")
+        private val PLACE_NAME_FIELDS = listOf("city", "region", "province", "community", "country", "country_code", "street_s", "postal_code_s")
 
         private const val DOCS_TABLE = "CREATE TABLE IF NOT EXISTS docs (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, indexed_at INTEGER NOT NULL, taken_at TEXT, tags_json TEXT, persons_json TEXT, meaning TEXT, ocr TEXT, city TEXT, country TEXT, json TEXT, modified INTEGER NOT NULL DEFAULT 0, taken_ms INTEGER NOT NULL DEFAULT 0, embed_model TEXT, file_hash TEXT, region TEXT, folder TEXT, camera TEXT, camera_model TEXT, media_id INTEGER NOT NULL DEFAULT 0, path TEXT)"
 

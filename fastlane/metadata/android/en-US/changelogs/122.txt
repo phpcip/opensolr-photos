@@ -1,0 +1,1 @@
+- A photo's place shows the street address on the spot when there is one: street and number, postal code, town, region, country.

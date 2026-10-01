@@ -250,7 +250,7 @@ class EditRepository(private val context: Context) {
         const val CLONE_FIELDS = "id,media_id,path,file_name,folder,mime,size_bytes,file_hash," +
             "taken_at,indexed_at,modified_at,year,month,width,height,orientation," +
             "camera_make,camera_model,lens,iso,exposure,f_number,focal_length,flash," +
-            "has_location,location,altitude,city,region,province,community,country,country_code," +
+            "has_location,location,altitude,city,region,province,community,country,country_code,street_s,postal_code_s," +
             "labels,meaning,ocr_t,persons_t,persons_ss,custom_tags,clip_model,embed_model,faces_json,pixel_hash"
     }
 }

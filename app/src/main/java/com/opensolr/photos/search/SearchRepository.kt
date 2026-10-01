@@ -172,6 +172,9 @@ data class PhotoHit(
 
     val province: String? = null,
     val country: String? = null,
+    // street and house number, and postal code, when a street address lies on the photo's spot
+    val street: String? = null,
+    val postalCode: String? = null,
     val labels: List<String> = emptyList(),
     val customTags: List<String> = emptyList(),
 
@@ -186,7 +189,8 @@ data class PhotoHit(
     val placeLabel: String? get() {
         val names = ArrayList<String>(3)
         val seen = HashSet<String>()
-        listOf(city ?: province, region, country).forEach { name ->
+        val town = (city ?: province)?.trim()?.ifBlank { null }
+        listOf(street, listOfNotNull(postalCode?.trim()?.ifBlank { null }, town).joinToString(" ").ifBlank { null }, region, country).forEach { name ->
             val clean = name?.trim().orEmpty()
             if (clean.isNotEmpty() && seen.add(com.opensolr.photos.data.Words.fold(clean))) names += clean
         }
@@ -370,6 +374,8 @@ class SearchRepository(private val context: Context) {
         region = d.optString("region").ifBlank { null },
         province = d.optString("province").ifBlank { null },
         country = d.optString("country").ifBlank { null },
+        street = d.optString("street_s").ifBlank { null },
+        postalCode = d.optString("postal_code_s").ifBlank { null },
         labels = d.optJSONArray("labels")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList(),
         customTags = d.optJSONArray("custom_tags")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList(),
         score = d.optDouble("score", 0.0),
@@ -1242,6 +1248,6 @@ class SearchRepository(private val context: Context) {
         private const val ALBUM_MIN = 1
 
         private const val ALBUM_THINGS = 12
-        private const val FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,size_bytes,meaning,ocr_t,persons_t,location,city,region,province,country,labels,custom_tags"
+        private const val FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,size_bytes,meaning,ocr_t,persons_t,location,city,region,province,country,street_s,postal_code_s,labels,custom_tags"
     }
 }
