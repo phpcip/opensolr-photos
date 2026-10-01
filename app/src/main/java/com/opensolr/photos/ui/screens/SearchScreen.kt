@@ -2645,7 +2645,7 @@ internal fun PhotoViewer(
                     ViewerAction(stringResource(R.string.act_similar), R.drawable.ic_duplicates, on) { onClose(); viewModel.showSimilar(hit) }
                     ViewerAction(stringResource(R.string.act_share), R.drawable.ic_share, on) { viewerShare = hit }
                     hit.latLon?.let { (lat, lon) ->
-                        ViewerAction(stringResource(R.string.act_map), R.drawable.ic_map, on) { onClose(); viewModel.openMap(MapFocus(lat, lon, 15.0)) }
+                        ViewerAction(stringResource(R.string.act_map), R.drawable.ic_map, on) { onClose(); viewModel.openMap(MapFocus(lat, lon, 19.0)) }
                         ViewerIconAction(stringResource(R.string.act_nearby), Icons.Filled.LocationOn, on) { onClose(); viewModel.searchNear(lat, lon, 5.0) }
                     }
                     ViewerAction(stringResource(R.string.act_delete), R.drawable.ic_delete, on) { onDelete(hit) }
