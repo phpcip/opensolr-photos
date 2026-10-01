@@ -1896,7 +1896,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun openMap(focus: MapFocus? = null) {
         _state.update { it.copy(screen = Screen.Map, mapFocus = focus) }
-        loadPins()
+        // On one photo: the photos around that spot, not the newest of the whole library
+        if (focus != null) {
+            loadPins(com.opensolr.photos.search.SearchRepository.MapArea(focus.lat - 0.002, focus.lon - 0.003, focus.lat + 0.002, focus.lon + 0.003))
+        } else {
+            loadPins()
+        }
     }
 
     private var pinsJob: kotlinx.coroutines.Job? = null

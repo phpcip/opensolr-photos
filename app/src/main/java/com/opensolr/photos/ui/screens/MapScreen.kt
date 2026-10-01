@@ -171,8 +171,12 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
         if (state.pinsLoading || fitted) return@LaunchedEffect
         val focus = state.mapFocus
         if (focus != null) {
-            mapView.controller.setZoom(focus.zoom)
-            mapView.controller.setCenter(GeoPoint(focus.lat, focus.lon))
+            // Once the map has its size, so the area asked for afterwards is the one on screen
+            mapView.post {
+                mapView.controller.setZoom(focus.zoom)
+                mapView.controller.setCenter(GeoPoint(focus.lat, focus.lon))
+                if (mapView.width > 0 && mapView.height > 0) area = areaOf(mapView)
+            }
             fitted = true
         } else if (state.pins.isNotEmpty()) {
             val box = BoundingBox.fromGeoPoints(state.pins.map { GeoPoint(it.lat, it.lon) })

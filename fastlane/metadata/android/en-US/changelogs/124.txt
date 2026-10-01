@@ -1,0 +1,1 @@
+- Map on a photo shows the photo and every other photo taken at that spot.
