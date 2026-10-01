@@ -376,21 +376,6 @@ class SearchRepository(private val context: Context) {
         pending = d.optBoolean("pending"),
     )
 
-    private suspend fun embedOnce(session: com.opensolr.photos.data.Session, indexName: String, text: String): FloatArray {
-        val key = "$indexName|$text"
-        val now = System.currentTimeMillis()
-        synchronized(EMBEDDED) {
-            EMBEDDED[key]?.let { (at, vector) -> if (now - at < EMBED_HOLD_MS) return vector }
-        }
-        val vector = api.embedQuery(session, indexName, text)
-        synchronized(EMBEDDED) {
-            EMBEDDED[key] = now to vector
-
-            while (EMBEDDED.size > EMBED_HELD) EMBEDDED.remove(EMBEDDED.keys.first())
-        }
-        return vector
-    }
-
     private suspend fun search(query: String, filters: SearchFilters, start: Int, rows: Int, legacy: Boolean, freshBias: Boolean, wordsOnly: Boolean): SearchPage {
         val (params, smart, notice) = queryParams(query, filters, legacy, wordsOnly = wordsOnly, freshBias = freshBias)
         val text = query.trim().take(300)
@@ -915,16 +900,48 @@ class SearchRepository(private val context: Context) {
         }
 
         return withContext(NonCancellable) {
-
-            val body = try {
-                SolrClient(connection).selectText(params)
-            } catch (e: SolrAuthException) {
-                SolrClient(IndexManager(context, prefs, api).refreshConnection(session)).selectText(params)
+            val vectorText = params.firstOrNull { it.first == EMBED_PARAM }?.second
+            if (vectorText != null) {
+                val rest = params.filter { it.first != EMBED_PARAM }
+                val body = try {
+                    api.photosSelect(session, connection.indexName, vectorText, KNN_TOP_K, rest)
+                } catch (e: QuotaExceededException) {
+                    null
+                } catch (e: VectorNotAllowedException) {
+                    null
+                } catch (e: ServiceException) {
+                    if (e.message?.contains("HTTP 400") == true) throw e
+                    null
+                }
+                if (body != null) {
+                    cache.put(key, body)
+                    return@withContext JSONObject(body)
+                }
+                // no vector this time: the same search by words, not kept in the cache
+                return@withContext JSONObject(direct(session, connection, wordsOnly(rest))).put(WORDS_ONLY_MARK, true)
             }
+            val body = direct(session, connection, params)
             cache.put(key, body)
             JSONObject(body)
         }
     }
+
+    private suspend fun direct(session: com.opensolr.photos.data.Session, connection: IndexConnection, params: List<Pair<String, String>>): String =
+        try {
+            SolrClient(connection).selectText(params)
+        } catch (e: SolrAuthException) {
+            SolrClient(IndexManager(context, prefs, api).refreshConnection(session)).selectText(params)
+        }
+
+    /** A search by meaning turned into the same search by words. */
+    private fun wordsOnly(params: List<Pair<String, String>>): List<Pair<String, String>> =
+        params.map { (name, value) ->
+            when {
+                value.startsWith("{!hybrid ") -> name to "{!bool should=\$lexicalRaw}"
+                name == "lexicalRaw" -> name to value.replace(HYBRID_QF, QF)
+                else -> name to value
+            }
+        }
 
     private suspend fun cachedDuplicateGroups(connection: IndexConnection, stop: DuplicateStop, base: List<Pair<String, String>>): List<List<String>> {
         val field = stop.field
@@ -1007,7 +1024,7 @@ class SearchRepository(private val context: Context) {
         val text = query.trim().take(300)
 
         var smart = false
-        var notice: String? = null
+        val notice: String? = null
         val params = ArrayList<Pair<String, String>>()
 
         if (text.isEmpty()) {
@@ -1020,27 +1037,14 @@ class SearchRepository(private val context: Context) {
             val embedText = if (ops.hasOps) ops.base else text
 
             val aiUsable = prefs.account?.let { a -> a.vectorAllowed && (a.maxAiRequests <= 0 || a.aiRequestsUsed < a.maxAiRequests) } == true
-            val vector = if (!wordsOnly && aiUsable && embedText.trim().length >= 2) {
-                try {
-                    embedOnce(session, connection.indexName, embedText)
-                } catch (e: QuotaExceededException) {
-                    notice = null
-                    null
-                } catch (e: VectorNotAllowedException) {
-                    notice = null
-                    null
-                } catch (e: ServiceException) {
-                    notice = null
-                    null
-                }
-            } else null
+            val vector = !wordsOnly && aiUsable && embedText.trim().length >= 2
 
             val qf = when {
                 legacy -> LEGACY_QF
-                vector != null -> HYBRID_QF
+                vector -> HYBRID_QF
                 else -> QF
             }
-            if (vector != null && ops.hasOps) {
+            if (vector && ops.hasOps) {
                 params += "uq" to ops.base
                 val fields = qf.split(' ').filter { it.isNotBlank() }.joinToString(" ") { it.substringBefore('^') }
                 ops.required.forEachIndexed { n, term ->
@@ -1055,10 +1059,10 @@ class SearchRepository(private val context: Context) {
                 params += "uq" to text
             }
             params += "lexicalRaw" to "{!edismax qf=\"$qf\" mm=\"${MM_LEVELS[prefs.matchLevel]}\" v=\$uq}"
-            val matched = if (vector != null) {
+            val matched = if (vector) {
                 smart = true
-
-                params += "vectorQuery" to "{!knn f=embeddings topK=$KNN_TOP_K}" + vector.joinToString(",", "[", "]")
+                // the vector is made and put in as vectorQuery by Opensolr (photos_select), never on the phone
+                params += EMBED_PARAM to embedText
                 "{!hybrid lexical=\$lexicalRaw vector=\$vectorQuery mode=union alpha=${String.format(Locale.US, "%.2f", 1f - prefs.lexicalWeight)} topN=$KNN_TOP_K}"
             } else {
                 "{!bool should=\$lexicalRaw}"
@@ -1149,7 +1153,7 @@ class SearchRepository(private val context: Context) {
                 }
             }
         }
-        return SearchPage(hits, response.optLong("numFound"), facets, smart, notice, collation)
+        return SearchPage(hits, response.optLong("numFound"), facets, smart && !json.optBoolean(WORDS_ONLY_MARK), notice, collation)
     }
 
     companion object {
@@ -1169,15 +1173,15 @@ class SearchRepository(private val context: Context) {
 
         private const val WORDS_OF_CHUNK = 1000
 
-        private val EMBEDDED = LinkedHashMap<String, Pair<Long, FloatArray>>()
+        /** The text a search by meaning embeds; it never reaches Solr. */
+        private const val EMBED_PARAM = "photos.embed"
 
-        private const val EMBED_HELD = 8
+        /** Set on an answer that had to be searched by words. */
+        private const val WORDS_ONLY_MARK = "photos_words_only"
 
         private val GROUPED = LinkedHashMap<String, Pair<Long, List<List<String>>>>()
 
         private const val GROUPS_HELD = 4
-
-        private const val EMBED_HOLD_MS = 30 * 60 * 1000L
 
         private const val KNN_TOP_K = 500
 

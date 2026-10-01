@@ -1,0 +1,1 @@
+- A search by meaning now runs on Opensolr's side, on your own index: your words are turned into a vector and searched there, and only the photos found come back to the phone. It costs a tenth of an AI request; the same words searched again cost nothing.

@@ -532,32 +532,23 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         }
     }
 
-    suspend fun batchEmbed(session: Session, name: String, texts: List<String>): List<FloatArray> = withContext(Dispatchers.IO) {
+    /** Search by meaning on the phone's own index: the text is embedded and used on Opensolr's side, only Solr's answer comes back. */
+    suspend fun photosSelect(session: Session, name: String, vectorText: String, topK: Int, params: List<Pair<String, String>>): String = withContext(Dispatchers.IO) {
+        val pairs = JSONArray()
+        params.forEach { (k, v) -> pairs.put(JSONArray().put(k).put(v)) }
         val body = JSONObject()
             .put("email", session.email)
             .put("api_key", session.apiKey)
             .put("index_name", name)
-            .put("payloads", JSONArray(texts))
-        val text = execute(Request.Builder().url(AI + "batch_embed").post(body.toString().toRequestBody(JSON)).build())
-        val json = parseObject(text)
-        if (json.optString("msg") == "VECTOR_NOT_ALLOWED") throw VectorNotAllowedException()
-        val vectors = json.optJSONArray("embeddings") ?: throw ServiceException(json.optString("error").ifBlank { platformMessage(text) })
-        if (vectors.length() != texts.size) throw ServiceException("The embedding service returned ${vectors.length()} vectors for ${texts.size} photos")
-        (0 until vectors.length()).map { toFloats(vectors.getJSONArray(it)) }
-    }
-
-    suspend fun embedQuery(session: Session, name: String, query: String): FloatArray = withContext(Dispatchers.IO) {
-        val body = JSONObject()
-            .put("email", session.email)
-            .put("api_key", session.apiKey)
-            .put("index_name", name)
-            .put("is_query", "1")
-            .put("payload", query)
-        val text = execute(Request.Builder().url(AI + "embed").post(body.toString().toRequestBody(JSON)).build()).trim()
-        if (text.startsWith("[")) return@withContext toFloats(JSONArray(text))
-        val json = parseObject(text)
-        if (json.optString("msg") == "VECTOR_NOT_ALLOWED") throw VectorNotAllowedException()
-        throw ServiceException(platformMessage(text))
+            .put("vector_text", vectorText)
+            .put("top_k", topK)
+            .put("params", pairs)
+        http.newCall(Request.Builder().url(AI + "photos_select").post(body.toString().toRequestBody(JSON)).build()).execute().use { response ->
+            val text = response.body?.string().orEmpty()
+            classify(response.code, text, response.header("Retry-After"))
+            if (!response.isSuccessful) throw ServiceException("The index answered HTTP ${response.code}")
+            text
+        }
     }
 
     private fun post(url: String, body: FormBody): String =

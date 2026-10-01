@@ -97,11 +97,12 @@ The AI endpoints:
   is the path behind local-first editing: a save is finished on the phone, and the sync that starts straight
   after carries it up. A photo the index does not hold yet is answered with nothing, and the app sends it
   the ordinary way, picture and all.
-- `embed` turns a typed query into a search vector. It is the only embedding call the app makes; the words
-  of an edited photo are turned into a vector on the server, inside `photos_words`.
+- `photos_select` turns a typed query into a search vector and runs the search with it on your index; only
+  the photos found come back, never the vector. The words of an edited photo are turned into a vector on the
+  server, inside `photos_words`.
 
 On a plan without vector search, or with the month's AI allowance spent, nothing is read: no words and no
-vector are made from the picture, and `embed` is never called, so search is lexical. Those photos are
+vector are made from the picture, and `photos_select` is never called, so search is lexical. Those photos are
 indexed by date, camera, place, file name and your own words.
 
 ### The phone's Opensolr Index
@@ -168,7 +169,7 @@ Where the boundary now runs:
   with the index. All of it is answered from the phone's copy of the index.
 - **Goes out once and is held:** the one full read of the index at install or reinstall, and the filter
   lists, which are fetched once and kept until a sync actually writes something.
-- **Goes out every time:** a typed search and the `embed` call behind it, `photos_ingest`, `photos_words`,
+- **Goes out every time:** a typed search by meaning (`photos_select`), `photos_ingest`, `photos_words`,
   the duplicate and map facets, `/suggest`, every `/update`, and the short checks a sync opens with
   (the index is in your account, its configuration is the one this version expects, the plan as it stands
   now).

@@ -100,8 +100,9 @@ That is the words-only `qf`. In a hybrid search the lexical leg uses lighter wei
 and the words refine it: `custom_tags_text^0.5 meaning^0.2 labels_t^0.2 ocr_t^0.4 persons_t^0.3 file_name_text
 folder_text camera_text place_text^0.1`.
 
-On a plan with vector search, the app first asks `embed` (with `is_query=1`) for the query's vector and
-hands both legs to Opensolr's `{!hybrid}` parser, the one search.opensolr.com runs:
+On a plan with vector search, the app sends the query and the typed words to `photos_select`: there the words
+become the query's vector, the vector goes in as `vectorQuery`, and both legs run in Opensolr's `{!hybrid}`
+parser, the one search.opensolr.com runs. Only Solr's answer comes back to the phone, never the vector:
 
 ```
 vectorQuery = {!knn f=embeddings topK=500}[0.0132, -0.0481, …]
@@ -111,12 +112,10 @@ q           = {!hybrid lexical=$lexicalRaw vector=$vectorQuery mode=union alpha=
 Each leg is scored on its own, normalised per query (BM25 to its maximum, kNN min-max over the candidates)
 and blended: `score = alpha * vector + (1 - alpha) * lexical`. `alpha` is `1 - AppPrefs.lexicalWeight`, the
 **Semantic ↔ Lexical Balance** slider in Me (0 = meaning only, 1 = words only, default 0.2, so alpha 0.8).
-The vector of a typed search is asked for once and then reused for 30 minutes (the last 8 searches are
-held, per index): the pages under the first one, the groups of days you open and the suggestions beside the
-box all use the same one, since the same words always make the same vector. Before 2.5.2 each of those was
-its own `embed` call, counted against the month's AI requests.
-No vector is asked for, and the search runs words only, on a plan without vector search, once the month's
-AI requests are used up, or for a single character (the embed endpoint refuses it). Nothing about that is
+The vector of a typed search is made once and kept on Opensolr's side: the pages under the first one and
+the groups of days you open search with the same words, are answered from that cache and cost nothing more.
+The search runs words only, straight on your index, on a plan without vector search, once the month's AI
+requests are used up, for a single character, or whenever `photos_select` cannot make a vector. Nothing about that is
 shown on the photos screen; the reasons are in Me.
 
 The photo's own vector is made of one text, built on the server (`Api_lib::_photos_embedding_text`, at

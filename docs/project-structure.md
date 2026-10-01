@@ -64,7 +64,7 @@ Everything below lives under `app/src/main/java/com/opensolr/photos/`. The packa
 ### `net/` — talking to Opensolr
 
 - `Http.kt` — the one shared HTTP client, with its timeouts and no redirects.
-- `OpensolrApi.kt` — one function per Opensolr call: token exchange, index list, create, config upload, connection details, account summary, `photos_ingest` (`photosIngest()`, the call a sync sends photos with), `photos_words` (`photosWords()`, words only, fifty photos per call and no pictures), `image_index`, `batch_embed`, `embed`. It also turns the platform's refusals into typed errors.
+- `OpensolrApi.kt` — one function per Opensolr call: token exchange, index list, create, config upload, connection details, account summary, `photos_ingest` (`photosIngest()`, the call a sync sends photos with), `photos_words` (`photosWords()`, words only, fifty photos per call and no pictures), `image_index`, `photos_select` (`photosSelect()`, a search by meaning run on Opensolr's side). It also turns the platform's refusals into typed errors.
 - `SolrClient.kt` — talks straight to the phone's index: search, add, delete, empty, commit, check the schema and its configuration version, autocomplete, duplicate groups. The method that matters since 2.5 is `forEachDoc(fields, ...)`, the one-off read of the whole index into the phone's copy of it. `allIds()` is no longer part of a sync.
 - `UpdateCheck.kt` and `SelfUpdate.kt` — in a copy installed from GitHub, compare the app with the latest release there (once a day in the background, and on demand from the account screen), download the APK and hand it to the system installer; a copy installed by Google Play or AppGallery (`installingPackageName`) is left to that store. `check()` returns a `Result`, so a failed check is never reported as "up to date".
 - `Errors.kt` — the exceptions, named after what the app has to do about them (sign in again, quota used up, plan limit, rate limited, photo rejected...).
@@ -147,7 +147,7 @@ Everything below lives under `app/src/main/java/com/opensolr/photos/`. The packa
 ### Search
 
 - Typing and pressing search, or turning a filter on → `AppViewModel.search()`.
-- `SearchRepository.search()` may call `OpensolrApi.embedQuery()`, then `SolrClient.select()`. On a plan without vector search the query stays lexical.
+- `SearchRepository.search()` sends a search by meaning through `OpensolrApi.photosSelect()` and everything else through `SolrClient.select()`. On a plan without vector search the query stays lexical.
 - The results and facets go into `UiState`; `SearchScreen` draws them; a tap calls `Actions.openPhoto()`.
 
 ### Tagging
