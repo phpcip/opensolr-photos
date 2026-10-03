@@ -1825,7 +1825,8 @@ private fun Thumbnail(hit: PhotoHit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val uri = remember(hit.mediaId) { ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, hit.mediaId) }
 
-    val request = remember(uri, hit.sizeBytes) { ImageRequest.Builder(context).data(uri).size(360).setParameter("bytes", hit.sizeBytes).crossfade(true).build() }
+    val edited = EditedPhotos.stamp(hit.mediaId)
+    val request = remember(uri, hit.sizeBytes, edited) { ImageRequest.Builder(context).data(uri).size(360).setParameter("bytes", hit.sizeBytes).setParameter("edited", edited).crossfade(true).build() }
     AsyncImage(
         model = request,
         contentDescription = hit.meaning.ifBlank { hit.fileName },
@@ -2392,6 +2393,7 @@ internal fun PhotoViewer(
 
     var sheetFor by remember { mutableStateOf<PhotoHit?>(null) }
     var viewerShare by remember { mutableStateOf<PhotoHit?>(null) }
+    var editing by remember { mutableStateOf<PhotoHit?>(null) }
     // faces: shown on demand on the photo on screen, a tap on one names it
     var facesOn by remember { mutableStateOf(false) }
     var faces by remember { mutableStateOf<List<com.opensolr.photos.data.PhotoCache.FaceRow>?>(null) }
@@ -2444,11 +2446,12 @@ internal fun PhotoViewer(
                 val uri = remember(hit.mediaId) {
                     ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, hit.mediaId)
                 }
-                var baseSize by remember(hit.mediaId) { mutableStateOf<androidx.compose.ui.geometry.Size?>(null) }
+                val edited = EditedPhotos.stamp(hit.mediaId)
+                var baseSize by remember(hit.mediaId, edited) { mutableStateOf<androidx.compose.ui.geometry.Size?>(null) }
                 Box(Modifier.fillMaxSize()) {
                 AsyncImage(
 
-                    model = ImageRequest.Builder(context).data(uri).setParameter("bytes", hit.sizeBytes).crossfade(true).build(),
+                    model = ImageRequest.Builder(context).data(uri).setParameter("bytes", hit.sizeBytes).setParameter("edited", edited).crossfade(true).build(),
                     contentDescription = hit.meaning.ifBlank { hit.fileName },
                     contentScale = ContentScale.Fit,
                     onSuccess = { baseSize = it.painter.intrinsicSize },
@@ -2581,14 +2584,14 @@ internal fun PhotoViewer(
                         },
                 )
                 // zoomed in: the original file's pixels over the screen-sized image
-                ViewerSharpLayer(
+                androidx.compose.runtime.key(edited) { ViewerSharpLayer(
                     uri = uri,
                     active = page == pager.currentPage,
                     baseSize = baseSize,
                     scale = { scale },
                     offset = { offset },
                     lift = { if (page == pager.currentPage) dismiss.value else 0f },
-                )
+                ) }
                 if (facesOn && page == pager.currentPage) {
                     faces?.let { shown -> FaceBoxes(baseSize, shown, { scale }, { offset }, faceLit) { faceLit = it.fid; faceToName = it } }
                 }
@@ -2649,7 +2652,7 @@ internal fun PhotoViewer(
                     val on = !hit.pending
                     ViewerIconAction(stringResource(R.string.fc_people), Icons.Filled.Face, on) { facesOn = !facesOn }
                     ViewerAction(stringResource(R.string.act_tag), R.drawable.ic_tag, on) { editFor = hit }
-                    ViewerAction(stringResource(R.string.act_gallery), R.drawable.ic_open, on) { Actions.openPhoto(context, hit) }
+                    ViewerAction(stringResource(R.string.act_edit), R.drawable.ic_edit, on) { editing = hit }
                     ViewerAction(stringResource(R.string.act_similar), R.drawable.ic_duplicates, on) { onClose(); viewModel.showSimilar(hit) }
                     ViewerAction(stringResource(R.string.act_share), R.drawable.ic_share, on) { viewerShare = hit }
                     hit.latLon?.let { (lat, lon) ->
@@ -2671,6 +2674,9 @@ internal fun PhotoViewer(
 
             // composed inside the viewer's window, so the choice shows above the photo
             viewerShare?.let { one -> com.opensolr.photos.ui.ShareChooser(listOf(one), fullScreen = true) { viewerShare = null } }
+            editing?.let { one ->
+                PhotoEditorScreen(one, topInset, bottomInset, onClose = { editing = null }, onSaved = { overwrote -> viewModel.photoEdited(if (overwrote) one.id else null) })
+            }
 
             // what the face finder saw: the people as a strip of faces with their names, or that it is still looking
             if (facesOn && showActions) {
@@ -3013,7 +3019,7 @@ internal fun DetailsSheet(
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 Box(Modifier.size(104.dp).clip(Corner).background(p.chip)) {
                     AsyncImage(
-                        model = ImageRequest.Builder(context).data(uri).size(360).setParameter("bytes", hit.sizeBytes).build(),
+                        model = ImageRequest.Builder(context).data(uri).size(360).setParameter("bytes", hit.sizeBytes).setParameter("edited", EditedPhotos.stamp(hit.mediaId)).build(),
                         contentDescription = hit.meaning,
                         contentScale = ContentScale.Crop,
                         modifier = Modifier.fillMaxSize(),

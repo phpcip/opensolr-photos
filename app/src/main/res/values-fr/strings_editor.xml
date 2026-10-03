@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="act_edit">Modifier</string>
+    <string name="ed_crop">Recadrer</string>
+    <string name="ed_rotate">Pivoter</string>
+    <string name="ed_resize">Taille</string>
+    <string name="ed_draw">Dessin</string>
+    <string name="ed_text">Texte</string>
+    <string name="ed_undo">Annuler</string>
+    <string name="ed_redo">Rétablir</string>
+    <string name="ed_save">Enregistrer</string>
+    <string name="ed_apply">Appliquer</string>
+    <string name="ed_reset">Réinitialiser</string>
+    <string name="ed_rotate_left">Gauche</string>
+    <string name="ed_rotate_right">Droite</string>
+    <string name="ed_width">Largeur</string>
+    <string name="ed_height">Hauteur</string>
+    <string name="ed_keep_ratio">Garder les proportions</string>
+    <string name="ed_now">Actuellement %1$s × %2$s px</string>
+    <string name="ed_too_big">Trop grand pour ce téléphone</string>
+    <string name="ed_size">Taille</string>
+    <string name="ed_tap_for_text">Touchez la photo là où va le texte</string>
+    <string name="ed_text_hint">Saisissez le texte</string>
+    <string name="ed_add">Ajouter</string>
+    <string name="ed_discard_title">Abandonner les modifications ?</string>
+    <string name="ed_discard">Abandonner</string>
+    <string name="ed_keep">Continuer</string>
+    <string name="ed_save_title">Enregistrer la photo modifiée</string>
+    <string name="ed_overwrite">Remplacer l’original</string>
+    <string name="ed_overwrite_sub">Remplace %1$s</string>
+    <string name="ed_overwrite_no">Impossible pour ce type de fichier</string>
+    <string name="ed_copy">Enregistrer une copie</string>
+    <string name="ed_copy_sub">Une nouvelle photo à côté de l’original</string>
+    <string name="ed_reduced">Modifiée en %1$s × %2$s px, l’original fait %3$s × %4$s px.</string>
+    <string name="ed_saved">Photo enregistrée</string>
+    <string name="ed_saved_copy">Enregistrée sous %1$s</string>
+    <string name="ed_failed">La photo n’a pas pu être enregistrée.</string>
+    <string name="ed_failed_step">Cette modification n’a pas pu être faite.</string>
+    <string name="ed_load_failed">Cette photo ne peut pas être modifiée.</string>
+    <string name="ed_change_size">Changer la taille</string>
+    <string name="ed_bytes_before">Avant : %1$s</string>
+    <string name="ed_bytes_after">Après : %1$s × %2$s px, %3$s</string>
+</resources>

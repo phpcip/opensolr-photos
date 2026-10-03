@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="act_edit">Edit</string>
+    <string name="ed_crop">Crop</string>
+    <string name="ed_rotate">Rotate</string>
+    <string name="ed_resize">Resize</string>
+    <string name="ed_draw">Draw</string>
+    <string name="ed_text">Text</string>
+    <string name="ed_undo">Undo</string>
+    <string name="ed_redo">Redo</string>
+    <string name="ed_save">Save</string>
+    <string name="ed_apply">Apply</string>
+    <string name="ed_reset">Reset</string>
+    <string name="ed_rotate_left">Left</string>
+    <string name="ed_rotate_right">Right</string>
+    <string name="ed_width">Width</string>
+    <string name="ed_height">Height</string>
+    <string name="ed_keep_ratio">Keep aspect ratio</string>
+    <string name="ed_now">Now %1$s × %2$s px</string>
+    <string name="ed_too_big">Too large for this phone</string>
+    <string name="ed_size">Size</string>
+    <string name="ed_tap_for_text">Tap the photo where the text goes</string>
+    <string name="ed_text_hint">Type the text</string>
+    <string name="ed_add">Add</string>
+    <string name="ed_discard_title">Discard your changes?</string>
+    <string name="ed_discard">Discard</string>
+    <string name="ed_keep">Keep editing</string>
+    <string name="ed_save_title">Save the edited photo</string>
+    <string name="ed_overwrite">Overwrite the original</string>
+    <string name="ed_overwrite_sub">Replaces %1$s</string>
+    <string name="ed_overwrite_no">Not possible for this kind of file</string>
+    <string name="ed_copy">Save as a copy</string>
+    <string name="ed_copy_sub">A new photo next to the original</string>
+    <string name="ed_reduced">Edited at %1$s × %2$s px, the original is %3$s × %4$s px.</string>
+    <string name="ed_saved">Photo saved</string>
+    <string name="ed_saved_copy">Saved as %1$s</string>
+    <string name="ed_failed">The photo could not be saved.</string>
+    <string name="ed_failed_step">That change could not be made.</string>
+    <string name="ed_load_failed">This photo cannot be opened for editing.</string>
+    <string name="ed_change_size">Change size</string>
+    <string name="ed_bytes_before">Before: %1$s</string>
+    <string name="ed_bytes_after">After: %1$s × %2$s px, %3$s</string>
+</resources>

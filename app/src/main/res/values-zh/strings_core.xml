@@ -79,8 +79,6 @@
     <string name="ix_setting_up">正在设置索引</string>
     <string name="ix_updating">正在更新索引配置</string>
     <string name="ac_no_browser">没有安装浏览器。</string>
-    <string name="ac_photo_gone">这张照片已不在手机上。下次重新同步时会从索引中移除。</string>
-    <string name="ac_no_gallery">这台手机上没有能打开照片的图库应用。</string>
     <string name="ac_photos_gone">这些照片已不在手机上。</string>
     <string name="ac_share_photos">分享照片</string>
     <string name="ac_no_share">这台手机上没有能分享照片的应用。</string>

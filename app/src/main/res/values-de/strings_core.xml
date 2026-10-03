@@ -79,8 +79,6 @@
     <string name="ix_setting_up">Index wird eingerichtet</string>
     <string name="ix_updating">Indexkonfiguration wird aktualisiert</string>
     <string name="ac_no_browser">Kein Browser installiert.</string>
-    <string name="ac_photo_gone">Dieses Foto ist nicht mehr auf Ihrem Telefon. Der nächste Neu-Sync entfernt es aus Ihrem Index.</string>
-    <string name="ac_no_gallery">Keine Galerie-App auf diesem Telefon kann Fotos öffnen.</string>
     <string name="ac_photos_gone">Diese Fotos sind nicht mehr auf Ihrem Telefon.</string>
     <string name="ac_share_photos">Fotos teilen</string>
     <string name="ac_no_share">Nichts auf diesem Telefon kann Fotos teilen.</string>

@@ -82,26 +82,6 @@ object Actions {
     }
 
 
-    fun openPhoto(context: Context, hit: PhotoHit) {
-        val mediaId = when {
-            hit.mediaId > 0 && MediaScanner.exists(context, hit.mediaId) -> hit.mediaId
-            else -> MediaScanner.findByPath(context, hit.path)?.mediaId
-        }
-        if (mediaId == null) {
-            Toast.makeText(context, AppText.s(R.string.ac_photo_gone), Toast.LENGTH_LONG).show()
-            return
-        }
-        val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, mediaId)
-        val intent = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(uri, hit.mime.ifBlank { "image/*" })
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
-        try {
-            context.startActivity(intent)
-        } catch (e: ActivityNotFoundException) {
-            Toast.makeText(context, AppText.s(R.string.ac_no_gallery), Toast.LENGTH_LONG).show()
-        }
-    }
-
     fun contentUris(context: Context, hits: List<PhotoHit>): List<Uri> {
         if (hits.isEmpty()) return emptyList()
 

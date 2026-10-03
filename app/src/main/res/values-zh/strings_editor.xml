@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="act_edit">编辑</string>
+    <string name="ed_crop">裁剪</string>
+    <string name="ed_rotate">旋转</string>
+    <string name="ed_resize">调整尺寸</string>
+    <string name="ed_draw">画笔</string>
+    <string name="ed_text">文字</string>
+    <string name="ed_undo">撤销</string>
+    <string name="ed_redo">重做</string>
+    <string name="ed_save">保存</string>
+    <string name="ed_apply">应用</string>
+    <string name="ed_reset">重置</string>
+    <string name="ed_rotate_left">向左</string>
+    <string name="ed_rotate_right">向右</string>
+    <string name="ed_width">宽度</string>
+    <string name="ed_height">高度</string>
+    <string name="ed_keep_ratio">保持宽高比</string>
+    <string name="ed_now">当前 %1$s × %2$s px</string>
+    <string name="ed_too_big">对此手机来说太大</string>
+    <string name="ed_size">大小</string>
+    <string name="ed_tap_for_text">点按照片上放文字的位置</string>
+    <string name="ed_text_hint">输入文字</string>
+    <string name="ed_add">添加</string>
+    <string name="ed_discard_title">放弃更改？</string>
+    <string name="ed_discard">放弃</string>
+    <string name="ed_keep">继续编辑</string>
+    <string name="ed_save_title">保存编辑后的照片</string>
+    <string name="ed_overwrite">覆盖原图</string>
+    <string name="ed_overwrite_sub">替换 %1$s</string>
+    <string name="ed_overwrite_no">此类文件无法覆盖</string>
+    <string name="ed_copy">另存为副本</string>
+    <string name="ed_copy_sub">在原图旁新建一张照片</string>
+    <string name="ed_reduced">以 %1$s × %2$s px 编辑，原图为 %3$s × %4$s px。</string>
+    <string name="ed_saved">照片已保存</string>
+    <string name="ed_saved_copy">已另存为 %1$s</string>
+    <string name="ed_failed">无法保存照片。</string>
+    <string name="ed_failed_step">无法进行此更改。</string>
+    <string name="ed_load_failed">无法编辑此照片。</string>
+    <string name="ed_change_size">更改尺寸</string>
+    <string name="ed_bytes_before">更改前：%1$s</string>
+    <string name="ed_bytes_after">更改后：%1$s × %2$s px，%3$s</string>
+</resources>

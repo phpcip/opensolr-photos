@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="act_edit">Editează</string>
+    <string name="ed_crop">Decupează</string>
+    <string name="ed_rotate">Rotește</string>
+    <string name="ed_resize">Mărime</string>
+    <string name="ed_draw">Desen</string>
+    <string name="ed_text">Text</string>
+    <string name="ed_undo">Anulează</string>
+    <string name="ed_redo">Refă</string>
+    <string name="ed_save">Salvează</string>
+    <string name="ed_apply">Aplică</string>
+    <string name="ed_reset">Resetează</string>
+    <string name="ed_rotate_left">Stânga</string>
+    <string name="ed_rotate_right">Dreapta</string>
+    <string name="ed_width">Lățime</string>
+    <string name="ed_height">Înălțime</string>
+    <string name="ed_keep_ratio">Păstrează proporțiile</string>
+    <string name="ed_now">Acum %1$s × %2$s px</string>
+    <string name="ed_too_big">Prea mare pentru acest telefon</string>
+    <string name="ed_size">Mărime</string>
+    <string name="ed_tap_for_text">Atinge poza unde vrei textul</string>
+    <string name="ed_text_hint">Scrie textul</string>
+    <string name="ed_add">Adaugă</string>
+    <string name="ed_discard_title">Renunți la modificări?</string>
+    <string name="ed_discard">Renunță</string>
+    <string name="ed_keep">Continuă editarea</string>
+    <string name="ed_save_title">Salvează poza editată</string>
+    <string name="ed_overwrite">Suprascrie originalul</string>
+    <string name="ed_overwrite_sub">Înlocuiește %1$s</string>
+    <string name="ed_overwrite_no">Nu se poate la acest tip de fișier</string>
+    <string name="ed_copy">Salvează o copie</string>
+    <string name="ed_copy_sub">O poză nouă lângă original</string>
+    <string name="ed_reduced">Editată la %1$s × %2$s px, originalul are %3$s × %4$s px.</string>
+    <string name="ed_saved">Poză salvată</string>
+    <string name="ed_saved_copy">Salvată ca %1$s</string>
+    <string name="ed_failed">Poza nu a putut fi salvată.</string>
+    <string name="ed_failed_step">Modificarea nu a putut fi făcută.</string>
+    <string name="ed_load_failed">Poza asta nu poate fi editată.</string>
+    <string name="ed_change_size">Schimbă mărimea</string>
+    <string name="ed_bytes_before">Înainte: %1$s</string>
+    <string name="ed_bytes_after">După: %1$s × %2$s px, %3$s</string>
+</resources>

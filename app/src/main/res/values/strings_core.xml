@@ -79,8 +79,6 @@
     <string name="ix_setting_up">Setting up the index</string>
     <string name="ix_updating">Updating the index configuration</string>
     <string name="ac_no_browser">No browser is installed.</string>
-    <string name="ac_photo_gone">This photo is no longer on your phone. The next Re-Sync removes it from your index.</string>
-    <string name="ac_no_gallery">No gallery app on this phone can open photos.</string>
     <string name="ac_photos_gone">These photos are no longer on your phone.</string>
     <string name="ac_share_photos">Share photos</string>
     <string name="ac_no_share">Nothing on this phone can share photos.</string>

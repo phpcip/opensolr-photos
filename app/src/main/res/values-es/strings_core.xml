@@ -79,8 +79,6 @@
     <string name="ix_setting_up">Preparando el índice</string>
     <string name="ix_updating">Actualizando la configuración del índice</string>
     <string name="ac_no_browser">No hay ningún navegador instalado.</string>
-    <string name="ac_photo_gone">Esta foto ya no está en tu teléfono. La próxima Resinc. la quitará de tu índice.</string>
-    <string name="ac_no_gallery">Ninguna app de galería de este teléfono puede abrir fotos.</string>
     <string name="ac_photos_gone">Estas fotos ya no están en tu teléfono.</string>
     <string name="ac_share_photos">Compartir fotos</string>
     <string name="ac_no_share">Nada en este teléfono puede compartir fotos.</string>

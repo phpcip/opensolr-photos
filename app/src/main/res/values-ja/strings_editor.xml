@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="act_edit">編集</string>
+    <string name="ed_crop">切り抜き</string>
+    <string name="ed_rotate">回転</string>
+    <string name="ed_resize">サイズ変更</string>
+    <string name="ed_draw">描画</string>
+    <string name="ed_text">テキスト</string>
+    <string name="ed_undo">元に戻す</string>
+    <string name="ed_redo">やり直す</string>
+    <string name="ed_save">保存</string>
+    <string name="ed_apply">適用</string>
+    <string name="ed_reset">リセット</string>
+    <string name="ed_rotate_left">左</string>
+    <string name="ed_rotate_right">右</string>
+    <string name="ed_width">幅</string>
+    <string name="ed_height">高さ</string>
+    <string name="ed_keep_ratio">縦横比を維持</string>
+    <string name="ed_now">現在 %1$s × %2$s px</string>
+    <string name="ed_too_big">この端末には大きすぎます</string>
+    <string name="ed_size">サイズ</string>
+    <string name="ed_tap_for_text">テキストを置く場所をタップ</string>
+    <string name="ed_text_hint">テキストを入力</string>
+    <string name="ed_add">追加</string>
+    <string name="ed_discard_title">変更を破棄しますか？</string>
+    <string name="ed_discard">破棄</string>
+    <string name="ed_keep">編集を続ける</string>
+    <string name="ed_save_title">編集した写真を保存</string>
+    <string name="ed_overwrite">元の写真を上書き</string>
+    <string name="ed_overwrite_sub">%1$s を置き換えます</string>
+    <string name="ed_overwrite_no">この種類のファイルでは不可</string>
+    <string name="ed_copy">コピーとして保存</string>
+    <string name="ed_copy_sub">元の写真の隣に新しい写真</string>
+    <string name="ed_reduced">%1$s × %2$s px で編集（元は %3$s × %4$s px）。</string>
+    <string name="ed_saved">保存しました</string>
+    <string name="ed_saved_copy">%1$s として保存しました</string>
+    <string name="ed_failed">写真を保存できませんでした。</string>
+    <string name="ed_failed_step">その変更はできませんでした。</string>
+    <string name="ed_load_failed">この写真は編集できません。</string>
+    <string name="ed_change_size">サイズを変更</string>
+    <string name="ed_bytes_before">変更前: %1$s</string>
+    <string name="ed_bytes_after">変更後: %1$s × %2$s px、%3$s</string>
+</resources>

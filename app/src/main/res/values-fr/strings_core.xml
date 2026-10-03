@@ -79,8 +79,6 @@
     <string name="ix_setting_up">Configuration de l\'index</string>
     <string name="ix_updating">Mise à jour de la configuration de l\'index</string>
     <string name="ac_no_browser">Aucun navigateur n\'est installé.</string>
-    <string name="ac_photo_gone">Cette photo n\'est plus sur votre téléphone. Le prochain Resync la retirera de votre index.</string>
-    <string name="ac_no_gallery">Aucune app de galerie de ce téléphone ne peut ouvrir les photos.</string>
     <string name="ac_photos_gone">Ces photos ne sont plus sur votre téléphone.</string>
     <string name="ac_share_photos">Partager les photos</string>
     <string name="ac_no_share">Rien sur ce téléphone ne peut partager des photos.</string>

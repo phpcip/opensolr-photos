@@ -1,0 +1,3 @@
+- Edit a photo: crop, resize (sizes in MB before and after, aspect ratio kept or not), rotate, draw and add text, with undo and redo; save over the original or as a copy.
+- Hold the finger still at the end of a line and it becomes a perfect circle, oval, rectangle, triangle, line or arrow, even when left open.
+- Texts and drawings can be moved anywhere on the photo.

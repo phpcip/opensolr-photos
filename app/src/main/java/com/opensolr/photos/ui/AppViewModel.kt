@@ -2381,6 +2381,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** A photo saved by the editor: written over, it is read again first; a new copy comes in with the sync started now. */
+    fun photoEdited(overwrittenId: String?) {
+        if (overwrittenId != null) prefs.resyncIds = prefs.resyncIds + overwrittenId
+        afterStoppingEverything { true }
+    }
+
     fun resyncSelected() {
         val ids = _state.value.selectedIds
         if (ids.isEmpty()) return
