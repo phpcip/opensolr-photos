@@ -147,4 +147,13 @@
     <string name="sh_small_sub">縮小コピー（長辺 1024 px）</string>
     <string name="sh_preparing">準備中 %1$s / %2$s</string>
     <string name="vm_stopping">すべて停止しています…</string>
+    <plurals name="pdf_title">
+        <item quantity="other">%1$s 枚の写真をPDFで保存</item>
+    </plurals>
+    <string name="pdf_name">ファイル名</string>
+    <string name="pdf_pick">保存先を選択</string>
+    <string name="pdf_saved">%1$s を保存しました</string>
+    <string name="pdf_saved_some">%1$s を保存しました（%3$s 枚中 %2$s 枚。残りは読み込めませんでした）</string>
+    <string name="pdf_failed">PDFを保存できませんでした。</string>
+    <string name="pdf_default_name">写真 %1$s</string>
 </resources>

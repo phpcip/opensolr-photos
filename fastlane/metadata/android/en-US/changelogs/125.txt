@@ -1,0 +1,1 @@
+- Select photos and tap PDF: name the file, pick where to save it, one page per photo at 1024 px.

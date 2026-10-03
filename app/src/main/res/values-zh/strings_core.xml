@@ -147,4 +147,13 @@
     <string name="sh_small_sub">较小的副本，长边 1024 像素</string>
     <string name="sh_preparing">正在准备 %1$s / %2$s</string>
     <string name="vm_stopping">正在停止所有内容…</string>
+    <plurals name="pdf_title">
+        <item quantity="other">将 %1$s 张照片保存为 PDF</item>
+    </plurals>
+    <string name="pdf_name">文件名</string>
+    <string name="pdf_pick">选择位置</string>
+    <string name="pdf_saved">已保存 %1$s</string>
+    <string name="pdf_saved_some">已保存 %1$s（%3$s 张中的 %2$s 张，其余无法读取）</string>
+    <string name="pdf_failed">无法保存 PDF。</string>
+    <string name="pdf_default_name">照片 %1$s</string>
 </resources>

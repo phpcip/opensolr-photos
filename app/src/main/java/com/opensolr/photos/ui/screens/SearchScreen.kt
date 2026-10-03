@@ -214,6 +214,9 @@ import androidx.compose.ui.unit.IntOffset
 
 private val Corner = RoundedCornerShape(2.dp)
 
+// five actions in the selection dock: tighter sides so they fit a narrow phone
+private val DOCK_PAD_X = 8.dp
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SearchScreen(state: UiState, viewModel: AppViewModel) {
@@ -245,6 +248,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
 
     var bulkTagging by remember { mutableStateOf(false) }
     var shareFor by remember { mutableStateOf<List<PhotoHit>?>(null) }
+    var pdfFor by remember { mutableStateOf<List<PhotoHit>?>(null) }
     val gridState = rememberLazyGridState()
 
     val gridWords = GridWords(stringResource(R.string.best_matches), stringResource(R.string.also_similar), stringResource(R.string.of_the_same))
@@ -915,6 +919,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             count = state.selectedIds.size,
             modifier = Modifier.align(Alignment.BottomCenter),
             onShare = { shareFor = viewModel.photosToTag() },
+            onPdf = { pdfFor = viewModel.photosToTag() },
 
             onDelete = { confirmDelete = true },
             onResync = { viewModel.resyncSelected() },
@@ -960,6 +965,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     }
 
     shareFor?.let { photos -> com.opensolr.photos.ui.ShareChooser(photos) { shareFor = null } }
+    pdfFor?.let { photos -> com.opensolr.photos.ui.PdfExport(photos) { pdfFor = null } }
 
     viewing?.let { hit ->
 
@@ -1149,6 +1155,7 @@ private fun SelectionDock(
     count: Int,
     modifier: Modifier = Modifier,
     onShare: () -> Unit,
+    onPdf: () -> Unit,
     onDelete: () -> Unit,
     onResync: () -> Unit,
     onTag: () -> Unit,
@@ -1156,7 +1163,7 @@ private fun SelectionDock(
     val p = LocalPalette.current
     Row(
         modifier
-            .padding(horizontal = 24.dp)
+            .padding(horizontal = 12.dp)
             .navigationBarsPadding()
             .padding(bottom = 14.dp)
             .clip(Corner)
@@ -1166,16 +1173,17 @@ private fun SelectionDock(
         verticalAlignment = Alignment.CenterVertically,
     ) {
 
-        DockAction(R.drawable.ic_tag, stringResource(R.string.dock_tag_n, Actions.formatCompact(count.toLong())), enabled = count > 0, onClick = onTag)
-        DockAction(R.drawable.ic_share, stringResource(R.string.act_share), enabled = count > 0, onClick = onShare)
-        DockAction(R.drawable.ic_sync, if (count > 0) stringResource(R.string.dock_resync_n, Actions.formatCompact(count.toLong())) else stringResource(R.string.dock_resync), enabled = count > 0, accent = true, onClick = onResync)
+        DockAction(R.drawable.ic_tag, stringResource(R.string.dock_tag_n, Actions.formatCompact(count.toLong())), enabled = count > 0, padX = DOCK_PAD_X, onClick = onTag)
+        DockAction(R.drawable.ic_share, stringResource(R.string.act_share), enabled = count > 0, padX = DOCK_PAD_X, onClick = onShare)
+        DockAction(R.drawable.ic_pdf, stringResource(R.string.dock_pdf), enabled = count > 0, padX = DOCK_PAD_X, onClick = onPdf)
+        DockAction(R.drawable.ic_sync, if (count > 0) stringResource(R.string.dock_resync_n, Actions.formatCompact(count.toLong())) else stringResource(R.string.dock_resync), enabled = count > 0, accent = true, padX = DOCK_PAD_X, onClick = onResync)
 
-        DockAction(R.drawable.ic_delete, stringResource(R.string.dock_delete), enabled = count > 0, onClick = onDelete)
+        DockAction(R.drawable.ic_delete, stringResource(R.string.dock_delete), enabled = count > 0, padX = DOCK_PAD_X, onClick = onDelete)
     }
 }
 
 @Composable
-internal fun DockAction(icon: Int, label: String, enabled: Boolean, accent: Boolean = false, onClick: () -> Unit) {
+internal fun DockAction(icon: Int, label: String, enabled: Boolean, accent: Boolean = false, padX: androidx.compose.ui.unit.Dp = 12.dp, onClick: () -> Unit) {
     val p = LocalPalette.current
     val tint = when {
         !enabled -> p.hairline
@@ -1190,7 +1198,7 @@ internal fun DockAction(icon: Int, label: String, enabled: Boolean, accent: Bool
             .background(p.dockFill)
             .border(1.dp, p.hairline, Corner)
             .then(if (enabled) Modifier.combinedClickableCompat(onClick = onClick) else Modifier)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
+            .padding(horizontal = padX, vertical = 6.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Icon(painterResource(icon), contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))

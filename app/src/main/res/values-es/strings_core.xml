@@ -159,4 +159,15 @@
     <string name="sh_small_sub">Copias más pequeñas, 1024 px en el lado largo</string>
     <string name="sh_preparing">Preparando %1$s de %2$s</string>
     <string name="vm_stopping">Deteniendo todo…</string>
+    <plurals name="pdf_title">
+        <item quantity="one">Guardar %1$s foto como PDF</item>
+        <item quantity="many">Guardar %1$s fotos como PDF</item>
+        <item quantity="other">Guardar %1$s fotos como PDF</item>
+    </plurals>
+    <string name="pdf_name">Nombre del archivo</string>
+    <string name="pdf_pick">Elegir dónde</string>
+    <string name="pdf_saved">%1$s guardado</string>
+    <string name="pdf_saved_some">%1$s guardado: %2$s de %3$s fotos. El resto no se pudo leer.</string>
+    <string name="pdf_failed">No se pudo guardar el PDF.</string>
+    <string name="pdf_default_name">Fotos %1$s</string>
 </resources>

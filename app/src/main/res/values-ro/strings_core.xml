@@ -159,4 +159,15 @@
     <string name="sh_small_sub">Copii mai mici, 1024 px pe latura lungă</string>
     <string name="sh_preparing">Se pregătește %1$s din %2$s</string>
     <string name="vm_stopping">Se oprește tot…</string>
+    <plurals name="pdf_title">
+        <item quantity="one">Salvează %1$s poză ca PDF</item>
+        <item quantity="few">Salvează %1$s poze ca PDF</item>
+        <item quantity="other">Salvează %1$s de poze ca PDF</item>
+    </plurals>
+    <string name="pdf_name">Numele fișierului</string>
+    <string name="pdf_pick">Alege unde</string>
+    <string name="pdf_saved">Salvat %1$s</string>
+    <string name="pdf_saved_some">Salvat %1$s: %2$s din %3$s poze. Restul nu au putut fi citite.</string>
+    <string name="pdf_failed">PDF-ul nu a putut fi salvat.</string>
+    <string name="pdf_default_name">Poze %1$s</string>
 </resources>

@@ -153,4 +153,15 @@
     <string name="sh_small_sub">Smaller copies, 1024 px on the long edge</string>
     <string name="sh_preparing">Preparing %1$s of %2$s</string>
     <string name="vm_stopping">Stopping everything…</string>
+    <plurals name="pdf_title">
+        <item quantity="one">Save %1$s photo as PDF</item>
+        <item quantity="other">Save %1$s photos as PDF</item>
+    </plurals>
+    <string name="pdf_name">File name</string>
+    <string name="pdf_pick">Choose where</string>
+    <string name="pdf_saved">Saved %1$s</string>
+    <string name="pdf_saved_some">Saved %1$s: %2$s of %3$s photos. The rest could not be read.</string>
+    <string name="pdf_failed">The PDF could not be saved.</string>
+    <string name="pdf_default_name">Photos %1$s</string>
+    <string name="dock_pdf" translatable="false">PDF</string>
 </resources>
