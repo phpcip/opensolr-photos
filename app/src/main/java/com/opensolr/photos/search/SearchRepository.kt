@@ -944,7 +944,6 @@ class SearchRepository(private val context: Context) {
         params.map { (name, value) ->
             when {
                 value.startsWith("{!hybrid ") -> name to "{!bool should=\$lexicalRaw}"
-                name == "lexicalRaw" -> name to value.replace(HYBRID_QF, QF)
                 else -> name to value
             }
         }
@@ -1045,11 +1044,8 @@ class SearchRepository(private val context: Context) {
             val aiUsable = prefs.account?.let { a -> a.vectorAllowed && (a.maxAiRequests <= 0 || a.aiRequestsUsed < a.maxAiRequests) } == true
             val vector = !wordsOnly && aiUsable && embedText.trim().length >= 2
 
-            val qf = when {
-                legacy -> LEGACY_QF
-                vector -> HYBRID_QF
-                else -> QF
-            }
+            // one field weighting for every search on the index: with or without AI, results and filter counts alike
+            val qf = if (legacy) LEGACY_QF else QF
             if (vector && ops.hasOps) {
                 params += "uq" to ops.base
                 val fields = qf.split(' ').filter { it.isNotBlank() }.joinToString(" ") { it.substringBefore('^') }
@@ -1196,8 +1192,7 @@ class SearchRepository(private val context: Context) {
         /** Minimum match for flexible, balanced and strict. */
         private val MM_LEVELS = listOf("2<65% 4<50% 8<40%", "2<90% 5<75% 8<60% 12<50%", "2<95% 5<90% 8<80%")
 
-        private const val QF = "custom_tags_text^5 meaning^2 labels_t^2 ocr_t^3 persons_t^4 text file_name_text folder_text camera_text place_text^1"
-        private const val HYBRID_QF = "custom_tags_text^0.5 meaning^0.2 labels_t^0.2 ocr_t^0.4 persons_t^0.3 file_name_text folder_text camera_text place_text^0.1"
+        private const val QF = "custom_tags_text^2 meaning^1 labels_t^1 ocr_t^4 persons_t^3 camera_text place_text^1"
         private const val LEGACY_QF = "meaning^3 text file_name_text folder_text camera_text"
         private const val LEGACY_FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,labels"
 

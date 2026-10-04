@@ -1,0 +1,1 @@
+- Every search weighs the same fields the same way, with or without AI, and the filter counts follow it.
