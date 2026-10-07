@@ -227,17 +227,9 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                 }
                 SubZone(stringResource(R.string.acc_places), "set_places" in state.meZonesOpen, { viewModel.toggleMeZone("set_places") }) {
                     Column {
-                        val backgroundAsk = androidx.activity.compose.rememberLauncherForActivityResult(
-                            androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
-                        ) { viewModel.refreshPlacesToWrite() }
                         val locationAsk = androidx.activity.compose.rememberLauncherForActivityResult(
                             androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
-                        ) { granted ->
-                            viewModel.refreshPlacesToWrite()
-                            if (granted.values.any { it } && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                                backgroundAsk.launch(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION)
-                            }
-                        }
+                        ) { viewModel.refreshPlacesToWrite() }
                         Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(stringResource(R.string.acc_place_new), style = MaterialTheme.typography.bodyLarge, color = p.ink)
@@ -279,13 +271,6 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                         if (state.autoPlace && !state.autoPlaceLocation) {
                             Text(
                                 stringResource(R.string.acc_place_no_location),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = p.muted,
-                            )
-                            Spacer(Modifier.height(8.dp))
-                        } else if (state.autoPlace && !state.autoPlaceBackground) {
-                            Text(
-                                stringResource(R.string.acc_place_no_background),
                                 style = MaterialTheme.typography.bodySmall,
                                 color = p.muted,
                             )

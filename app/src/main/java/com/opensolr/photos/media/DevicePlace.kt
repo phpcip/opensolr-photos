@@ -1,6 +1,7 @@
 package com.opensolr.photos.media
 
 import android.Manifest
+import android.app.ActivityManager
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
@@ -24,12 +25,15 @@ object DevicePlace {
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
             ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
-    fun permittedInBackground(context: Context): Boolean =
-        permitted(context) && (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
-            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_BACKGROUND_LOCATION) == PackageManager.PERMISSION_GRANTED)
+    // Location is asked only while in use, so a sync running with the app out of sight never asks for a position.
+    private fun appInSight(): Boolean {
+        val info = ActivityManager.RunningAppProcessInfo()
+        ActivityManager.getMyMemoryState(info)
+        return info.importance <= ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+    }
 
     suspend fun now(context: Context): Location? {
-        if (!permitted(context)) return null
+        if (!permitted(context) || !appInSight()) return null
         val manager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
         val at = System.currentTimeMillis()
         val known = try {

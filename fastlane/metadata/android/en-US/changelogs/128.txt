@@ -1,0 +1,1 @@
+- Locate new photos uses the phone position only while the app is open. The app no longer asks for location in the background.

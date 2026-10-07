@@ -135,8 +135,6 @@ data class UiState(
 
     val autoPlaceLocation: Boolean = false,
 
-    val autoPlaceBackground: Boolean = false,
-
 
     val duplicateLevel: Int = com.opensolr.photos.search.SearchRepository.DEFAULT_DUPLICATE_LEVEL,
 
@@ -559,7 +557,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 placesToWrite = 0,
                 autoPlace = prefs.autoPlaceSince > 0,
                 autoPlaceLocation = com.opensolr.photos.media.DevicePlace.permitted(context),
-                autoPlaceBackground = com.opensolr.photos.media.DevicePlace.permittedInBackground(context),
             )
         }
     }

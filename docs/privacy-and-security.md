@@ -101,7 +101,7 @@ What you type is only ever sent to Solr as a bound parameter (`v=$uq`), and ever
 |---|---|---|
 | Photos (`READ_MEDIA_IMAGES`, or storage on Android 12 and older) | To find and read the photos in your folders | Yes |
 | Photo locations (`ACCESS_MEDIA_LOCATION`) | Android removes GPS from photos without it | No, photos are then indexed without a place |
-| Location (`ACCESS_COARSE_LOCATION`, `ACCESS_FINE_LOCATION`, `ACCESS_BACKGROUND_LOCATION`) | Asked only if you turn on *Locate new photos*, so a new photo without a position takes the phone's, also in background syncs | No |
+| Location (`ACCESS_COARSE_LOCATION`, `ACCESS_FINE_LOCATION`) | Asked only if you turn on *Locate new photos*, so a new photo without a position takes the phone's when it is synced while the app is open | No |
 | Notifications | Sync progress and plan alerts | No |
 | Internet, network state | Opensolr | Yes |
 | Foreground service (data sync) | So Android does not stop a long sync half way | Yes |
