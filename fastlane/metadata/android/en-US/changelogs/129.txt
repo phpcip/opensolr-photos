@@ -1,0 +1,2 @@
+- Scan: a new button next to Me photographs a document, finds its edges while you aim, lets you adjust the four corners and saves the straightened page as a photo in a folder the app already syncs.
+- PDF: photos go into the PDF at their full size, so scanned pages stay sharp and their text can be read again. No location or camera details go into the file.
