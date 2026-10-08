@@ -245,6 +245,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     val topInset = systemBars.calculateTopPadding()
     val bottomInset = systemBars.calculateBottomPadding()
     var editing by remember { mutableStateOf<PhotoHit?>(null) }
+    var scanning by remember { mutableStateOf(false) }
+    if (scanning) ScanDialog(viewModel.syncedFolders(), topInset, bottomInset, onClose = { scanning = false })
 
     var bulkTagging by remember { mutableStateOf(false) }
     var shareFor by remember { mutableStateOf<List<PhotoHit>?>(null) }
@@ -362,6 +364,9 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
 
             HeaderItem(stringResource(R.string.nav_me), onClick = { viewModel.open(Screen.Account) }) {
                 Icon(Icons.Filled.AccountCircle, contentDescription = stringResource(R.string.cd_account), tint = p.ink, modifier = Modifier.size(20.dp))
+            }
+            HeaderItem(stringResource(R.string.nav_scan), onClick = { scanning = true }) {
+                Icon(painterResource(R.drawable.ic_scan), contentDescription = stringResource(R.string.nav_scan), tint = p.ink, modifier = Modifier.size(20.dp))
             }
             HeaderItem(stringResource(R.string.nav_sync), active = state.sync.busy, onClick = { viewModel.open(Screen.Sync) }) {
                 SyncIcon(running = state.sync.busy)

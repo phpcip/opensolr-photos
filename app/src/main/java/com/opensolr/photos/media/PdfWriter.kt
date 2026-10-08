@@ -3,7 +3,7 @@ package com.opensolr.photos.media
 import java.io.OutputStream
 import java.util.Locale
 
-/** A PDF written page by page straight to [out]: each page is one JPEG embedded as it is (DCTDecode), never re-encoded. */
+/** A PDF written page by page straight to [out]: every picture is a JPEG embedded as it comes (DCTDecode), never re-encoded here. */
 class PdfWriter(out: OutputStream, private val title: String) {
     private val sink = Counting(out)
     private val offsets = ArrayList<Long>()
@@ -21,18 +21,73 @@ class PdfWriter(out: OutputStream, private val title: String) {
 
     val pages: Int get() = kids.size
 
-    /** Adds [jpeg] ([width] x [height] px) as a page of its own shape, long edge the length of an A4 page. */
-    fun addPage(jpeg: ByteArray, width: Int, height: Int) {
-        val scale = PAGE_LONG_EDGE_PT / maxOf(width, height)
-        val w = num(width * scale)
-        val h = num(height * scale)
-        val image = next()
-        writeStream(image, "<< /Type /XObject /Subtype /Image /Width $width /Height $height /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.size} >>", jpeg)
-        val content = next()
-        writeStream(content, null, "q $w 0 0 $h 0 0 cm /Im0 Do Q".toByteArray(Charsets.US_ASCII))
-        val page = next()
-        writeObject(page, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 $w $h] /Resources << /XObject << /Im0 $image 0 R >> >> /Contents $content 0 R >>")
-        kids += page
+    /**
+     * A page for a photo stored [width] x [height] px and turned by its EXIF [orientation] (1 to 8): the page has the
+     * shape the photo is seen in, its long edge the length of an A4 page, and the pictures [draw] adds fill it.
+     * Nothing is added when [draw] returns false; true when the page is in.
+     */
+    fun addPage(width: Int, height: Int, orientation: Int, draw: Page.() -> Boolean): Boolean {
+        val turned = orientation in 5..8
+        val shownW = if (turned) height else width
+        val shownH = if (turned) width else height
+        val scale = PAGE_LONG_EDGE_PT / maxOf(shownW, shownH)
+        val w = shownW * scale
+        val h = shownH * scale
+        val page = Page(height)
+        if (!page.draw() || page.images.isEmpty()) return false
+        val content = StringBuilder("q ").append(placement(orientation, w, h)).append(" cm\n")
+        val names = StringBuilder()
+        page.images.forEachIndexed { i, image ->
+            val share = image.rows.toFloat() / height
+            val bottom = 1f - (image.top + image.rows).toFloat() / height
+            content.append("q 1 0 0 ").append(num(share)).append(" 0 ").append(num(bottom)).append(" cm /Im").append(i).append(" Do Q\n")
+            names.append("/Im").append(i).append(' ').append(image.id).append(" 0 R ")
+        }
+        content.append("Q")
+        val stream = next()
+        writeStream(stream, null, content.toString().toByteArray(Charsets.US_ASCII))
+        val pageId = next()
+        writeObject(pageId, "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${num(w)} ${num(h)}] /Resources << /XObject << $names>> >> /Contents $stream 0 R >>")
+        kids += pageId
+        return true
+    }
+
+    /** The pictures of one page: horizontal bands of the stored photo, top to bottom, each one JPEG. */
+    inner class Page internal constructor(private val height: Int) {
+        internal val images = ArrayList<Placed>()
+
+        /** Rows [top] to [top] + [rows] of the photo, [width] px wide, [components] colour channels, the JPEG bytes written by [write]. */
+        fun jpeg(top: Int, rows: Int, width: Int, components: Int, write: (OutputStream) -> Unit) {
+            require(top >= 0 && rows > 0 && top + rows <= height)
+            val image = next()
+            val length = next()
+            offsets[image - 1] = sink.count
+            val space = if (components == 1) "/DeviceGray" else "/DeviceRGB"
+            sink.write("$image 0 obj\n<< /Type /XObject /Subtype /Image /Width $width /Height $rows /ColorSpace $space /BitsPerComponent 8 /Filter /DCTDecode /Length $length 0 R >>\nstream\n".toByteArray(Charsets.US_ASCII))
+            val start = sink.count
+            write(Unclosable(sink))
+            val size = sink.count - start
+            sink.write("\nendstream\nendobj\n".toByteArray(Charsets.US_ASCII))
+            writeObject(length, size.toString())
+            images += Placed(image, top, rows)
+        }
+    }
+
+    internal class Placed(val id: Int, val top: Int, val rows: Int)
+
+    // the stored photo (the unit square, its first row at the top) laid on the page as its EXIF orientation shows it
+    private fun placement(orientation: Int, w: Float, h: Float): String {
+        val m = when (orientation) {
+            2 -> floatArrayOf(-w, 0f, 0f, h, w, 0f)
+            3 -> floatArrayOf(-w, 0f, 0f, -h, w, h)
+            4 -> floatArrayOf(w, 0f, 0f, -h, 0f, h)
+            5 -> floatArrayOf(0f, -h, -w, 0f, w, h)
+            6 -> floatArrayOf(0f, -h, w, 0f, 0f, h)
+            7 -> floatArrayOf(0f, h, w, 0f, 0f, 0f)
+            8 -> floatArrayOf(0f, h, -w, 0f, w, 0f)
+            else -> floatArrayOf(w, 0f, 0f, h, 0f, 0f)
+        }
+        return m.joinToString(" ") { num(it) }
     }
 
     /** Page tree, document info, cross-reference table and trailer. The stream is flushed, not closed. */
@@ -66,11 +121,18 @@ class PdfWriter(out: OutputStream, private val title: String) {
         sink.write("\nendstream\nendobj\n".toByteArray(Charsets.US_ASCII))
     }
 
-    private fun num(v: Float): String = String.format(Locale.US, "%.2f", v)
+    private fun num(v: Float): String = String.format(Locale.US, "%.6f", v).trimEnd('0').trimEnd('.').ifEmpty { "0" }
 
     // any language in the title: UTF-16BE with its byte order mark, as a hex string
     private fun utf16(text: String): String =
         "<FEFF" + text.toByteArray(Charsets.UTF_16BE).joinToString("") { String.format(Locale.US, "%02X", it) } + ">"
+
+    // a picture written into the PDF must not close the PDF
+    private class Unclosable(private val out: OutputStream) : OutputStream() {
+        override fun write(b: Int) = out.write(b)
+        override fun write(b: ByteArray, off: Int, len: Int) = out.write(b, off, len)
+        override fun close() = Unit
+    }
 
     private class Counting(private val out: OutputStream) : OutputStream() {
         var count = 0L

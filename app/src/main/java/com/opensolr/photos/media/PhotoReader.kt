@@ -53,18 +53,6 @@ object PhotoReader {
         return out.toByteArray()
     }
 
-    /** One PDF page: the photo upright as a JPEG, long edge at most [edge] px, with its pixel size. */
-    class PdfImage(val jpeg: ByteArray, val width: Int, val height: Int)
-
-    fun pdfImage(context: Context, uri: Uri, edge: Int): PdfImage? {
-        val upright = decodeUpright(context, uri, openExif(context, uri)?.rotationDegrees ?: 0, edge) ?: return null
-        val out = ByteArrayOutputStream()
-        upright.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
-        val image = PdfImage(out.toByteArray(), upright.width, upright.height)
-        upright.recycle()
-        return image
-    }
-
     /** The photo upright, long edge at most [edge] px, as the face finder reads it. */
     fun uprightBitmap(context: Context, uri: Uri, edge: Int): Bitmap? =
         decodeUpright(context, uri, openExif(context, uri)?.rotationDegrees ?: 0, edge)

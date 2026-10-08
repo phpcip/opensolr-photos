@@ -27,8 +27,8 @@ android {
         applicationId = "com.opensolr.photos.main"
         minSdk = 26
         targetSdk = 36
-        versionCode = 128
-        versionName = "3.18.2"
+        versionCode = 129
+        versionName = "3.19.0"
         // the face models run natively, on phones (arm)
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
@@ -130,4 +130,7 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.osmdroid)
     implementation(libs.litert)
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
 }

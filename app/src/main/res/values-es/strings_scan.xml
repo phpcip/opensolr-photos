@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_scan">Escanear</string>
+    <string name="scan_close">Cerrar</string>
+    <string name="scan_hint_camera">Encuadra la página</string>
+    <string name="scan_hint_corners">Lleva las esquinas a las de la página</string>
+    <string name="scan_retake">Repetir</string>
+    <string name="scan_save">Guardar</string>
+    <string name="scan_saving">Guardando…</string>
+    <string name="scan_saved">Guardada en %1$s</string>
+    <string name="scan_failed">No se pudo guardar la página.</string>
+    <string name="scan_capture_failed">No se pudo hacer la foto.</string>
+    <string name="scan_bad_corners">Pon cada esquina en una esquina de la página.</string>
+    <string name="scan_no_folder">Ninguna de las carpetas que sincronizas admite fotos nuevas. Añade una de DCIM o Pictures en Sync, Cambiar carpetas.</string>
+    <string name="scan_no_camera">No se puede abrir la cámara.</string>
+    <string name="scan_camera_needed">El escáner fotografía la página con la cámara.</string>
+    <string name="scan_allow">Permitir</string>
+    <string name="scan_take">Hacer la foto</string>
+    <plurals name="scan_saved_count">
+        <item quantity="one">%1$d página</item>
+        <item quantity="other">%1$d páginas</item>
+    </plurals>
+</resources>

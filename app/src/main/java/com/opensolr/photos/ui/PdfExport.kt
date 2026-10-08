@@ -28,7 +28,7 @@ import androidx.compose.ui.unit.dp
 import com.opensolr.photos.AppText
 import com.opensolr.photos.R
 import com.opensolr.photos.media.PdfWriter
-import com.opensolr.photos.media.PhotoReader
+import com.opensolr.photos.media.PdfPhoto
 import com.opensolr.photos.search.PhotoHit
 import com.opensolr.photos.ui.theme.LocalPalette
 import kotlinx.coroutines.CancellationException
@@ -38,7 +38,7 @@ import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** [hits] as one PDF: the file is named here, the place to save it is picked in the system picker, one 1024 px page per photo. */
+/** [hits] as one PDF: the file is named here, the place to save it is picked in the system picker, one page per photo at its full size. */
 @Composable
 fun PdfExport(hits: List<PhotoHit>, onDismiss: () -> Unit) {
     val context = LocalContext.current.applicationContext
@@ -119,8 +119,7 @@ private suspend fun writePdf(context: Context, hits: List<PhotoHit>, target: Uri
             val pdf = PdfWriter(out, fileName.removeSuffix(PDF_EXT))
             sources.forEachIndexed { i, source ->
                 kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                val image = runCatching { PhotoReader.pdfImage(context, source, PDF_EDGE_PX) }.getOrNull()
-                if (image != null) pdf.addPage(image.jpeg, image.width, image.height)
+                PdfPhoto.add(context, source, pdf)
                 progress(i + 1)
             }
             pages = pdf.pages
@@ -159,6 +158,5 @@ private fun fileName(raw: String): String {
 
 private const val PDF_MIME = "application/pdf"
 private const val PDF_EXT = ".pdf"
-private const val PDF_EDGE_PX = 1024
 private const val MAX_NAME = 120
 private const val BUFFER = 64 * 1024

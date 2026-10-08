@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_scan">スキャン</string>
+    <string name="scan_close">閉じる</string>
+    <string name="scan_hint_camera">ページを枠に収めてください</string>
+    <string name="scan_hint_corners">角をページの角に合わせてください</string>
+    <string name="scan_retake">撮り直す</string>
+    <string name="scan_save">保存</string>
+    <string name="scan_saving">保存中…</string>
+    <string name="scan_saved">%1$s に保存しました</string>
+    <string name="scan_failed">ページを保存できませんでした。</string>
+    <string name="scan_capture_failed">写真を撮れませんでした。</string>
+    <string name="scan_bad_corners">それぞれの角をページの角に置いてください。</string>
+    <string name="scan_no_folder">同期中のフォルダーはどれも新しい写真を受け付けません。「同期」の「フォルダーを変更」で DCIM か Pictures のフォルダーを追加してください。</string>
+    <string name="scan_no_camera">カメラを開けません。</string>
+    <string name="scan_camera_needed">スキャナーはカメラでページを撮影します。</string>
+    <string name="scan_allow">許可</string>
+    <string name="scan_take">撮影</string>
+    <plurals name="scan_saved_count">
+        <item quantity="other">%1$d ページ</item>
+    </plurals>
+</resources>

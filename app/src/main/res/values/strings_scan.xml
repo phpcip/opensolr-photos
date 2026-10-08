@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_scan">Scan</string>
+    <string name="scan_close">Close</string>
+    <string name="scan_hint_camera">Hold the page in the frame</string>
+    <string name="scan_hint_corners">Drag the corners onto the page\'s corners</string>
+    <string name="scan_retake">Retake</string>
+    <string name="scan_save">Save</string>
+    <string name="scan_saving">Saving…</string>
+    <string name="scan_saved">Saved in %1$s</string>
+    <string name="scan_failed">The page could not be saved.</string>
+    <string name="scan_capture_failed">The photo could not be taken.</string>
+    <string name="scan_bad_corners">Put each corner on a corner of the page.</string>
+    <string name="scan_no_folder">None of the folders you sync takes new photos. Add one from DCIM or Pictures in Sync, Change folders.</string>
+    <string name="scan_no_camera">The camera cannot be opened.</string>
+    <string name="scan_camera_needed">The scanner photographs the page with the camera.</string>
+    <string name="scan_allow">Allow</string>
+    <string name="scan_take">Take the photo</string>
+    <plurals name="scan_saved_count">
+        <item quantity="one">%1$d page</item>
+        <item quantity="other">%1$d pages</item>
+    </plurals>
+</resources>

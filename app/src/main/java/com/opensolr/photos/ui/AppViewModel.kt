@@ -1299,6 +1299,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         openFolders(Screen.Setup)
     }
 
+    /** The folders this phone syncs, where the scanner saves its pages. */
+    fun syncedFolders(): Set<String> = prefs.folders
+
     fun openFolders(returnTo: Screen) {
         _state.update { it.copy(screen = Screen.Folders, foldersLoading = true, foldersReturnTo = returnTo) }
         viewModelScope.launch {

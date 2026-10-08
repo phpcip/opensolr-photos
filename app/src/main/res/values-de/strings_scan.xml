@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_scan">Scannen</string>
+    <string name="scan_close">Schließen</string>
+    <string name="scan_hint_camera">Seite ins Bild halten</string>
+    <string name="scan_hint_corners">Ecken auf die Ecken der Seite ziehen</string>
+    <string name="scan_retake">Neu</string>
+    <string name="scan_save">Speichern</string>
+    <string name="scan_saving">Speichert…</string>
+    <string name="scan_saved">Gespeichert in %1$s</string>
+    <string name="scan_failed">Die Seite konnte nicht gespeichert werden.</string>
+    <string name="scan_capture_failed">Das Foto konnte nicht aufgenommen werden.</string>
+    <string name="scan_bad_corners">Jede Ecke auf eine Ecke der Seite setzen.</string>
+    <string name="scan_no_folder">Keiner der synchronisierten Ordner nimmt neue Fotos auf. Füge einen aus DCIM oder Pictures hinzu: Sync, Ordner ändern.</string>
+    <string name="scan_no_camera">Die Kamera lässt sich nicht öffnen.</string>
+    <string name="scan_camera_needed">Der Scanner fotografiert die Seite mit der Kamera.</string>
+    <string name="scan_allow">Erlauben</string>
+    <string name="scan_take">Foto aufnehmen</string>
+    <plurals name="scan_saved_count">
+        <item quantity="one">%1$d Seite</item>
+        <item quantity="other">%1$d Seiten</item>
+    </plurals>
+</resources>

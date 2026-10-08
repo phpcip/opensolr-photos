@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_scan">Scanare</string>
+    <string name="scan_close">Închide</string>
+    <string name="scan_hint_camera">Încadrează pagina</string>
+    <string name="scan_hint_corners">Trage colțurile pe colțurile paginii</string>
+    <string name="scan_retake">Din nou</string>
+    <string name="scan_save">Salvează</string>
+    <string name="scan_saving">Se salvează…</string>
+    <string name="scan_saved">Salvată în %1$s</string>
+    <string name="scan_failed">Pagina nu a putut fi salvată.</string>
+    <string name="scan_capture_failed">Poza nu a putut fi făcută.</string>
+    <string name="scan_bad_corners">Pune fiecare colț pe un colț al paginii.</string>
+    <string name="scan_no_folder">Niciun folder sincronizat nu primește poze noi. Adaugă unul din DCIM sau Pictures în Sync, Schimbă folderele.</string>
+    <string name="scan_no_camera">Camera nu poate fi deschisă.</string>
+    <string name="scan_camera_needed">Scanerul fotografiază pagina cu camera.</string>
+    <string name="scan_allow">Permite</string>
+    <string name="scan_take">Fă poza</string>
+    <plurals name="scan_saved_count">
+        <item quantity="one">%1$d pagină</item>
+        <item quantity="few">%1$d pagini</item>
+        <item quantity="other">%1$d de pagini</item>
+    </plurals>
+</resources>

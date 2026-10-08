@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="nav_scan">扫描</string>
+    <string name="scan_close">关闭</string>
+    <string name="scan_hint_camera">将页面放入取景框</string>
+    <string name="scan_hint_corners">将四角拖到页面的四角</string>
+    <string name="scan_retake">重拍</string>
+    <string name="scan_save">保存</string>
+    <string name="scan_saving">正在保存…</string>
+    <string name="scan_saved">已保存到 %1$s</string>
+    <string name="scan_failed">无法保存页面。</string>
+    <string name="scan_capture_failed">无法拍照。</string>
+    <string name="scan_bad_corners">请把每个角放到页面的一个角上。</string>
+    <string name="scan_no_folder">同步的文件夹都不接收新照片。请在“同步”的“更改文件夹”中添加 DCIM 或 Pictures 里的文件夹。</string>
+    <string name="scan_no_camera">无法打开相机。</string>
+    <string name="scan_camera_needed">扫描仪用相机拍摄页面。</string>
+    <string name="scan_allow">允许</string>
+    <string name="scan_take">拍照</string>
+    <plurals name="scan_saved_count">
+        <item quantity="other">%1$d 页</item>
+    </plurals>
+</resources>
