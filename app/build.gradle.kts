@@ -27,8 +27,8 @@ android {
         applicationId = "com.opensolr.photos.main"
         minSdk = 26
         targetSdk = 36
-        versionCode = 130
-        versionName = "3.19.1"
+        versionCode = 131
+        versionName = "3.19.2"
         // the face models run natively, on phones (arm)
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
@@ -66,8 +66,11 @@ android {
         includeInBundle = false
     }
 
+    // the NDK only extracts the symbols of the native libraries for Google Play's crash reports
+    ndkVersion = "27.0.12077973"
     buildTypes {
         release {
+            ndk { debugSymbolLevel = "SYMBOL_TABLE" }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
