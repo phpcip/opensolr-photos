@@ -1,0 +1,2 @@
+- PDF: the pages follow the order in which you ticked the photos.
+- PDF: photos go in at up to 300 dpi, sharp enough for OCR, so the file stays small.

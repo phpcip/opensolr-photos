@@ -885,11 +885,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** The ticked photos in the order they were ticked (the PDF's pages follow it). */
     fun photosToTag(): List<PhotoHit> {
         val state = _state.value
-        val onScreen = state.hits.filter { it.id in state.selectedIds }
-        val known = onScreen.map { it.id }.toSet()
-        return onScreen + state.selectedOffscreen.filterKeys { it in state.selectedIds && it !in known }.values
+        val onScreen = HashMap<String, PhotoHit>(state.selectedIds.size)
+        for (hit in state.hits) if (hit.id in state.selectedIds) onScreen[hit.id] = hit
+        return state.selectedIds.mapNotNull { id -> onScreen[id] ?: state.selectedOffscreen[id] }
     }
 
     /** A name gone from the whole library: off every photo and face, the filters and the results follow at once. */

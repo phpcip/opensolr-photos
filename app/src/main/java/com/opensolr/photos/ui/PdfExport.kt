@@ -106,8 +106,7 @@ fun PdfExport(hits: List<PhotoHit>, onDismiss: () -> Unit) {
 
 /** Writes the pages into [target]; a file left with no page, a failed write or a cancel removes it again. */
 private suspend fun writePdf(context: Context, hits: List<PhotoHit>, target: Uri, fileName: String, progress: (Int) -> Unit) {
-    // pages in the order the photos were taken, oldest first: the pages of a scanned document come out 1, 2, 3
-    val sources = Actions.contentUris(context, hits.sortedWith(compareBy(nullsLast()) { it.takenMs }))
+    val sources = Actions.contentUris(context, hits)
     if (sources.isEmpty()) {
         discard(context, target)
         toast(context, AppText.s(R.string.ac_photos_gone))

@@ -13,8 +13,9 @@ import androidx.exifinterface.media.ExifInterface
 import java.io.ByteArrayOutputStream
 
 /**
- * A photo as one PDF page at its full size, never resampled: a JPEG goes in byte for byte (its metadata left out),
- * any other picture as JPEG bands of its own pixels; the page turns it the way its EXIF says.
+ * A photo as one PDF page, at most 300 dpi on the A4-long page (3508 px on its long edge, what OCR wants): a JPEG
+ * that is not larger goes in byte for byte (its metadata left out), a larger photo is scaled down to that once, any
+ * other picture goes in as JPEG bands of its own pixels; the page turns it the way its EXIF says.
  */
 object PdfPhoto {
 
@@ -29,6 +30,7 @@ object PdfPhoto {
         } catch (e: Exception) {
             null
         }
+        if (frame != null && maxOf(frame.width, frame.height) > MAX_EDGE) return addScaled(context, uri, orientation, pdf)
         if (frame != null) {
             val input = try {
                 resolver.openInputStream(uri)
@@ -57,6 +59,7 @@ object PdfPhoto {
         val width = bounds.outWidth
         val height = bounds.outHeight
         if (width <= 0 || height <= 0) return false
+        if (maxOf(width, height) > MAX_EDGE) return addScaled(context, uri, orientation, pdf)
         val region = try {
             resolver.openInputStream(uri)?.use { stream ->
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) BitmapRegionDecoder.newInstance(stream)
@@ -108,6 +111,41 @@ object PdfPhoto {
         }
     }
 
+    // a photo larger than 300 dpi on the page: read at the smallest power-of-two size still above it, then scaled to it exactly
+    private fun addScaled(context: Context, uri: Uri, orientation: Int, pdf: PdfWriter): Boolean {
+        val resolver = context.contentResolver
+        val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        try {
+            resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return false
+        } catch (e: Exception) {
+            return false
+        }
+        val long = maxOf(bounds.outWidth, bounds.outHeight)
+        if (long <= 0) return false
+        var sample = 1
+        while (long / (sample * 2) >= MAX_EDGE) sample *= 2
+        val decoded = try {
+            resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample }) }
+        } catch (e: Exception) {
+            null
+        } catch (e: OutOfMemoryError) {
+            null
+        } ?: return false
+        val scale = MAX_EDGE.toFloat() / maxOf(decoded.width, decoded.height)
+        val sized = if (scale < 1f) {
+            val w = (decoded.width * scale).toInt().coerceAtLeast(1)
+            val h = (decoded.height * scale).toInt().coerceAtLeast(1)
+            Bitmap.createScaledBitmap(decoded, w, h, true).also { if (it !== decoded) decoded.recycle() }
+        } else decoded
+        val width = sized.width
+        val height = sized.height
+        val jpeg = encode(sized)
+        return pdf.addPage(width, height, orientation) {
+            jpeg(0, height, width, 3) { it.write(jpeg) }
+            true
+        }
+    }
+
     // transparent pixels on white, the way a page shows them; the bitmap is recycled
     private fun encode(bitmap: Bitmap): ByteArray {
         val opaque = if (bitmap.hasAlpha()) {
@@ -125,7 +163,9 @@ object PdfPhoto {
         return out.toByteArray()
     }
 
-    private const val QUALITY = 95
+    private const val QUALITY = 85
+    // 300 dpi along the long side of an A4 page (11.69 in)
+    private const val MAX_EDGE = 3508
     private const val BAND_PIXELS = 12_000_000L
     private const val BAND_STEP = 16
 }
