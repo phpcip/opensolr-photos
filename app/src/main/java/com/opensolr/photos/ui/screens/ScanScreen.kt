@@ -213,13 +213,16 @@ internal fun ScanDialog(folders: Set<String>, topInset: Dp, bottomInset: Dp, onC
             .build()
         var lastAt = 0L
         var misses = 0
+        // the page of the frame before, as the frame is seen: the next frame starts from it
+        var before: FloatArray? = null
         analysis.setAnalyzer(executor) { image ->
             try {
                 val now = SystemClock.uptimeMillis()
                 if (now - lastAt >= ANALYZE_EVERY_MS) {
                     lastAt = now
                     val degrees = image.imageInfo.rotationDegrees
-                    val found = framePage(image)?.let { DocumentEdges.turn(it, degrees) }
+                    val found = framePage(image, before?.let { DocumentEdges.turn(it, 360 - degrees) })?.let { DocumentEdges.turn(it, degrees) }
+                    before = found
                     val aspect = if (degrees % 180 == 0) image.width.toFloat() / image.height else image.height.toFloat() / image.width
                     main.execute {
                         if (disposed) return@execute
@@ -277,7 +280,7 @@ internal fun ScanDialog(folders: Set<String>, topInset: Dp, bottomInset: Dp, onC
                 scope.launch {
                     val ready = withContext(Dispatchers.IO) {
                         val bitmap = PhotoReader.uprightBitmap(app, Uri.fromFile(file), REVIEW_EDGE)
-                        bitmap?.let { it to DocumentScan.detect(it) }
+                        bitmap?.let { it to DocumentScan.detect(it, seen) }
                     }
                     if (ready == null) {
                         file.delete()
@@ -573,8 +576,8 @@ private fun LightGhostButton(text: String, enabled: Boolean, modifier: Modifier 
     }
 }
 
-// the page in one frame of the camera, as fractions of the frame as the sensor gives it
-private fun framePage(image: ImageProxy): FloatArray? {
+// the page in one frame of the camera, as fractions of the frame as the sensor gives it; [previous] the one before
+private fun framePage(image: ImageProxy, previous: FloatArray?): FloatArray? {
     val plane = image.planes.firstOrNull() ?: return null
     val buffer = plane.buffer
     val rowStride = plane.rowStride
@@ -587,12 +590,15 @@ private fun framePage(image: ImageProxy): FloatArray? {
         val row = y * step * rowStride
         for (x in 0 until w) grey[y * w + x] = buffer.get(row + x * step * pixelStride).toInt() and 0xFF
     }
-    return DocumentEdges.find(grey, w, h)
+    return DocumentEdges.find(grey, w, h, previous)
 }
 
-// the outline follows the page without jumping: halfway to each new reading
+// the outline goes straight to a page that moved far, and halfway to one that barely moved, so it neither lags nor shakes
 private fun smooth(previous: FloatArray?, found: FloatArray): FloatArray {
     if (previous == null) return found
+    var far = 0f
+    for (i in 0 until 4) far = maxOf(far, hypot(found[i * 2] - previous[i * 2], found[i * 2 + 1] - previous[i * 2 + 1]))
+    if (far > SNAP) return found
     return FloatArray(8) { previous[it] + (found[it] - previous[it]) * SMOOTHING }
 }
 
@@ -604,11 +610,12 @@ private val HANDLE_REACH = 48.dp
 private val HANDLE_MARGIN = 20.dp
 private const val ANALYSIS_W = 640
 private const val ANALYSIS_H = 480
-private const val ANALYZE_EVERY_MS = 120L
+private const val ANALYZE_EVERY_MS = 50L
 private const val LIVE_EDGE = 320
 private const val REVIEW_EDGE = 1600
-private const val MISSES_TO_HIDE = 4
+private const val MISSES_TO_HIDE = 6
 private const val SMOOTHING = 0.5f
+private const val SNAP = 0.04f
 private const val OUTLINE_FILL = 0.18f
 private const val DIM = 0.55f
 private const val DISABLED = 0.4f

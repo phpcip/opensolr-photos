@@ -43,11 +43,11 @@ object DocumentScan {
         return dcim + rest
     }
 
-    /** The corners of the page in [upright] (the photo as it is seen), as fractions of it; null when no page shows. */
-    fun detect(upright: Bitmap): FloatArray? {
+    /** The corners of the page in [upright] (the photo as it is seen), as fractions of it; [seen] the live outline; null when no page shows. */
+    fun detect(upright: Bitmap, seen: FloatArray?): FloatArray? {
         val step = DocumentEdges.step(upright.width, upright.height, DETECT_EDGE)
         val small = if (step == 1) upright else Bitmap.createScaledBitmap(upright, upright.width / step, upright.height / step, true)
-        val found = DocumentEdges.find(DocumentEdges.grey(small), small.width, small.height)
+        val found = DocumentEdges.find(DocumentEdges.grey(small), small.width, small.height, seen)
         if (small !== upright) small.recycle()
         return found
     }
