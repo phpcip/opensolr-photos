@@ -82,6 +82,15 @@
     <string name="ac_photos_gone">これらの写真はもう端末にありません。</string>
     <string name="ac_share_photos">写真を共有</string>
     <string name="ac_no_share">この端末には写真を共有できるアプリがありません。</string>
+    <string name="ac_set_wallpaper">壁紙に設定</string>
+    <string name="ac_wallpaper_set">壁紙を設定しました。</string>
+    <string name="ac_no_wallpaper">この端末では壁紙を設定できません。</string>
+    <string name="wp_home">ホーム画面</string>
+    <string name="wp_home_sub">アプリの背景</string>
+    <string name="wp_lock">ロック画面</string>
+    <string name="wp_lock_sub">端末がロックされているとき</string>
+    <string name="wp_both">両方</string>
+    <string name="wp_both_sub">ホーム画面とロック画面</string>
     <string name="ac_no_maps">地図アプリがインストールされていません。</string>
     <string name="ac_today">今日</string>
     <string name="ac_yesterday">昨日</string>

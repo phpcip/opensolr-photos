@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Wallpaper: a phone with a landscape on its screen, 2px stroke, the editorial style of the app. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M6,2 L18,2 L18,22 L6,22 Z"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M6,17 L10,12 L13,15 L15,13 L18,16"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:strokeLineJoin="miter"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M14,7 m-1.5,0 a1.5,1.5 0 1,0 3,0 a1.5,1.5 0 1,0 -3,0"
+        android:strokeColor="#FF000000"
+        android:strokeWidth="2"
+        android:fillColor="#00000000" />
+</vector>

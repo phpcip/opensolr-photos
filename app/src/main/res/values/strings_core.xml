@@ -82,6 +82,15 @@
     <string name="ac_photos_gone">These photos are no longer on your phone.</string>
     <string name="ac_share_photos">Share photos</string>
     <string name="ac_no_share">Nothing on this phone can share photos.</string>
+    <string name="ac_set_wallpaper">Set as wallpaper</string>
+    <string name="ac_wallpaper_set">Wallpaper set.</string>
+    <string name="ac_no_wallpaper">This phone cannot set a wallpaper.</string>
+    <string name="wp_home">Home screen</string>
+    <string name="wp_home_sub">Behind your apps</string>
+    <string name="wp_lock">Lock screen</string>
+    <string name="wp_lock_sub">When the phone is locked</string>
+    <string name="wp_both">Both</string>
+    <string name="wp_both_sub">Home screen and lock screen</string>
     <string name="ac_no_maps">No maps app is installed.</string>
     <string name="ac_today">Today</string>
     <string name="ac_yesterday">Yesterday</string>

@@ -166,6 +166,16 @@ object Actions {
         }
     }
 
+    /** The photo upright, at the phone's wallpaper size, on the home screen, the lock screen, or both ([which] = WallpaperManager flags). */
+    fun setWallpaper(context: Context, uri: Uri, which: Int): Boolean = runCatching {
+        val manager = android.app.WallpaperManager.getInstance(context)
+        if (!manager.isWallpaperSupported || !manager.isSetWallpaperAllowed) return false
+        val screen = context.resources.displayMetrics
+        val edge = maxOf(manager.desiredMinimumWidth, manager.desiredMinimumHeight, screen.widthPixels, screen.heightPixels)
+        val bitmap = com.opensolr.photos.media.PhotoReader.uprightBitmap(context, uri, edge) ?: return false
+        try { manager.setBitmap(bitmap, null, true, which) != 0 } finally { bitmap.recycle() }
+    }.getOrDefault(false)
+
     /** Shares are started from background threads too: the message is shown on the main one. */
     private fun toast(context: Context, text: Int) {
         android.os.Handler(android.os.Looper.getMainLooper()).post { Toast.makeText(context, AppText.s(text), Toast.LENGTH_LONG).show() }

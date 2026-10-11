@@ -96,6 +96,7 @@
     <string name="act_tag">标签、人物和文字</string>
     <string name="act_similar">相似照片</string>
     <string name="act_share">分享</string>
+    <string name="act_wallpaper">壁纸</string>
     <string name="act_map">在地图上显示</string>
     <string name="act_nearby">附近的照片</string>
     <string name="act_delete">删除</string>

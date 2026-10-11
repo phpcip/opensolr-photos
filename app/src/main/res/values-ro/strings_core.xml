@@ -82,6 +82,15 @@
     <string name="ac_photos_gone">Aceste poze nu mai sunt pe telefon.</string>
     <string name="ac_share_photos">Trimite pozele</string>
     <string name="ac_no_share">Nimic de pe telefon nu poate trimite poze.</string>
+    <string name="ac_set_wallpaper">Setează ca fundal</string>
+    <string name="ac_wallpaper_set">Fundalul a fost setat.</string>
+    <string name="ac_no_wallpaper">Telefonul acesta nu poate seta un fundal.</string>
+    <string name="wp_home">Ecranul principal</string>
+    <string name="wp_home_sub">În spatele aplicațiilor</string>
+    <string name="wp_lock">Ecranul de blocare</string>
+    <string name="wp_lock_sub">Când telefonul e blocat</string>
+    <string name="wp_both">Amândouă</string>
+    <string name="wp_both_sub">Ecranul principal și ecranul de blocare</string>
     <string name="ac_no_maps">Nu e instalată nicio aplicație de hărți.</string>
     <string name="ac_today">Azi</string>
     <string name="ac_yesterday">Ieri</string>

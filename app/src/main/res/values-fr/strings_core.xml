@@ -82,6 +82,15 @@
     <string name="ac_photos_gone">Ces photos ne sont plus sur votre téléphone.</string>
     <string name="ac_share_photos">Partager les photos</string>
     <string name="ac_no_share">Rien sur ce téléphone ne peut partager des photos.</string>
+    <string name="ac_set_wallpaper">Définir comme fond d\'écran</string>
+    <string name="ac_wallpaper_set">Fond d\'écran défini.</string>
+    <string name="ac_no_wallpaper">Ce téléphone ne peut pas définir de fond d\'écran.</string>
+    <string name="wp_home">Écran d\'accueil</string>
+    <string name="wp_home_sub">Derrière vos applications</string>
+    <string name="wp_lock">Écran de verrouillage</string>
+    <string name="wp_lock_sub">Quand le téléphone est verrouillé</string>
+    <string name="wp_both">Les deux</string>
+    <string name="wp_both_sub">Écran d\'accueil et écran de verrouillage</string>
     <string name="ac_no_maps">Aucune app de cartes n\'est installée.</string>
     <string name="ac_today">Aujourd\'hui</string>
     <string name="ac_yesterday">Hier</string>

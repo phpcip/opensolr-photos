@@ -82,6 +82,15 @@
     <string name="ac_photos_gone">Diese Fotos sind nicht mehr auf Ihrem Telefon.</string>
     <string name="ac_share_photos">Fotos teilen</string>
     <string name="ac_no_share">Nichts auf diesem Telefon kann Fotos teilen.</string>
+    <string name="ac_set_wallpaper">Als Hintergrund festlegen</string>
+    <string name="ac_wallpaper_set">Hintergrund festgelegt.</string>
+    <string name="ac_no_wallpaper">Dieses Telefon kann keinen Hintergrund festlegen.</string>
+    <string name="wp_home">Startbildschirm</string>
+    <string name="wp_home_sub">Hinter deinen Apps</string>
+    <string name="wp_lock">Sperrbildschirm</string>
+    <string name="wp_lock_sub">Wenn das Telefon gesperrt ist</string>
+    <string name="wp_both">Beide</string>
+    <string name="wp_both_sub">Startbildschirm und Sperrbildschirm</string>
     <string name="ac_no_maps">Keine Karten-App installiert.</string>
     <string name="ac_today">Heute</string>
     <string name="ac_yesterday">Gestern</string>

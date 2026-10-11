@@ -2398,6 +2398,7 @@ internal fun PhotoViewer(
 
     var sheetFor by remember { mutableStateOf<PhotoHit?>(null) }
     var viewerShare by remember { mutableStateOf<PhotoHit?>(null) }
+    var wallpaperFor by remember { mutableStateOf<PhotoHit?>(null) }
     var editing by remember { mutableStateOf<PhotoHit?>(null) }
     // faces: shown on demand on the photo on screen, a tap on one names it
     var facesOn by remember { mutableStateOf(false) }
@@ -2658,6 +2659,7 @@ internal fun PhotoViewer(
                     ViewerIconAction(stringResource(R.string.fc_people), Icons.Filled.Face, on) { facesOn = !facesOn }
                     ViewerAction(stringResource(R.string.act_tag), R.drawable.ic_tag, on) { editFor = hit }
                     ViewerAction(stringResource(R.string.act_edit), R.drawable.ic_edit, on) { editing = hit }
+                    ViewerAction(stringResource(R.string.act_wallpaper), R.drawable.ic_wallpaper) { wallpaperFor = hit }
                     ViewerAction(stringResource(R.string.act_similar), R.drawable.ic_duplicates, on) { onClose(); viewModel.showSimilar(hit) }
                     ViewerAction(stringResource(R.string.act_share), R.drawable.ic_share, on) { viewerShare = hit }
                     hit.latLon?.let { (lat, lon) ->
@@ -2679,6 +2681,9 @@ internal fun PhotoViewer(
 
             // composed inside the viewer's window, so the choice shows above the photo
             viewerShare?.let { one -> com.opensolr.photos.ui.ShareChooser(listOf(one), fullScreen = true) { viewerShare = null } }
+            wallpaperFor?.let { one ->
+                com.opensolr.photos.ui.WallpaperChooser(ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, one.mediaId)) { wallpaperFor = null }
+            }
             editing?.let { one ->
                 PhotoEditorScreen(one, topInset, bottomInset, onClose = { editing = null }, onSaved = { overwrote -> viewModel.photoEdited(if (overwrote) one.id else null) })
             }

@@ -82,6 +82,15 @@
     <string name="ac_photos_gone">这些照片已不在手机上。</string>
     <string name="ac_share_photos">分享照片</string>
     <string name="ac_no_share">这台手机上没有能分享照片的应用。</string>
+    <string name="ac_set_wallpaper">设为壁纸</string>
+    <string name="ac_wallpaper_set">壁纸已设置。</string>
+    <string name="ac_no_wallpaper">此手机无法设置壁纸。</string>
+    <string name="wp_home">主屏幕</string>
+    <string name="wp_home_sub">应用背后</string>
+    <string name="wp_lock">锁屏</string>
+    <string name="wp_lock_sub">手机锁定时</string>
+    <string name="wp_both">两者</string>
+    <string name="wp_both_sub">主屏幕和锁屏</string>
     <string name="ac_no_maps">没有安装地图应用。</string>
     <string name="ac_today">今天</string>
     <string name="ac_yesterday">昨天</string>

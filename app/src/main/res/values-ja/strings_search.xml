@@ -96,6 +96,7 @@
     <string name="act_tag">タグ・人物・言葉</string>
     <string name="act_similar">類似の写真</string>
     <string name="act_share">共有</string>
+    <string name="act_wallpaper">壁紙</string>
     <string name="act_map">地図で表示</string>
     <string name="act_nearby">近くの写真</string>
     <string name="act_delete">削除</string>

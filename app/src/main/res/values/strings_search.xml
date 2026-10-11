@@ -96,6 +96,7 @@
     <string name="act_tag">Tags, people and words</string>
     <string name="act_similar">Similar photos</string>
     <string name="act_share">Share</string>
+    <string name="act_wallpaper">Wallpaper</string>
     <string name="act_map">Show on map</string>
     <string name="act_nearby">Photos nearby</string>
     <string name="act_delete">Delete</string>
