@@ -423,6 +423,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val faces = try { com.opensolr.photos.media.FaceEngine.of(context).analyze(bitmap) } finally { bitmap.recycle() }
                 // a photo read here, before the background pass, is named the same way: the file's names, then the matcher
                 com.opensolr.photos.search.FaceMatcher.fromFile(context, photoCache, uri, photoCache.putFaces(hit.id, hit.mediaId, hit.sizeBytes, faces))
+                com.opensolr.photos.search.FaceMatcher.fromOriginal(context, photoCache, hit.id).takeIf { it.isNotEmpty() }?.let { edits.queueForAll(listOf(hit.id), null, false, it, false); SyncScheduler.runNow(context) }
                 com.opensolr.photos.search.FaceMatcher.nameOnlyFace(photoCache, hit.id)
                 val stored = photoCache.facesWithVectors(hit.id)
                 val people = com.opensolr.photos.search.FaceMatcher.people(photoCache)

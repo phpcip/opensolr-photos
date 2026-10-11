@@ -11,6 +11,7 @@
     <string name="ed_save">保存</string>
     <string name="ed_apply">应用</string>
     <string name="ed_reset">重置</string>
+    <string name="ed_straighten">拉直</string>
     <string name="ed_rotate_left">向左</string>
     <string name="ed_rotate_right">向右</string>
     <string name="ed_width">宽度</string>
@@ -20,6 +21,12 @@
     <string name="ed_too_big">对此手机来说太大</string>
     <string name="ed_size">大小</string>
     <string name="ed_tap_for_text">点按照片上放文字的位置</string>
+    <string name="ed_erase">擦除</string>
+    <string name="ed_find_text">查找文字</string>
+    <string name="ed_clear">清除</string>
+    <string name="ed_erase_hint">涂抹要去掉的部分，或让应用查找文字</string>
+    <string name="ed_no_text">这张照片中没有找到文字。</string>
+    <string name="ed_erase_now">立即擦除</string>
     <string name="ed_text_hint">输入文字</string>
     <string name="ed_add">添加</string>
     <string name="ed_discard_title">放弃更改？</string>

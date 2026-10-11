@@ -27,8 +27,12 @@ sealed interface EditOp {
     data class Crop(val left: Int, val top: Int, val right: Int, val bottom: Int) : EditOp
     data class Rotate(val clockwise: Boolean) : EditOp
     data class Resize(val width: Int, val height: Int) : EditOp
+    /** Turned [degrees] about the picture's centre (clockwise positive), then cut to the box, in the turned picture's frame. */
+    data class Straighten(val degrees: Float, val left: Int, val top: Int, val right: Int, val bottom: Int) : EditOp
     /** The marks drawn so far, set into the pixels before the picture is cropped, turned or resized. */
     class Bake(val marks: List<EditOp>) : EditOp
+    /** Pixels painted by the eraser, set back at [left], [top]: replayed as they are, the model never runs twice. */
+    class Patch(val left: Int, val top: Int, val pixels: Bitmap) : EditOp
 
     // marks: drawn over the picture, movable until baked
     class Stroke(val points: FloatArray, val color: Int, val width: Float) : EditOp
@@ -144,6 +148,14 @@ class EditSession(private val source: Bitmap) {
         }
     }
 
+    /** The marks set into the picture, then [make] (the eraser) run on it; its patch becomes one step. False when it made none. */
+    fun patch(make: (Bitmap) -> EditOp.Patch?): Boolean {
+        val full = render()
+        val made = try { make(full) } finally { full.recycle() } ?: return false
+        transform(made)
+        return true
+    }
+
     /** The picture without the marks, fitted in [edge] px, for the screen. */
     fun preview(edge: Int): Bitmap = PhotoEditor.fit(base, edge)
 
@@ -199,6 +211,14 @@ object PhotoEditor {
             out
         }
         is EditOp.Resize -> scale(bitmap, op.width, op.height)
+        is EditOp.Straighten -> {
+            val out = Bitmap.createBitmap(max(1, op.right - op.left), max(1, op.bottom - op.top), Bitmap.Config.ARGB_8888)
+            val canvas = Canvas(out)
+            canvas.translate(-op.left.toFloat(), -op.top.toFloat())
+            canvas.rotate(op.degrees, bitmap.width / 2f, bitmap.height / 2f)
+            canvas.drawBitmap(bitmap, 0f, 0f, Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG))
+            out
+        }
         is EditOp.Bake -> {
             val canvas = Canvas(bitmap)
             op.marks.forEach { drawMark(canvas, it) }
@@ -206,6 +226,10 @@ object PhotoEditor {
         }
         is EditOp.Stroke, is EditOp.Shape, is EditOp.Label -> {
             drawMark(Canvas(bitmap), op)
+            bitmap
+        }
+        is EditOp.Patch -> {
+            Canvas(bitmap).drawBitmap(op.pixels, op.left.toFloat(), op.top.toFloat(), null)
             bitmap
         }
     }
@@ -373,6 +397,20 @@ object PhotoEditor {
             .build()
     }
 
+    /**
+     * The largest box of the picture's own shape, centred, that stays inside the picture turned by [degrees]:
+     * no empty corner can show in it. In the [width] x [height] frame.
+     */
+    fun straightLimit(width: Int, height: Int, degrees: Float): android.graphics.RectF {
+        val a = Math.toRadians(abs(degrees).toDouble())
+        val c = kotlin.math.cos(a).toFloat()
+        val sn = kotlin.math.sin(a).toFloat()
+        val k = kotlin.math.min(width / (width * c + height * sn), height / (width * sn + height * c))
+        val w = width * k - 2f
+        val h = height * k - 2f
+        return android.graphics.RectF((width - w) / 2f, (height - h) / 2f, (width + w) / 2f, (height + h) / 2f)
+    }
+
     fun mutableCopy(bitmap: Bitmap): Bitmap = bitmap.copy(Bitmap.Config.ARGB_8888, true)
 
     /** [bitmap] fitted in [edge] px on its long side, a new bitmap. */
@@ -479,9 +517,12 @@ object PhotoEditor {
     }
 
     /** [encoded] as a new photo in the original's folder (or Pictures, where that folder takes no photos); its folder and name. */
-    fun saveCopy(context: Context, original: Uri, originalName: String, originalPath: String, encoded: File, format: Bitmap.CompressFormat): String {
+    fun saveCopy(context: Context, original: Uri, originalName: String, originalPath: String, encoded: File, format: Bitmap.CompressFormat, synced: Set<String>): String {
         val name = originalName.substringBeforeLast('.').ifBlank { "photo" } + "-edited." + extensionOf(format)
         val mime = mimeOf(format)
+        // the copy is a photo of now: dated at the save, so it comes first in the list
+        val now = System.currentTimeMillis()
+        stampNow(encoded, now)
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             val dir = File(originalPath).parentFile ?: throw java.io.IOException("no folder")
             var target = File(dir, name)
@@ -489,47 +530,72 @@ object PhotoEditor {
             while (target.exists()) target = File(dir, name.substringBeforeLast('.') + " (" + n++ + ")." + extensionOf(format))
             encoded.inputStream().use { input -> target.outputStream().use { input.copyTo(it, BUFFER) } }
             android.media.MediaScannerConnection.scanFile(context, arrayOf(target.absolutePath), arrayOf(mime), null)
-            return dir.name + "/" + target.name
+            return target.absolutePath.removePrefix(android.os.Environment.getExternalStorageDirectory().absolutePath).trimStart('/')
         }
         val resolver = context.contentResolver
-        var folder = android.os.Environment.DIRECTORY_PICTURES + "/"
-        var taken = 0L
+        var folder: String? = null
+        val taken = now
         resolver.query(original, arrayOf(MediaStore.MediaColumns.RELATIVE_PATH, MediaStore.Images.Media.DATE_TAKEN), null, null, null)?.use { c ->
             if (c.moveToFirst()) {
-                c.getString(0)?.takeIf { it.isNotBlank() }?.let { folder = it }
-                taken = c.getLong(1)
+                folder = c.getString(0)?.takeIf { it.isNotBlank() }
             }
         }
-        val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
         fun values(path: String) = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, name)
             put(MediaStore.MediaColumns.MIME_TYPE, mime)
             put(MediaStore.MediaColumns.RELATIVE_PATH, path)
-            // the copy sorts next to the original, by the moment the photo was taken
             if (taken > 0) put(MediaStore.Images.Media.DATE_TAKEN, taken)
             put(MediaStore.MediaColumns.IS_PENDING, 1)
         }
-        val created = try {
-            resolver.insert(collection, values(folder))
-        } catch (e: IllegalArgumentException) {
-            null
-        } ?: run {
-            folder = android.os.Environment.DIRECTORY_PICTURES + "/"
-            resolver.insert(collection, values(folder))
-        } ?: throw java.io.IOException("insert failed")
-        try {
-            val out = resolver.openOutputStream(created, "w") ?: throw java.io.IOException("no output stream")
-            out.use { stream -> encoded.inputStream().use { it.copyTo(stream, BUFFER) } }
-            resolver.update(created, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
-        } catch (e: Exception) {
-            runCatching { resolver.delete(created, null, null) }
-            throw e
+        // next to the original first; Documents/ and Download/ take photos only through the files collection;
+        // then the synced folders, so the copy is always somewhere the app reads
+        val images = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val files = MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val targets = (listOfNotNull(folder) + DocumentScan.targets(synced)).distinct()
+        for (path in targets) {
+            for (collection in listOf(images, files)) {
+                val created = try {
+                    resolver.insert(collection, values(path))
+                } catch (e: IllegalArgumentException) {
+                    null
+                } ?: continue
+                try {
+                    val out = resolver.openOutputStream(created, "w") ?: throw java.io.IOException("no output stream")
+                    out.use { stream -> encoded.inputStream().use { it.copyTo(stream, BUFFER) } }
+                    resolver.update(created, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+                } catch (e: Exception) {
+                    runCatching { resolver.delete(created, null, null) }
+                    throw e
+                }
+                var shown = name
+                resolver.query(created, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+                    if (c.moveToFirst()) c.getString(0)?.let { shown = it }
+                }
+                return path.trimEnd('/') + "/" + shown
+            }
         }
-        var shown = name
-        resolver.query(created, arrayOf(MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)?.use { c ->
-            if (c.moveToFirst()) c.getString(0)?.let { shown = it }
+        throw java.io.IOException("no folder takes the copy")
+    }
+
+    // the file's own dates set to [now], in the phone's time zone; a format without EXIF keeps none
+    private fun stampNow(file: File, now: Long) {
+        runCatching {
+            val date = java.util.Date(now)
+            val stamp = java.text.SimpleDateFormat("yyyy:MM:dd HH:mm:ss", java.util.Locale.US).format(date)
+            val offset = java.text.SimpleDateFormat("XXX", java.util.Locale.US).format(date)
+            ExifInterface(file.absolutePath).apply {
+                setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, stamp)
+                setAttribute(ExifInterface.TAG_DATETIME_DIGITIZED, stamp)
+                setAttribute(ExifInterface.TAG_DATETIME, stamp)
+                setAttribute(ExifInterface.TAG_OFFSET_TIME_ORIGINAL, offset)
+                setAttribute(ExifInterface.TAG_OFFSET_TIME_DIGITIZED, offset)
+                setAttribute(ExifInterface.TAG_OFFSET_TIME, offset)
+                setAttribute(ExifInterface.TAG_SUBSEC_TIME_ORIGINAL, null)
+                setAttribute(ExifInterface.TAG_SUBSEC_TIME_DIGITIZED, null)
+                setAttribute(ExifInterface.TAG_SUBSEC_TIME, null)
+                saveAttributes()
+            }
         }
-        return folder.trimEnd('/') + "/" + shown
     }
 
     private fun rescan(context: Context, uri: Uri) {

@@ -1,0 +1,3 @@
+- Erase in the editor: paint over people or things, or let the app find the text, and they are filled from what is around them, all on the phone.
+- Straighten in Crop, in half degrees, with the crop box free to move and resize on the turned photo.
+- A copy saved from the editor goes into the original's folder, is dated now so it comes first in the list, and keeps the original's people.

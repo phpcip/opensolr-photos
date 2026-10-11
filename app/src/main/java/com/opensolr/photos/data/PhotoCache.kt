@@ -1026,12 +1026,18 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
     /** The photo's faces as the index keeps them, or null when none were read yet. */
     fun facesForIndex(photoId: String, sizeBytes: Long): String? {
         val rows = facesWithVectors(photoId)
+        val flags = faceFlags(photoId)
+        if (rows.isEmpty() && !faceScanned(photoId, sizeBytes)) return null
+        return FaceStore.encode(sizeBytes, com.opensolr.photos.media.FaceEngine.VERSION, rows, flags)
+    }
+
+    /** Each face of the photo: whether its name is sure, and who gave it. */
+    fun faceFlags(photoId: String): Map<Long, Pair<Boolean, Int>> {
         val flags = HashMap<Long, Pair<Boolean, Int>>()
         readableDatabase.rawQuery("SELECT fid, sure, how FROM faces WHERE photo_id = ?", arrayOf(photoId)).use { c ->
             while (c.moveToNext()) flags[c.getLong(0)] = (c.getInt(1) == 1) to c.getInt(2)
         }
-        if (rows.isEmpty() && !faceScanned(photoId, sizeBytes)) return null
-        return FaceStore.encode(sizeBytes, com.opensolr.photos.media.FaceEngine.VERSION, rows, flags)
+        return flags
     }
 
     /** Faces read back from the index for a photo this phone has not read itself: stored as they were, nothing computed. */

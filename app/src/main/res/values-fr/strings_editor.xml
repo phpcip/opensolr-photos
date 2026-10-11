@@ -11,6 +11,7 @@
     <string name="ed_save">Enregistrer</string>
     <string name="ed_apply">Appliquer</string>
     <string name="ed_reset">Réinitialiser</string>
+    <string name="ed_straighten">Redresser</string>
     <string name="ed_rotate_left">Gauche</string>
     <string name="ed_rotate_right">Droite</string>
     <string name="ed_width">Largeur</string>
@@ -20,6 +21,12 @@
     <string name="ed_too_big">Trop grand pour ce téléphone</string>
     <string name="ed_size">Taille</string>
     <string name="ed_tap_for_text">Touchez la photo là où va le texte</string>
+    <string name="ed_erase">Gommer</string>
+    <string name="ed_find_text">Trouver le texte</string>
+    <string name="ed_clear">Vider</string>
+    <string name="ed_erase_hint">Peignez sur ce qui doit partir, ou laissez l\'app trouver le texte</string>
+    <string name="ed_no_text">Aucun texte trouvé dans cette photo.</string>
+    <string name="ed_erase_now">Gommer maintenant</string>
     <string name="ed_text_hint">Saisissez le texte</string>
     <string name="ed_add">Ajouter</string>
     <string name="ed_discard_title">Abandonner les modifications ?</string>

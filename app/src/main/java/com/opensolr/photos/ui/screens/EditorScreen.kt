@@ -69,6 +69,7 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalConfiguration
@@ -91,6 +92,7 @@ import com.opensolr.photos.AppText
 import com.opensolr.photos.R
 import com.opensolr.photos.media.EditOp
 import com.opensolr.photos.media.EditSession
+import com.opensolr.photos.media.MagicEraser
 import com.opensolr.photos.media.PhotoEditor
 import com.opensolr.photos.media.ShapeFit
 import com.opensolr.photos.search.PhotoHit
@@ -116,11 +118,17 @@ internal object EditedPhotos {
     fun stamp(mediaId: Long): Long = stamps[mediaId] ?: 0L
 }
 
-private enum class Tool { Crop, Rotate, Resize, Draw, Text }
+private enum class Tool { Crop, Rotate, Resize, Draw, Text, Erase }
+
+/** A line painted with the eraser, in image pixels. */
+private class EraseStroke(val points: FloatArray, val width: Float)
+
+/** Text the app found, in image pixels; only the boxes left on are erased. */
+private class TextBox(val rect: android.graphics.RectF, val on: Boolean)
 
 /** Crop, resize, rotate, draw and text on one photo; Save asks whether it replaces the original or becomes a copy. */
 @Composable
-internal fun PhotoEditorScreen(hit: PhotoHit, topInset: Dp, bottomInset: Dp, onClose: () -> Unit, onSaved: (overwrote: Boolean) -> Unit) {
+internal fun PhotoEditorScreen(hit: PhotoHit, synced: Set<String>, topInset: Dp, bottomInset: Dp, onClose: () -> Unit, onSaved: (overwrote: Boolean) -> Unit) {
     val context = LocalContext.current
     val app = context.applicationContext
     val view = LocalView.current
@@ -151,6 +159,9 @@ internal fun PhotoEditorScreen(hit: PhotoHit, topInset: Dp, bottomInset: Dp, onC
     var penDp by remember { mutableFloatStateOf(PEN_DEFAULT_DP) }
     var textDp by remember { mutableFloatStateOf(TEXT_DEFAULT_DP) }
     var crop by remember { mutableStateOf<Rect?>(null) }
+    // straighten: the turn shown behind the crop box, and the box the crop may use at that turn
+    var angle by remember { mutableFloatStateOf(0f) }
+    var limit by remember { mutableStateOf<Rect?>(null) }
     val live = remember { mutableStateListOf<Offset>() }
     // marks handed to the worker and not yet back in [marks]: shown meanwhile, so nothing blinks
     val drawn = remember { mutableStateListOf<EditOp>() }
@@ -166,6 +177,11 @@ internal fun PhotoEditorScreen(hit: PhotoHit, topInset: Dp, bottomInset: Dp, onC
     var pendingOverwrite by remember { mutableStateOf<Boolean?>(null) }
     // image pixels per screen pixel as shown, so pen and text sizes picked on screen land the same in the photo
     var viewScale by remember { mutableFloatStateOf(1f) }
+    val eraseStrokes = remember { mutableStateListOf<EraseStroke>() }
+    val textBoxes = remember { mutableStateListOf<TextBox>() }
+    var eraseDp by remember { mutableFloatStateOf(ERASE_DEFAULT_DP) }
+    // the eraser's models, loaded on the worker the first time they are needed and closed with the editor
+    val eraserHolder = remember { arrayOfNulls<MagicEraser>(1) }
 
     fun toast(text: String) = Toast.makeText(app, text, Toast.LENGTH_LONG).show()
 
@@ -180,7 +196,13 @@ internal fun PhotoEditorScreen(hit: PhotoHit, topInset: Dp, bottomInset: Dp, onC
                     step(s)
                     if (s.baseVersion != shownVersion) s.baseVersion to s.preview(previewEdge).asImageBitmap() else null
                 }
-                shown?.let { shownVersion = it.first; preview = it.second }
+                shown?.let {
+                    shownVersion = it.first
+                    preview = it.second
+                    // what was marked for the eraser belonged to the picture before this step
+                    eraseStrokes.clear()
+                    textBoxes.clear()
+                }
                 marks = s.marks
                 imgW = s.width
                 imgH = s.height
@@ -190,8 +212,10 @@ internal fun PhotoEditorScreen(hit: PhotoHit, topInset: Dp, bottomInset: Dp, onC
             } catch (e: CancellationException) {
                 throw e
             } catch (e: OutOfMemoryError) {
+                android.util.Log.w("PhotoEditor", "edit step out of memory", e)
                 toast(AppText.s(R.string.ed_too_big))
             } catch (e: Exception) {
+                android.util.Log.w("PhotoEditor", "edit step failed", e)
                 toast(AppText.s(R.string.ed_failed_step))
             } finally {
                 after()
@@ -223,20 +247,85 @@ internal fun PhotoEditorScreen(hit: PhotoHit, topInset: Dp, bottomInset: Dp, onC
     DisposableEffect(Unit) {
         onDispose {
             val s = session
-            CoroutineScope(worker).launch { s?.release(); PhotoEditor.clearCache(app) }
+            CoroutineScope(worker).launch { s?.release(); eraserHolder[0]?.close(); PhotoEditor.clearCache(app) }
         }
     }
 
     LaunchedEffect(tool, imgW, imgH) {
-        crop = if (tool == Tool.Crop && imgW > 0) Rect(0f, 0f, imgW.toFloat(), imgH.toFloat()) else null
+        angle = 0f
+        limit = if (tool == Tool.Crop && imgW > 0) Rect(0f, 0f, imgW.toFloat(), imgH.toFloat()) else null
+        crop = limit
     }
 
-    val cropPending = crop?.let { c -> c.left > 0.5f || c.top > 0.5f || c.right < imgW - 0.5f || c.bottom < imgH - 0.5f } == true
+    // a new turn: the crop box becomes the largest one with no empty corner
+    fun straighten(degrees: Float) {
+        if (imgW <= 0) return
+        angle = degrees
+        val r = PhotoEditor.straightLimit(imgW, imgH, degrees)
+        limit = if (degrees == 0f) Rect(0f, 0f, imgW.toFloat(), imgH.toFloat()) else Rect(r.left, r.top, r.right, r.bottom)
+        crop = limit
+    }
+
+    val cropPending = angle != 0f || crop?.let { c -> c.left > 0.5f || c.top > 0.5f || c.right < imgW - 0.5f || c.bottom < imgH - 0.5f } == true
 
     fun applyCrop() {
         val c = crop ?: return
         if (!cropPending) return
-        edit({ it.transform(EditOp.Crop(c.left.roundToInt(), c.top.roundToInt(), c.right.roundToInt(), c.bottom.roundToInt())) })
+        val turn = angle
+        edit({
+            it.transform(
+                if (turn != 0f) EditOp.Straighten(turn, c.left.roundToInt(), c.top.roundToInt(), c.right.roundToInt(), c.bottom.roundToInt())
+                else EditOp.Crop(c.left.roundToInt(), c.top.roundToInt(), c.right.roundToInt(), c.bottom.roundToInt()),
+            )
+        })
+    }
+
+    fun eraserOn(): MagicEraser = eraserHolder[0] ?: MagicEraser(app).also { eraserHolder[0] = it }
+
+    fun findText() {
+        val s = session ?: return
+        working++
+        scope.launch {
+            try {
+                val found = withContext(worker) {
+                    val full = s.render()
+                    try { eraserOn().findText(full) } finally { full.recycle() }
+                }
+                textBoxes.clear()
+                found.forEach { textBoxes += TextBox(it, true) }
+                if (found.isEmpty()) toast(AppText.s(R.string.ed_no_text))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: OutOfMemoryError) {
+                android.util.Log.w("PhotoEditor", "edit step out of memory", e)
+                toast(AppText.s(R.string.ed_too_big))
+            } catch (e: Exception) {
+                android.util.Log.w("PhotoEditor", "edit step failed", e)
+                toast(AppText.s(R.string.ed_failed_step))
+            } finally {
+                working--
+            }
+        }
+    }
+
+    fun eraseNow() {
+        val strokes = eraseStrokes.toList()
+        val boxes = textBoxes.filter { it.on }.map { it.rect }
+        if (strokes.isEmpty() && boxes.isEmpty()) return
+        val w = imgW
+        val h = imgH
+        edit({ s ->
+            val mask = eraseMask(w, h, strokes)
+            try {
+                s.patch { full ->
+                    val eraser = eraserOn()
+                    eraser.markText(full, boxes, mask)
+                    eraser.erase(full, mask)
+                }
+            } finally {
+                mask.recycle()
+            }
+        })
     }
 
     fun pick(next: Tool) {
@@ -265,7 +354,11 @@ internal fun PhotoEditorScreen(hit: PhotoHit, topInset: Dp, bottomInset: Dp, onC
                         PhotoEditor.overwrite(app, target, file)
                         null
                     } else {
-                        PhotoEditor.saveCopy(app, target, hit.fileName, hit.path, file, format)
+                        PhotoEditor.saveCopy(app, target, hit.fileName, hit.path, file, format, synced).also { where ->
+                            val folder = where.substringBeforeLast('/', "")
+                            val copyId = com.opensolr.photos.media.MediaScanner.photoId(com.opensolr.photos.media.MediaScanner.folderKey(folder) + where.substringAfterLast('/'))
+                            com.opensolr.photos.search.FaceMatcher.linkCopy(app, copyId, hit.id)
+                        }
                     }
                 }
                 if (overwrite) {
@@ -525,21 +618,61 @@ internal fun PhotoEditorScreen(hit: PhotoHit, topInset: Dp, bottomInset: Dp, onC
                             change.consume()
                             val dx = drag.x / s
                             val dy = drag.y / s
+                            // the box goes anywhere its four corners stay on the turned picture: each move or edge
+                            // goes as far as it can, the other direction still slides
                             val side = min(minSide, min(imgW, imgH).toFloat())
+                            fun ok(r: Rect) = r.width >= side - 0.5f && r.height >= side - 0.5f && onPicture(r, angle, imgW, imgH)
+                            fun reach(from: Rect, make: (Float) -> Rect): Rect {
+                                if (ok(make(1f))) return make(1f)
+                                var lo = 0f
+                                var hi = 1f
+                                repeat(REACH_STEPS) { val mid = (lo + hi) / 2f; if (ok(make(mid))) lo = mid else hi = mid }
+                                return if (lo > 0f) make(lo) else from
+                            }
                             crop = if (grab == GRAB_MOVE) {
-                                val mx = dx.coerceIn(-c.left, imgW - c.right)
-                                val my = dy.coerceIn(-c.top, imgH - c.bottom)
-                                c.translate(mx, my)
+                                val across = reach(c) { k -> c.translate(dx * k, 0f) }
+                                reach(across) { k -> across.translate(0f, dy * k) }
                             } else {
-                                var l = c.left
-                                var t = c.top
-                                var r = c.right
-                                var b = c.bottom
-                                if (grab and GRAB_LEFT != 0) l = (l + dx).coerceIn(0f, r - side)
-                                if (grab and GRAB_RIGHT != 0) r = (r + dx).coerceIn(l + side, imgW.toFloat())
-                                if (grab and GRAB_TOP != 0) t = (t + dy).coerceIn(0f, b - side)
-                                if (grab and GRAB_BOTTOM != 0) b = (b + dy).coerceIn(t + side, imgH.toFloat())
-                                Rect(l, t, r, b)
+                                var r = c
+                                if (grab and GRAB_LEFT != 0) { val b = r; r = reach(b) { k -> Rect(b.left + dx * k, b.top, b.right, b.bottom) } }
+                                if (grab and GRAB_RIGHT != 0) { val b = r; r = reach(b) { k -> Rect(b.left, b.top, b.right + dx * k, b.bottom) } }
+                                if (grab and GRAB_TOP != 0) { val b = r; r = reach(b) { k -> Rect(b.left, b.top + dy * k, b.right, b.bottom) } }
+                                if (grab and GRAB_BOTTOM != 0) { val b = r; r = reach(b) { k -> Rect(b.left, b.top, b.right, b.bottom + dy * k) } }
+                                r
+                            }
+                        }
+                    }
+                    Tool.Erase -> Modifier.pointerInput(tool, s, left, top, eraseDp) {
+                        val width = with(density) { eraseDp.dp.toPx() } / s
+                        awaitEachGesture {
+                            val down = awaitFirstDown(requireUnconsumed = false)
+                            val start = toImage(down.position)
+                            live.clear()
+                            live += start
+                            var moved = false
+                            while (true) {
+                                val c = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                                if (!c.pressed) break
+                                if (!moved && (c.position - down.position).getDistance() > viewConfiguration.touchSlop) moved = true
+                                if (moved) {
+                                    c.consume()
+                                    live += toImage(c.position)
+                                }
+                            }
+                            val points = FloatArray(live.size * 2).also { a -> live.forEachIndexed { i, o -> a[i * 2] = o.x; a[i * 2 + 1] = o.y } }
+                            live.clear()
+                            if (moved) {
+                                eraseStrokes += EraseStroke(points, width)
+                                return@awaitEachGesture
+                            }
+                            // a tap on found text turns it on or off; anywhere else it marks a dot
+                            val hitBox = textBoxes.indexOfLast { it.rect.contains(start.x, start.y) }
+                            if (hitBox >= 0) {
+                                val box = textBoxes[hitBox]
+                                Haptics.toggle(view, !box.on)
+                                textBoxes[hitBox] = TextBox(box.rect, !box.on)
+                            } else {
+                                eraseStrokes += EraseStroke(floatArrayOf(start.x, start.y), width)
                             }
                         }
                     }
@@ -556,6 +689,9 @@ internal fun PhotoEditorScreen(hit: PhotoHit, topInset: Dp, bottomInset: Dp, onC
                 }
                 Canvas(Modifier.fillMaxSize().then(exclusions).then(gestures)) {
                     val shown = preview ?: return@Canvas
+                    // the picture and its marks turn together behind the crop box while straightening
+                    val turn = if (tool == Tool.Crop) angle else 0f
+                    rotate(turn, Offset(left + dispW / 2f, top + dispH / 2f)) {
                     drawImage(
                         shown,
                         srcSize = IntSize(shown.width, shown.height),
@@ -585,10 +721,47 @@ internal fun PhotoEditorScreen(hit: PhotoHit, topInset: Dp, bottomInset: Dp, onC
                             val shape = snapped
                             if (shape != null) {
                                 PhotoEditor.drawMark(native, shape)
-                            } else if (live.isNotEmpty()) {
+                            } else if (live.isNotEmpty() && tool != Tool.Erase) {
                                 val pts = FloatArray(live.size * 2)
                                 live.forEachIndexed { i, o -> pts[i * 2] = o.x; pts[i * 2 + 1] = o.y }
                                 PhotoEditor.drawMark(native, EditOp.Stroke(pts, color, penDp.dp.toPx() / s))
+                            }
+                            native.restore()
+                        }
+                    }
+                    }
+                    // what the eraser will take out: painted lines, and the text found (on = filled, off = outlined)
+                    if (tool == Tool.Erase && (eraseStrokes.isNotEmpty() || textBoxes.isNotEmpty() || live.isNotEmpty())) {
+                        drawIntoCanvas { canvas ->
+                            val native = canvas.nativeCanvas
+                            native.save()
+                            native.clipRect(left, top, left + dispW, top + dispH)
+                            native.translate(left, top)
+                            native.scale(s, s)
+                            val pen = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                                this.color = ERASE_TINT
+                                style = android.graphics.Paint.Style.STROKE
+                                strokeCap = android.graphics.Paint.Cap.ROUND
+                                strokeJoin = android.graphics.Paint.Join.ROUND
+                            }
+                            fun line(points: FloatArray, width: Float) {
+                                pen.strokeWidth = width
+                                if (points.size <= 2) native.drawPoint(points[0], points[1], pen)
+                                else native.drawPath(PhotoEditor.strokePath(points), pen)
+                            }
+                            eraseStrokes.forEach { line(it.points, it.width) }
+                            if (live.isNotEmpty()) {
+                                line(FloatArray(live.size * 2).also { a -> live.forEachIndexed { i, o -> a[i * 2] = o.x; a[i * 2 + 1] = o.y } }, eraseDp.dp.toPx() / s)
+                            }
+                            val fill = android.graphics.Paint().apply { this.color = ERASE_TINT }
+                            val edge = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                                style = android.graphics.Paint.Style.STROKE
+                                strokeWidth = 2.dp.toPx() / s
+                            }
+                            textBoxes.forEach { b ->
+                                if (b.on) native.drawRect(b.rect, fill)
+                                edge.color = if (b.on) ERASE_EDGE else ERASE_OFF
+                                native.drawRect(b.rect, edge)
                             }
                             native.restore()
                         }
@@ -605,6 +778,13 @@ internal fun PhotoEditorScreen(hit: PhotoHit, topInset: Dp, bottomInset: Dp, onC
                             drawLine(Color.White.copy(alpha = 0.5f), Offset(r.left + r.width * i / 3f, r.top), Offset(r.left + r.width * i / 3f, r.bottom), thin)
                             drawLine(Color.White.copy(alpha = 0.5f), Offset(r.left, r.top + r.height * i / 3f), Offset(r.right, r.top + r.height * i / 3f), thin)
                         }
+                        if (angle != 0f) {
+                            // a dense grid to line the horizon or the walls up against
+                            for (i in 1 until STRAIGHT_GRID) {
+                                drawLine(Color.White.copy(alpha = 0.3f), Offset(r.left + r.width * i / STRAIGHT_GRID, r.top), Offset(r.left + r.width * i / STRAIGHT_GRID, r.bottom), thin)
+                                drawLine(Color.White.copy(alpha = 0.3f), Offset(r.left, r.top + r.height * i / STRAIGHT_GRID), Offset(r.right, r.top + r.height * i / STRAIGHT_GRID), thin)
+                            }
+                        }
                         drawRect(Color.White, r.topLeft, r.size, style = Stroke(1.5.dp.toPx()))
                         val arm = min(20.dp.toPx(), min(r.width, r.height) / 2f)
                         val bold = 4.dp.toPx()
@@ -618,7 +798,7 @@ internal fun PhotoEditorScreen(hit: PhotoHit, topInset: Dp, bottomInset: Dp, onC
                     }
                 }
 
-                if (busy && preview == null || saving) {
+                if (busy && (preview == null || tool == Tool.Erase) || saving) {
                     CircularProgressIndicator(color = p.accent, modifier = Modifier.align(Alignment.Center).size(40.dp))
                 }
                 if (loadFailed) {
@@ -628,9 +808,12 @@ internal fun PhotoEditorScreen(hit: PhotoHit, topInset: Dp, bottomInset: Dp, onC
 
             Column(Modifier.fillMaxWidth().heightIn(min = PANEL_MIN_HEIGHT).padding(horizontal = 12.dp), verticalArrangement = Arrangement.Center) {
                 when (tool) {
-                    Tool.Crop -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        PanelButton(stringResource(R.string.ed_reset), enabled = cropPending) { crop = Rect(0f, 0f, imgW.toFloat(), imgH.toFloat()) }
-                        PanelButton(stringResource(R.string.ed_apply), enabled = cropPending, accent = true) { applyCrop() }
+                    Tool.Crop -> {
+                        StraightenRow(angle, enabled = imgW > 0) { straighten(it) }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            PanelButton(stringResource(R.string.ed_reset), enabled = cropPending) { straighten(0f) }
+                            PanelButton(stringResource(R.string.ed_apply), enabled = cropPending, accent = true) { applyCrop() }
+                        }
                     }
                     Tool.Rotate -> Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         PanelButton(stringResource(R.string.ed_rotate_left), icon = R.drawable.ic_rotate_left, enabled = session != null) { edit({ it.transform(EditOp.Rotate(clockwise = false)) }) }
@@ -657,6 +840,19 @@ internal fun PhotoEditorScreen(hit: PhotoHit, topInset: Dp, bottomInset: Dp, onC
                         SizeRow(stringResource(R.string.ed_size), textDp, TEXT_MIN_DP..TEXT_MAX_DP, color) { textDp = it }
                         Text(stringResource(R.string.ed_tap_for_text), color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodyMedium)
                     }
+                    Tool.Erase -> {
+                        SizeRow(stringResource(R.string.ed_size), eraseDp, ERASE_MIN_DP..ERASE_MAX_DP, ERASE_EDGE) { eraseDp = it }
+                        val marked = eraseStrokes.isNotEmpty() || textBoxes.any { it.on }
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            PanelButton(stringResource(R.string.ed_find_text), enabled = session != null && !busy) { findText() }
+                            PanelButton(stringResource(R.string.ed_clear), enabled = (eraseStrokes.isNotEmpty() || textBoxes.isNotEmpty()) && !busy) {
+                                eraseStrokes.clear()
+                                textBoxes.clear()
+                            }
+                            PanelButton(stringResource(R.string.ed_erase_now), enabled = marked && !busy, accent = true) { eraseNow() }
+                        }
+                        Text(stringResource(R.string.ed_erase_hint), color = Color.White.copy(alpha = 0.8f), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 6.dp))
+                    }
                 }
             }
 
@@ -666,6 +862,7 @@ internal fun PhotoEditorScreen(hit: PhotoHit, topInset: Dp, bottomInset: Dp, onC
                 ToolButton(stringResource(R.string.ed_resize), R.drawable.ic_resize, tool == Tool.Resize) { pick(Tool.Resize) }
                 ToolButton(stringResource(R.string.ed_draw), R.drawable.ic_pen, tool == Tool.Draw) { pick(Tool.Draw) }
                 ToolButton(stringResource(R.string.ed_text), R.drawable.ic_text, tool == Tool.Text) { pick(Tool.Text) }
+                ToolButton(stringResource(R.string.ed_erase), R.drawable.ic_eraser, tool == Tool.Erase) { pick(Tool.Erase) }
             }
         }
 
@@ -765,6 +962,50 @@ private fun RowScope.PanelButton(label: String, icon: Int? = null, enabled: Bool
             Spacer(Modifier.width(8.dp))
         }
         Text(label, color = tint, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+    }
+}
+
+/** True when every corner of [r] lies on the picture turned [degrees] about its centre (in its [w] x [h] frame). */
+private fun onPicture(r: Rect, degrees: Float, w: Int, h: Int): Boolean {
+    val a = Math.toRadians(-degrees.toDouble())
+    val c = kotlin.math.cos(a).toFloat()
+    val sn = kotlin.math.sin(a).toFloat()
+    val cx = w / 2f
+    val cy = h / 2f
+    for ((x, y) in listOf(r.left to r.top, r.right to r.top, r.left to r.bottom, r.right to r.bottom)) {
+        val px = (x - cx) * c - (y - cy) * sn + cx
+        val py = (x - cx) * sn + (y - cy) * c + cy
+        if (px < -EDGE_SLACK || px > w + EDGE_SLACK || py < -EDGE_SLACK || py > h + EDGE_SLACK) return false
+    }
+    return true
+}
+
+/** The turn for straightening, -45 to 45 degrees in half degrees; a tick when it passes level. */
+@Composable
+private fun StraightenRow(value: Float, enabled: Boolean, onChange: (Float) -> Unit) {
+    val p = LocalPalette.current
+    val view = LocalView.current
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 6.dp)) {
+        Text(stringResource(R.string.ed_straighten), color = Color.White, style = MaterialTheme.typography.labelLarge, modifier = Modifier.width(96.dp), maxLines = 1)
+        Slider(
+            value = value,
+            onValueChange = { v ->
+                val snapped = (v / STRAIGHT_STEP).roundToInt() * STRAIGHT_STEP
+                if (snapped != value) {
+                    if (snapped == 0f || (snapped > 0f) != (value > 0f)) Haptics.tick(view, true)
+                    onChange(snapped)
+                }
+            },
+            enabled = enabled,
+            valueRange = -STRAIGHT_MAX..STRAIGHT_MAX,
+            colors = SliderDefaults.colors(thumbColor = p.accent, activeTrackColor = p.accent, inactiveTrackColor = Color.White.copy(alpha = 0.3f)),
+            modifier = Modifier.weight(1f),
+        )
+        Text(
+            String.format(java.util.Locale.getDefault(), "%.1f°", value),
+            color = Color.White, style = MaterialTheme.typography.labelLarge, maxLines = 1,
+            modifier = Modifier.width(56.dp).padding(start = 8.dp),
+        )
     }
 }
 
@@ -959,6 +1200,24 @@ private fun TextEntryDialog(onDismiss: () -> Unit, onAdd: (String) -> Unit) {
     )
 }
 
+/** The eraser's mask at the picture's size, with the painted lines, opaque where things go; the text found is added by the eraser. */
+private fun eraseMask(width: Int, height: Int, strokes: List<EraseStroke>): android.graphics.Bitmap {
+    val mask = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ALPHA_8)
+    val canvas = android.graphics.Canvas(mask)
+    val pen = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        color = 0xFF000000.toInt()
+        style = android.graphics.Paint.Style.STROKE
+        strokeCap = android.graphics.Paint.Cap.ROUND
+        strokeJoin = android.graphics.Paint.Join.ROUND
+    }
+    strokes.forEach {
+        pen.strokeWidth = it.width
+        if (it.points.size <= 2) canvas.drawPoint(it.points[0], it.points[1], pen)
+        else canvas.drawPath(PhotoEditor.strokePath(it.points), pen)
+    }
+    return mask
+}
+
 private val Corner = RoundedCornerShape(2.dp)
 
 // bright red first: the pen's colour until another is picked
@@ -973,6 +1232,17 @@ private const val TEXT_DEFAULT_DP = 28f
 private const val TEXT_MIN_DP = 14f
 private const val TEXT_MAX_DP = 96f
 private const val TEXT_MAX_CHARS = 500
+private const val REACH_STEPS = 14
+private const val EDGE_SLACK = 0.5f
+private const val STRAIGHT_MAX = 45f
+private const val STRAIGHT_STEP = 0.5f
+private const val STRAIGHT_GRID = 8
+private const val ERASE_DEFAULT_DP = 24f
+private const val ERASE_MIN_DP = 8f
+private const val ERASE_MAX_DP = 80f
+private const val ERASE_TINT = 0x80FF1A1A.toInt()
+private const val ERASE_EDGE = 0xFFFF1A1A.toInt()
+private const val ERASE_OFF = 0xB3FFFFFF.toInt()
 private const val PREVIEW_MAX_EDGE = 2048
 private val HANDLE_REACH = 28.dp
 private val IMAGE_SIDE = 32.dp

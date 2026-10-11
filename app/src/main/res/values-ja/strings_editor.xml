@@ -11,6 +11,7 @@
     <string name="ed_save">保存</string>
     <string name="ed_apply">適用</string>
     <string name="ed_reset">リセット</string>
+    <string name="ed_straighten">傾き補正</string>
     <string name="ed_rotate_left">左</string>
     <string name="ed_rotate_right">右</string>
     <string name="ed_width">幅</string>
@@ -20,6 +21,12 @@
     <string name="ed_too_big">この端末には大きすぎます</string>
     <string name="ed_size">サイズ</string>
     <string name="ed_tap_for_text">テキストを置く場所をタップ</string>
+    <string name="ed_erase">消去</string>
+    <string name="ed_find_text">文字を探す</string>
+    <string name="ed_clear">クリア</string>
+    <string name="ed_erase_hint">消したい部分をなぞるか、アプリに文字を探させます</string>
+    <string name="ed_no_text">この写真に文字は見つかりませんでした。</string>
+    <string name="ed_erase_now">今すぐ消去</string>
     <string name="ed_text_hint">テキストを入力</string>
     <string name="ed_add">追加</string>
     <string name="ed_discard_title">変更を破棄しますか？</string>

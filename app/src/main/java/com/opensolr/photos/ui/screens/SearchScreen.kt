@@ -2391,7 +2391,16 @@ internal fun PhotoViewer(
     // the viewer follows the photo, not its position: a list re-read during a sync must not swap the photo on screen
     var shownId by remember { mutableStateOf(hits.getOrNull(start)?.id) }
     val latestHits by androidx.compose.runtime.rememberUpdatedState(hits)
-    LaunchedEffect(pager) { snapshotFlow { pager.settledPage }.collect { shownId = latestHits.getOrNull(it)?.id ?: shownId } }
+    // only a swipe changes the photo followed; a page moved by a shorter or reordered list does not
+    var swiped by remember { mutableStateOf(false) }
+    LaunchedEffect(pager) {
+        pager.interactionSource.interactions.collect { if (it is androidx.compose.foundation.interaction.DragInteraction.Start) swiped = true }
+    }
+    LaunchedEffect(pager) {
+        snapshotFlow { pager.settledPage }.collect {
+            if (swiped && !pager.isScrollInProgress) { swiped = false; shownId = latestHits.getOrNull(it)?.id ?: shownId }
+        }
+    }
     LaunchedEffect(hits) {
         val id = shownId ?: return@LaunchedEffect
         val at = hits.indexOfFirst { it.id == id }
@@ -2694,7 +2703,7 @@ internal fun PhotoViewer(
                 com.opensolr.photos.ui.WallpaperChooser(ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, one.mediaId)) { wallpaperFor = null }
             }
             editing?.let { one ->
-                PhotoEditorScreen(one, topInset, bottomInset, onClose = { editing = null }, onSaved = { overwrote -> viewModel.photoEdited(if (overwrote) one.id else null) })
+                PhotoEditorScreen(one, viewModel.syncedFolders(), topInset, bottomInset, onClose = { editing = null }, onSaved = { overwrote -> viewModel.photoEdited(if (overwrote) one.id else null) })
             }
 
             // what the face finder saw: the people as a strip of faces with their names, or that it is still looking

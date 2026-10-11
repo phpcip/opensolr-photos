@@ -118,6 +118,46 @@ object FaceMatcher {
         }
     }
 
+    /** An edited copy's face this close to a face of its original is that face. */
+    private const val COPY_SAME = 0.5f
+
+    /** The copy is linked to its original when the editor saves it. */
+    fun linkCopy(context: android.content.Context, copyId: String, originalId: String) {
+        val prefs = com.opensolr.photos.data.AppPrefs(context)
+        prefs.copyOrigins = prefs.copyOrigins.filterNot { it.startsWith("$copyId|") }.toSet() + "$copyId|$originalId"
+    }
+
+    /**
+     * An edited copy's faces take the names of the same faces in its original, as the original has them (sure or
+     * not, by whom). Runs once, the first time the copy's faces are read. The names given.
+     */
+    fun fromOriginal(context: android.content.Context, cache: PhotoCache, copyId: String): List<String> {
+        val prefs = com.opensolr.photos.data.AppPrefs(context)
+        val link = prefs.copyOrigins.firstOrNull { it.startsWith("$copyId|") } ?: return emptyList()
+        prefs.copyOrigins = prefs.copyOrigins - link
+        val originalId = link.substringAfter('|')
+        val source = cache.facesWithVectors(originalId).filter { it.first.person != null }
+        if (source.isEmpty()) return emptyList()
+        val flags = cache.faceFlags(originalId)
+        val copy = cache.facesWithVectors(copyId).filter { it.first.person == null }
+        // the closest pairs first, each face of either photo used once
+        val pairs = ArrayList<Triple<Int, Int, Float>>()
+        copy.forEachIndexed { i, c -> source.forEachIndexed { j, o -> val s = FaceEngine.similarity(c.second, o.second); if (s >= COPY_SAME) pairs += Triple(i, j, s) } }
+        pairs.sortByDescending { it.third }
+        val usedCopy = HashSet<Int>()
+        val usedSource = HashSet<Int>()
+        val named = ArrayList<String>()
+        for ((i, j, _) in pairs) {
+            if (i in usedCopy || j in usedSource) continue
+            usedCopy += i; usedSource += j
+            val from = source[j].first
+            val (sure, how) = flags[from.fid] ?: (true to PhotoCache.HOW_OWNER)
+            cache.setFacePerson(listOf(copy[i].first.fid), from.person, sure = sure, how = how)
+            named += from.person!!
+        }
+        return named.distinctBy { it.lowercase() }
+    }
+
     private fun overlap(f: PhotoCache.FaceRow, a: com.opensolr.photos.media.PhotoReader.FaceArea): Float {
         val x1 = maxOf(f.x, a.x); val y1 = maxOf(f.y, a.y)
         val x2 = minOf(f.x + f.w, a.x + a.w); val y2 = minOf(f.y + f.h, a.y + a.h)

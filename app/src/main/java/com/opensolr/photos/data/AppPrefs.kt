@@ -137,6 +137,13 @@ class AppPrefs(context: Context) {
             prefs.edit().putStringSet(KEY_RESYNC_IDS, value.toSet()).commit()
         }
 
+    // Copies saved from the editor, "copyId|originalId": their faces take the original's names when first read
+    var copyOrigins: Set<String>
+        get() = prefs.getStringSet(KEY_COPY_ORIGINS, emptySet())?.toSet() ?: emptySet()
+        set(value) {
+            prefs.edit().putStringSet(KEY_COPY_ORIGINS, value.toSet()).commit()
+        }
+
     // Photos whose owner reset their wording: read again, and the server drops the stored wording
     var wordingResetIds: Set<String>
         get() = prefs.getStringSet(KEY_WORDING_RESET_IDS, emptySet())?.toSet() ?: emptySet()
@@ -318,6 +325,7 @@ class AppPrefs(context: Context) {
         private const val KEY_REPORT = "last_report"
         private const val KEY_REBUILD = "rebuild_approved"
         private const val KEY_RESYNC_IDS = "resync_ids"
+        private const val KEY_COPY_ORIGINS = "copy_origins"
         private const val KEY_WORDING_RESET_IDS = "wording_reset_ids"
         private const val KEY_REREAD_ALL_SINCE = "reread_all_since"
         private const val KEY_WARNED = "warned_keys"
