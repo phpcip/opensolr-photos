@@ -1,0 +1,1 @@
+- Full screen view stays on the photo you tapped while a sync updates the list.

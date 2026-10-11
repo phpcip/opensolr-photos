@@ -2388,6 +2388,15 @@ internal fun PhotoViewer(
 ) {
     val context = LocalContext.current
     val pager = rememberPagerState(initialPage = start) { hits.size }
+    // the viewer follows the photo, not its position: a list re-read during a sync must not swap the photo on screen
+    var shownId by remember { mutableStateOf(hits.getOrNull(start)?.id) }
+    val latestHits by androidx.compose.runtime.rememberUpdatedState(hits)
+    LaunchedEffect(pager) { snapshotFlow { pager.settledPage }.collect { shownId = latestHits.getOrNull(it)?.id ?: shownId } }
+    LaunchedEffect(hits) {
+        val id = shownId ?: return@LaunchedEffect
+        val at = hits.indexOfFirst { it.id == id }
+        if (at >= 0 && at != pager.currentPage) pager.scrollToPage(at)
+    }
     val view = LocalView.current
     var showActions by remember { mutableStateOf(true) }
 
