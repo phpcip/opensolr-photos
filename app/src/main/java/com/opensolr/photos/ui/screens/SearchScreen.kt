@@ -62,6 +62,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Person
@@ -202,6 +204,7 @@ import com.opensolr.photos.ui.SectionLabel
 import com.opensolr.photos.ui.UiState
 import com.opensolr.photos.ui.theme.LocalPalette
 import android.content.ContentUris
+import android.net.Uri
 import android.provider.MediaStore
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.composed
@@ -843,7 +846,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                     modifier = Modifier
                                         .combinedClickable(
                                             onClick = {
-                                                if (state.selecting) { Haptics.toggle(view, hit.id !in state.selectedIds); viewModel.toggleSelected(hit.id) } else viewing = hit
+                                                if (state.selecting) { Haptics.toggle(view, hit.id !in state.selectedIds); row.all.forEach { viewModel.toggleSelected(it.id) } } else viewing = hit
                                             },
                                         )
                                         .semantics {
@@ -886,6 +889,14 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                         hasPlace = !hit.location.isNullOrBlank(),
                                         hasPeople = hit.persons.isNotBlank(),
                                         hasTags = hit.customTags.isNotEmpty(),
+                                        cloud = com.opensolr.photos.storage.CloudFiles.has(hit.id),
+                                        label = when {
+                                            row.extra.isNotEmpty() -> stringResource(R.string.mark_pages, Actions.formatCount((row.extra.size + 1).toLong()))
+                                            hit.isPdfPage -> "${hit.page}/${hit.pages}"
+                                            hit.isVideo -> com.opensolr.photos.ui.Images.duration(hit.durationMs)
+                                            else -> null
+                                        },
+                                        labelIcon = when { hit.isPdfPage -> R.drawable.ic_pdf; hit.isVideo -> R.drawable.ic_play; else -> null },
                                         modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
                                     )
                                 }
@@ -976,7 +987,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
 
         val viewerHits = remember(rows, state.hits, state.resultGroups) {
             if (state.resultGroups.isEmpty()) state.hits
-            else rows.filterIsInstance<GridRow.Photo>().map { it.hit }.distinctBy { it.id }
+            else rows.filterIsInstance<GridRow.Photo>().flatMap { it.all }.distinctBy { it.id }
         }
         val startAt = remember(hit.id, viewerHits) { viewerHits.indexOfFirst { it.id == hit.id }.coerceAtLeast(0) }
         PhotoViewer(
@@ -1239,8 +1250,24 @@ private sealed interface GridRow {
         val selectable: Boolean get() = exact || range != null || (ids.isNotEmpty() && name.contains(" of the same"))
     }
 
-    data class Photo(val hit: PhotoHit, val group: String? = null) : GridRow {
+    /** [extra]: the following pages of the same PDF, folded into this cell; they still open in the viewer. */
+    data class Photo(val hit: PhotoHit, val group: String? = null, val extra: List<PhotoHit> = emptyList()) : GridRow {
         override val key: String get() = if (group == null) hit.id else "g:$group|${hit.id}"
+        val all: List<PhotoHit> get() = if (extra.isEmpty()) listOf(hit) else listOf(hit) + extra
+    }
+}
+
+/** Photos as cells; consecutive pages of one PDF become one cell. */
+private fun MutableList<GridRow>.addPhotos(photos: List<PhotoHit>, group: String? = null) {
+    var i = 0
+    while (i < photos.size) {
+        val first = photos[i]
+        var j = i + 1
+        if (first.isPdfPage && first.parentId != null) {
+            while (j < photos.size && photos[j].parentId == first.parentId) j++
+        }
+        this += GridRow.Photo(first, group, if (j - i > 1) photos.subList(i + 1, j).toList() else emptyList())
+        i = j
     }
 }
 
@@ -1293,7 +1320,7 @@ private fun buildSkeletonRows(
         if (folded) return@forEach
 
         if (group.name in withChildren) return@forEach
-        mine.forEach { rows += GridRow.Photo(it) }
+        rows.addPhotos(mine)
     }
     return rows
 }
@@ -1324,7 +1351,7 @@ private fun buildResultGroupRows(
             exact = true,
             missing = !folded && leaf && photos.size < group.ids.size,
         )
-        photos.forEach { rows += GridRow.Photo(it, group.name) }
+        rows.addPhotos(photos, group.name)
     }
     return rows
 }
@@ -1357,7 +1384,7 @@ private fun buildRows(
             level = level,
             range = range,
         )
-        if (!folded) photos.forEach { this += GridRow.Photo(it) }
+        if (!folded) addPhotos(photos)
         return folded
     }
 
@@ -1392,7 +1419,7 @@ private fun buildRows(
     if (!byDate) {
         // A ranked list with scores close together (no clear fall) is all best matches: the grouping is always
         // there. A list with no scores (browsing, nothing typed) has no ranking to group.
-        val cut = scoreCut(hits) ?: if (hits.first().score > 0.0) hits.size else return hits.map { GridRow.Photo(it) }
+        val cut = scoreCut(hits) ?: if (hits.first().score > 0.0) hits.size else return ArrayList<GridRow>(hits.size).apply { addPhotos(hits) }
         val rows = ArrayList<GridRow>(hits.size + 2)
         rows.addGroup("Best matches", hits.take(cut), text = words.best)
         if (cut < hits.size) rows.addGroup("Also similar", hits.drop(cut), text = words.similar)
@@ -1431,7 +1458,7 @@ private fun buildRows(
     }
 
     val rows = ArrayList<GridRow>(hits.size + years.size * 2)
-    loose.forEach { rows += GridRow.Photo(it) }
+    rows.addPhotos(loose)
 
     recent.forEach { (heading, photos) ->
         val millis = photos.firstNotNullOfOrNull { it.takenMs }
@@ -1686,6 +1713,7 @@ private fun ActiveFilterChips(filters: SearchFilters, onRemove: (SearchFilters) 
         filters.taken?.let { add(it.label to filters.copy(taken = null)) }
         filters.hasOcr?.let { add(context.getString(if (it) R.string.chip_ocr else R.string.chip_no_ocr) to filters.copy(hasOcr = null)) }
         filters.hasPeople?.let { add(context.getString(if (it) R.string.chip_has_people else R.string.chip_no_people) to filters.copy(hasPeople = null)) }
+        filters.kinds.sorted().forEach { kind -> add(context.getString(when (kind) { "video" -> R.string.sw_videos; "pdf" -> R.string.sw_pdfs; else -> R.string.sw_photos }) to filters.toggledKind(kind)) }
     }
     LazyRow(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
 
@@ -1828,7 +1856,7 @@ private fun PlaceButton(label: String, onClick: () -> Unit) {
 private fun Thumbnail(hit: PhotoHit, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
     val context = LocalContext.current
-    val uri = remember(hit.mediaId) { ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, hit.mediaId) }
+    val uri = com.opensolr.photos.ui.Images.model(context, hit)
 
     val edited = EditedPhotos.stamp(hit.mediaId)
     val request = remember(uri, hit.sizeBytes, edited) { ImageRequest.Builder(context).data(uri).size(360).setParameter("bytes", hit.sizeBytes).setParameter("edited", edited).crossfade(true).build() }
@@ -1955,6 +1983,13 @@ private fun FilterSheet(
 
             FilterGroup(stringResource(R.string.taken_between), if (draft.taken != null) 1 else 0, "Taken between" in open, { onToggleSection("Taken between") }) {
                 DateRangeValues(draft.taken, years) { onChange(draft.copy(taken = it, fields = if (it != null) draft.fields - "year" else draft.fields)) }
+            }
+
+            FilterGroup(stringResource(R.string.filter_type), draft.kinds.size, "Type" in open, { onToggleSection("Type") }) {
+                FilterSwitch(stringResource(R.string.sw_photos), stringResource(R.string.sw_photos_hint), "photo" in draft.kinds) { onChange(draft.toggledKind("photo")) }
+                FilterSwitch(stringResource(R.string.sw_videos), stringResource(R.string.sw_videos_hint), "video" in draft.kinds) { onChange(draft.toggledKind("video")) }
+                FilterSwitch(stringResource(R.string.sw_pdfs), stringResource(R.string.sw_pdfs_hint), "pdf" in draft.kinds) { onChange(draft.toggledKind("pdf")) }
+                Spacer(Modifier.height(12.dp))
             }
 
             val switchesOn = listOf(draft.hasOcr == true, draft.tagged == true, draft.hasPeople == true, draft.withLocation).count { it }
@@ -2416,6 +2451,7 @@ internal fun PhotoViewer(
 
     var sheetFor by remember { mutableStateOf<PhotoHit?>(null) }
     var viewerShare by remember { mutableStateOf<PhotoHit?>(null) }
+    var confirmPdfDelete by remember { mutableStateOf<PhotoHit?>(null) }
     var wallpaperFor by remember { mutableStateOf<PhotoHit?>(null) }
     var editing by remember { mutableStateOf<PhotoHit?>(null) }
     // faces: shown on demand on the photo on screen, a tap on one names it
@@ -2467,15 +2503,20 @@ internal fun PhotoViewer(
                 modifier = Modifier.fillMaxSize(),
             ) { page ->
                 val hit = hits.getOrNull(page) ?: return@HorizontalPager
-                val uri = remember(hit.mediaId) {
-                    ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, hit.mediaId)
-                }
+                val cloudFile = com.opensolr.photos.storage.CloudFiles.model(context, hit.id)
+                val model: Any = remember(hit.mediaId, cloudFile, hit.kind) { cloudFile?.let { android.net.Uri.fromFile(it) } ?: com.opensolr.photos.ui.Images.model(context, hit) }
+                val uri: Uri = (model as? Uri) ?: hit.uri
                 val edited = EditedPhotos.stamp(hit.mediaId)
                 var baseSize by remember(hit.mediaId, edited) { mutableStateOf<androidx.compose.ui.geometry.Size?>(null) }
+                // a clip on this phone plays; one only the backend has shows its first frame like a photo
+                val playable = hit.isVideo && cloudFile == null
                 Box(Modifier.fillMaxSize()) {
+                if (playable) {
+                    VideoPage(uri, active = page == pager.currentPage, onTap = { showActions = !showActions })
+                } else
                 AsyncImage(
 
-                    model = ImageRequest.Builder(context).data(uri).setParameter("bytes", hit.sizeBytes).setParameter("edited", edited).crossfade(true).build(),
+                    model = ImageRequest.Builder(context).data(model).setParameter("bytes", hit.sizeBytes).setParameter("edited", edited).crossfade(true).build(),
                     contentDescription = hit.meaning.ifBlank { hit.fileName },
                     contentScale = ContentScale.Fit,
                     onSuccess = { baseSize = it.painter.intrinsicSize },
@@ -2607,8 +2648,8 @@ internal fun PhotoViewer(
                             translationY = offset.y + (if (page == pager.currentPage) dismiss.value else 0f)
                         },
                 )
-                // zoomed in: the original file's pixels over the screen-sized image
-                androidx.compose.runtime.key(edited) { ViewerSharpLayer(
+                // zoomed in: the original file's pixels over the screen-sized image (a photo's; a page is rendered sharp already)
+                if (hit.mediaKind == com.opensolr.photos.media.Kind.PHOTO) androidx.compose.runtime.key(edited) { ViewerSharpLayer(
                     uri = uri,
                     active = page == pager.currentPage,
                     baseSize = baseSize,
@@ -2672,20 +2713,47 @@ internal fun PhotoViewer(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                 ) {
 
-                    // a photo still syncing shows its actions greyed out until its document is back
+                    // a photo still syncing shows its actions greyed out until its document is back;
+                    // one only the backend has keeps its words and sharing, the file itself comes with Download
                     val on = !hit.pending
-                    ViewerIconAction(stringResource(R.string.fc_people), Icons.Filled.Face, on) { facesOn = !facesOn }
+                    val cloud = com.opensolr.photos.storage.CloudFiles.has(hit.id)
+                    val photo = hit.mediaKind == com.opensolr.photos.media.Kind.PHOTO
+                    if (!hit.isPdfPage) ViewerIconAction(stringResource(R.string.fc_people), Icons.Filled.Face, on) { facesOn = !facesOn }
                     ViewerAction(stringResource(R.string.act_tag), R.drawable.ic_tag, on) { editFor = hit }
-                    ViewerAction(stringResource(R.string.act_edit), R.drawable.ic_edit, on) { editing = hit }
-                    ViewerAction(stringResource(R.string.act_wallpaper), R.drawable.ic_wallpaper) { wallpaperFor = hit }
+                    if (hit.isPdfPage) {
+                        // the pages of the same file, as far as they are in the list
+                        val at = pager.currentPage
+                        val previous = hits.getOrNull(at - 1)?.takeIf { it.parentId == hit.parentId && it.page == hit.page - 1 }
+                        val next = hits.getOrNull(at + 1)?.takeIf { it.parentId == hit.parentId && it.page == hit.page + 1 }
+                        ViewerIconAction(stringResource(R.string.act_prev_page), Icons.AutoMirrored.Filled.KeyboardArrowLeft, previous != null) { scope.launch { pager.animateScrollToPage(at - 1) } }
+                        ViewerIconAction(stringResource(R.string.act_next_page), Icons.AutoMirrored.Filled.KeyboardArrowRight, next != null) { scope.launch { pager.animateScrollToPage(at + 1) } }
+                        if (!cloud) ViewerAction(stringResource(R.string.act_open_pdf), R.drawable.ic_pdf, on) { Actions.openFile(context, hit.uri, "application/pdf") }
+                    }
+                    if (cloud) {
+                        ViewerAction(stringResource(R.string.stg_download), R.drawable.ic_open, on && hit.id !in viewerState.downloading) { viewModel.downloadOriginal(hit) }
+                    } else if (photo) {
+                        ViewerAction(stringResource(R.string.act_edit), R.drawable.ic_edit, on) { editing = hit }
+                        ViewerAction(stringResource(R.string.act_wallpaper), R.drawable.ic_wallpaper) { wallpaperFor = hit }
+                    }
                     ViewerAction(stringResource(R.string.act_similar), R.drawable.ic_duplicates, on) { onClose(); viewModel.showSimilar(hit) }
                     ViewerAction(stringResource(R.string.act_share), R.drawable.ic_share, on) { viewerShare = hit }
                     hit.latLon?.let { (lat, lon) ->
                         ViewerAction(stringResource(R.string.act_map), R.drawable.ic_map, on) { onClose(); viewModel.openMap(MapFocus(lat, lon, 19.0)) }
                         ViewerIconAction(stringResource(R.string.act_nearby), Icons.Filled.LocationOn, on) { onClose(); viewModel.searchNear(lat, lon, 5.0) }
                     }
-                    ViewerAction(stringResource(R.string.act_delete), R.drawable.ic_delete, on) { onDelete(hit) }
+                    if (!cloud) ViewerAction(stringResource(R.string.act_delete), R.drawable.ic_delete, on) { if (hit.isPdfPage) confirmPdfDelete = hit else onDelete(hit) }
                 }
+            }
+
+            confirmPdfDelete?.let { one ->
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { confirmPdfDelete = null },
+                    title = { Text(stringResource(R.string.pdf_delete_title)) },
+                    text = { com.opensolr.photos.ui.KeyboardBack(); Text(stringResource(R.string.pdf_delete_text, one.fileName, Actions.formatCount(one.pages.toLong()))) },
+                    confirmButton = { com.opensolr.photos.ui.TextButton(onClick = { confirmPdfDelete = null; onDelete(one) }) { Text(stringResource(R.string.act_delete), color = LocalPalette.current.accent) } },
+                    dismissButton = { com.opensolr.photos.ui.TextButton(onClick = { confirmPdfDelete = null }) { Text(stringResource(R.string.cancel), color = LocalPalette.current.ink) } },
+                    containerColor = LocalPalette.current.paper,
+                )
             }
 
             sheetFor?.let { held ->
@@ -3042,7 +3110,8 @@ internal fun DetailsSheet(
                 .padding(horizontal = 20.dp)
                 .navigationBarsPadding()
         ) {
-            val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, hit.mediaId)
+            val cloudFile = com.opensolr.photos.storage.CloudFiles.model(context, hit.id)
+            val uri: Any = com.opensolr.photos.ui.Images.model(context, hit)
 
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
                 Box(Modifier.size(104.dp).clip(Corner).background(p.chip)) {
@@ -3064,6 +3133,8 @@ internal fun DetailsSheet(
                     )
                     Spacer(Modifier.height(4.dp))
                     val plate = listOfNotNull(
+                        if (hit.isVideo) stringResource(R.string.kind_video, com.opensolr.photos.ui.Images.duration(hit.durationMs)) else null,
+                        if (hit.isPdfPage) stringResource(R.string.kind_pdf_page, Actions.formatCount(hit.page.toLong()), Actions.formatCount(hit.pages.toLong())) else null,
                         hit.folder.trim('/').ifBlank { null },
                         Actions.formatSolrDate(hit.takenAt),
                         listOfNotNull(hit.cameraMake, hit.cameraModel).joinToString(" ").takeIf { it.isNotBlank() },
@@ -3092,6 +3163,23 @@ internal fun DetailsSheet(
                 }
             }
             Spacer(Modifier.height(16.dp))
+
+            if (hit.isPdfPage && cloudFile == null) {
+                com.opensolr.photos.ui.GhostButton(stringResource(R.string.act_open_pdf), onClick = { Actions.openFile(context, hit.uri, "application/pdf") }, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(16.dp))
+            }
+
+            if (cloudFile != null) {
+                SectionLabel(stringResource(R.string.stg_mark))
+                Spacer(Modifier.height(10.dp))
+                val where = fresh.storage?.let { it.label.ifBlank { it.host } }.orEmpty()
+                val bytes = remember(hit.id) { com.opensolr.photos.data.PhotoCache.of(context).remote(hit.id)?.bytes ?: 0L }
+                Text(stringResource(R.string.stg_original_in, where, Actions.formatFileSize(bytes)), style = MaterialTheme.typography.bodyMedium, color = p.ink)
+                Spacer(Modifier.height(10.dp))
+                val downloading = hit.id in fresh.downloading
+                com.opensolr.photos.ui.GhostButton(if (downloading) stringResource(R.string.stg_downloading) else stringResource(R.string.stg_download), onClick = { viewModel.downloadOriginal(hit) }, enabled = !downloading, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(16.dp))
+            }
 
             SectionLabel(stringResource(R.string.sec_place))
             Spacer(Modifier.height(10.dp))
@@ -3184,9 +3272,20 @@ private fun headingLabel(row: GridRow.Heading): String =
     row.text.substringBefore(" \u00b7 ").substringBefore(" (").trim().ifBlank { row.name }
 
 @Composable
-private fun PhotoMarks(hasPlace: Boolean, hasPeople: Boolean, hasTags: Boolean, modifier: Modifier = Modifier) {
-    if (!hasPlace && !hasPeople && !hasTags) return
-    Row(modifier, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+private fun PhotoMarks(hasPlace: Boolean, hasPeople: Boolean, hasTags: Boolean, cloud: Boolean = false, label: String? = null, labelIcon: Int? = null, modifier: Modifier = Modifier) {
+    if (!hasPlace && !hasPeople && !hasTags && !cloud && label == null) return
+    Row(modifier, horizontalArrangement = Arrangement.spacedBy(3.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (label != null) {
+            Row(Modifier.height(18.dp).background(Color(0x99000000), Corner).padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                labelIcon?.let { Icon(painterResource(it), contentDescription = null, tint = Color.White, modifier = Modifier.size(11.dp)) }
+                Text(label, style = MaterialTheme.typography.labelSmall, color = Color.White, maxLines = 1)
+            }
+        }
+        if (cloud) {
+            PhotoMark {
+                Icon(painterResource(R.drawable.ic_cloud), contentDescription = stringResource(R.string.stg_mark), tint = Color.White, modifier = Modifier.size(12.dp))
+            }
+        }
         if (hasPlace) {
             PhotoMark {
                 Icon(painterResource(R.drawable.ic_map), contentDescription = stringResource(R.string.cd_has_location), tint = Color.White, modifier = Modifier.size(12.dp))
@@ -3359,3 +3458,21 @@ internal fun <T : Any> Modifier.dragSelect(
 private val DRAG_EDGE = 72.dp
 
 private val DRAG_STEP = 14.dp
+
+
+/** A clip on this phone, played in place; it starts when its page is the one shown and stops when it is not. */
+@Composable
+private fun VideoPage(uri: Uri, active: Boolean, onTap: () -> Unit) {
+    val context = LocalContext.current
+    val view = remember(uri) {
+        android.widget.VideoView(context).apply {
+            setVideoURI(uri)
+            setMediaController(android.widget.MediaController(context).also { it.setAnchorView(this) })
+            setOnPreparedListener { it.isLooping = false }
+            setOnClickListener { onTap() }
+        }
+    }
+    androidx.compose.runtime.DisposableEffect(view) { onDispose { runCatching { view.stopPlayback() } } }
+    LaunchedEffect(active) { if (active) view.start() else runCatching { view.pause() } }
+    androidx.compose.ui.viewinterop.AndroidView(factory = { view }, modifier = Modifier.fillMaxSize())
+}

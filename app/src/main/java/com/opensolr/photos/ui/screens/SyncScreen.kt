@@ -12,6 +12,7 @@ import com.opensolr.photos.R
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -159,7 +160,7 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
         )
         Spacer(Modifier.height(28.dp))
 
-        // Faces in every photo: only when the owner asks, only on the charger, with progress and a stop
+        // Faces in every photo: only when the owner asks, with progress and a stop
         val faceScan by com.opensolr.photos.sync.FaceWorker.progress.collectAsState()
         var confirmFaceScan by remember { mutableStateOf(false) }
         SectionLabel(stringResource(R.string.fc_people))
@@ -191,6 +192,50 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
                 textContentColor = p.muted,
             )
         }
+
+        SectionLabel(stringResource(R.string.sync_also))
+        Spacer(Modifier.height(4.dp))
+        val videoContext = androidx.compose.ui.platform.LocalContext.current
+        val videoAsk = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { viewModel.setIncludeVideos(true) }
+        KindSwitch(stringResource(R.string.sync_videos), stringResource(R.string.sync_videos_text), state.includeVideos) { on ->
+            val needs = on && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+                androidx.core.content.ContextCompat.checkSelfPermission(videoContext, android.Manifest.permission.READ_MEDIA_VIDEO) != android.content.pm.PackageManager.PERMISSION_GRANTED
+            if (needs) videoAsk.launch(android.Manifest.permission.READ_MEDIA_VIDEO) else viewModel.setIncludeVideos(on)
+        }
+        HorizontalDivider(color = p.hairline)
+        KindSwitch(stringResource(R.string.sync_pdfs), stringResource(R.string.sync_pdfs_text), state.includePdfs) { viewModel.setIncludePdfs(it) }
+        if (state.includePdfs) {
+            // GitHub build, Android 11+: PDFs of other apps need All files access, granted in the system settings
+            var allFiles by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(Actions.hasAllFilesAccess()) }
+            val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+            androidx.compose.runtime.DisposableEffect(owner) {
+                val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                    if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                        val now = Actions.hasAllFilesAccess()
+                        if (now && !allFiles) viewModel.forceResync()
+                        allFiles = now
+                    }
+                }
+                owner.lifecycle.addObserver(observer)
+                onDispose { owner.lifecycle.removeObserver(observer) }
+            }
+            if (!allFiles) {
+                Spacer(Modifier.height(8.dp))
+                com.opensolr.photos.ui.Notice(stringResource(R.string.sync_pdfs_access_text), title = stringResource(R.string.sync_pdfs_access_title))
+                Spacer(Modifier.height(8.dp))
+                GhostButton(stringResource(R.string.sync_pdfs_access_allow), onClick = { Actions.openAllFilesAccess(videoContext) }, modifier = Modifier.fillMaxWidth())
+            }
+            Text(stringResource(R.string.sync_pdf_pages, Actions.formatCount(state.pdfMaxPages.toLong())), style = MaterialTheme.typography.bodyMedium, color = p.ink, modifier = Modifier.padding(top = 10.dp))
+            androidx.compose.material3.Slider(
+                value = state.pdfMaxPages.toFloat(),
+                onValueChange = { viewModel.setPdfMaxPages(it.toInt()) },
+                valueRange = 10f..500f,
+                steps = 48,
+                colors = androidx.compose.material3.SliderDefaults.colors(thumbColor = p.accent, activeTrackColor = p.accent, inactiveTrackColor = p.hairline),
+            )
+        }
+        HorizontalDivider(color = p.hairline)
+        Spacer(Modifier.height(28.dp))
 
         SectionLabel(stringResource(R.string.sync_auto))
         Spacer(Modifier.height(4.dp))
@@ -258,6 +303,24 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
 }
 
 @Composable
+private fun KindSwitch(title: String, text: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    val view = androidx.compose.ui.platform.LocalView.current
+    val p = LocalPalette.current
+    Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge, color = p.ink)
+            Text(text, style = MaterialTheme.typography.bodySmall, color = p.muted)
+        }
+        Spacer(Modifier.width(12.dp))
+        androidx.compose.material3.Switch(
+            checked = checked,
+            onCheckedChange = { Haptics.toggle(view, it); onChange(it) },
+            colors = androidx.compose.material3.SwitchDefaults.colors(checkedTrackColor = p.accentFill, checkedThumbColor = p.onAccentFill, uncheckedTrackColor = p.chip, uncheckedBorderColor = p.hairline, uncheckedThumbColor = p.muted),
+        )
+    }
+}
+
+@Composable
 private fun ScheduleOption(label: String, selected: Boolean, onSelect: () -> Unit) {
     val view = androidx.compose.ui.platform.LocalView.current
     val p = LocalPalette.current
@@ -287,7 +350,7 @@ private fun statusLine(state: UiState): String {
         "rebuild_required" -> stringResource(R.string.st_rebuild)
         "update_app" -> stringResource(R.string.st_update)
         "device_choice" -> stringResource(R.string.st_device)
-        "waiting_charger" -> stringResource(R.string.st_charger, report.message)
+        "waiting_battery" -> stringResource(R.string.st_battery, report.message)
         "retry_later" -> stringResource(R.string.st_retry)
         else -> stringResource(R.string.st_failed)
     }
@@ -302,7 +365,7 @@ private fun resultLabel(status: String): String = when (status) {
     "rebuild_required" -> stringResource(R.string.rs_rebuild)
     "update_app" -> stringResource(R.string.rs_update)
     "device_choice" -> stringResource(R.string.rs_device)
-    "waiting_charger" -> stringResource(R.string.rs_charger)
+    "waiting_battery" -> stringResource(R.string.rs_battery)
     "retry_later" -> stringResource(R.string.rs_retry)
     else -> stringResource(R.string.rs_failed)
 }

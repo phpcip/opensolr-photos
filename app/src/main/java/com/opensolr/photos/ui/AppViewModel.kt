@@ -48,7 +48,10 @@ import java.security.MessageDigest
 
 data class FaceReview(val person: String, val faces: List<com.opensolr.photos.data.PhotoCache.FaceRow>)
 
-enum class Screen { SignIn, Welcome, Permissions, Folders, Setup, Search, Sync, Account, Map, Albums, Stats }
+enum class Screen { SignIn, Welcome, Permissions, Folders, Setup, Search, Sync, Account, Map, Albums, Stats, Storage }
+
+/** What the backend holds and what is still to go, for the Storage screen. */
+data class StorageStats(val inBackend: Long, val bytesInBackend: Long, val pending: Int, val cloudOnly: Long, val cloudOnlyBytes: Long)
 
 data class UiState(
     val screen: Screen,
@@ -79,6 +82,9 @@ data class UiState(
     val smart: Boolean = false,
     val endReached: Boolean = false,
     val schedule: SyncSchedule = SyncSchedule.WEEKLY,
+    val includeVideos: Boolean = true,
+    val includePdfs: Boolean = true,
+    val pdfMaxPages: Int = AppPrefs.DEFAULT_PDF_MAX_PAGES,
     val lastReport: SyncReport? = null,
     /** Photos in the indexed folders right now, in the index right now, and kept from removed folders; null until read. */
     val liveFolderCount: Int? = null,
@@ -207,6 +213,20 @@ data class UiState(
 
     val hapticsEnabled: Boolean = true,
 
+    val useMobileData: Boolean = false,
+    val storage: com.opensolr.photos.data.StorageConfig? = null,
+    val storageReport: com.opensolr.photos.data.StorageReport? = null,
+    val storageStatus: com.opensolr.photos.storage.StorageStatus = com.opensolr.photos.storage.StorageStatus(false, false, "", 0, 0),
+    val storageStats: StorageStats? = null,
+    val storageEditing: Boolean = false,
+    val storageTesting: Boolean = false,
+    val storageTested: com.opensolr.photos.data.StorageConfig? = null,
+    val storageTestResult: String? = null,
+    val storageSaving: Boolean = false,
+    val storageError: String? = null,
+    val storageClearing: Boolean = false,
+    val downloading: Set<String> = emptySet(),
+
     val cachedCount: Int = 0,
 
     val deviceChoices: List<AccountIndex> = emptyList(),
@@ -281,6 +301,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 wasBusy = status.busy
                 // every batch the sync sends shows up in the list as it lands, not at the end
                 val step = status.done to status.total
+                if (status.running && status.total > 0 && step != lastStep) refreshLocalQuietly()
+                lastStep = step
+            }
+        }
+        viewModelScope.launch {
+            var wasBusy = false
+            var lastStep = -1 to -1
+            com.opensolr.photos.storage.StorageScheduler.status(context).collect { status ->
+                _state.update { it.copy(storageStatus = status) }
+                if (wasBusy && !status.busy) onStorageFinished()
+                wasBusy = status.busy
+                val step = status.done to status.total
+                // photos coming back from the backend show in the list as they land
                 if (status.running && status.total > 0 && step != lastStep) refreshLocalQuietly()
                 lastStep = step
             }
@@ -401,10 +434,11 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // After a sync, only what it could not have seen justifies another one.
     private fun phoneAheadOfIndex(): Boolean {
-        val local = MediaScanner.scan(context, prefs.folders) ?: return false
+        val local = MediaScanner.scan(context, prefs.folders, photoCache.aliases(), com.opensolr.photos.media.ScanOptions.of(context)) ?: return false
         val known = photoCache.docSizes()
         val skipped = photoCache.skippedSizes()
-        if (known.keys.any { it !in local }) return true
+        val cloud = photoCache.cloudIds()
+        if (known.keys.any { it !in local && it !in cloud }) return true
         return local.values.any { photo ->
             val stamp = known[photo.id]
             skipped[photo.id] != photo.sizeBytes && (stamp == null || stamp.first != photo.sizeBytes)
@@ -479,7 +513,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         SyncScheduler.runNow(context)
     }
 
-    /** The owner asked for every photo to be read for faces: runs on the charger, in the background, stoppable. */
+    /** The owner asked for every photo to be read for faces: runs in the background, stoppable. */
     fun startFaceScan() = com.opensolr.photos.sync.FaceWorker.scanAll(context)
 
     fun stopFaceScan() = com.opensolr.photos.sync.FaceWorker.stopScan(context)
@@ -1235,6 +1269,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             planWarnings = prefs.account?.let { PlanWatch.evaluate(it) } ?: emptyList(),
             selectedFolders = prefs.folders,
             schedule = prefs.schedule,
+            includeVideos = prefs.includeVideos,
+            includePdfs = prefs.includePdfs,
+            pdfMaxPages = prefs.pdfMaxPages,
             lastReport = prefs.lastReport,
             indexName = prefs.connection?.indexName,
             openFilterSections = prefs.openFilterSections,
@@ -1242,7 +1279,192 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             statsOpen = prefs.statsOpen,
             meZonesOpen = prefs.meZonesOpen,
             groupBy = GroupBy.of(prefs.groupBy),
+            useMobileData = prefs.useMobileData,
+            storage = prefs.storage,
+            storageReport = prefs.storageReport,
         )
+    }
+
+    // ---- storage backend ----
+
+    private fun onStorageFinished() {
+        _state.update { it.copy(storageReport = prefs.storageReport, storage = prefs.storage) }
+        if (_state.value.screen == Screen.Storage) refreshStorageStats()
+        if (_state.value.screen == Screen.Search) refresh()
+    }
+
+    fun setUseMobileData(on: Boolean) {
+        prefs.useMobileData = on
+        _state.update { it.copy(useMobileData = on) }
+        // the queued runs take the new network rule
+        SyncScheduler.applySchedule(context, prefs.schedule)
+        com.opensolr.photos.storage.StorageScheduler.applySchedule(context)
+    }
+
+    fun setBackupQuality(quality: String) {
+        val held = prefs.storage ?: return
+        val next = held.copy(quality = quality, updated = System.currentTimeMillis() / 1000)
+        prefs.storage = next
+        _state.update { it.copy(storage = next) }
+        val session = prefs.session ?: return
+        val index = prefs.connection?.indexName ?: return
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                api.photosStorageQuality(session, index, quality)
+            } catch (e: Exception) {
+                prefs.storageSynced = false
+            }
+        }
+    }
+
+    fun openStorage() {
+        _state.update { it.copy(screen = Screen.Storage, storage = prefs.storage, storageReport = prefs.storageReport, storageEditing = prefs.storage == null, storageTestResult = null, storageTested = null, storageError = null) }
+        refreshStorageStats()
+    }
+
+    fun refreshStorageStats() {
+        viewModelScope.launch {
+            val stats = withContext(Dispatchers.IO) {
+                val local = MediaScanner.scan(context, prefs.folders, photoCache.aliases(), com.opensolr.photos.media.ScanOptions.of(context))?.keys ?: emptySet()
+                val (count, bytes) = photoCache.remoteTotals()
+                val (cloud, cloudBytes) = photoCache.cloudOnlyTotals()
+                StorageStats(count, bytes, photoCache.backupPendingCount(local), cloud, cloudBytes)
+            }
+            _state.update { it.copy(storageStats = stats, storage = prefs.storage, storageReport = prefs.storageReport) }
+        }
+    }
+
+    fun editStorage(on: Boolean) {
+        _state.update { it.copy(storageEditing = on, storageTestResult = null, storageTested = null, storageError = null) }
+    }
+
+    /** The backend as typed, tried for real; what comes back (host key included) is what Save stores. */
+    fun testStorage(config: com.opensolr.photos.data.StorageConfig) {
+        val index = prefs.connection?.indexName ?: return
+        _state.update { it.copy(storageTesting = true, storageTestResult = null, storageTested = null) }
+        viewModelScope.launch {
+            val outcome = withContext(Dispatchers.IO) { runCatching { com.opensolr.photos.storage.StorageEngine.test(config, index) } }
+            outcome.onSuccess { tested ->
+                _state.update { it.copy(storageTesting = false, storageTested = tested, storageTestResult = AppText.s(R.string.stg_test_ok)) }
+            }.onFailure { e ->
+                _state.update { it.copy(storageTesting = false, storageTestResult = AppText.s(R.string.stg_test_failed) + ": " + (e.message ?: e.javaClass.simpleName)) }
+            }
+        }
+    }
+
+    /** The tested backend becomes the index's: on this phone at once, in the account as soon as it answers, and the first run starts. */
+    fun saveStorage() {
+        val tested = _state.value.storageTested ?: return
+        val session = prefs.session ?: return
+        val index = prefs.connection?.indexName ?: return
+        _state.update { it.copy(storageSaving = true, storageError = null) }
+        viewModelScope.launch {
+            val stamped = tested.copy(updated = System.currentTimeMillis() / 1000)
+            withContext(Dispatchers.IO) {
+                com.opensolr.photos.storage.StorageScheduler.stopAndWait(context, pause = false)
+                // another backend's listing does not apply to this one
+                if (prefs.storage != null) { photoCache.clearRemote(); photoCache.clearCloud(); com.opensolr.photos.storage.CloudFiles.clear(context) }
+                prefs.storage = stamped
+                prefs.storageSynced = false
+                prefs.manifestsReadAt = 0L
+            }
+            val error = withContext(Dispatchers.IO) {
+                try { api.photosStorageSave(session, index, stamped); prefs.storageSynced = true; null } catch (e: Exception) { e.message ?: e.javaClass.simpleName }
+            }
+            _state.update { it.copy(storageSaving = false, storageEditing = false, storage = prefs.storage, storageTested = null, storageTestResult = null, storageError = error?.let { m -> AppText.s(R.string.stg_save_failed) + ": " + m }) }
+            com.opensolr.photos.storage.StorageScheduler.resume(context)
+            com.opensolr.photos.storage.StorageScheduler.runNow(context)
+            refreshStorageStats()
+        }
+    }
+
+    fun runStorageNow() {
+        com.opensolr.photos.storage.StorageScheduler.resume(context)
+        com.opensolr.photos.storage.StorageScheduler.runNow(context)
+    }
+
+    fun stopStorage() {
+        viewModelScope.launch { withContext(Dispatchers.IO) { com.opensolr.photos.storage.StorageScheduler.stopAndWait(context, pause = true) } }
+    }
+
+    fun rereadBackend() {
+        prefs.manifestsReadAt = 0L
+        runStorageNow()
+    }
+
+    fun downloadAllOriginals() {
+        prefs.downloadAllOriginals = true
+        runStorageNow()
+    }
+
+    /** The account forgets the backend; nothing in it is touched. Only when nothing lives there alone. */
+    fun forgetStorage() {
+        if ((_state.value.storageStats?.cloudOnly ?: 1L) > 0L) return
+        val session = prefs.session ?: return
+        val index = prefs.connection?.indexName ?: return
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                com.opensolr.photos.storage.StorageScheduler.stopAndWait(context, pause = false)
+                runCatching { api.photosStorageDelete(session, index) }
+                prefs.storage = null
+                prefs.storageSynced = true
+                prefs.manifestsReadAt = 0L
+                photoCache.clearRemote(); photoCache.clearCloud(); com.opensolr.photos.storage.CloudFiles.clear(context)
+            }
+            _state.update { it.copy(storage = null, storageEditing = true, storageStats = null) }
+        }
+    }
+
+    /** Everything this app wrote for this index removed from the backend, then the backend forgotten. */
+    fun clearStorage() {
+        if ((_state.value.storageStats?.cloudOnly ?: 1L) > 0L) return
+        val config = prefs.storage ?: return
+        val session = prefs.session ?: return
+        val index = prefs.connection?.indexName ?: return
+        _state.update { it.copy(storageClearing = true, storageError = null) }
+        viewModelScope.launch {
+            val error = withContext(Dispatchers.IO) {
+                com.opensolr.photos.storage.StorageScheduler.stopAndWait(context, pause = false)
+                try {
+                    com.opensolr.photos.storage.Backend.open(config).use { backend ->
+                        backend.connect()
+                        backend.deleteTree(com.opensolr.photos.storage.Layout(config, index).home)
+                    }
+                    runCatching { api.photosStorageDelete(session, index) }
+                    prefs.storage = null
+                    prefs.storageSynced = true
+                    prefs.manifestsReadAt = 0L
+                    photoCache.clearRemote(); photoCache.clearCloud(); com.opensolr.photos.storage.CloudFiles.clear(context)
+                    null
+                } catch (e: Exception) {
+                    e.message ?: e.javaClass.simpleName
+                }
+            }
+            _state.update { it.copy(storageClearing = false, storage = prefs.storage, storageEditing = prefs.storage == null, storageStats = null,
+                storageError = error?.let { m -> AppText.s(R.string.stg_clear_failed) + ": " + m }, notice = if (error == null) AppText.s(R.string.stg_cleared) else null) }
+        }
+    }
+
+    /** The full copy of one photo brought into the phone's folders; the cloud mark goes, the list is read again. */
+    fun downloadOriginal(hit: PhotoHit) {
+        val config = prefs.storage ?: return
+        val index = prefs.connection?.indexName ?: return
+        if (hit.id in _state.value.downloading) return
+        _state.update { it.copy(downloading = it.downloading + hit.id) }
+        viewModelScope.launch {
+            val outcome = withContext(Dispatchers.IO) {
+                runCatching {
+                    com.opensolr.photos.storage.Backend.open(config).use { backend ->
+                        backend.connect()
+                        com.opensolr.photos.storage.StorageEngine(context).downloadOriginal(backend, com.opensolr.photos.storage.Layout(config, index), hit.id)
+                    }
+                    photoCache.remote(hit.id)?.path?.substringBeforeLast('/', "").orEmpty()
+                }
+            }
+            _state.update { it.copy(downloading = it.downloading - hit.id,
+                notice = outcome.fold({ AppText.s(R.string.stg_downloaded, it.ifBlank { "Pictures" }) }, { AppText.s(R.string.stg_download_failed) + ": " + (it.message ?: "") })) }
+            if (outcome.isSuccess) { SyncScheduler.runNow(context); refresh() }
+        }
     }
 
     fun beginSignIn(activityContext: Context) {
@@ -2405,6 +2627,33 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(showBusyDialog = false) }
     }
 
+    /** True the first time only: the video permission is asked once on its own, then only from the Videos switch. */
+    fun askVideoPermissionOnce(): Boolean {
+        val sp = context.getSharedPreferences("opensolr_photos", Context.MODE_PRIVATE)
+        if (sp.getBoolean("video_permission_asked", false)) return false
+        sp.edit().putBoolean("video_permission_asked", true).apply()
+        return true
+    }
+
+    /** Videos (their first frame) join the index, or leave it at the next sync. */
+    fun setIncludeVideos(on: Boolean) {
+        prefs.includeVideos = on
+        _state.update { it.copy(includeVideos = on) }
+        afterStoppingEverything { true }
+    }
+
+    /** PDFs, page by page, join the index, or leave it at the next sync. */
+    fun setIncludePdfs(on: Boolean) {
+        prefs.includePdfs = on
+        _state.update { it.copy(includePdfs = on) }
+        afterStoppingEverything { true }
+    }
+
+    fun setPdfMaxPages(pages: Int) {
+        prefs.pdfMaxPages = pages
+        _state.update { it.copy(pdfMaxPages = prefs.pdfMaxPages) }
+    }
+
     fun setSchedule(schedule: SyncSchedule) {
         prefs.schedule = schedule
         SyncScheduler.applySchedule(context, schedule)
@@ -2454,6 +2703,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     fun signOut() {
         SyncScheduler.cancelAll(context)
+        com.opensolr.photos.storage.StorageScheduler.cancelAll(context)
         viewModelScope.launch(Dispatchers.IO) { PhotoCache.of(context).clear() }
         signedOut(null)
     }
@@ -2485,6 +2735,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _state.update { it.copy(screen = Screen.Search) }
 
                 refresh()
+            }
+            Screen.Storage -> {
+                _state.update { it.copy(screen = Screen.Account) }
+                refreshAccount()
             }
             Screen.Search -> if (current.returnToStats) openStats()
             Screen.Folders -> if (current.foldersReturnTo == Screen.Sync) _state.update { it.copy(screen = Screen.Sync) }

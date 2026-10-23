@@ -34,7 +34,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                 prefs.lastWatchSyncAt = System.currentTimeMillis()
             }
             promote("Preparing", 0, 0)
-            val report = SyncEngine(applicationContext, unlimited = SyncScheduler.mayReadUnlimited(tags)).run { progress ->
+            val report = SyncEngine(applicationContext).run { progress ->
                 setProgress(workDataOf(KEY_PHASE to progress.phase, KEY_DONE to progress.done, KEY_TOTAL to progress.total))
                 val now = System.currentTimeMillis()
                 if (now - lastNotified > 1500) {
@@ -47,7 +47,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
 
             if (report.status == "retry_later") return Result.retry()
 
-            if (report.status == "waiting_charger") SyncScheduler.runWhenCharging(applicationContext)
+            if (report.status == "waiting_battery") SyncScheduler.runLater(applicationContext, SyncScheduler.BATTERY_RETRY_MS)
             return Result.success(workDataOf(KEY_STATUS to report.status))
         } finally {
             running.set(false)
@@ -55,6 +55,8 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             if (AppPrefs(applicationContext).session != null) SyncScheduler.watchMedia(applicationContext)
             // after a sync: the people are learned and the newest photos named, nothing is read
             FaceWorker.next(applicationContext)
+            // then the storage backend, when the index has one: restore what is missing, send what is new
+            com.opensolr.photos.storage.StorageScheduler.runNow(applicationContext)
         }
     }
 

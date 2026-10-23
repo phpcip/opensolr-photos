@@ -267,6 +267,64 @@ class AppPrefs(context: Context) {
             prefs.edit().putInt(KEY_CACHE_SECONDS, value.coerceIn(SearchCache.MIN_SECONDS, SearchCache.MAX_SECONDS)).apply()
         }
 
+    /** Videos in the chosen folders are indexed too (their first frame); on unless the owner turns it off. */
+    var includeVideos: Boolean
+        get() = prefs.getBoolean(KEY_VIDEOS, true)
+        set(value) = prefs.edit().putBoolean(KEY_VIDEOS, value).commit().let {}
+
+    /** PDFs in the chosen folders are indexed page by page; on unless the owner turns it off. */
+    var includePdfs: Boolean
+        get() = prefs.getBoolean(KEY_PDFS, true)
+        set(value) = prefs.edit().putBoolean(KEY_PDFS, value).commit().let {}
+
+    /** The most pages of one PDF that are indexed. */
+    var pdfMaxPages: Int
+        get() = prefs.getInt(KEY_PDF_MAX_PAGES, DEFAULT_PDF_MAX_PAGES).coerceIn(1, 2000)
+        set(value) = prefs.edit().putInt(KEY_PDF_MAX_PAGES, value.coerceIn(1, 2000)).commit().let {}
+
+    /** Sync, backup and restore may use mobile data; off = only Wi-Fi (or other unmetered networks). */
+    var useMobileData: Boolean
+        get() = prefs.getBoolean(KEY_MOBILE_DATA, false)
+        set(value) = prefs.edit().putBoolean(KEY_MOBILE_DATA, value).commit().let {}
+
+    /** The backend of this index as the platform holds it, kept here sealed so a run needs no call first. */
+    var storage: StorageConfig?
+        get() = prefs.getString(KEY_STORAGE, null)?.let { SecureStore.decrypt(it) }?.let { runCatching { StorageConfig.fromJson(JSONObject(it)) }.getOrNull() }
+        set(value) {
+            prefs.edit().apply {
+                if (value == null) remove(KEY_STORAGE) else putString(KEY_STORAGE, SecureStore.encrypt(value.toJson().toString()))
+            }.commit()
+        }
+
+    /** False while the backend typed here has not reached the account yet (the next run sends it again). */
+    var storageSynced: Boolean
+        get() = prefs.getBoolean(KEY_STORAGE_SYNCED, true)
+        set(value) = prefs.edit().putBoolean(KEY_STORAGE_SYNCED, value).commit().let {}
+
+    /** When the account was last asked for the backend (a phone without one asks again after a day). */
+    var storageAskedAt: Long
+        get() = prefs.getLong(KEY_STORAGE_ASKED, 0L)
+        set(value) = prefs.edit().putLong(KEY_STORAGE_ASKED, value).commit().let {}
+
+    /** When the manifests in the backend were last read into the clone. */
+    var manifestsReadAt: Long
+        get() = prefs.getLong(KEY_MANIFESTS_READ, 0L)
+        set(value) = prefs.edit().putLong(KEY_MANIFESTS_READ, value).commit().let {}
+
+    var storageReport: StorageReport?
+        get() = StorageReport.fromJson(prefs.getString(KEY_STORAGE_REPORT, null))
+        set(value) = prefs.edit().putString(KEY_STORAGE_REPORT, value?.toJson()).commit().let {}
+
+    /** The owner pressed Stop on the Storage screen: nothing starts on its own until they press a button there. */
+    var storagePaused: Boolean
+        get() = prefs.getBoolean(KEY_STORAGE_PAUSED, false)
+        set(value) = prefs.edit().putBoolean(KEY_STORAGE_PAUSED, value).commit().let {}
+
+    /** The owner asked for every original to come down from the backend (before a change or a clear). */
+    var downloadAllOriginals: Boolean
+        get() = prefs.getBoolean(KEY_DOWNLOAD_ALL, false)
+        set(value) = prefs.edit().putBoolean(KEY_DOWNLOAD_ALL, value).commit().let {}
+
     var pendingNotice: String?
         get() = prefs.getString(KEY_NOTICE, null)
         set(value) {
@@ -304,6 +362,10 @@ class AppPrefs(context: Context) {
             .remove(KEY_INDEX)
             .remove(KEY_REPORT)
             .remove(KEY_INDEX_CHECKED)
+            .remove(KEY_STORAGE)
+            .remove(KEY_STORAGE_REPORT)
+            .remove(KEY_MANIFESTS_READ)
+            .remove(KEY_STORAGE_ASKED)
             .commit()
     }
 
@@ -331,6 +393,18 @@ class AppPrefs(context: Context) {
         private const val KEY_WARNED = "warned_keys"
         private const val KEY_CHOSEN_INDEX = "chosen_index"
         private const val KEY_NOTICE = "notice"
+        private const val KEY_MOBILE_DATA = "use_mobile_data"
+        private const val KEY_VIDEOS = "include_videos"
+        private const val KEY_PDFS = "include_pdfs"
+        private const val KEY_PDF_MAX_PAGES = "pdf_max_pages"
+        const val DEFAULT_PDF_MAX_PAGES = 100
+        private const val KEY_STORAGE = "storage_backend"
+        private const val KEY_STORAGE_SYNCED = "storage_synced"
+        private const val KEY_STORAGE_ASKED = "storage_asked_at"
+        private const val KEY_MANIFESTS_READ = "manifests_read_at"
+        private const val KEY_STORAGE_REPORT = "storage_report"
+        private const val KEY_STORAGE_PAUSED = "storage_paused"
+        private const val KEY_DOWNLOAD_ALL = "download_all_originals"
         private const val KEY_UPDATE_CHECKED = "update_checked_at"
         private const val KEY_WATCH_SYNC = "watch_sync_at"
         private const val KEY_INDEX_CHECKED = "index_checked"

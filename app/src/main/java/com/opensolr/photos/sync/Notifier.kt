@@ -18,6 +18,7 @@ object Notifier {
     const val CHANNEL_SYNC = "sync"
     const val CHANNEL_ALERTS = "alerts"
     const val PROGRESS_ID = 1001
+    const val STORAGE_ID = 1002
     private const val ALERT_SIGN_IN = 2001
     private const val ALERT_LIMIT = 2002
     private const val ACCOUNT_URL = "https://opensolr.com/admin/solr_manager/dashboard"
@@ -34,7 +35,7 @@ object Notifier {
         )
     }
 
-    fun progress(context: Context, title: String, text: String, done: Int, total: Int): Notification =
+    fun progress(context: Context, title: String, text: String, done: Int, total: Int, id: Int = PROGRESS_ID): Notification =
         NotificationCompat.Builder(context, CHANNEL_SYNC)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
@@ -43,7 +44,7 @@ object Notifier {
             .setOngoing(true)
             .setSilent(true)
             .setProgress(total, done, total <= 0)
-            .setContentIntent(openApp(context, MainActivity.DESTINATION_SYNC))
+            .setContentIntent(openApp(context, if (id == STORAGE_ID) MainActivity.DESTINATION_STORAGE else MainActivity.DESTINATION_SYNC))
             .build()
 
     fun signInRequired(context: Context) = post(

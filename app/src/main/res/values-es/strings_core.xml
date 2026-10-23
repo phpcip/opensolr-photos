@@ -41,7 +41,7 @@
     <string name="sy_saving_words">Guardando tus palabras en %1$s de %2$s fotos</string>
     <string name="sy_no_recognition">%1$s indexadas solo por fecha, cámara, lugar, nombre de archivo y tus etiquetas: tu plan no incluye reconocimiento de fotos.</string>
     <string name="sy_no_words">%1$s indexadas sin leerse en palabras: se agotaron las solicitudes de IA mensuales de tu plan. Se leen en la primera sincronización tras la renovación.</string>
-    <string name="sy_charger">En pausa al %1$s%% de batería tras %2$s fotos; quedan %3$s. Sigue sola cuando el teléfono se esté cargando.</string>
+    <string name="sy_battery">En pausa al %1$s%% de batería tras %2$s fotos; quedan %3$s. Sigue sola cuando la batería supere el 10%%.</string>
     <string name="sy_signin_notice">Tu sesión de Opensolr dejó de funcionar. Vuelve a iniciar sesión para mantener tus fotos sincronizadas.</string>
     <string name="sy_quota_title">Solicitudes de IA mensuales agotadas</string>
     <string name="sy_quota_text">Opensolr Photos se detuvo tras indexar %1$s fotos.%2$s</string>

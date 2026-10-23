@@ -41,7 +41,7 @@
     <string name="sy_saving_words">Wörter werden auf %1$s von %2$s Fotos gespeichert</string>
     <string name="sy_no_recognition">%1$s nur nach Datum, Kamera, Ort, Dateiname und Ihren Tags indexiert: Ihr Tarif enthält keine Fotoerkennung.</string>
     <string name="sy_no_words">%1$s ohne Wörter indexiert: Die monatlichen KI-Anfragen Ihres Tarifs sind aufgebraucht. Sie werden beim ersten Sync nach dem Zurücksetzen gelesen.</string>
-    <string name="sy_charger">Pausiert bei %1$s%% Akku nach %2$s Fotos; %3$s bleiben. Es geht von selbst weiter, wenn das Telefon lädt.</string>
+    <string name="sy_battery">Pausiert bei %1$s%% Akku nach %2$s Fotos; %3$s bleiben. Es geht von selbst weiter, sobald der Akku über 10%% liegt.</string>
     <string name="sy_signin_notice">Ihre Opensolr-Anmeldung funktioniert nicht mehr. Melden Sie sich erneut an, damit Ihre Fotos synchron bleiben.</string>
     <string name="sy_quota_title">Monatliche KI-Anfragen aufgebraucht</string>
     <string name="sy_quota_text">Opensolr Photos hat nach %1$s Fotos pausiert.%2$s</string>

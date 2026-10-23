@@ -6,6 +6,11 @@
     <uses-permission android:name="android.permission.SET_WALLPAPER" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+    <!-- GitHub build only: PDFs other apps saved (Download, WhatsApp) are visible only with All files access -->
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
     <!-- Android 14 and up: the owner may grant only the photos they pick rather than all of
          them. Declared so that choice is an answer the app understands and works with, instead
          of reading as a refusal and leaving the app stuck on the permission screen. -->

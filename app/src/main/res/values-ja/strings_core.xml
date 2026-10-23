@@ -41,7 +41,7 @@
     <string name="sy_saving_words">%2$s 枚中 %1$s 枚に言葉を保存中</string>
     <string name="sy_no_recognition">%1$s は日付、カメラ、場所、ファイル名、タグのみでインデックスされました。プランに写真の認識が含まれていません。</string>
     <string name="sy_no_words">%1$s は言葉に読み取らずにインデックスされました。プランの月間AIリクエストを使い切りました。リセット後の最初の同期で読み取られます。</string>
-    <string name="sy_charger">写真 %2$s 枚の後、電池 %1$s%% で一時停止しました（残り %3$s 枚）。充電中になると自動で再開します。</string>
+    <string name="sy_battery">写真 %2$s 枚の後、電池 %1$s%% で一時停止しました（残り %3$s 枚）。電池が 10%% を超えると自動で再開します。</string>
     <string name="sy_signin_notice">Opensolrのログインが無効になりました。写真の同期を続けるには再ログインしてください。</string>
     <string name="sy_quota_title">月間AIリクエストを使い切りました</string>
     <string name="sy_quota_text">Opensolr Photosは写真 %1$s 枚をインデックスした後に一時停止しました。%2$s</string>

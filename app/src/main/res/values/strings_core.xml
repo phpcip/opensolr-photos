@@ -41,7 +41,7 @@
     <string name="sy_saving_words">Saving your words on %1$s of %2$s photos</string>
     <string name="sy_no_recognition">%1$s indexed by date, camera, place, file name and your tags only: your plan does not include photo recognition.</string>
     <string name="sy_no_words">%1$s indexed without being read into words: the monthly AI requests of your plan are used up. They are read at the first sync after the allowance resets.</string>
-    <string name="sy_charger">Paused at %1$s%% battery after %2$s photos; %3$s are left. It continues on its own when the phone is charging.</string>
+    <string name="sy_battery">Paused at %1$s%% battery after %2$s photos; %3$s are left. It continues on its own once the battery is above 10%%.</string>
     <string name="sy_signin_notice">Your Opensolr sign-in stopped working. Sign in again to keep your photos in sync.</string>
     <string name="sy_quota_title">Monthly AI requests used up</string>
     <string name="sy_quota_text">Opensolr Photos paused after indexing %1$s photos.%2$s</string>

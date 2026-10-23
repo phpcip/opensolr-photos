@@ -174,6 +174,50 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
         FilterGroup(stringResource(R.string.acc_zone_settings), 0, "settings" in state.meZonesOpen, { viewModel.toggleMeZone("settings") }) {
             Column {
 
+                SubZone(stringResource(R.string.stg_zone), "set_backup" in state.meZonesOpen, { viewModel.toggleMeZone("set_backup") }) {
+                    Column {
+                        Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(stringResource(R.string.stg_mobile_data), style = MaterialTheme.typography.bodyLarge, color = p.ink)
+                                Text(stringResource(R.string.stg_mobile_data_text), style = MaterialTheme.typography.bodySmall, color = p.muted)
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Switch(
+                                checked = state.useMobileData,
+                                onCheckedChange = { viewModel.setUseMobileData(it); Haptics.toggle(view, it) },
+                                colors = SwitchDefaults.colors(checkedTrackColor = p.accentFill, checkedThumbColor = p.onAccentFill, uncheckedTrackColor = p.chip, uncheckedBorderColor = p.hairline, uncheckedThumbColor = p.muted),
+                            )
+                        }
+                        state.storage?.let { storage ->
+                            Text(stringResource(R.string.stg_quality), style = MaterialTheme.typography.bodyLarge, color = p.ink)
+                            Spacer(Modifier.height(4.dp))
+                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                listOf(com.opensolr.photos.data.StorageConfig.QUALITY_ORIGINAL to stringResource(R.string.stg_quality_original), com.opensolr.photos.data.StorageConfig.QUALITY_1080 to stringResource(R.string.stg_quality_1080)).forEach { (q, name) ->
+                                    val on = storage.quality == q
+                                    Text(
+                                        name,
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = if (on) p.accent else p.ink,
+                                        modifier = Modifier
+                                            .border(if (on) 1.5.dp else 1.dp, if (on) p.accent else p.hairline, androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
+                                            .background(if (on) p.paper else p.chip, androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
+                                            .clickable { Haptics.tap(view); viewModel.setBackupQuality(q) }
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    )
+                                }
+                            }
+                            Spacer(Modifier.height(12.dp))
+                        }
+                        Text(stringResource(R.string.stg_open_text), style = MaterialTheme.typography.bodySmall, color = p.muted)
+                        Spacer(Modifier.height(10.dp))
+                        GhostButton(
+                            state.storage?.let { it.label.ifBlank { it.host } } ?: stringResource(R.string.stg_open),
+                            onClick = { viewModel.openStorage() },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
                 SubZone(stringResource(R.string.acc_feedback), "set_feedback" in state.meZonesOpen, { viewModel.toggleMeZone("set_feedback") }) {
                     Column {
                         Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {

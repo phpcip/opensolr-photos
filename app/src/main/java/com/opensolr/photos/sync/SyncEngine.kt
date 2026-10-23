@@ -39,7 +39,7 @@ import java.util.Locale
 import java.util.Date
 import java.util.TimeZone
 
-class SyncEngine(private val context: Context, private val unlimited: Boolean = false) {
+class SyncEngine(private val context: Context) {
 
     private val callTimes = ArrayDeque<Long>()
 
@@ -95,7 +95,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
         return out
     }
 
-    private class ChargerNeededException(val photos: Int) : Exception()
+    private class LowBatteryException(val photos: Int) : Exception()
 
     private class SyncStoppedException : Exception()
 
@@ -192,7 +192,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
 
             val foldersBefore = MediaScanner.folderStamp(context, prefs.folders)
             // Android not answering is not "no photos": nothing is compared, nothing is removed
-            val local = MediaScanner.scan(context, prefs.folders)
+            val local = MediaScanner.scan(context, prefs.folders, cache.aliases(), com.opensolr.photos.media.ScanOptions.of(context))
                 ?: return report("failed", message = AppText.s(R.string.sy_cannot_read))
             localCount = local.size
             onPhone = local.keys
@@ -253,8 +253,8 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             suspend fun progress(phase: String) = onProgress(Progress(phase, added + failed, maxOf(total, expected)))
             suspend fun ingest(batch: List<LocalPhoto>) {
 
-                if (!unlimited && !isCharging() && batteryPercent() < BATTERY_PAUSE_PERCENT) {
-                    throw ChargerNeededException((maxOf(expected, total) - added).coerceAtLeast(0))
+                if (batteryPercent() < BATTERY_PAUSE_PERCENT) {
+                    throw LowBatteryException((maxOf(expected, total) - added).coerceAtLeast(0))
                 }
 
                 if (SyncWorker.stopRequested.get()) {
@@ -300,7 +300,8 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
                     val meaning = if (cleared) null else edits?.meaning ?: xmp?.meaning
                     var names = edits?.persons ?: xmp?.persons ?: emptyList()
                     // the faces, read once here for a new or changed picture, go up with it and stay in the index
-                    val faces = try { readFaces(photo, people, read.upright) } finally { read.upright?.recycle() }
+                    // a page of a document is not a photo of people: no faces are looked for in it
+                    val faces = try { if (photo.kind == com.opensolr.photos.media.Kind.PDF) null else readFaces(photo, people, read.upright) } finally { read.upright?.recycle() }
                     if (faces != null && edits == null && names.isEmpty()) {
                         names = cache.facesOf(photo.id).mapNotNull { it.person }.distinctBy { it.lowercase() }
                     }
@@ -420,7 +421,9 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
 
                 // many photos gone at once is a phone that cannot see them, not an owner who deleted them:
                 // they stay in the index until the owner says otherwise on the Sync screen
-                val missing = known.keys.filter { it !in local }
+                // a photo that lives only in the storage backend (restored as a 720 px copy) is not missing
+                val cloud = cache.cloudIds()
+                val missing = known.keys.filter { it !in local && it !in cloud }
                 if (missing.size * 2 > known.size && !prefs.removeMissingApproved) {
                     prefs.missingHeld = missing.size
                     shortAllowance = AppText.s(R.string.sy_missing_many, Actions.formatCount(missing.size.toLong()))
@@ -549,10 +552,10 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
             commitQuietly()
             return report("stopped", added, deleted, failed, localCount, indexCount,
                 AppText.p(R.plurals.sy_stopped_after, added, Actions.formatCount(added.toLong())), recreated)
-        } catch (e: ChargerNeededException) {
+        } catch (e: LowBatteryException) {
             commitQuietly()
-            return report("waiting_charger", added, deleted, failed, localCount, indexCount,
-                AppText.s(R.string.sy_charger, batteryPercent().toString(), Actions.formatCount(added.toLong()), Actions.formatCount(e.photos.toLong())), recreated)
+            return report("waiting_battery", added, deleted, failed, localCount, indexCount,
+                AppText.s(R.string.sy_battery, batteryPercent().toString(), Actions.formatCount(added.toLong()), Actions.formatCount(e.photos.toLong())), recreated)
         } catch (e: RestoreRefusedException) {
             commitQuietly()
             return report("failed", added, deleted, failed, localCount, indexCount, AppText.s(R.string.sy_restore_refused, Actions.formatCount(e.refused.toLong())), recreated)
@@ -760,12 +763,6 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
         return if (level < 0 || scale <= 0) 100 else (level * 100 / scale)
     }
 
-    private fun isCharging(): Boolean {
-        val status = context.registerReceiver(null, android.content.IntentFilter(android.content.Intent.ACTION_BATTERY_CHANGED))
-            ?.getIntExtra(android.os.BatteryManager.EXTRA_STATUS, -1) ?: -1
-        return status == android.os.BatteryManager.BATTERY_STATUS_CHARGING || status == android.os.BatteryManager.BATTERY_STATUS_FULL
-    }
-
     private suspend fun <T> withFreshPassword(session: Session, onRefreshed: (IndexConnection) -> Unit, block: suspend () -> T): T =
         try {
             block()
@@ -834,7 +831,7 @@ class SyncEngine(private val context: Context, private val unlimited: Boolean = 
 
         private const val EXACT_TAKEN_MAX = 200
 
-        private const val BATTERY_PAUSE_PERCENT = 20
+        private const val BATTERY_PAUSE_PERCENT = 10
 
         private const val PACE_SHARE = 0.8
         private const val MINUTE_MS = 60 * 1000L

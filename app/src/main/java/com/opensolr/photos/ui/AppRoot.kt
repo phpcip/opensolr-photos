@@ -46,9 +46,21 @@ fun AppRoot(viewModel: AppViewModel) {
     val state by viewModel.state.collectAsStateWithLifecycle()
     val p = LocalPalette.current
 
-    BackHandler(enabled = state.screen == Screen.Sync || state.screen == Screen.Account || state.screen == Screen.Map || state.screen == Screen.Albums || state.screen == Screen.Stats || (state.screen == Screen.Search && state.returnToStats) ||
+    BackHandler(enabled = state.screen == Screen.Sync || state.screen == Screen.Account || state.screen == Screen.Storage || state.screen == Screen.Map || state.screen == Screen.Albums || state.screen == Screen.Stats || (state.screen == Screen.Search && state.returnToStats) ||
         (state.screen == Screen.Folders && state.foldersReturnTo == Screen.Sync)) {
         viewModel.back()
+    }
+
+    // Videos on (the default) and Android 13+: the clips need their own permission, asked once on a phone set up before it existed
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val videoAsk = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) viewModel.forceResync()
+    }
+    androidx.compose.runtime.LaunchedEffect(state.screen, state.includeVideos) {
+        if (state.screen == Screen.Search && state.includeVideos && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU &&
+            androidx.core.content.ContextCompat.checkSelfPermission(context, android.Manifest.permission.READ_MEDIA_VIDEO) != android.content.pm.PackageManager.PERMISSION_GRANTED &&
+            viewModel.askVideoPermissionOnce()
+        ) videoAsk.launch(android.Manifest.permission.READ_MEDIA_VIDEO)
     }
 
     Box(
@@ -76,6 +88,7 @@ fun AppRoot(viewModel: AppViewModel) {
                 Screen.Search -> SearchScreen(state, viewModel)
                 Screen.Sync -> SyncScreen(state, viewModel)
                 Screen.Account -> AccountScreen(state, viewModel)
+                Screen.Storage -> com.opensolr.photos.ui.screens.StorageScreen(state, viewModel)
                 Screen.Map -> MapScreen(state, viewModel)
                 Screen.Albums -> AlbumsScreen(state, viewModel)
                 Screen.Stats -> StatsScreen(state, viewModel)

@@ -40,7 +40,16 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         db.execSQL(INCOMING_TAKEN_INDEX)
         db.execSQL(PARKED_DOCS_TABLE)
         db.execSQL(PARKED_WORDS_TABLE)
+        createStorageTables(db)
         createFaceTables(db)
+    }
+
+    private fun createStorageTables(db: SQLiteDatabase) {
+        db.execSQL(REMOTE_TABLE)
+        db.execSQL(REMOTE_DEVICE_INDEX)
+        db.execSQL(CLOUD_TABLE)
+        db.execSQL(ALIASES_TABLE)
+        db.execSQL(PDF_PAGES_TABLE)
     }
 
     private fun createFaceTables(db: SQLiteDatabase) {
@@ -173,6 +182,12 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
                     db.execSQL("UPDATE docs SET media_id = ?, path = ? WHERE id = ?", arrayOf<Any>(doc.optLong("media_id", 0L), doc.optString("path"), c.getString(0)))
                 }
             }
+        }
+        if (oldVersion < 31) {
+            createStorageTables(db)
+        }
+        if (oldVersion < 32) {
+            db.execSQL(PDF_PAGES_TABLE)
         }
         if (oldVersion < 24) {
             // who named a face: 0 the owner, 1 learned from the photos' tags, 2 the matcher on its own
@@ -576,6 +591,147 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         }
         val updated = json?.let { runCatching { org.json.JSONObject(it).put("media_id", mediaId).put("path", path).toString() }.getOrNull() }
         writableDatabase.execSQL("UPDATE docs SET media_id = ?, path = ?, json = COALESCE(?, json) WHERE id = ?", arrayOf<Any?>(mediaId, path, updated, id))
+    }
+
+    // ---- storage backend: what the backend holds (remote), the 720 px copies on this phone (cloud), id aliases ----
+
+    data class Remote(val id: String, val device: String, val kind: String, val bytes: Long, val path: String, val md5: String?, val at: Long)
+
+    fun putRemote(rows: Collection<Remote>) {
+        if (rows.isEmpty()) return
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.compileStatement("INSERT OR REPLACE INTO remote (id, device, kind, bytes, path, md5, at) VALUES (?,?,?,?,?,?,?)").use { st ->
+                for (r in rows) {
+                    st.clearBindings()
+                    st.bindString(1, r.id); st.bindString(2, r.device); st.bindString(3, r.kind); st.bindLong(4, r.bytes)
+                    st.bindString(5, r.path); if (r.md5 == null) st.bindNull(6) else st.bindString(6, r.md5); st.bindLong(7, r.at)
+                    st.executeInsert()
+                }
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    fun remote(id: String): Remote? =
+        readableDatabase.query("remote", REMOTE_COLUMNS, "id = ?", arrayOf(id), null, null, null, "1").use { c -> if (c.moveToFirst()) readRemote(c) else null }
+
+    fun remoteIds(): Set<String> {
+        val out = HashSet<String>()
+        readableDatabase.query("remote", arrayOf("id"), null, null, null, null, null).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        return out
+    }
+
+    /** Count and bytes of everything the backend holds (as the manifests say). */
+    fun remoteTotals(): Pair<Long, Long> =
+        readableDatabase.rawQuery("SELECT COUNT(*), COALESCE(SUM(bytes), 0) FROM remote", null).use { c -> if (c.moveToFirst()) c.getLong(0) to c.getLong(1) else 0L to 0L }
+
+    fun forEachRemoteOfDevice(device: String, block: (Remote) -> Unit) {
+        readableDatabase.query("remote", REMOTE_COLUMNS, "device = ?", arrayOf(device), null, null, "at ASC").use { c -> while (c.moveToNext()) block(readRemote(c)) }
+    }
+
+    fun clearRemote() {
+        writableDatabase.delete("remote", null, null)
+    }
+
+    private fun readRemote(c: android.database.Cursor) = Remote(c.getString(0), c.getString(1), c.getString(2), c.getLong(3), c.getString(4), if (c.isNull(5)) null else c.getString(5), c.getLong(6))
+
+    /** The photos of the index that are in the backend but have no file on this phone, newest first; [limit] of them. */
+    fun restoreCandidates(local: Set<String>, limit: Int): List<Remote> {
+        val out = ArrayList<Remote>()
+        readableDatabase.rawQuery(
+            "SELECT r.id, r.device, r.kind, r.bytes, r.path, r.md5, r.at FROM remote r INNER JOIN docs d ON d.id = r.id WHERE r.id NOT IN (SELECT id FROM cloud) ORDER BY d.taken_ms DESC",
+            null,
+        ).use { c ->
+            while (c.moveToNext() && out.size < limit) {
+                val id = c.getString(0)
+                if (id in local) continue
+                out += readRemote(c)
+            }
+        }
+        return out
+    }
+
+    /** Indexed photos on this phone that the backend does not have yet: id, folder, file name, media id, size. */
+    data class ToBackup(val id: String, val folder: String, val fileName: String, val mediaId: Long, val sizeBytes: Long, val takenMs: Long)
+
+    fun backupCandidates(local: Set<String>, limit: Int): List<ToBackup> {
+        val out = ArrayList<ToBackup>()
+        readableDatabase.rawQuery(
+            "SELECT id, folder, path, media_id, size_bytes, taken_ms FROM docs WHERE id NOT IN (SELECT id FROM remote) ORDER BY taken_ms DESC",
+            null,
+        ).use { c ->
+            while (c.moveToNext() && out.size < limit) {
+                val id = c.getString(0)
+                if (id !in local) continue
+                val path = c.getString(2).orEmpty()
+                out += ToBackup(id, c.getString(1).orEmpty(), path.substringAfterLast('/'), c.getLong(3), c.getLong(4), c.getLong(5))
+            }
+        }
+        return out
+    }
+
+    fun backupPendingCount(local: Set<String>): Int {
+        var n = 0
+        readableDatabase.rawQuery("SELECT id FROM docs WHERE id NOT IN (SELECT id FROM remote)", null).use { c -> while (c.moveToNext()) if (c.getString(0) in local) n++ }
+        return n
+    }
+
+    fun putCloud(id: String, bytes: Long) {
+        writableDatabase.execSQL("INSERT OR REPLACE INTO cloud (id, bytes, at) VALUES (?, ?, ?)", arrayOf<Any>(id, bytes, System.currentTimeMillis()))
+    }
+
+    fun removeCloud(id: String) {
+        writableDatabase.delete("cloud", "id = ?", arrayOf(id))
+    }
+
+    fun cloudIds(): Set<String> {
+        val out = HashSet<String>()
+        readableDatabase.query("cloud", arrayOf("id"), null, null, null, null, null).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        return out
+    }
+
+    /** Photos only the backend has: those restored as 720 px copies, with the full size the backend holds. */
+    fun cloudOnlyTotals(): Pair<Long, Long> =
+        readableDatabase.rawQuery("SELECT COUNT(*), COALESCE(SUM(r.bytes), 0) FROM cloud c INNER JOIN remote r ON r.id = c.id", null).use { c -> if (c.moveToFirst()) c.getLong(0) to c.getLong(1) else 0L to 0L }
+
+    fun cloudOnlyIds(limit: Int): List<String> {
+        val out = ArrayList<String>()
+        readableDatabase.rawQuery("SELECT c.id FROM cloud c INNER JOIN remote r ON r.id = c.id INNER JOIN docs d ON d.id = c.id ORDER BY d.taken_ms DESC LIMIT ?", arrayOf(limit.toString())).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        return out
+    }
+
+    fun clearCloud() {
+        writableDatabase.delete("cloud", null, null)
+    }
+
+    /** A file written where Android allowed instead of its own folder keeps the photo's id: alias (path id) -> id. */
+    fun putAlias(aliasId: String, id: String) {
+        writableDatabase.execSQL("INSERT OR REPLACE INTO aliases (alias_id, id) VALUES (?, ?)", arrayOf<Any>(aliasId, id))
+    }
+
+    /** How many pages a PDF (by id and size) was found to have; null when it was never opened. */
+    fun pdfPages(id: String, sizeBytes: Long): Int? =
+        readableDatabase.query("pdf_pages", arrayOf("pages"), "id = ? AND size_bytes = ?", arrayOf(id, sizeBytes.toString()), null, null, null, "1").use { c -> if (c.moveToFirst()) c.getInt(0) else null }
+
+    fun putPdfPages(id: String, sizeBytes: Long, pages: Int) {
+        writableDatabase.execSQL("INSERT OR REPLACE INTO pdf_pages (id, size_bytes, pages) VALUES (?, ?, ?)", arrayOf<Any>(id, sizeBytes, pages))
+    }
+
+    /** The page documents of one PDF, by its id. */
+    fun docIdsOfParent(parentId: String): List<String> {
+        val out = ArrayList<String>()
+        readableDatabase.query("docs", arrayOf("id"), "json LIKE ?", arrayOf("%\"parent_s\":\"$parentId\"%"), null, null, null).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        return out
+    }
+
+    fun aliases(): Map<String, String> {
+        val out = HashMap<String, String>()
+        readableDatabase.query("aliases", arrayOf("alias_id", "id"), null, null, null, null, null).use { c -> while (c.moveToNext()) out[c.getString(0)] = c.getString(1) }
+        return out
     }
 
     fun docSizes(): Map<String, Pair<Long, Long>> {
@@ -1121,7 +1277,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         if (moves.isEmpty()) return 0
         val keyed = listOf(
             "docs" to "id", "parked_docs" to "id", "doc_words" to "id", "parked_words" to "id", "edits" to "id", "set_places" to "id",
-            "actions" to "id", "skipped" to "id", "incoming" to "id", "word_retries" to "id",
+            "actions" to "id", "skipped" to "id", "incoming" to "id", "word_retries" to "id", "remote" to "id", "cloud" to "id",
             "faces" to "photo_id", "face_scanned" to "photo_id", "auto_words" to "photo_id",
         )
         val db = writableDatabase
@@ -1806,7 +1962,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
     companion object {
         private const val NAME = "photo_cache.db"
-        private const val VERSION = 30
+        private const val VERSION = 32
 
         @Volatile private var shared: PhotoCache? = null
 
@@ -1879,5 +2035,11 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         const val HOW_LEARNED = 1
         const val HOW_AUTO = 2
         private const val WORD_RETRIES_TABLE = "CREATE TABLE IF NOT EXISTS word_retries (id TEXT PRIMARY KEY NOT NULL, attempts INTEGER NOT NULL, next_at INTEGER NOT NULL)"
+        private const val REMOTE_TABLE = "CREATE TABLE IF NOT EXISTS remote (id TEXT PRIMARY KEY NOT NULL, device TEXT NOT NULL, kind TEXT NOT NULL, bytes INTEGER NOT NULL, path TEXT NOT NULL, md5 TEXT, at INTEGER NOT NULL)"
+        private const val REMOTE_DEVICE_INDEX = "CREATE INDEX IF NOT EXISTS remote_device ON remote (device, at)"
+        private val REMOTE_COLUMNS = arrayOf("id", "device", "kind", "bytes", "path", "md5", "at")
+        private const val CLOUD_TABLE = "CREATE TABLE IF NOT EXISTS cloud (id TEXT PRIMARY KEY NOT NULL, bytes INTEGER NOT NULL, at INTEGER NOT NULL)"
+        private const val ALIASES_TABLE = "CREATE TABLE IF NOT EXISTS aliases (alias_id TEXT PRIMARY KEY NOT NULL, id TEXT NOT NULL)"
+        private const val PDF_PAGES_TABLE = "CREATE TABLE IF NOT EXISTS pdf_pages (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, pages INTEGER NOT NULL)"
     }
 }

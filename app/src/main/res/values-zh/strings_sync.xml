@@ -47,7 +47,7 @@
     <string name="st_rebuild">等待中：新版本需要重置索引并完整重新同步。打开照片界面即可开始。</string>
     <string name="st_update">已暂停：请更新 Opensolr Photos 以继续同步。</string>
     <string name="st_device">等待中：打开应用，选择是否重新使用你 Opensolr 账户中的索引。</string>
-    <string name="st_charger">等待充电：%1$s</string>
+    <string name="st_battery">等待电量：%1$s</string>
     <string name="st_retry">短暂暂停：Opensolr 要求放慢速度，稍后会自动继续。</string>
     <string name="st_failed">上次同步未完成，将在下次重新同步时重试。</string>
     <string name="rs_ok">已完成</string>
@@ -57,7 +57,7 @@
     <string name="rs_rebuild">需要重置并完整重新同步</string>
     <string name="rs_update">需要更新应用</string>
     <string name="rs_device">尚未选择设备</string>
-    <string name="rs_charger">等待充电</string>
+    <string name="rs_battery">等待电量</string>
     <string name="rs_retry">稍后继续</string>
     <string name="rs_failed">未完成</string>
     <string name="vm_resync_now">正在立即读取 %1$s 张</string>

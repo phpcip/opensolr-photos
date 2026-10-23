@@ -35,13 +35,16 @@ object SyncScheduler {
     private const val PERIODIC = "opensolr-sync-periodic"
     private const val MEDIA = "opensolr-sync-media"
     private const val LATER = "opensolr-sync-later"
-    private const val CHARGING = "opensolr-sync-charging"
 
     const val WATCH_MIN_INTERVAL_MS = 15 * 60 * 1000L
 
-    private val constraints = Constraints.Builder()
-        .setRequiredNetworkType(NetworkType.CONNECTED)
-        .build()
+    const val BATTERY_RETRY_MS = 15 * 60 * 1000L
+
+    /** Wi-Fi (any unmetered network) unless the owner allowed mobile data. */
+    private fun network(context: Context): NetworkType =
+        if (com.opensolr.photos.data.AppPrefs(context).useMobileData) NetworkType.CONNECTED else NetworkType.UNMETERED
+
+    private fun constraints(context: Context) = Constraints.Builder().setRequiredNetworkType(network(context)).build()
 
     /**
      * Everything stopped: the running sync is told to stop and every queued sync and face job is cancelled.
@@ -72,7 +75,7 @@ object SyncScheduler {
     fun runNow(context: Context) {
         if (paused(context)) return
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setConstraints(constraints)
+            .setConstraints(constraints(context))
             // started by the owner or by a new photo: runs at once, not when the system gets to it
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
@@ -87,8 +90,13 @@ object SyncScheduler {
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(
                 Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .setRequiredNetworkType(network(context))
                     .addContentUriTrigger(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true)
+                    .apply {
+                        val prefs = com.opensolr.photos.data.AppPrefs(context)
+                        if (prefs.includeVideos) addContentUriTrigger(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, true)
+                        if (prefs.includePdfs) addContentUriTrigger(MediaStore.Files.getContentUri("external"), true)
+                    }
                     .setTriggerContentUpdateDelay(60, TimeUnit.SECONDS)
                     .setTriggerContentMaxDelay(5, TimeUnit.MINUTES)
                     .build()
@@ -103,7 +111,7 @@ object SyncScheduler {
     fun runLater(context: Context, delayMs: Long) {
         if (paused(context)) return
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setConstraints(constraints)
+            .setConstraints(constraints(context))
             .setInitialDelay(delayMs.coerceAtLeast(1000L), TimeUnit.MILLISECONDS)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .addTag(TAG)
@@ -112,32 +120,13 @@ object SyncScheduler {
         WorkManager.getInstance(context).enqueueUniqueWork(LATER, ExistingWorkPolicy.KEEP, request)
     }
 
-    fun runWhenCharging(context: Context) {
-        if (paused(context)) return
-        val request = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setConstraints(
-                Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
-                    .setRequiresCharging(true)
-                    .build()
-            )
-            .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
-            .addTag(TAG)
-            .addTag(CHARGING)
-            .build()
-        WorkManager.getInstance(context).enqueueUniqueWork(CHARGING, ExistingWorkPolicy.KEEP, request)
-    }
-
     fun isWatchRun(tags: Set<String>): Boolean = MEDIA in tags
-
-    fun mayReadUnlimited(tags: Set<String>): Boolean = CHARGING in tags
 
     fun applySchedule(context: Context, schedule: SyncSchedule) {
         val request = PeriodicWorkRequestBuilder<SyncWorker>(schedule.days, TimeUnit.DAYS)
             .setConstraints(
                 Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
-                    .setRequiresBatteryNotLow(true)
+                    .setRequiredNetworkType(network(context))
                     .build()
             )
             .setInitialDelay(schedule.days, TimeUnit.DAYS)
@@ -156,7 +145,7 @@ object SyncScheduler {
         val manager = WorkManager.getInstance(context)
         manager.cancelAllWorkByTag(TAG)
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
-            .setConstraints(constraints)
+            .setConstraints(constraints(context))
             .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .addTag(TAG)
@@ -171,7 +160,6 @@ object SyncScheduler {
 
         manager.cancelAllWorkByTag(NOW)
         manager.cancelAllWorkByTag(LATER)
-        manager.cancelAllWorkByTag(CHARGING)
         manager.cancelAllWorkByTag(MEDIA)
         watchMedia(context)
     }

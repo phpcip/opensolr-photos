@@ -176,6 +176,8 @@ fun PermissionsScreen(state: UiState, viewModel: AppViewModel) {
             (Build.VERSION.SDK_INT >= 34 && ContextCompat.checkSelfPermission(context, partialPermission) == PackageManager.PERMISSION_GRANTED)
     val requested = buildList {
         add(photoPermission)
+        // the clips in the same folders, indexed by their first frame
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.READ_MEDIA_VIDEO)
         if (Build.VERSION.SDK_INT >= 34) add(partialPermission)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) add(Manifest.permission.ACCESS_MEDIA_LOCATION)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) add(Manifest.permission.POST_NOTIFICATIONS)

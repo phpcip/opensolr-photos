@@ -47,7 +47,7 @@
     <string name="st_rebuild">Waiting: your index must be reset and fully re-synced for the new version. Open the app\'s photos screen to start it.</string>
     <string name="st_update">Paused: update Opensolr Photos to keep syncing.</string>
     <string name="st_device">Waiting: open the app and choose whether to re-use an index from your Opensolr account.</string>
-    <string name="st_charger">Waiting for the charger: %1$s</string>
+    <string name="st_battery">Waiting for battery: %1$s</string>
     <string name="st_retry">Paused for a moment: Opensolr asked the app to slow down. It continues on its own.</string>
     <string name="st_failed">The last sync did not finish. It is tried again at the next Re-Sync.</string>
     <string name="rs_ok">Completed</string>
@@ -57,7 +57,7 @@
     <string name="rs_rebuild">Reset and full re-sync needed</string>
     <string name="rs_update">App update needed</string>
     <string name="rs_device">Device not chosen yet</string>
-    <string name="rs_charger">Waiting for the charger</string>
+    <string name="rs_battery">Waiting for battery</string>
     <string name="rs_retry">Continues shortly</string>
     <string name="rs_failed">Did not finish</string>
     <string name="vm_resync_now">Reading %1$s now</string>

@@ -5,7 +5,9 @@ import com.opensolr.photos.sync.Notifier
 import org.osmdroid.config.Configuration
 import java.io.File
 
-class PhotosApp : Application() {
+class PhotosApp : Application(), coil.ImageLoaderFactory {
+
+    override fun newImageLoader(): coil.ImageLoader = com.opensolr.photos.ui.Images.loader(this)
 
     override fun attachBaseContext(base: android.content.Context) {
         super.attachBaseContext(com.opensolr.photos.ui.AppLanguage.wrap(base))
@@ -23,6 +25,10 @@ class PhotosApp : Application() {
             else if (current == null || current.indexName != stale.indexName) null
             else prefs.session?.let { com.opensolr.photos.index.IndexManager(this, prefs, com.opensolr.photos.net.OpensolrApi()).refreshConnection(it) }
         }
+
+        // the photos only the backend has, for the grid; the daily storage run
+        com.opensolr.photos.storage.CloudFiles.load(this)
+        com.opensolr.photos.storage.StorageScheduler.applySchedule(this)
 
         Configuration.getInstance().apply {
             userAgentValue = "opensolr-photos/" + BuildConfig.VERSION_NAME

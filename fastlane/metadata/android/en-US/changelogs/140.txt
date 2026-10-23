@@ -1,0 +1,4 @@
+- Backup to your own storage: an S3 bucket (AWS, Backblaze B2, Cloudflare R2, Wasabi, MinIO), an SFTP server or a WebDAV folder. Originals or 1080p. The files go straight from the phone to your storage.
+- A new phone gets your library back: sign in, pick your index, and every photo returns as a 720p copy with its people, tags and text; Download brings the full file.
+- Videos and PDFs are indexed too: a clip by its first frame, a PDF page by page, each page a result with its text read. Filter by type.
+- Use mobile data: one switch for sync, backup and restore. Nothing waits for the charger any more; work pauses only under 10% battery.

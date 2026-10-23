@@ -41,7 +41,7 @@
     <string name="sy_saving_words">Se salvează cuvintele pe %1$s din %2$s poze</string>
     <string name="sy_no_recognition">%1$s indexate doar după dată, cameră, loc, nume de fișier și etichetele tale: planul nu include recunoașterea pozelor.</string>
     <string name="sy_no_words">%1$s indexate fără să fie citite în cuvinte: cererile AI lunare ale planului s-au terminat. Sunt citite la primul sync după resetare.</string>
-    <string name="sy_charger">Pauză la %1$s%% baterie după %2$s poze; au rămas %3$s. Continuă singur când telefonul se încarcă.</string>
+    <string name="sy_battery">Pauză la %1$s%% baterie după %2$s poze; mai sunt %3$s. Continuă singur când bateria trece de 10%%.</string>
     <string name="sy_signin_notice">Autentificarea Opensolr nu mai merge. Autentifică-te din nou ca pozele să rămână sincronizate.</string>
     <string name="sy_quota_title">Cereri AI lunare terminate</string>
     <string name="sy_quota_text">Opensolr Photos s-a oprit după %1$s poze indexate.%2$s</string>

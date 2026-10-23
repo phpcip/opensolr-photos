@@ -47,7 +47,7 @@
     <string name="st_rebuild">待機中: 新しいバージョンのため、インデックスのリセットと完全な再同期が必要です。写真画面を開くと開始します。</string>
     <string name="st_update">一時停止: 同期を続けるにはOpensolr Photosを更新してください。</string>
     <string name="st_device">待機中: アプリを開き、Opensolrアカウントのインデックスを再利用するか選んでください。</string>
-    <string name="st_charger">充電待ち: %1$s</string>
+    <string name="st_battery">電池待ち: %1$s</string>
     <string name="st_retry">一時停止中: Opensolrから速度を落とすよう求められました。自動で再開します。</string>
     <string name="st_failed">前回の同期は完了しませんでした。次の再同期で再試行します。</string>
     <string name="rs_ok">完了</string>
@@ -57,7 +57,7 @@
     <string name="rs_rebuild">リセットと完全な再同期が必要</string>
     <string name="rs_update">アプリの更新が必要</string>
     <string name="rs_device">デバイス未選択</string>
-    <string name="rs_charger">充電待ち</string>
+    <string name="rs_battery">電池待ち</string>
     <string name="rs_retry">まもなく再開</string>
     <string name="rs_failed">未完了</string>
     <string name="vm_resync_now">%1$s枚を今すぐ読み込みます</string>

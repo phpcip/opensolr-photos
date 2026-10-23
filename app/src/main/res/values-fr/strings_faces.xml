@@ -24,7 +24,7 @@
     </plurals>
     <string name="sy_restoring">Restauration de ton index</string>
     <string name="fc_scan_all">Trouver les visages dans toutes les photos</string>
-    <string name="fc_scan_text">Lit chaque photo une fois pour y trouver les visages. Ne tourne que pendant la charge du téléphone, prend du temps et peut être arrêté ici. Les visages déjà lus restent dans ton index et ne sont jamais relus.</string>
+    <string name="fc_scan_text">Lit chaque photo une fois pour y trouver les visages. Cela prend du temps, se met en pause sous 10%% de batterie et peut être arrêté ici. Les visages déjà lus restent dans votre index et ne sont jamais relus.</string>
     <string name="fc_scan_start">Démarrer</string>
     <string name="fc_scan_progress">Lecture des visages : %1$s sur %2$s</string>
     <string name="fc_remove_title">Retirer %1$s partout ?</string>

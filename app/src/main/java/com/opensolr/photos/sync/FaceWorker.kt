@@ -23,7 +23,7 @@ import kotlinx.coroutines.flow.StateFlow
  *  - NAME, after every sync: the newest photos get the names of the people they match. A person is only ever
  *    the faces the owner named; no photo is read, only fingerprints already on the phone are compared.
  *  - SCAN_ALL, started by the owner from the Sync screen: every photo without faces in the index is read once,
- *    only while the phone is charging, in short runs, with progress, stoppable. The faces go to the index with
+ *    in short runs, with progress, stoppable, paused under 10% battery. The faces go to the index with
  *    the words path, so no phone reads them a second time.
  * New photos get their faces read when they are indexed (SyncEngine), one at a time, as they come.
  */
@@ -35,7 +35,7 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         if (prefs.session == null || prefs.folders.isEmpty()) return Result.success()
         val cache = PhotoCache.of(ctx)
         val edits = EditRepository(ctx)
-        val local = MediaScanner.scan(ctx, prefs.folders) ?: return Result.success()
+        val local = MediaScanner.scan(ctx, prefs.folders, cache.aliases(), com.opensolr.photos.media.ScanOptions.of(ctx))?.filterValues { it.kind != com.opensolr.photos.media.Kind.PDF } ?: return Result.success()
         // faces read for these files under an earlier id are taken over first, so nothing named is dropped
         val adopted = local.values.filter { cache.adoptFaces(it.id, it.mediaId) }.map { it.id }
         if (adopted.isNotEmpty()) { cache.queueActions(adopted, PhotoCache.ACTION_WORDS); SyncScheduler.runNow(ctx) }
@@ -67,6 +67,8 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             for (photo in todo) {
                 if (isStopped) return Result.success()
                 if (System.currentTimeMillis() > until) { next(ctx, scanAll = true, continuation = true); return Result.success() }
+                // under 10% battery the scan waits and comes back on its own
+                if (com.opensolr.photos.ui.Actions.batteryPercent(ctx) < BATTERY_PAUSE_PERCENT) { nextLater(ctx); return Result.success() }
                 val bitmap = try { PhotoReader.uprightBitmap(ctx, photo.uri, FaceEngine.READ_EDGE) } catch (e: Exception) { null }
                 val faces = if (bitmap == null) emptyList() else try { engine.analyze(bitmap) } catch (e: Exception) { emptyList() } finally { bitmap.recycle() }
                 // the names the file carries come first; the matcher only names what is left
@@ -134,6 +136,17 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         }
 
         /** After a sync: name the newest photos with the people known. Nothing is read. */
+        private const val BATTERY_PAUSE_PERCENT = 10
+        private const val BATTERY_RETRY_MS = 15 * 60 * 1000L
+
+        private fun nextLater(context: Context) {
+            val request = OneTimeWorkRequestBuilder<FaceWorker>()
+                .setInputData(workDataOf(SCAN_ALL to true))
+                .setInitialDelay(BATTERY_RETRY_MS, java.util.concurrent.TimeUnit.MILLISECONDS)
+                .build()
+            WorkManager.getInstance(context).enqueueUniqueWork(WORK_SCAN, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+        }
+
         fun next(context: Context, scanAll: Boolean = false, continuation: Boolean = false) {
             if (AppPrefs(context).syncPaused) return
             if (!scanAll) {
@@ -142,13 +155,11 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             }
             val request = OneTimeWorkRequestBuilder<FaceWorker>()
                 .setInputData(workDataOf(SCAN_ALL to true))
-                // only on the charger: this is the one job that reads every photo
-                .setConstraints(Constraints.Builder().setRequiresCharging(true).build())
                 .build()
             WorkManager.getInstance(context).enqueueUniqueWork(WORK_SCAN, if (continuation) ExistingWorkPolicy.APPEND_OR_REPLACE else ExistingWorkPolicy.KEEP, request)
         }
 
-        /** The owner asked for every photo to be read: starts the scan (it waits for the charger). */
+        /** The owner asked for every photo to be read: starts the scan. */
         fun scanAll(context: Context) {
             SyncScheduler.resume(context)
             _progress.value = Progress(true, _progress.value.done, _progress.value.total)

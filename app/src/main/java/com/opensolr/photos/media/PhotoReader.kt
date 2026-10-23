@@ -125,7 +125,41 @@ object PhotoReader {
         return String(out)
     }
 
-    fun fileMd5(context: Context, photo: LocalPhoto): String? = fileMd5(context, photo.uri)
+    /** The file's identity: md5 of a photo or PDF, the partial hash of a video (its size, first and last 4 MB). */
+    fun fileMd5(context: Context, photo: LocalPhoto): String? = when (photo.kind) {
+        Kind.VIDEO -> PartialHash.of(context, photo.uri)
+        Kind.PDF -> pdfMd5(context, photo)
+        else -> fileMd5(context, photo.uri)
+    }
+
+    // the pages of one PDF share its md5: computed once per file and size while the pages go through
+    private val pdfHashes = object : java.util.LinkedHashMap<String, String>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean = size > 32
+    }
+
+    private fun pdfMd5(context: Context, photo: LocalPhoto): String? {
+        val key = photo.uri.toString() + "|" + photo.sizeBytes
+        synchronized(pdfHashes) { pdfHashes[key]?.let { return it } }
+        val md5 = fileMd5(context, photo.uri) ?: return null
+        synchronized(pdfHashes) { pdfHashes[key] = md5 }
+        return md5
+    }
+
+    /**
+     * The picture that stands for [photo] at [edge] px, as JPEG: the photo itself, a video's first frame, one page
+     * of a PDF. The copies in the storage backend and the restore copies are made of this.
+     */
+    fun representativeJpeg(context: Context, photo: LocalPhoto, edge: Int, quality: Int = SHARE_JPEG_QUALITY): ByteArray? {
+        val bitmap = when (photo.kind) {
+            Kind.VIDEO -> VideoFrames.frame(context, photo.uri, edge)
+            Kind.PDF -> PdfPages.render(context, photo.uri, photo.page, edge)
+            else -> return shrinkForClip(context, photo.uri, openExif(context, photo.uri)?.rotationDegrees ?: 0, edge, quality)
+        } ?: return null
+        val out = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, quality, out)
+        bitmap.recycle()
+        return out.toByteArray()
+    }
 
     fun fileMd5(context: Context, uri: android.net.Uri): String? = try {
         context.contentResolver.openInputStream(uri)?.use { input ->
@@ -174,6 +208,7 @@ object PhotoReader {
      * from which the server copy, the picture hash and the face image are all taken. Null when it cannot be read.
      */
     fun readForIngest(context: Context, photo: LocalPhoto, place: com.opensolr.photos.data.PhotoCache.SetPlace? = null): IngestRead? {
+        if (photo.kind != Kind.PHOTO) return readOtherForIngest(context, photo, place)
         val bytes = context.contentResolver.openInputStream(photo.uri)?.use { it.readBytes() } ?: return null
         val md5 = hex(java.security.MessageDigest.getInstance("MD5").digest(bytes))
         val exif = openExif(context, photo.uri)
@@ -184,6 +219,44 @@ object PhotoReader {
         small.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
         if (small !== upright) small.recycle()
         val jpeg = withCarriedExif(context, out.toByteArray(), exif, place)
+        return IngestRead(jpeg, md5, pixelHash, upright)
+    }
+
+    /**
+     * A video or a PDF page for the index: the picture is the first frame or the rendered page; the file's
+     * identity is its (partial) hash; the date and place a video carries go into the copy's EXIF, so the server
+     * reads them as it reads a photo's.
+     */
+    private fun readOtherForIngest(context: Context, photo: LocalPhoto, place: com.opensolr.photos.data.PhotoCache.SetPlace?): IngestRead? {
+        val md5 = fileMd5(context, photo) ?: return null
+        val upright = when (photo.kind) {
+            Kind.VIDEO -> VideoFrames.frame(context, photo.uri, FaceEngine.READ_EDGE)
+            else -> PdfPages.render(context, photo.uri, photo.page, FaceEngine.READ_EDGE)
+        } ?: return null
+        val pixelHash = pixelHashOf(upright)
+        val small = scaled(upright, CLIP_EDGE_PX)
+        val out = ByteArrayOutputStream()
+        small.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+        if (small !== upright) small.recycle()
+        var jpeg = out.toByteArray()
+        val facts = if (photo.kind == Kind.VIDEO) VideoFrames.facts(context, photo.uri) else null
+        val taken = facts?.takenMs ?: photo.dateTakenMs.takeIf { it > 0 } ?: (photo.modifiedSec * 1000L).takeIf { it > 0 }
+        val latLon = facts?.let { f -> if (f.latitude != null && f.longitude != null) f.latitude to f.longitude else null }
+            ?: place?.let { it.lat to it.lon }
+        if (taken != null || latLon != null) {
+            val file = java.io.File.createTempFile("ingest", ".jpg", context.cacheDir)
+            try {
+                file.writeBytes(jpeg)
+                val exif = ExifInterface(file.absolutePath)
+                taken?.let { exif.setAttribute(ExifInterface.TAG_DATETIME_ORIGINAL, SimpleDateFormat("yyyy:MM:dd HH:mm:ss", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(it)); exif.setAttribute(ExifInterface.TAG_OFFSET_TIME_ORIGINAL, "+00:00") }
+                latLon?.let { exif.setLatLong(it.first, it.second) }
+                exif.saveAttributes()
+                jpeg = file.readBytes()
+            } catch (e: Exception) {
+            } finally {
+                file.delete()
+            }
+        }
         return IngestRead(jpeg, md5, pixelHash, upright)
     }
 

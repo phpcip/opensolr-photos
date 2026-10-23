@@ -441,6 +441,11 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
                 if (p.modifiedSec > 0) put("modified_at", isoUtc(p.modifiedSec * 1000L))
                 put("width", p.width)
                 put("height", p.height)
+                when (p.kind) {
+                    com.opensolr.photos.media.Kind.VIDEO -> { put("kind", "video"); put("duration_ms", p.durationMs) }
+                    com.opensolr.photos.media.Kind.PDF -> { put("kind", "pdf_page"); put("page", p.page); put("pages", p.pages); put("parent_id", p.parentId) }
+                    else -> Unit
+                }
                 put("image", Base64.encodeToString(item.jpeg, Base64.NO_WRAP))
 
                 item.tags?.let { put("tags", JSONArray(it)) }
@@ -549,6 +554,41 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
             if (!response.isSuccessful) throw ServiceException("The index answered HTTP ${response.code}")
             text
         }
+    }
+
+    /** The storage backend of [name] as the account holds it (null when none), and whether the platform can seal one. */
+    suspend fun photosStorageGet(session: Session, name: String): Pair<com.opensolr.photos.data.StorageConfig?, Boolean> = withContext(Dispatchers.IO) {
+        val json = storageAnswer(post(MANAGEMENT + "photos_storage_get", form(session) { add("core_name", name) }))
+        val msg = json.optJSONObject("msg") ?: JSONObject()
+        val config = msg.optJSONObject("storage")?.let { com.opensolr.photos.data.StorageConfig.fromJson(it) }
+        config to msg.optBoolean("ready", false)
+    }
+
+    suspend fun photosStorageSave(session: Session, name: String, config: com.opensolr.photos.data.StorageConfig): com.opensolr.photos.data.StorageConfig = withContext(Dispatchers.IO) {
+        val json = storageAnswer(post(MANAGEMENT + "photos_storage_save", form(session) {
+            add("core_name", name)
+            add("kind", config.kind)
+            add("label", config.label)
+            add("quality", config.quality)
+            add("config", config.toJson().getJSONObject("config").toString())
+        }))
+        json.optJSONObject("msg")?.optJSONObject("storage")?.let { com.opensolr.photos.data.StorageConfig.fromJson(it) } ?: config
+    }
+
+    suspend fun photosStorageQuality(session: Session, name: String, quality: String) = withContext(Dispatchers.IO) {
+        storageAnswer(post(MANAGEMENT + "photos_storage_quality", form(session) { add("core_name", name); add("quality", quality) }))
+        Unit
+    }
+
+    suspend fun photosStorageDelete(session: Session, name: String) = withContext(Dispatchers.IO) {
+        storageAnswer(post(MANAGEMENT + "photos_storage_delete", form(session) { add("core_name", name) }))
+        Unit
+    }
+
+    private fun storageAnswer(text: String): JSONObject {
+        val json = parseObject(text)
+        if (!json.optBoolean("status")) throw ServiceException(platformMessage(text))
+        return json
     }
 
     private fun post(url: String, body: FormBody): String =

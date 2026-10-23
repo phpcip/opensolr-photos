@@ -87,7 +87,14 @@ object Actions {
 
         val wanted = hits.mapNotNull { it.mediaId.takeIf { id -> id > 0 } }.toSet()
         val alive = MediaScanner.existing(context, wanted)
+        val authority = context.packageName + ".share"
         return hits.mapNotNull { hit ->
+            // a photo only the backend has is shared as its 720 px copy
+            com.opensolr.photos.storage.CloudFiles.model(context, hit.id)?.let { file ->
+                return@mapNotNull androidx.core.content.FileProvider.getUriForFile(context, authority, file)
+            }
+            // a video or a PDF: the file itself, from its own collection
+            if (hit.mediaKind != com.opensolr.photos.media.Kind.PHOTO && hit.mediaId > 0) return@mapNotNull hit.uri
             val mediaId = when {
                 hit.mediaId > 0 && hit.mediaId in alive -> hit.mediaId
 
@@ -223,6 +230,30 @@ object Actions {
                 }
             }
             null
+        }
+    }
+
+    /** True when PDFs of other apps can be read: Android 10 and older, or All files access granted (GitHub build). */
+    fun hasAllFilesAccess(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.R || com.opensolr.photos.BuildConfig.PLAY_BUILD || android.os.Environment.isExternalStorageManager()
+
+    /** The system page where All files access is granted to this app. */
+    fun openAllFilesAccess(context: Context) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
+        val own = Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION, Uri.parse("package:" + context.packageName)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        try {
+            context.startActivity(own)
+        } catch (e: ActivityNotFoundException) {
+            runCatching { context.startActivity(Intent(android.provider.Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+        }
+    }
+
+    /** The file opened in whatever app handles [mime] (a PDF reader, a video player). */
+    fun openFile(context: Context, uri: Uri, mime: String) {
+        try {
+            context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, mime).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: ActivityNotFoundException) {
+            toast(context, R.string.ac_no_app)
         }
     }
 
@@ -393,6 +424,29 @@ object Actions {
             mb >= 1 -> String.format(Locale.US, "%.1f MB", mb)
             else -> String.format(Locale.US, "%.0f KB", kb)
         }
+    }
+
+    fun batteryPercent(context: Context): Int {
+        val intent = context.registerReceiver(null, android.content.IntentFilter(Intent.ACTION_BATTERY_CHANGED)) ?: return 100
+        val level = intent.getIntExtra(android.os.BatteryManager.EXTRA_LEVEL, -1)
+        val scale = intent.getIntExtra(android.os.BatteryManager.EXTRA_SCALE, -1)
+        return if (level < 0 || scale <= 0) 100 else (level * 100 / scale)
+    }
+
+    /** True on mobile data (or any network the phone counts as metered); false on Wi-Fi and when there is no network. */
+    fun onMeteredNetwork(context: Context): Boolean {
+        val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return false
+        val active = manager.activeNetwork ?: return false
+        val caps = manager.getNetworkCapabilities(active) ?: return false
+        return !caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED)
+    }
+
+    /** Bytes free on the phone's storage where the photo folders live. */
+    fun freeBytes(): Long = try {
+        @Suppress("DEPRECATION")
+        android.os.StatFs(android.os.Environment.getExternalStorageDirectory().absolutePath).availableBytes
+    } catch (e: Exception) {
+        0L
     }
 
     fun formatMb(mb: Double): String =

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sync_also">Also index</string>
+    <string name="sync_videos">Videos</string>
+    <string name="sync_videos_text">The clips in the same folders. Only their first frame and their details go to your index; the clip itself stays on the phone, and is backed up only when you have a storage backend.</string>
+    <string name="sync_pdfs">PDF files</string>
+    <string name="sync_pdfs_text">PDFs in the same folders, page by page: every page becomes a result, with its text read. The file stays on the phone.</string>
+    <string name="sync_pdfs_access_title">Allow access to PDFs</string>
+    <string name="sync_pdfs_access_text">Android shows an app only its own PDFs. To index the ones other apps saved, in Download or WhatsApp, allow All files access. The app only reads PDFs in the folders you sync.</string>
+    <string name="sync_pdfs_access_allow">Allow All files access</string>
+    <string name="sync_pdf_pages">Up to %1$s pages per file</string>
+    <string name="filter_type">Type</string>
+    <string name="sw_photos">Photos</string>
+    <string name="sw_photos_hint">Pictures only</string>
+    <string name="sw_videos">Videos</string>
+    <string name="sw_videos_hint">Clips, shown by their first frame</string>
+    <string name="sw_pdfs">PDF pages</string>
+    <string name="sw_pdfs_hint">Pages of PDF files</string>
+    <string name="kind_video">Video · %1$s</string>
+    <string name="kind_pdf_page">PDF · page %1$s of %2$s</string>
+    <string name="mark_pages">%1$s pages</string>
+    <string name="act_prev_page">Previous page</string>
+    <string name="act_next_page">Next page</string>
+    <string name="act_open_pdf">Open PDF</string>
+    <string name="pdf_delete_title">Delete the whole PDF?</string>
+    <string name="pdf_delete_text">%1$s has %2$s pages. Deleting removes the file and every page of it.</string>
+    <string name="ac_no_app">No app on this phone can open it.</string>
+</resources>

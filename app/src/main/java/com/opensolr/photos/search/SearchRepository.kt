@@ -41,11 +41,16 @@ data class SearchFilters(
     val documents: Boolean? = null,
 
     val folders: Set<String> = emptySet(),
+
+    /** Only these kinds: "photo", "video", "pdf"; empty = everything. */
+    val kinds: Set<String> = emptySet(),
 ) {
 
     val count: Int get() = fields.values.sumOf { it.size } + folders.size + (if (withLocation) 1 else 0) +
         (if (tagged != null) 1 else 0) + (if (near != null) 1 else 0) + (if (taken != null) 1 else 0) +
-        (if (hasOcr != null) 1 else 0) + (if (hasPeople != null) 1 else 0) + (if (documents != null) 1 else 0)
+        (if (hasOcr != null) 1 else 0) + (if (hasPeople != null) 1 else 0) + (if (documents != null) 1 else 0) + kinds.size
+
+    fun toggledKind(kind: String): SearchFilters = copy(kinds = if (kind in kinds) kinds - kind else kinds + kind)
 
     fun values(field: String): Set<String> = fields[field] ?: emptySet()
 
@@ -182,7 +187,20 @@ data class PhotoHit(
 
     // on the phone, not indexed yet: shown with the syncing mark, no actions until it is
     val pending: Boolean = false,
+
+    /** "video", "pdf_page" or "" for a photo. */
+    val kind: String = "",
+    val durationMs: Long = 0,
+    val page: Int = 0,
+    val pages: Int = 0,
+    val parentId: String? = null,
 ) {
+
+    val isVideo: Boolean get() = kind == "video"
+    val isPdfPage: Boolean get() = kind == "pdf_page"
+    val mediaKind: com.opensolr.photos.media.Kind get() = when (kind) { "video" -> com.opensolr.photos.media.Kind.VIDEO; "pdf_page" -> com.opensolr.photos.media.Kind.PDF; else -> com.opensolr.photos.media.Kind.PHOTO }
+    /** The file on this phone, in the collection its kind lives in. */
+    val uri: android.net.Uri get() = com.opensolr.photos.media.MediaScanner.uriOf(mediaKind, mediaId)
 
     val latLon: Pair<Double, Double>? get() = parseLatLon(location)
 
@@ -263,7 +281,7 @@ class SearchRepository(private val context: Context) {
         params += "fl" to "id,taken_at,city,province,region,country,persons_ss,custom_tags,folder,camera_make,camera_model"
         params += "start" to "0"
         params += "rows" to GROUP_TICK_MAX.toString()
-        if (params.none { it.first == "sort" }) params += "sort" to "taken_at desc, id asc"
+        if (params.none { it.first == "sort" }) params += "sort" to "taken_at desc, page_i asc, id asc"
         val docs = select(params).getJSONObject("response").getJSONArray("docs")
         fun list(d: JSONObject, field: String): List<String> =
             d.optJSONArray(field)?.let { a -> (0 until a.length()).map { a.optString(it).trim() }.filter { it.isNotEmpty() } } ?: emptyList()
@@ -380,6 +398,11 @@ class SearchRepository(private val context: Context) {
         customTags = d.optJSONArray("custom_tags")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList(),
         score = d.optDouble("score", 0.0),
         pending = d.optBoolean("pending"),
+        kind = d.optString("kind_s"),
+        durationMs = d.optLong("duration_l"),
+        page = d.optInt("page_i"),
+        pages = d.optInt("pages_i"),
+        parentId = d.optString("parent_s").ifBlank { null },
     )
 
     private suspend fun search(query: String, filters: SearchFilters, start: Int, rows: Int, legacy: Boolean, freshBias: Boolean, wordsOnly: Boolean): SearchPage {
@@ -427,10 +450,10 @@ class SearchRepository(private val context: Context) {
 
         params += "fq" to "{!lucene v=\$group_q}"
         params += "group_q" to "taken_at:[${stamp.format(Date(from))} TO ${stamp.format(Date(to))}]"
-        params += "fl" to (if (full) FIELDS else "id,media_id,path,file_name,folder,mime,custom_tags,persons_t")
+        params += "fl" to (if (full) FIELDS else "id,media_id,path,file_name,folder,mime,custom_tags,persons_t,kind_s,duration_l,page_i,pages_i,parent_s")
         params += "start" to "0"
         params += "rows" to GROUP_TICK_MAX.toString()
-        params += "sort" to "taken_at desc, id asc"
+        params += "sort" to "taken_at desc, page_i asc, id asc"
         val json = select(params)
         if (full) return parse(json, smart = false, notice = null).hits
         val docs = json.getJSONObject("response").getJSONArray("docs")
@@ -448,6 +471,7 @@ class SearchRepository(private val context: Context) {
                 meaning = "", location = null,
                 persons = d.optString("persons_t"),
                 customTags = d.optJSONArray("custom_tags")?.let { a -> (0 until a.length()).map { a.optString(it) } } ?: emptyList(),
+                kind = d.optString("kind_s"), durationMs = d.optLong("duration_l"), page = d.optInt("page_i"), pages = d.optInt("pages_i"), parentId = d.optString("parent_s").ifBlank { null },
             )
         }
     }
@@ -599,12 +623,13 @@ class SearchRepository(private val context: Context) {
         }
         params += "fq" to "{!bool ${clauses.joinToString(" ")}}"
         val out = ArrayList<PhotoHit>()
-        com.opensolr.photos.net.SolrClient(connection).forEachDoc("id,media_id,path,file_name,folder,mime", filters = visible(params)) { d ->
+        com.opensolr.photos.net.SolrClient(connection).forEachDoc("id,media_id,path,file_name,folder,mime,kind_s,duration_l,page_i,pages_i,parent_s", filters = visible(params)) { d ->
             out += PhotoHit(
                 id = d.optString("id"), mediaId = d.optLong("media_id", -1L), path = d.optString("path"),
                 fileName = d.optString("file_name"), folder = d.optString("folder"), mime = d.optString("mime"),
                 takenAt = null, cameraMake = null, cameraModel = null, lens = null, iso = null, exposure = null,
                 fNumber = null, focalLength = null, width = null, height = null, meaning = "", location = null,
+                kind = d.optString("kind_s"), durationMs = d.optLong("duration_l"), page = d.optInt("page_i"), pages = d.optInt("pages_i"), parentId = d.optString("parent_s").ifBlank { null },
             )
         }
         return out
@@ -803,7 +828,7 @@ class SearchRepository(private val context: Context) {
         params += "fl" to FIELDS
         params += "rows" to SIMILAR_ROWS.toString()
 
-        params += "sort" to "taken_at desc, id asc"
+        params += "sort" to "taken_at desc, page_i asc, id asc"
 
         val hits = parse(select(params), false, null).hits.sortedByDescending { it.id == photoId }
         if (hits.isEmpty()) return anchorAlone(photoId)
@@ -1034,7 +1059,7 @@ class SearchRepository(private val context: Context) {
 
         if (text.isEmpty()) {
             params += "q" to "*:*"
-            params += "sort" to "taken_at desc, id asc"
+            params += "sort" to "taken_at desc, page_i asc, id asc"
         } else {
             // +word / -word / +"phrase" / -"phrase": with AI they leave the text and become
             // filters (both legs obey an fq); with nothing left to embed, words only, as typed.
@@ -1097,6 +1122,11 @@ class SearchRepository(private val context: Context) {
         if (filters.withLocation) params += "fq" to "has_location:true"
 
         if (!legacy) {
+            if (filters.kinds.isNotEmpty()) {
+                val clauses = filters.kinds.map { when (it) { "video" -> "kind_s:video"; "pdf" -> "kind_s:pdf_page"; else -> "(*:* -kind_s:*)" } }
+                params += "fq" to "{!lucene v=\$kind_q}"
+                params += "kind_q" to clauses.joinToString(" OR ")
+            }
             filters.hasOcr?.let { params += "fq" to if (it) "ocr_t:*" else "-ocr_t:*" }
             filters.hasPeople?.let { params += "fq" to if (it) "persons_t:*" else "-persons_t:*" }
             filters.documents?.let { wanted ->
@@ -1243,6 +1273,6 @@ class SearchRepository(private val context: Context) {
         private const val ALBUM_MIN = 1
 
         private const val ALBUM_THINGS = 12
-        private const val FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,size_bytes,meaning,ocr_t,persons_t,location,city,region,province,country,street_s,postal_code_s,labels,custom_tags"
+        private const val FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,size_bytes,meaning,ocr_t,persons_t,location,city,region,province,country,street_s,postal_code_s,labels,custom_tags,kind_s,duration_l,page_i,pages_i,parent_s"
     }
 }

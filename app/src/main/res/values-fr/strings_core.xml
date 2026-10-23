@@ -41,7 +41,7 @@
     <string name="sy_saving_words">Enregistrement de vos mots sur %1$s des %2$s photos</string>
     <string name="sy_no_recognition">%1$s indexées seulement par date, appareil, lieu, nom de fichier et vos étiquettes : votre forfait n\'inclut pas la reconnaissance.</string>
     <string name="sy_no_words">%1$s indexées sans être lues en mots : les requêtes IA mensuelles de votre forfait sont épuisées. Elles seront lues à la première synchro après le renouvellement.</string>
-    <string name="sy_charger">En pause à %1$s%% de batterie après %2$s photos ; il en reste %3$s. Cela reprend tout seul quand le téléphone charge.</string>
+    <string name="sy_battery">En pause à %1$s%% de batterie après %2$s photos ; il en reste %3$s. Cela reprend tout seul dès que la batterie dépasse 10%%.</string>
     <string name="sy_signin_notice">Votre connexion Opensolr ne fonctionne plus. Reconnectez-vous pour garder vos photos synchronisées.</string>
     <string name="sy_quota_title">Requêtes IA mensuelles épuisées</string>
     <string name="sy_quota_text">Opensolr Photos s\'est mis en pause après %1$s photos.%2$s</string>
