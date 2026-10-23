@@ -1467,12 +1467,15 @@ private fun buildRows(
     years.forEach { (year, months) ->
         val yearPhotos = months.values.flatten()
         val yearMillis = yearPhotos.firstNotNullOfOrNull { it.takenMs }
+        // the cells a group added are taken off by how many it added: pages of one PDF share a cell
+        val yearCells = rows.size + 1
         if (rows.addGroup(year, yearPhotos, level = 0, range = yearMillis?.let { Actions.yearSpan(it) })) return@forEach
 
-        repeat(yearPhotos.size) { rows.removeAt(rows.size - 1) }
+        while (rows.size > yearCells) rows.removeAt(rows.size - 1)
         months.forEach { (monthKey, monthPhotos) ->
             val monthMillis = monthPhotos.firstNotNullOfOrNull { it.takenMs }
             val monthText = monthMillis?.let { Actions.monthHeading(it) } ?: monthKey
+            val monthCells = rows.size + 1
             if (rows.addGroup(monthKey, monthPhotos, text = monthText, level = 1, range = monthMillis?.let { Actions.monthSpan(it) })) return@forEach
             val days = LinkedHashMap<String, MutableList<PhotoHit>>()
             monthPhotos.forEach { hit ->
@@ -1481,7 +1484,7 @@ private fun buildRows(
             }
 
             if (days.keys.any { it.isEmpty() }) return@forEach
-            repeat(monthPhotos.size) { rows.removeAt(rows.size - 1) }
+            while (rows.size > monthCells) rows.removeAt(rows.size - 1)
             days.forEach { (dayKey, dayPhotos) ->
                 val millis = dayPhotos.firstNotNullOfOrNull { it.takenMs }
                 rows.addGroup(dayKey, dayPhotos, text = millis?.let { Actions.dayHeading(it) } ?: dayKey, level = 2, range = millis?.let { Actions.daySpan(it) })

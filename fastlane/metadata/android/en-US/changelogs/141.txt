@@ -1,0 +1,1 @@
+- Fixed: the app closed when the results held several pages of the same PDF grouped by date (for example with the PDF pages filter on).
