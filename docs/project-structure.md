@@ -88,7 +88,7 @@ Everything below lives under `app/src/main/java/com/opensolr/photos/`. The packa
 
 - `SyncEngine.kt` — the sync algorithm itself, from “is the index there” to the final commit, including every stop condition. This is the heart of the app. In 2.5 the comparison is entirely local: `MediaScanner.scan()` against `PhotoCache.docSizes()`, with `EditRepository.readIndexIntoCache()` run once when `cloneMissing()` is true. A file that looks touched is weighed by its md5 before anything is sent, so a file this app rewrote itself is not read again. Every document the server answers with goes straight into the phone's copy through `EditRepository.storeDoc()`, and after the commit the engine calls `EditRepository.sendWords()` to carry queued word changes up. A plan without vector search sends no picture at all: photos are indexed from what the phone knows.
 - `SyncWorker.kt` — runs the engine as a background job with a progress notification, and makes sure only one runs at a time.
-- `FaceWorker.kt` — names the newest faces from the people known so far after each sync, and, on request, reads the faces of every photo once (`SCAN_ALL`), only while charging, in short runs.
+- `FaceWorker.kt` — names the newest faces from the people known so far after each sync, and, on request, reads the faces of every photo once (`SCAN_ALL`), in short runs, pausing under 10% battery.
 - `SyncScheduler.kt` — starts a sync now, sets the weekly or monthly schedule, and exposes the live status the screens show.
 - `Notifier.kt` — every notification the app posts.
 - `PlanWatch.kt` — the warnings at 90% and at a plan limit, each posted once.

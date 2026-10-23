@@ -163,7 +163,7 @@ carries it up through `photos_words`. Nothing is ever written into the photo fil
 | **Back to the app** | `MainActivity.onResume` compares the same folder stamp; a sync starts only if it differs, so an edit made while Android had closed the app is still picked up |
 | **Re-sync selected** | Chosen photo ids go to `AppPrefs.resyncIds` and a sync starts; those photos are read and written again whatever the phone's copy of the index says about them, and their word pauses and *could not be read* marks are cleared |
 | **Pull the photo grid down** | Reloads the grid and starts a sync as well; a sync that is running is stopped first and started again |
-| **Kind to the battery** | The watch only starts a sync when a changed picture is in one of your folders; a screenshot or a chat picture elsewhere is ignored without a single request. Two watch-started syncs stay at least 15 minutes apart (the change waits, it is not lost). More than 500 photos to read at once waits for the charger. The app paces its calls under your account's API rate limits, and if Opensolr still asks it to slow down, the run stops and is started again a little later instead of waiting with the phone awake. |
+| **Kind to the battery** | The watch only starts a sync when a changed picture is in one of your folders; a screenshot or a chat picture elsewhere is ignored without a single request. Two watch-started syncs stay at least 15 minutes apart (the change waits, it is not lost). The app paces its calls under your account's API rate limits, and if Opensolr still asks it to slow down, the run stops and is started again a little later instead of waiting with the phone awake. |
 | **Scheduled** | Every day, week or month, your choice on the Sync screen; the safety net for what the watcher cannot see (words after the allowance resets or a pause ends, an index changed on the server); only with a network connection and a battery that is not low |
 
 **Only one sync runs at a time.** Both kinds are unique WorkManager jobs, and the worker also refuses to
@@ -201,8 +201,7 @@ next sync.
 - **Re-Sync**, **Stop**, **Re-read**, **Documents** (reads the receipts, labels and screenshots again) and
   **Reset** (empties the index and fills it back from the phone's copy), in one row, with a line under it
   saying what each of them does.
-- **Find faces in all photos**: reads, once, the faces of photos indexed before faces existed; only while
-  charging, stoppable. Faces already read are kept in the index and never read again.
+- **Find faces in all photos**: reads, once, the faces of photos indexed before faces existed; pausing under 10% battery, stoppable. Faces already read are kept in the index and never read again.
 - When more than half of the indexed photos are missing: the note and the *Remove the N missing photos from
   the index* button.
 - **Automatic Re-Sync**: every day, every week or every month.

@@ -161,7 +161,7 @@ sure, cleaned of the ones that disagree with the rest (`FaceMatcher.references`)
 person when it is close to three of them, not to one.
 
 New photos have their faces read as they are indexed (`SyncEngine`). Photos indexed before faces existed
-are read once with **Find faces in all photos** in Sync (`FaceWorker` with `SCAN_ALL`): only while charging,
+are read once with **Find faces in all photos** in Sync (`FaceWorker` with `SCAN_ALL`): pausing under 10% battery,
 in short runs, with progress, stoppable. After every sync `FaceWorker` names the newest faces from the people
 known so far.
 

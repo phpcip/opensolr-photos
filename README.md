@@ -58,11 +58,15 @@ Six problems, in the order they mattered. Everything in the feature table below 
 | **Filters** | A screen of their own, closed with *Done* or Back. Year, taken between two days, people, your own tags, meaning, camera model, city, country, orientation, a radius around a point, and switches for photos with printed text, tagged, with people and with a location. The filter values come from your own photos, every value listed (meaning stops at 500), alphabetically. Every group carries the same heading as the grid, folds away (all folded to start with), is remembered between visits, and shows a badge with how many of its own filters are on. A name can be taken off the whole library from the People filter. Choosing years narrows the *Taken between* calendar to those years and opens it there; choosing days puts the years aside. |
 | **Best matches first** | A typed search splits its results into *Best matches* and *Also similar*. Browsing without a query has three levels, Year, then Month, then Day, with Today, Yesterday and the last few days above the years. Every month is spelled out by its days, even a month with a single day, and group headings fold and are remembered. |
 | **Selecting photos** | A long press starts a selection and it ends by itself when the last tick goes, or at once with a tap on the ✓ count above the grid. A tick on a group heading takes the whole group, a year, a month or a day, not only the photos loaded on screen. In a typed search, *Best matches* and *Also similar* have no group tick: their boundary moves as more results arrive. |
-| **People, by their faces** | Faces are found and told apart on the phone (YuNet and SFace, no picture goes to Opensolr's AI for this). Name a face in the viewer and the app finds that person in the rest of the library: sure matches get the name, the others are offered under *Is this Anna?*. People go on a photo only by naming faces. Faces already read are kept in your index; photos indexed before faces existed are read once on request, only while charging. |
+| **People, by their faces** | Faces are found and told apart on the phone (YuNet and SFace, no picture goes to Opensolr's AI for this). Name a face in the viewer and the app finds that person in the rest of the library: sure matches get the name, the others are offered under *Is this Anna?*. People go on a photo only by naming faces. Faces already read are kept in your index; photos indexed before faces existed are read once on request, pausing under 10% battery. |
 | **Your own tags and words** | Tag the selected photos with *My tags (Albums)*, with an Add / Replace switch. Add puts your words on top of what each photo carries; Replace makes them the whole of that field on every ticked photo, and says so. Under the form, the people and tags the ticked photos already carry, with counts. Saving is finished on the phone; the sync that starts straight after carries the change up to your index. Your words always win over what Opensolr saw. Nothing is written into the photo files. |
 | **Autocomplete and spelling** | As you type in the search box, your tags, the words your photos were read into, the cameras and the places are offered by the index, and the same prefix typed again is answered from the phone; a misspelt search gets a *Did you mean*. In the tagging sheet, the tags and the names offered come from the phone's own copy, without a request. |
 | **Stats** | Your library in numbers, counted on the phone with no request: photos, size, tagged, with people, with a place, with text; then per year, month, weekday and hour, and the people, tags, things, countries, cities and cameras, each a chart with its full table. Tap a line and its photos open; Back returns to the same spot. |
-| **Marks on the thumbnails** | A person mark on photos with people named on them, a tag mark on photos you tagged. |
+| **Videos** | The clips in your folders are indexed by their first frame and their facts (date, place, length), so a clip is found by what it shows. The clip itself never goes to Opensolr. It plays in the viewer, with its length on the thumbnail. |
+| **PDF files, page by page** | Every page of a PDF in your folders is a result of its own, with its printed text read, so a line on page 7 of a contract is found like a receipt. Pages of one file fold into one cell and swipe one after another; *Open PDF* opens the file. Up to 100 pages per file by default. PDFs saved by other apps (Download, WhatsApp) need *All files access* in the GitHub build. |
+| **Backup to your own storage** | Optional: your photos, videos and PDFs copied straight from the phone to **your** S3 bucket (AWS, Backblaze B2, Cloudflare R2, Wasabi, MinIO), SFTP server or WebDAV folder, as originals or 1080p. Opensolr never holds a file; it keeps only the sealed credentials, so a new phone finds the backup by itself. |
+| **A new phone gets your library back** | Sign in, pick your index: every photo comes back as a 720 px copy with a cloud mark, with its people, tags, text and places already there and nothing read again. *Download* brings the full file into its folder. |
+| **Marks on the thumbnails** | A person mark on photos with people named on them, a tag mark on photos you tagged, a cloud on photos only in your backup, the length of a clip, the page of a PDF. |
 | **Similar photos** | A slider groups alike photos: *Same faces* (around one photo, compared on the phone), *Same first 2 words, same camera*, *Same first 3 words, same camera*, *Same description, same camera*, *Same photo (EXIF)* and *Same file (exact copy)*. Around one photo the comparison is about that photo alone: typed words and filters are left aside. *Select 1 of each group* ticks one photo per group, leaving the first alone, for review, sharing or deleting. The keys come from the picture and its EXIF only, never from your tags. |
 | **Delete** | Delete selected photos from the phone and the index at once, after the app's own warning (and Android's, on Android 11 and newer). |
 | **A map** | Every photo with a GPS position, grouped into thumbnail markers on OpenStreetMap. Tap a group and its photos open straight away, in a sheet that drags up to the whole screen and says where *here* is, in city and country; or *Search this area*. The night map is dimmed rather than colour-inverted, so the sea stays blue. The place is written into the index in words (city, region, country). |
@@ -137,11 +141,14 @@ The APK is signed with the Opensolr Photos release key. SHA-256 of the signing c
   <img src="docs/images/data-boundaries.svg" alt="Where each piece of data lives" width="100%">
 </p>
 
-- **Originals never leave the phone.** Only a 1024 px re-encoded copy is sent to be indexed, carrying the
+- **Originals never go to Opensolr.** Only a 1024 px re-encoded copy is sent to be indexed (a clip's first frame, a PDF page drawn as a picture), carrying the
   original's EXIF (time, camera, position) and the names of any people other apps already wrote into the file;
   the copy is processed in memory and not stored. Faces are found and compared on the phone only. The position, rounded, is turned into a place name on the server.
-- **The map** draws OpenStreetMap tiles, requested only while the map screen is open. That is the only
-  host besides Opensolr the app ever talks to.
+- **The map** draws OpenStreetMap tiles, requested only while the map screen is open.
+- **Your backup, if you set one,** goes from the phone straight to your own S3 bucket, SFTP server or WebDAV
+  folder. Opensolr keeps only the credentials, sealed, so a new phone can reach it.
+- **Mobile data** is used only if you allow it (one switch for sync, backup and restore); nothing waits for
+  the charger, and work pauses under 10% battery.
 - **The index is yours**: labels, a search vector, date, camera, place, path, file name, size, the dates,
   the EXIF, the text printed in the photo, the people and their faces, your own tags and wording, and the
   file's md5. It lives in your Opensolr account: plain Apache Solr, which you can query and export with any
@@ -173,6 +180,8 @@ Full account: [privacy and security](docs/privacy-and-security.md).
 | [Building from source](docs/building.md) | Toolchain, signing, debug builds |
 | [Contributing](CONTRIBUTING.md) | How changes get in, conventions, and how to become a contributor |
 | [Troubleshooting](docs/troubleshooting.md) | Common situations and what to do |
+| [Backup and restore](https://opensolr.com/opensolr-photos-docs/backup) | Your own storage, step by step for AWS S3, other S3 services, SFTP and WebDAV, and a new phone |
+| [Videos](https://opensolr.com/opensolr-photos-docs/videos) and [PDF files](https://opensolr.com/opensolr-photos-docs/pdf-files) | What goes to the index, how they show and play, the switches |
 
 ## Build from source
 
