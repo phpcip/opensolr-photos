@@ -583,6 +583,32 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
     }
 
     /** Where each document says its file is: this phone's MediaStore id and absolute path, or another phone's. */
+    /** This phone's own media id and path of each of [ids], from the clone: the index holds the last phone's. */
+    fun mediaFor(ids: Collection<String>): Map<String, Pair<Long, String>> {
+        val out = HashMap<String, Pair<Long, String>>()
+        ids.chunked(400).forEach { batch ->
+            val marks = batch.joinToString(",") { "?" }
+            readableDatabase.rawQuery("SELECT id, media_id, path FROM docs WHERE id IN ($marks)", batch.toTypedArray()).use { c ->
+                while (c.moveToNext()) out[c.getString(0)] = c.getLong(1) to c.getString(2).orEmpty()
+            }
+        }
+        return out
+    }
+
+    /** Backed-up ids the clone has no document for: written by another phone after this one read the index. */
+    fun remoteWithoutDoc(): List<String> {
+        val out = ArrayList<String>()
+        readableDatabase.rawQuery("SELECT id FROM remote WHERE id NOT IN (SELECT id FROM docs) AND id NOT IN (SELECT id FROM parked_docs)", null).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        return out
+    }
+
+    /** Videos and PDF pages that an older version brought back as 720 px copies: they come back as their files. */
+    fun cloudVideosAndPages(): List<String> {
+        val out = ArrayList<String>()
+        readableDatabase.rawQuery("SELECT c.id FROM cloud c INNER JOIN docs d ON d.id = c.id WHERE d.json LIKE '%\"kind_s\":\"video\"%' OR d.json LIKE '%\"kind_s\":\"pdf_page\"%'", null).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        return out
+    }
+
     fun docMedia(): Map<String, Pair<Long, String>> {
         val out = HashMap<String, Pair<Long, String>>()
         readableDatabase.query("docs", arrayOf("id", "media_id", "path"), null, null, null, null, null).use { c ->

@@ -27,8 +27,8 @@ android {
         applicationId = "com.opensolr.photos.main"
         minSdk = 26
         targetSdk = 36
-        versionCode = 146
-        versionName = "3.23.0"
+        versionCode = 149
+        versionName = "3.23.3"
         // the face models run natively, on phones (arm)
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }

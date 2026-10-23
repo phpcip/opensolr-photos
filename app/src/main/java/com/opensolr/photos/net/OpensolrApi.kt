@@ -30,6 +30,8 @@ data class IngestItem(
     val ownerTags: Boolean = false, val ownerPersons: Boolean = false, val ownerMeaning: Boolean = false,
     /** The faces as the index keeps them (FaceStore), and the md5 of the picture's pixels alone. */
     val faces: String? = null, val pixelHash: String? = null,
+    /** The phone could not decode the picture: the server indexes the file by its facts and reads nothing. */
+    val noRead: Boolean = false,
 )
 
 data class WordsItem(
@@ -446,6 +448,7 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
                     com.opensolr.photos.media.Kind.PDF -> { put("kind", "pdf_page"); put("page", p.page); put("pages", p.pages); put("parent_id", p.parentId) }
                     else -> Unit
                 }
+                if (item.noRead) put("no_read", true)
                 put("image", Base64.encodeToString(item.jpeg, Base64.NO_WRAP))
 
                 item.tags?.let { put("tags", JSONArray(it)) }

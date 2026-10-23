@@ -23,6 +23,7 @@
     <string name="act_next_page">Next page</string>
     <string name="act_open_pdf">Open PDF</string>
     <string name="act_open_video">Open in video player</string>
+    <string name="act_open_other_app">Open in another app</string>
     <string name="pdf_delete_title">Delete the whole PDF?</string>
     <string name="pdf_delete_text">%1$s has %2$s pages. Deleting removes the file and every page of it.</string>
     <string name="ac_no_app">No app on this phone can open it.</string>

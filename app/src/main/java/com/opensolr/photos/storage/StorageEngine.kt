@@ -66,6 +66,23 @@ class StorageEngine(private val context: Context) {
                 prefs.manifestsReadAt = System.currentTimeMillis()
             }
 
+            // once: the clone read before 3.23.3 lacked the kind of each document (video, PDF page): read again
+            val sp = context.getSharedPreferences("opensolr_photos", Context.MODE_PRIVATE)
+            if (!sp.getBoolean("clone_kinds_3233", false)) {
+                runCatching { com.opensolr.photos.search.EditRepository(context).readDocsIntoCache(cache.cloudIds().toList()) }
+                    .onSuccess { sp.edit().putBoolean("clone_kinds_3233", true).apply() }
+            }
+
+            // what another phone indexed after this one read the index: its documents into the clone first
+            cache.remoteWithoutDoc().takeIf { it.isNotEmpty() }?.let { ids ->
+                onProgress(Progress(AppText.s(R.string.stg_reading_manifests), 0, 0))
+                runCatching { com.opensolr.photos.search.EditRepository(context).readDocsIntoCache(ids) }
+            }
+
+            // videos and PDF pages an older version brought back as pictures come back as their files
+            val oldCopies = cache.cloudVideosAndPages()
+            oldCopies.forEach { id -> cache.removeCloud(id); CloudFiles.remove(context, id) }
+
             // the whole backed-up library is this phone's, whatever folders it syncs: hidden photos come back
             if (cache.unparkBackedUp() > 0) prefs.cloneComplete = true
 
@@ -297,7 +314,8 @@ class StorageEngine(private val context: Context) {
         val big = File.createTempFile("main", ".jpg", context.cacheDir)
         try {
             // the restore copy: the photo, a clip's first frame or the page itself, at 720 px
-            val smallBytes = PhotoReader.representativeJpeg(context, photo, RESTORE_EDGE) ?: throw UnreadableException()
+            // a file whose picture cannot be drawn still goes up; its restore copy is the stand-in
+            val smallBytes = PhotoReader.representativeJpeg(context, photo, RESTORE_EDGE) ?: PhotoReader.placeholderJpeg(photo.kind, 1280)
             small.writeBytes(smallBytes)
             val result: Triple<String, Long, String?>
             val already = sentFiles[mainPath]

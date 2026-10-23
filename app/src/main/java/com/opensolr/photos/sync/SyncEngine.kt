@@ -259,9 +259,9 @@ class SyncEngine(private val context: Context) {
 
             // 3.23.0 reads more kinds of clips: what an earlier version could not read is tried once again
             val sp = context.getSharedPreferences("opensolr_photos", Context.MODE_PRIVATE)
-            if (!sp.getBoolean("skipped_retry_3230", false)) {
+            if (!sp.getBoolean("skipped_retry_3232", false)) {
                 cache.skipped().forEach { cache.clearSkipped(it.id) }
-                sp.edit().putBoolean("skipped_retry_3230", true).apply()
+                sp.edit().putBoolean("skipped_retry_3232", true).apply()
             }
             val forced = prefs.resyncIds
             val wordingReset = prefs.wordingResetIds
@@ -333,7 +333,7 @@ class SyncEngine(private val context: Context) {
                     items += IngestItem(
                         photo, jpeg, tags, meaning, weighed[photo.id] ?: read.md5, names, resetWording = cleared || photo.id in wordingReset,
                         ownerTags = edits != null, ownerPersons = edits?.persons != null, ownerMeaning = !edits?.meaning.isNullOrEmpty(),
-                        faces = faces, pixelHash = read.pixelHash,
+                        faces = faces, pixelHash = read.pixelHash, noRead = read.noRead,
                     )
                 }
                 if (items.isNotEmpty()) {

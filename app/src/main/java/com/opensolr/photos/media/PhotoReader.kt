@@ -201,7 +201,32 @@ object PhotoReader {
     }
 
     /** What one read of a file gives the sync: the copy for the server, the file md5, the picture hash and the upright image for faces. */
-    class IngestRead(val jpeg: ByteArray, val md5: String, val pixelHash: String?, val upright: Bitmap?)
+    /** [noRead]: the picture could not be decoded on this phone; [jpeg] is a plain stand-in and the file is indexed by its facts only. */
+    class IngestRead(val jpeg: ByteArray, val md5: String, val pixelHash: String?, val upright: Bitmap?, val noRead: Boolean = false)
+
+    /** A plain stand-in picture for a file whose own picture cannot be decoded: dark, with a sign of its kind. */
+    fun placeholderJpeg(kind: Kind, edge: Int = 640): ByteArray {
+        val w = edge
+        val h = edge * 3 / 4
+        val bitmap = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+        val canvas = android.graphics.Canvas(bitmap)
+        canvas.drawColor(0xFF2A2A2A.toInt())
+        val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFDDDDDD.toInt(); style = android.graphics.Paint.Style.STROKE; strokeWidth = w / 64f; strokeJoin = android.graphics.Paint.Join.ROUND }
+        val cx = w / 2f
+        val cy = h / 2f
+        val r = h / 6f
+        val path = android.graphics.Path()
+        when (kind) {
+            Kind.VIDEO -> { path.moveTo(cx - r * 0.7f, cy - r); path.lineTo(cx + r, cy); path.lineTo(cx - r * 0.7f, cy + r); path.close() }
+            Kind.PDF -> { path.addRect(cx - r * 0.8f, cy - r, cx + r * 0.8f, cy + r, android.graphics.Path.Direction.CW) }
+            else -> { path.addRect(cx - r * 1.2f, cy - r * 0.9f, cx + r * 1.2f, cy + r * 0.9f, android.graphics.Path.Direction.CW) }
+        }
+        canvas.drawPath(path, paint)
+        val out = ByteArrayOutputStream()
+        bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
+        bitmap.recycle()
+        return out.toByteArray()
+    }
 
     /**
      * The file read once into memory: md5 over its bytes, one decode (upright, long edge [FaceEngine.READ_EDGE])
@@ -212,7 +237,9 @@ object PhotoReader {
         val bytes = context.contentResolver.openInputStream(photo.uri)?.use { it.readBytes() } ?: return null
         val md5 = hex(java.security.MessageDigest.getInstance("MD5").digest(bytes))
         val exif = openExif(context, photo.uri)
-        val upright = decodeUprightBytes(bytes, exif?.rotationDegrees ?: 0, FaceEngine.READ_EDGE) ?: return null
+        // a picture this phone cannot decode is still a photo: indexed by its facts, backed up, listed
+        val upright = decodeUprightBytes(bytes, exif?.rotationDegrees ?: 0, FaceEngine.READ_EDGE)
+            ?: return IngestRead(withCarriedExif(context, placeholderJpeg(Kind.PHOTO), exif, place), md5, null, null, noRead = true)
         val pixelHash = pixelHashOf(upright)
         val small = scaled(upright, CLIP_EDGE_PX)
         val out = ByteArrayOutputStream()
@@ -229,11 +256,15 @@ object PhotoReader {
      */
     private fun readOtherForIngest(context: Context, photo: LocalPhoto, place: com.opensolr.photos.data.PhotoCache.SetPlace?): IngestRead? {
         val md5 = fileMd5(context, photo) ?: return null
-        val upright = when (photo.kind) {
+        val decoded = when (photo.kind) {
             Kind.VIDEO -> VideoFrames.frame(context, photo.uri, FaceEngine.READ_EDGE)
             else -> PdfPages.render(context, photo.uri, photo.page, FaceEngine.READ_EDGE)
-        } ?: return null
-        val pixelHash = pixelHashOf(upright)
+        }
+        val noRead = decoded == null
+        // no frame or page can be drawn here: a stand-in picture carries the facts, the file is still indexed
+        val stand = if (decoded == null) placeholderJpeg(photo.kind) else null
+        val upright = decoded ?: BitmapFactory.decodeByteArray(stand, 0, stand!!.size)
+        val pixelHash = if (noRead) null else pixelHashOf(upright)
         val small = scaled(upright, CLIP_EDGE_PX)
         val out = ByteArrayOutputStream()
         small.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)
@@ -257,7 +288,7 @@ object PhotoReader {
                 file.delete()
             }
         }
-        return IngestRead(jpeg, md5, pixelHash, upright)
+        return IngestRead(jpeg, md5, pixelHash, if (noRead) null.also { upright.recycle() } else upright, noRead)
     }
 
     /** [bitmap] with its long edge at most [edge] px: the same bitmap when it already is. */

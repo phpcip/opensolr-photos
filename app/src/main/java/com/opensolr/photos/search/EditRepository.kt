@@ -200,6 +200,21 @@ class EditRepository(private val context: Context) {
         prefs.cloneComplete = true
     }
 
+    /**
+     * Documents another phone wrote into the shared index after this phone read it: read by id into the clone, so
+     * browsing, Stats and the restore know them. In chunks, never the whole index again.
+     */
+    suspend fun readDocsIntoCache(ids: Collection<String>) {
+        val connection = prefs.connection ?: return
+        val solr = com.opensolr.photos.net.SolrClient(connection)
+        ids.chunked(200).forEach { batch ->
+            solr.forEachDoc(CLONE_FIELDS, pageSize = CLONE_PAGE, filters = listOf("fq" to "{!terms f=id}" + batch.joinToString(","))) { d ->
+                val id = d.optString("id")
+                if (id.isNotEmpty()) storeDoc(id, d, indexedAt = com.opensolr.photos.ui.Actions.solrDateMillis(d.optString("indexed_at")) ?: 0L)
+            }
+        }
+    }
+
     fun storeDoc(id: String, answered: JSONObject, indexedAt: Long = System.currentTimeMillis()) {
         // the document alone is kept: what the server said about the call travels no further
         val answer = JSONObject(answered.toString()).apply { PhotoCache.ANSWER_KEYS.forEach { remove(it) } }
@@ -251,6 +266,7 @@ class EditRepository(private val context: Context) {
             "taken_at,indexed_at,modified_at,year,month,width,height,orientation," +
             "camera_make,camera_model,lens,iso,exposure,f_number,focal_length,flash," +
             "has_location,location,altitude,city,region,province,community,country,country_code,street_s,postal_code_s," +
-            "labels,meaning,ocr_t,persons_t,persons_ss,custom_tags,clip_model,embed_model,faces_json,pixel_hash"
+            "labels,meaning,ocr_t,persons_t,persons_ss,custom_tags,clip_model,embed_model,faces_json,pixel_hash," +
+            "kind_s,duration_l,page_i,pages_i,parent_s,no_picture_b"
     }
 }

@@ -1,0 +1,2 @@
+- A second phone gets everything: videos and PDFs come back as their files, results open this phone's own file, and what another phone indexed later is read in before restoring.
+- Files this phone cannot decode are indexed by their facts, backed up, shown with a sign of their kind and opened in another app.

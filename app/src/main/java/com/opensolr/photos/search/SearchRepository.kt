@@ -194,6 +194,8 @@ data class PhotoHit(
     val page: Int = 0,
     val pages: Int = 0,
     val parentId: String? = null,
+    /** The phone that indexed it could not decode its picture: shown by a sign of its kind, opened in another app. */
+    val noPicture: Boolean = false,
 ) {
 
     val isVideo: Boolean get() = kind == "video"
@@ -403,6 +405,7 @@ class SearchRepository(private val context: Context) {
         page = d.optInt("page_i"),
         pages = d.optInt("pages_i"),
         parentId = d.optString("parent_s").ifBlank { null },
+        noPicture = d.optBoolean("no_picture_b"),
     )
 
     private suspend fun search(query: String, filters: SearchFilters, start: Int, rows: Int, legacy: Boolean, freshBias: Boolean, wordsOnly: Boolean): SearchPage {
@@ -1155,7 +1158,10 @@ class SearchRepository(private val context: Context) {
     private fun parse(json: JSONObject, smart: Boolean, notice: String?): SearchPage {
         val response = json.getJSONObject("response")
         val docs = response.getJSONArray("docs")
-        val hits = (0 until docs.length()).map { i -> hitOf(docs.getJSONObject(i)) }
+        val raw = (0 until docs.length()).map { i -> hitOf(docs.getJSONObject(i)) }
+        // every phone opens the file by its own media id; the index carries the id of whichever phone wrote last
+        val mine = com.opensolr.photos.data.PhotoCache.of(context).mediaFor(raw.map { it.id })
+        val hits = raw.map { hit -> mine[hit.id]?.takeIf { it.first > 0 }?.let { (id, path) -> hit.copy(mediaId = id, path = path.ifBlank { hit.path }) } ?: hit }
 
         val facets = HashMap<String, List<FacetValue>>()
         json.optJSONObject("facet_counts")?.optJSONObject("facet_fields")?.let { fields ->
@@ -1273,6 +1279,6 @@ class SearchRepository(private val context: Context) {
         private const val ALBUM_MIN = 1
 
         private const val ALBUM_THINGS = 12
-        private const val FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,size_bytes,meaning,ocr_t,persons_t,location,city,region,province,country,street_s,postal_code_s,labels,custom_tags,kind_s,duration_l,page_i,pages_i,parent_s"
+        private const val FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,size_bytes,meaning,ocr_t,persons_t,location,city,region,province,country,street_s,postal_code_s,labels,custom_tags,kind_s,duration_l,page_i,pages_i,parent_s,no_picture_b"
     }
 }

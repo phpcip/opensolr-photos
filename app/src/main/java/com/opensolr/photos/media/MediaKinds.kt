@@ -61,7 +61,10 @@ object VideoFrames {
      * thumbnail Android itself makes.
      */
     fun frame(context: Context, uri: Uri, edge: Int): Bitmap? {
-        val raw = retrieverFrame(context, uri) ?: systemThumbnail(context, uri, edge) ?: exoFrame(context, uri) ?: return null
+        val a = retrieverFrame(context, uri)
+        val b = if (a == null) systemThumbnail(context, uri, edge) else null
+        val c = if (a == null && b == null) exoFrame(context, uri) else null
+        val raw = a ?: b ?: c ?: return null
         val longEdge = max(raw.width, raw.height)
         if (longEdge <= edge) return raw
         val scale = edge.toFloat() / longEdge

@@ -1863,8 +1863,11 @@ private fun Thumbnail(hit: PhotoHit, modifier: Modifier = Modifier) {
 
     val edited = EditedPhotos.stamp(hit.mediaId)
     val request = remember(uri, hit.sizeBytes, edited) { ImageRequest.Builder(context).data(uri).size(360).setParameter("bytes", hit.sizeBytes).setParameter("edited", edited).crossfade(true).build() }
+    // a file whose picture cannot be drawn on this phone shows a sign of its kind instead of an empty square
+    val sign = painterResource(if (hit.isVideo) R.drawable.ic_play else if (hit.isPdfPage) R.drawable.ic_pdf else R.drawable.ic_skipped)
     AsyncImage(
         model = request,
+        error = sign,
         contentDescription = hit.meaning.ifBlank { hit.fileName },
         contentScale = ContentScale.Crop,
         modifier = modifier
@@ -2514,7 +2517,12 @@ internal fun PhotoViewer(
                 // a clip on this phone plays; one only the backend has shows its first frame like a photo
                 val playable = hit.isVideo && cloudFile == null
                 Box(Modifier.fillMaxSize()) {
-                if (playable) {
+                if (hit.noPicture && !hit.isVideo && cloudFile == null) {
+                    // this phone cannot draw it: the file opens in an app that can
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        com.opensolr.photos.ui.GhostButton(stringResource(R.string.act_open_other_app), onClick = { Actions.openFile(context, hit.uri, hit.mime.ifBlank { "*/*" }) }, modifier = Modifier.padding(24.dp))
+                    }
+                } else if (playable) {
                     // the player takes every touch: a layer over it gives the clip the same swipes as a photo
                     VideoPage(uri, active = page == pager.currentPage, onTap = { showActions = !showActions }, gestures = Modifier.pointerInput(hit.id) {
                         detectVerticalDragGestures(
