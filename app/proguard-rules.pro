@@ -17,3 +17,4 @@
 -dontwarn sun.security.x509.**
 -dontwarn net.i2p.crypto.eddsa.**
 -keep class net.i2p.crypto.eddsa.** { *; }
+-dontwarn androidx.media3.**

@@ -2515,7 +2515,33 @@ internal fun PhotoViewer(
                 val playable = hit.isVideo && cloudFile == null
                 Box(Modifier.fillMaxSize()) {
                 if (playable) {
-                    VideoPage(uri, active = page == pager.currentPage, onTap = { showActions = !showActions })
+                    // the player takes every touch: a layer over it gives the clip the same swipes as a photo
+                    VideoPage(uri, active = page == pager.currentPage, onTap = { showActions = !showActions }, gestures = Modifier.pointerInput(hit.id) {
+                        detectVerticalDragGestures(
+                            onVerticalDrag = { change, amount ->
+                                change.consume()
+                                if (amount < 0 && dismiss.value == 0f) {
+                                    if (upBy.value == 0f) Haptics.tick(view, strong = false)
+                                    upBy.value -= amount
+                                }
+                                scope.launch { dismiss.snapTo((dismiss.value + amount).coerceAtLeast(0f)) }
+                            },
+                            onDragEnd = {
+                                if (dismiss.value == 0f && upBy.value > VIEWER_SWIPE_UP && !hit.pending) {
+                                    Haptics.tick(view, strong = false)
+                                    sheetFor = hit
+                                }
+                                upBy.value = 0f
+                                if (dismiss.value > closeAt) {
+                                    Haptics.tick(view, strong = true)
+                                    scope.launch { dismiss.animateTo(closeAt * 4f, tween(160)); onClose() }
+                                } else {
+                                    scope.launch { dismiss.animateTo(0f, spring()) }
+                                }
+                            },
+                            onDragCancel = { upBy.value = 0f; scope.launch { dismiss.animateTo(0f, spring()) } },
+                        )
+                    }.graphicsLayer { translationY = if (page == pager.currentPage) dismiss.value else 0f })
                 } else
                 AsyncImage(
 
@@ -3465,17 +3491,42 @@ private val DRAG_STEP = 14.dp
 
 /** A clip on this phone, played in place; it starts when its page is the one shown and stops when it is not. */
 @Composable
-private fun VideoPage(uri: Uri, active: Boolean, onTap: () -> Unit) {
+private fun VideoPage(uri: Uri, active: Boolean, onTap: () -> Unit, gestures: Modifier = Modifier) {
     val context = LocalContext.current
-    val view = remember(uri) {
-        android.widget.VideoView(context).apply {
-            setVideoURI(uri)
-            setMediaController(android.widget.MediaController(context).also { it.setAnchorView(this) })
-            setOnPreparedListener { it.isLooping = false }
-            setOnClickListener { onTap() }
+    var failed by remember(uri) { mutableStateOf(false) }
+    val player = remember(uri) {
+        androidx.media3.exoplayer.ExoPlayer.Builder(context).build().apply {
+            setMediaItem(androidx.media3.common.MediaItem.fromUri(uri))
+            addListener(object : androidx.media3.common.Player.Listener {
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) { failed = true }
+            })
+            prepare()
         }
     }
-    androidx.compose.runtime.DisposableEffect(view) { onDispose { runCatching { view.stopPlayback() } } }
-    LaunchedEffect(active) { if (active) view.start() else runCatching { view.pause() } }
-    androidx.compose.ui.viewinterop.AndroidView(factory = { view }, modifier = Modifier.fillMaxSize())
+    androidx.compose.runtime.DisposableEffect(player) { onDispose { player.release() } }
+    LaunchedEffect(active) { player.playWhenReady = active; if (!active) player.pause() }
+    val playerView = remember(uri) {
+        androidx.media3.ui.PlayerView(context).apply {
+            this.player = player
+            useController = true
+            controllerShowTimeoutMs = 3000
+            setBackgroundColor(android.graphics.Color.BLACK)
+        }
+    }
+    Box(Modifier.fillMaxSize().then(gestures)) {
+        if (failed) {
+            // a clip this phone cannot play here: its first frame, and the phone's own player one tap away
+            AsyncImage(model = uri, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+            com.opensolr.photos.ui.GhostButton(stringResource(R.string.act_open_video), onClick = { Actions.openFile(context, uri, "video/*") }, modifier = Modifier.align(Alignment.Center).padding(24.dp))
+        } else {
+            androidx.compose.ui.viewinterop.AndroidView(factory = { playerView }, modifier = Modifier.fillMaxSize())
+            // above the player: a tap shows its controls and the row of actions; swipes go to the viewer
+            Box(Modifier.fillMaxSize().pointerInput(uri) {
+                detectTapGestures(onTap = {
+                    if (playerView.isControllerFullyVisible) playerView.hideController() else playerView.showController()
+                    onTap()
+                })
+            })
+        }
+    }
 }

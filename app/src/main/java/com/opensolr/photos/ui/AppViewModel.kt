@@ -51,7 +51,7 @@ data class FaceReview(val person: String, val faces: List<com.opensolr.photos.da
 enum class Screen { SignIn, Welcome, Permissions, Folders, Setup, Search, Sync, Account, Map, Albums, Stats, Storage }
 
 /** What the backend holds and what is still to go, for the Storage screen. */
-data class StorageStats(val inBackend: Long, val bytesInBackend: Long, val pending: Int, val cloudOnly: Long, val cloudOnlyBytes: Long)
+data class StorageStats(val inBackend: Long, val bytesInBackend: Long, val pending: Int, val cloudOnly: Long, val cloudOnlyBytes: Long, val onPhone: Int = 0, val bytesOnPhone: Long = 0)
 
 data class UiState(
     val screen: Screen,
@@ -438,7 +438,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val known = photoCache.docSizes()
         val skipped = photoCache.skippedSizes()
         val cloud = photoCache.cloudIds() + photoCache.remoteIds()
-        if (known.keys.any { it !in local && it !in cloud }) return true
+        val seen = photoCache.seenIds()
+        if (known.keys.any { it !in local && it !in cloud && it in seen }) return true
         return local.values.any { photo ->
             val stamp = known[photo.id]
             skipped[photo.id] != photo.sizeBytes && (stamp == null || stamp.first != photo.sizeBytes)
@@ -1325,10 +1326,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun refreshStorageStats() {
         viewModelScope.launch {
             val stats = withContext(Dispatchers.IO) {
-                val local = MediaScanner.scan(context, prefs.folders, photoCache.aliases(), com.opensolr.photos.media.ScanOptions.of(context))?.keys ?: emptySet()
+                val scanned = MediaScanner.scan(context, prefs.folders, photoCache.aliases(), com.opensolr.photos.media.ScanOptions.of(context)) ?: emptyMap()
+                val local = scanned.keys
                 val (count, bytes) = photoCache.remoteTotals()
                 val (cloud, cloudBytes) = photoCache.cloudOnlyTotals()
-                StorageStats(count, bytes, photoCache.backupPendingCount(local), cloud, cloudBytes)
+                // on the phone: the files in the synced folders (a PDF once, not per page) plus the 720p copies
+                val fileBytes = scanned.values.distinctBy { it.parentId ?: it.id }.sumOf { it.sizeBytes }
+                val copyBytes = com.opensolr.photos.storage.CloudFiles.dir(context).listFiles()?.sumOf { it.length() } ?: 0L
+                StorageStats(count, bytes, photoCache.backupPendingCount(local), cloud, cloudBytes, local.size + cloud.toInt(), fileBytes + copyBytes)
             }
             _state.update { it.copy(storageStats = stats, storage = prefs.storage, storageReport = prefs.storageReport) }
         }

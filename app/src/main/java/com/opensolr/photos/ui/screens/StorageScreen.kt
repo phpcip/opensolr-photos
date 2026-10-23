@@ -126,6 +126,8 @@ private fun StorageOverview(state: UiState, viewModel: AppViewModel, storage: St
     if (stats != null) {
         InfoRow(stringResource(R.string.stg_in_backend), Actions.formatCount(stats.inBackend))
         InfoRow(stringResource(R.string.stg_size_backend), Actions.formatFileSize(stats.bytesInBackend).ifBlank { "0" })
+        InfoRow(stringResource(R.string.stg_on_phone), Actions.formatCount(stats.onPhone.toLong()))
+        InfoRow(stringResource(R.string.stg_size_phone), Actions.formatFileSize(stats.bytesOnPhone).ifBlank { "0" })
         InfoRow(stringResource(R.string.stg_pending), Actions.formatCount(stats.pending.toLong()))
         InfoRow(stringResource(R.string.stg_cloud_only), Actions.formatCount(stats.cloudOnly))
         if (stats.cloudOnly > 0) {

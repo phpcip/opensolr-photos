@@ -50,6 +50,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         db.execSQL(CLOUD_TABLE)
         db.execSQL(ALIASES_TABLE)
         db.execSQL(PDF_PAGES_TABLE)
+        db.execSQL(SEEN_TABLE)
     }
 
     private fun createFaceTables(db: SQLiteDatabase) {
@@ -188,6 +189,12 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         }
         if (oldVersion < 32) {
             db.execSQL(PDF_PAGES_TABLE)
+        }
+        if (oldVersion < 33) {
+            // a phone that had the index alone until now: everything in it was this phone's
+            db.execSQL(SEEN_TABLE)
+            db.execSQL("INSERT OR IGNORE INTO seen (id) SELECT id FROM docs")
+            db.execSQL("INSERT OR IGNORE INTO seen (id) SELECT id FROM parked_docs")
         }
         if (oldVersion < 24) {
             // who named a face: 0 the owner, 1 learned from the photos' tags, 2 the matcher on its own
@@ -720,6 +727,25 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
     /** A file written where Android allowed instead of its own folder keeps the photo's id: alias (path id) -> id. */
     fun putAlias(aliasId: String, id: String) {
         writableDatabase.execSQL("INSERT OR REPLACE INTO aliases (alias_id, id) VALUES (?, ?)", arrayOf<Any>(aliasId, id))
+    }
+
+    /** The ids this phone has ever had as files: only those can be missing here; the rest are other phones'. */
+    fun seenIds(): Set<String> {
+        val out = HashSet<String>()
+        readableDatabase.query("seen", arrayOf("id"), null, null, null, null, null).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        return out
+    }
+
+    fun addSeen(ids: Collection<String>) {
+        if (ids.isEmpty()) return
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.compileStatement("INSERT OR IGNORE INTO seen (id) VALUES (?)").use { st -> ids.forEach { st.clearBindings(); st.bindString(1, it); st.executeInsert() } }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
     }
 
     /** How many pages a PDF (by id and size) was found to have; null when it was never opened. */
@@ -1992,7 +2018,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
     companion object {
         private const val NAME = "photo_cache.db"
-        private const val VERSION = 32
+        private const val VERSION = 33
 
         @Volatile private var shared: PhotoCache? = null
 
@@ -2070,6 +2096,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         private val REMOTE_COLUMNS = arrayOf("id", "device", "kind", "bytes", "path", "md5", "at")
         private const val CLOUD_TABLE = "CREATE TABLE IF NOT EXISTS cloud (id TEXT PRIMARY KEY NOT NULL, bytes INTEGER NOT NULL, at INTEGER NOT NULL)"
         private const val ALIASES_TABLE = "CREATE TABLE IF NOT EXISTS aliases (alias_id TEXT PRIMARY KEY NOT NULL, id TEXT NOT NULL)"
+        private const val SEEN_TABLE = "CREATE TABLE IF NOT EXISTS seen (id TEXT PRIMARY KEY NOT NULL)"
         private const val PDF_PAGES_TABLE = "CREATE TABLE IF NOT EXISTS pdf_pages (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, pages INTEGER NOT NULL)"
     }
 }

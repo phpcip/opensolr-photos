@@ -1,0 +1,4 @@
+- A phone that already has photos merges with your library: each phone removes from the index only what it once had itself, and two files with the same name in the same folder on two phones both stay.
+- Videos play with a new player; swipe up for details works on a clip, and a clip the phone cannot play shows its frame and Open in video player.
+- The Photo backup screen shows photos and size on this phone next to the backend.
+- More ways to read a clip's first frame.

@@ -44,6 +44,8 @@
     <string name="stg_backend">Backend</string>
     <string name="stg_in_backend">Photos in the backend</string>
     <string name="stg_size_backend">Size in the backend</string>
+    <string name="stg_on_phone">Photos on this phone</string>
+    <string name="stg_size_phone">Size on this phone</string>
     <string name="stg_pending">Waiting to be backed up</string>
     <string name="stg_cloud_only">Only in the backend</string>
     <string name="stg_cloud_only_text">%1$s photos (%2$s) are in the backend but not on this phone: they show as 720p copies with a cloud mark. Download brings the full copy.</string>

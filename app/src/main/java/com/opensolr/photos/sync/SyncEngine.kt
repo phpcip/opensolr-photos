@@ -192,8 +192,27 @@ class SyncEngine(private val context: Context) {
 
             val foldersBefore = MediaScanner.folderStamp(context, prefs.folders)
             // Android not answering is not "no photos": nothing is compared, nothing is removed
-            val local = MediaScanner.scan(context, prefs.folders, cache.aliases(), com.opensolr.photos.media.ScanOptions.of(context))
+            var local = MediaScanner.scan(context, prefs.folders, cache.aliases(), com.opensolr.photos.media.ScanOptions.of(context))
                 ?: return report("failed", message = AppText.s(R.string.sy_cannot_read))
+            // Another phone's file under the same folder and name (WhatsApp, screenshots) is a different photo:
+            // this phone's file gets an id of its own, so neither replaces the other in the index or the backup.
+            val seenBefore = cache.seenIds()
+            val clashes = local.values.filter { it.id !in seenBefore && it.page <= 1 }.mapNotNull { photo ->
+                val doc = cache.doc(photo.id) ?: return@mapNotNull null
+                val same = doc.fileHash?.let { it == PhotoReader.fileMd5(context, photo) } ?: (doc.sizeBytes == photo.sizeBytes)
+                if (same) null else photo
+            }
+            if (clashes.isNotEmpty()) {
+                val device = com.opensolr.photos.auth.AuthFlow.deviceId(context)
+                for (photo in clashes) {
+                    val fileId = photo.parentId ?: photo.id
+                    val ownFile = MediaScanner.photoId(MediaScanner.folderKey(photo.folder) + photo.fileName + "@" + device)
+                    if (photo.parentId == null) cache.putAlias(photo.id, ownFile)
+                    else for (n in 1..photo.pages) cache.putAlias(MediaScanner.pageId(fileId, n), MediaScanner.pageId(ownFile, n))
+                }
+                local = MediaScanner.scan(context, prefs.folders, cache.aliases(), com.opensolr.photos.media.ScanOptions.of(context))
+                    ?: return report("failed", message = AppText.s(R.string.sy_cannot_read))
+            }
             localCount = local.size
             onPhone = local.keys
 
@@ -238,6 +257,12 @@ class SyncEngine(private val context: Context) {
             }
             val rebuilt = rebuild && !refill
 
+            // 3.23.0 reads more kinds of clips: what an earlier version could not read is tried once again
+            val sp = context.getSharedPreferences("opensolr_photos", Context.MODE_PRIVATE)
+            if (!sp.getBoolean("skipped_retry_3230", false)) {
+                cache.skipped().forEach { cache.clearSkipped(it.id) }
+                sp.edit().putBoolean("skipped_retry_3230", true).apply()
+            }
             val forced = prefs.resyncIds
             val wordingReset = prefs.wordingResetIds
             forced.forEach { cache.clearWordRetry(it); cache.clearSkipped(it) }
@@ -423,7 +448,9 @@ class SyncEngine(private val context: Context) {
                 // they stay in the index until the owner says otherwise on the Sync screen
                 // a photo the storage backend holds (restored as a 720 px copy, or about to be) is not missing
                 val cloud = cache.cloudIds() + cache.remoteIds()
-                val missing = known.keys.filter { it !in local && it !in cloud }
+                // only a file this phone once had can be missing here; what other phones indexed is theirs
+                val seen = cache.seenIds()
+                val missing = known.keys.filter { it !in local && it !in cloud && it in seen }
                 if (missing.size * 2 > known.size && !prefs.removeMissingApproved) {
                     prefs.missingHeld = missing.size
                     shortAllowance = AppText.s(R.string.sy_missing_many, Actions.formatCount(missing.size.toLong()))
@@ -543,6 +570,7 @@ class SyncEngine(private val context: Context) {
                     AppText.s(R.string.sy_no_words, n)
             }
             val indexAfter = cache.docCount()
+            cache.addSeen(local.keys)
             prefs.folderStamp = foldersBefore
             return report("ok", added, deleted, failed, localCount, indexCount, message, recreated, indexAfter)
         } catch (e: CancellationException) {
@@ -639,6 +667,9 @@ class SyncEngine(private val context: Context) {
             val onDisk = MediaScanner.existingPaths(context, missing.map { it.third }.filter { it.isNotEmpty() })
             missing.forEach { (id, _, path) -> if (path !in onDisk) gone += id }
         }
+        // only files this phone once had; another phone's photos are never dropped from here
+        val seen = cache.seenIds()
+        gone.retainAll { it in seen }
         val parked = cache.parkedCount()
         if (parked > 0 && gone.size * 2 > parked) return
         gone.chunked(500).forEach { batch ->
