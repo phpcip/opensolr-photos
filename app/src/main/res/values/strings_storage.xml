@@ -61,12 +61,13 @@
     <string name="stg_download_all_start">Download</string>
     <string name="stg_change">Change backend</string>
     <string name="stg_change_blocked">Download all originals first: %1$s photos are only in the backend.</string>
-    <string name="stg_change_text">The new backend starts empty and is filled from the photos on this phone. The old one is left as it is.</string>
+    <string name="stg_change_text">The new backend starts empty and is filled from the files on this phone. The old one is left as it is, with every file in it; photos this phone holds only as 720p copies stay there.</string>
     <string name="stg_forget">Forget backend</string>
-    <string name="stg_forget_text">The account forgets the backend. Nothing in it is removed.</string>
+    <string name="stg_forget_text">The account forgets the backend. Nothing in it is removed; photos this phone holds only as 720p copies stay there.</string>
     <string name="stg_clear">Clear backend</string>
     <string name="stg_clear_text">Removes every file this app wrote into the backend for this index, then forgets it. This cannot be undone. Type the backend\'s name to confirm.</string>
     <string name="stg_clear_blocked">Download all originals first: %1$s photos exist only in the backend.</string>
+    <string name="stg_clear_cloud_lost">%1$s photos exist only in this backend, as 720p copies on the phone. Clearing removes their full files for good.</string>
     <string name="stg_clear_confirm">Remove everything</string>
     <string name="stg_cleared">The backend was cleared.</string>
     <string name="stg_clear_failed">Could not clear the backend</string>

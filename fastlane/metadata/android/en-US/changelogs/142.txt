@@ -1,0 +1,3 @@
+- A new phone gets the whole library back, whatever folders it syncs, with a true progress bar.
+- Videos and PDFs come back as the original files; photos as 720p copies, each downloaded on its own when you want it.
+- Download all originals is gone. Change, Forget and Clear backend work at any time; Clear warns about photos that exist only there.

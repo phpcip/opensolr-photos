@@ -437,7 +437,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         val local = MediaScanner.scan(context, prefs.folders, photoCache.aliases(), com.opensolr.photos.media.ScanOptions.of(context)) ?: return false
         val known = photoCache.docSizes()
         val skipped = photoCache.skippedSizes()
-        val cloud = photoCache.cloudIds()
+        val cloud = photoCache.cloudIds() + photoCache.remoteIds()
         if (known.keys.any { it !in local && it !in cloud }) return true
         return local.values.any { photo ->
             val stamp = known[photo.id]
@@ -1363,7 +1363,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             withContext(Dispatchers.IO) {
                 com.opensolr.photos.storage.StorageScheduler.stopAndWait(context, pause = false)
                 // another backend's listing does not apply to this one
-                if (prefs.storage != null) { photoCache.clearRemote(); photoCache.clearCloud(); com.opensolr.photos.storage.CloudFiles.clear(context) }
+                if (prefs.storage != null) { photoCache.clearRemote() }
                 prefs.storage = stamped
                 prefs.storageSynced = false
                 prefs.manifestsReadAt = 0L
@@ -1399,7 +1399,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** The account forgets the backend; nothing in it is touched. Only when nothing lives there alone. */
     fun forgetStorage() {
-        if ((_state.value.storageStats?.cloudOnly ?: 1L) > 0L) return
         val session = prefs.session ?: return
         val index = prefs.connection?.indexName ?: return
         viewModelScope.launch {
@@ -1409,7 +1408,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 prefs.storage = null
                 prefs.storageSynced = true
                 prefs.manifestsReadAt = 0L
-                photoCache.clearRemote(); photoCache.clearCloud(); com.opensolr.photos.storage.CloudFiles.clear(context)
+                photoCache.clearRemote()
             }
             _state.update { it.copy(storage = null, storageEditing = true, storageStats = null) }
         }
@@ -1417,7 +1416,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** Everything this app wrote for this index removed from the backend, then the backend forgotten. */
     fun clearStorage() {
-        if ((_state.value.storageStats?.cloudOnly ?: 1L) > 0L) return
         val config = prefs.storage ?: return
         val session = prefs.session ?: return
         val index = prefs.connection?.indexName ?: return
@@ -1434,7 +1432,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     prefs.storage = null
                     prefs.storageSynced = true
                     prefs.manifestsReadAt = 0L
-                    photoCache.clearRemote(); photoCache.clearCloud(); com.opensolr.photos.storage.CloudFiles.clear(context)
+                    photoCache.clearRemote()
                     null
                 } catch (e: Exception) {
                     e.message ?: e.javaClass.simpleName

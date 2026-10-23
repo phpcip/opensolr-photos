@@ -421,8 +421,8 @@ class SyncEngine(private val context: Context) {
 
                 // many photos gone at once is a phone that cannot see them, not an owner who deleted them:
                 // they stay in the index until the owner says otherwise on the Sync screen
-                // a photo that lives only in the storage backend (restored as a 720 px copy) is not missing
-                val cloud = cache.cloudIds()
+                // a photo the storage backend holds (restored as a 720 px copy, or about to be) is not missing
+                val cloud = cache.cloudIds() + cache.remoteIds()
                 val missing = known.keys.filter { it !in local && it !in cloud }
                 if (missing.size * 2 > known.size && !prefs.removeMissingApproved) {
                     prefs.missingHeld = missing.size

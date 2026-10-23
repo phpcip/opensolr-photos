@@ -66,6 +66,9 @@ class StorageEngine(private val context: Context) {
                 prefs.manifestsReadAt = System.currentTimeMillis()
             }
 
+            // the whole backed-up library is this phone's, whatever folders it syncs: hidden photos come back
+            if (cache.unparkBackedUp() > 0) prefs.cloneComplete = true
+
             // originals asked for in bulk (before a change or a clear) come down first
             if (prefs.downloadAllOriginals) {
                 var total = cache.cloudOnlyTotals().first.toInt()
@@ -92,13 +95,32 @@ class StorageEngine(private val context: Context) {
 
             // restore: the photos in the backend that this phone has no file for
             val cloudDir = CloudFiles.dir(context)
-            var toRestore = -1
+            // the total is counted once, over everything to bring, so the bar and N of M are true from the start
+            val toRestore = cache.restorePendingCount(localIds)
+            // ids dealt with in this run: a clip or a PDF comes back as its file, every page of a PDF at once
+            val handled = HashSet<String>()
             while (true) {
-                val batch = cache.restoreCandidates(localIds, BATCH)
+                val batch = cache.restoreCandidates(localIds, BATCH).filter { it.id !in handled && it.id !in missing }
                 if (batch.isEmpty()) break
-                if (toRestore < 0) toRestore = batch.size
                 for (remote in batch) {
                     guard()
+                    if (remote.id in handled) continue
+                    handled += remote.id
+                    // videos and PDFs come back as the original file; photos as 720 px copies
+                    val doc = cache.doc(remote.id)?.json?.let { runCatching { JSONObject(it) }.getOrNull() }
+                    val kind = doc?.optString("kind_s").orEmpty()
+                    if (kind == "video" || kind == "pdf_page") {
+                        try {
+                            downloadOriginal(backend, layout, remote.id)
+                            if (kind == "pdf_page") doc?.optString("parent_s")?.takeIf { it.isNotBlank() }?.let { parent -> handled += cache.docIdsOfParent(parent) }
+                            restored++
+                        } catch (e: NotFoundException) {
+                            failed++
+                            missing += remote.id
+                        }
+                        onProgress(Progress(AppText.s(R.string.stg_restoring), restored + failed, maxOf(toRestore, restored + failed)))
+                        continue
+                    }
                     val target = File(cloudDir, remote.id + ".jpg")
                     val tmp = File(cloudDir, remote.id + ".part")
                     try {
@@ -129,7 +151,7 @@ class StorageEngine(private val context: Context) {
                     }
                     onProgress(Progress(AppText.s(R.string.stg_restoring), restored + failed, maxOf(toRestore, restored + failed)))
                 }
-                if (batch.size < BATCH || batch.all { it.id in missing }) break
+                if (batch.size < BATCH) break
             }
 
             // backup: what is indexed and on this phone but not in the backend yet
@@ -364,16 +386,28 @@ class StorageEngine(private val context: Context) {
     private data class Written(val folder: String, val name: String, val mediaId: Long, val absolutePath: String)
 
     private fun writeIntoFolders(file: File, folder: String, name: String): Written {
-        val allowed = folder.startsWith("DCIM/", ignoreCase = true) || folder.equals("DCIM", ignoreCase = true) ||
-            folder.startsWith("Pictures/", ignoreCase = true) || folder.equals("Pictures", ignoreCase = true)
-        val target = (if (allowed) folder else "Pictures/" + folder).trim('/') + "/"
-        val mime = when (name.substringAfterLast('.', "").lowercase()) {
+        val ext = name.substringAfterLast('.', "").lowercase()
+        val mime = when (ext) {
             "png" -> "image/png"
             "webp" -> "image/webp"
             "heic", "heif" -> "image/heic"
             "gif" -> "image/gif"
+            "mp4", "m4v" -> "video/mp4"
+            "mov" -> "video/quicktime"
+            "mkv" -> "video/x-matroska"
+            "webm" -> "video/webm"
+            "3gp" -> "video/3gpp"
+            "pdf" -> "application/pdf"
             else -> "image/jpeg"
         }
+        // each kind into a folder Android lets it live in: its own when allowed, else a folder of the same name there
+        fun under(vararg tops: String) = tops.any { folder.equals(it, true) || folder.startsWith("$it/", true) }
+        val (allowed, fallback) = when {
+            mime.startsWith("video/") -> under("DCIM", "Movies", "Pictures") to "Movies/"
+            mime == "application/pdf" -> under("Download", "Documents") to "Documents/"
+            else -> under("DCIM", "Pictures") to "Pictures/"
+        }
+        val target = (if (allowed) folder else fallback + folder).trim('/') + "/"
         val resolver = context.contentResolver
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             @Suppress("DEPRECATION")
@@ -387,7 +421,11 @@ class StorageEngine(private val context: Context) {
             val found = MediaScanner.findByPath(context, out.absolutePath)
             return Written(target, out.name, found?.mediaId ?: 0L, out.absolutePath)
         }
-        val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        val collection = when {
+            mime.startsWith("video/") -> MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            mime == "application/pdf" -> MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            else -> MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        }
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, name)
             put(MediaStore.MediaColumns.MIME_TYPE, mime)

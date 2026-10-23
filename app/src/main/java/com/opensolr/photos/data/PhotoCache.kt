@@ -655,6 +655,15 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         return out
     }
 
+    /** How many photos the backend has that this phone lacks and has no 720 px copy of yet: the restore's real total. */
+    fun restorePendingCount(local: Set<String>): Int {
+        var n = 0
+        readableDatabase.rawQuery("SELECT r.id FROM remote r INNER JOIN docs d ON d.id = r.id WHERE r.id NOT IN (SELECT id FROM cloud)", null).use { c ->
+            while (c.moveToNext()) if (c.getString(0) !in local) n++
+        }
+        return n
+    }
+
     /** Indexed photos on this phone that the backend does not have yet: id, folder, file name, media id, size. */
     data class ToBackup(val id: String, val folder: String, val fileName: String, val mediaId: Long, val sizeBytes: Long, val takenMs: Long)
 
@@ -965,6 +974,26 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
      */
     fun parkOutside(roots: List<String>): Int = move("docs", "doc_words", "parked_docs", "parked_words", roots, inside = false)
 
+    /**
+     * Parked photos the storage backend holds go back into the clone: with a backend the whole library is this
+     * phone's, as 720 px copies, whatever folders this phone syncs. Returns how many came back.
+     */
+    fun unparkBackedUp(): Int {
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            db.execSQL("INSERT OR REPLACE INTO doc_words (id, kind, word) SELECT id, kind, word FROM parked_words WHERE id IN (SELECT id FROM remote)")
+            db.execSQL("DELETE FROM parked_words WHERE id IN (SELECT id FROM remote)")
+            db.execSQL("INSERT OR REPLACE INTO docs ($PARKED_COLUMNS) SELECT $PARKED_COLUMNS FROM parked_docs WHERE id IN (SELECT id FROM remote)")
+            val moved = db.compileStatement("SELECT changes()").use { it.simpleQueryForLong().toInt() }
+            db.execSQL("DELETE FROM parked_docs WHERE id IN (SELECT id FROM remote)")
+            db.setTransactionSuccessful()
+            return moved
+        } finally {
+            db.endTransaction()
+        }
+    }
+
     /** Parked photos under [roots] back into the local clone. Returns how many came back. */
     fun unparkInside(roots: List<String>): Int = move("parked_docs", "parked_words", "docs", "doc_words", roots, inside = true)
 
@@ -1005,12 +1034,13 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
     private fun move(fromDocs: String, fromWords: String, toDocs: String, toWords: String, roots: List<String>, inside: Boolean): Int {
         val (under, args) = underRoots(roots)
         // a row whose folder is unknown is never parked
-        val where = if (inside) "($under)" else "folder IS NOT NULL AND NOT ($under)"
+        // a photo the storage backend holds is never parked: it belongs to the library on every phone
+        val where = if (inside) "($under)" else "folder IS NOT NULL AND NOT ($under) AND id NOT IN (SELECT id FROM remote)"
         val cols = PARKED_COLUMNS
         val db = writableDatabase
         db.beginTransaction()
         try {
-            db.execSQL("INSERT OR REPLACE INTO $toWords (id, kind, word) SELECT w.id, w.kind, w.word FROM $fromWords w JOIN $fromDocs d ON d.id = w.id WHERE ${where.replace("folder", "d.folder")}", args)
+            db.execSQL("INSERT OR REPLACE INTO $toWords (id, kind, word) SELECT w.id, w.kind, w.word FROM $fromWords w JOIN $fromDocs d ON d.id = w.id WHERE ${where.replace("folder", "d.folder").replace("id NOT IN", "d.id NOT IN")}", args)
             db.execSQL("DELETE FROM $fromWords WHERE id IN (SELECT id FROM $fromDocs WHERE $where)", args)
             db.execSQL("INSERT OR REPLACE INTO $toDocs ($cols) SELECT $cols FROM $fromDocs WHERE $where", args)
             val moved = db.compileStatement("SELECT changes()").use { it.simpleQueryForLong().toInt() }

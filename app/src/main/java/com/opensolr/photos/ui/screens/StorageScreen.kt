@@ -81,7 +81,6 @@ private fun StorageOverview(state: UiState, viewModel: AppViewModel, storage: St
     val p = LocalPalette.current
     val stats = state.storageStats
     val status = state.storageStatus
-    var confirmDownloadAll by remember { mutableStateOf(false) }
     var confirmForget by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     var typed by remember { mutableStateOf("") }
@@ -138,41 +137,23 @@ private fun StorageOverview(state: UiState, viewModel: AppViewModel, storage: St
     GhostButton(stringResource(R.string.stg_read_manifests), onClick = { viewModel.rereadBackend() }, enabled = !status.busy, modifier = Modifier.fillMaxWidth())
     Spacer(Modifier.height(10.dp))
     val cloudOnly = stats?.cloudOnly ?: 0L
-    GhostButton(stringResource(R.string.stg_download_all), onClick = { confirmDownloadAll = true }, enabled = !status.busy && cloudOnly > 0, modifier = Modifier.fillMaxWidth())
-    Spacer(Modifier.height(24.dp))
+    Spacer(Modifier.height(14.dp))
 
     SectionLabel(stringResource(R.string.stg_change))
     Spacer(Modifier.height(10.dp))
-    Text(if (cloudOnly > 0) stringResource(R.string.stg_change_blocked, Actions.formatCount(cloudOnly)) else stringResource(R.string.stg_change_text), style = MaterialTheme.typography.bodySmall, color = p.muted)
+    Text(stringResource(R.string.stg_change_text), style = MaterialTheme.typography.bodySmall, color = p.muted)
     Spacer(Modifier.height(10.dp))
-    GhostButton(stringResource(R.string.stg_change), onClick = { viewModel.editStorage(true) }, enabled = !status.busy && cloudOnly == 0L && stats != null, modifier = Modifier.fillMaxWidth())
+    GhostButton(stringResource(R.string.stg_change), onClick = { viewModel.editStorage(true) }, enabled = !status.busy, modifier = Modifier.fillMaxWidth())
     Spacer(Modifier.height(10.dp))
-    GhostButton(stringResource(R.string.stg_forget), onClick = { confirmForget = true }, enabled = !status.busy && cloudOnly == 0L && stats != null, modifier = Modifier.fillMaxWidth())
+    GhostButton(stringResource(R.string.stg_forget), onClick = { confirmForget = true }, enabled = !status.busy, modifier = Modifier.fillMaxWidth())
     Spacer(Modifier.height(24.dp))
 
     SectionLabel(stringResource(R.string.stg_clear))
     Spacer(Modifier.height(10.dp))
-    Text(if (cloudOnly > 0) stringResource(R.string.stg_clear_blocked, Actions.formatCount(cloudOnly)) else stringResource(R.string.stg_clear_text), style = MaterialTheme.typography.bodySmall, color = p.muted)
+    Text(stringResource(R.string.stg_clear_text), style = MaterialTheme.typography.bodySmall, color = p.muted)
     Spacer(Modifier.height(10.dp))
-    GhostButton(if (state.storageClearing) stringResource(R.string.stg_saving) else stringResource(R.string.stg_clear), onClick = { typed = ""; confirmClear = true }, enabled = !status.busy && !state.storageClearing && cloudOnly == 0L && stats != null, modifier = Modifier.fillMaxWidth())
+    GhostButton(if (state.storageClearing) stringResource(R.string.stg_saving) else stringResource(R.string.stg_clear), onClick = { typed = ""; confirmClear = true }, enabled = !status.busy && !state.storageClearing, modifier = Modifier.fillMaxWidth())
 
-    if (confirmDownloadAll && stats != null) {
-        val free = remember { Actions.freeBytes() }
-        val enough = free > stats.cloudOnlyBytes + SPACE_MARGIN
-        AlertDialog(
-            onDismissRequest = { confirmDownloadAll = false },
-            title = { Text(stringResource(R.string.stg_download_all)) },
-            text = { com.opensolr.photos.ui.KeyboardBack()
-                Text(
-                    if (enough) stringResource(R.string.stg_download_all_text, Actions.formatCount(stats.cloudOnly), Actions.formatFileSize(stats.cloudOnlyBytes), Actions.formatFileSize(free))
-                    else stringResource(R.string.stg_download_all_no_space, Actions.formatFileSize(stats.cloudOnlyBytes + SPACE_MARGIN), Actions.formatFileSize(free)),
-                )
-            },
-            confirmButton = { if (enough) TextButton(onClick = { confirmDownloadAll = false; viewModel.downloadAllOriginals() }) { Text(stringResource(R.string.stg_download_all_start), color = p.accent) } },
-            dismissButton = { TextButton(onClick = { confirmDownloadAll = false }) { Text(stringResource(R.string.stg_cancel), color = p.ink) } },
-            containerColor = p.paper,
-        )
-    }
     if (confirmForget) {
         AlertDialog(
             onDismissRequest = { confirmForget = false },
@@ -191,6 +172,10 @@ private fun StorageOverview(state: UiState, viewModel: AppViewModel, storage: St
             text = { com.opensolr.photos.ui.KeyboardBack()
                 Column {
                     Text(stringResource(R.string.stg_clear_text))
+                    if (cloudOnly > 0) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(stringResource(R.string.stg_clear_cloud_lost, Actions.formatCount(cloudOnly)), color = p.accent)
+                    }
                     Spacer(Modifier.height(12.dp))
                     Field(typed, { typed = it }, expected)
                 }
