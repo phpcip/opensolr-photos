@@ -65,7 +65,7 @@ object VideoFrames {
         val b = if (a == null) systemThumbnail(context, uri, edge) else null
         // a clip Android cannot read: the app's own player, turned the way the clip is shown
         val c = if (a == null && b == null) playerFrame(context, uri, edge) else null
-        val raw = a ?: b ?: c ?: return null
+        val raw = (a ?: b)?.let { upright(context, uri, it) } ?: c ?: return null
         val longEdge = max(raw.width, raw.height)
         if (longEdge <= edge) return raw
         val scale = edge.toFloat() / longEdge
@@ -79,7 +79,29 @@ object VideoFrames {
      * a player: a grid holds dozens of clips at once.
      */
     fun thumbnail(context: Context, uri: Uri, edge: Int): Bitmap? =
-        systemThumbnail(context, uri, edge)?.takeIf { !isBlank(it) } ?: scaledFrame(context, uri, edge)
+        (systemThumbnail(context, uri, edge)?.takeIf { !isBlank(it) } ?: scaledFrame(context, uri, edge))?.let { upright(context, uri, it) }
+
+    /**
+     * A frame Android gave as it is stored (some iPhone clips): turned the way the clip says it is shown. Only a
+     * quarter turn can be seen from the picture's shape, so only that is corrected; a frame already upright is kept.
+     * One read of the file's header, a few KB.
+     */
+    private fun upright(context: Context, uri: Uri, frame: Bitmap, stored: Boolean = false): Bitmap {
+        val info = Mp4Info.read(context, uri) ?: return frame
+        // the app's own decoder gives the picture as stored: a half turn is applied there as well
+        if (stored && info.rotation == 180) {
+            val half = Bitmap.createBitmap(frame, 0, 0, frame.width, frame.height, Matrix().apply { postRotate(180f) }, true)
+            if (half !== frame) frame.recycle()
+            return half
+        }
+        if (frame.width == frame.height) return frame
+        if ((info.rotation != 90 && info.rotation != 270) || info.width <= 0 || info.height <= 0 || info.width == info.height) return frame
+        // still in the stored shape (wide for a clip shown tall): it was not turned
+        if ((frame.width > frame.height) != (info.width > info.height)) return frame
+        val turned = Bitmap.createBitmap(frame, 0, 0, frame.width, frame.height, Matrix().apply { postRotate(info.rotation.toFloat()) }, true)
+        if (turned !== frame) frame.recycle()
+        return turned
+    }
 
     /** True when the picture is all but black (a clip that fades in, a dark first second): never kept as its picture. */
     fun isBlank(bitmap: Bitmap?): Boolean {
@@ -146,9 +168,8 @@ object VideoFrames {
     fun playerFrame(context: Context, uri: Uri, edge: Int): Bitmap? {
         val frame = exoFrame(context, uri) ?: return null
         if (isBlank(frame)) { frame.recycle(); return null }
-        // the decoder gives the picture as stored: it is turned the way the clip is shown
-        val turn = Mp4Info.read(context, uri)?.rotation ?: 0
-        val raw = if (turn == 0) frame else Bitmap.createBitmap(frame, 0, 0, frame.width, frame.height, Matrix().apply { postRotate(turn.toFloat()) }, true).also { if (it !== frame) frame.recycle() }
+        // turned the way the clip is shown, unless the decoder already did
+        val raw = upright(context, uri, frame, stored = true)
         val longEdge = max(raw.width, raw.height)
         if (longEdge <= edge) return raw
         val scale = edge.toFloat() / longEdge
