@@ -95,12 +95,14 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
 
     var viewing by remember { mutableStateOf<com.opensolr.photos.search.PhotoHit?>(null) }
     var pendingDelete by remember { mutableStateOf<Set<String>>(emptySet()) }
+    // photos deleted while the map is open: the group sheet drops them from its grid
+    var gone by remember { mutableStateOf<Set<String>>(emptySet()) }
 
     val systemBars = WindowInsets.systemBars.asPaddingValues()
     val topInset = systemBars.calculateTopPadding()
     val bottomInset = systemBars.calculateBottomPadding()
     val deleteLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
-        if (result.resultCode == android.app.Activity.RESULT_OK) viewModel.removeDeleted(pendingDelete)
+        if (result.resultCode == android.app.Activity.RESULT_OK) { viewModel.removeDeleted(pendingDelete); gone = gone + pendingDelete }
         pendingDelete = emptySet()
     }
     val context = LocalContext.current
@@ -246,7 +248,7 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
 
     var sheetPhotos by remember { mutableStateOf<List<com.opensolr.photos.search.PhotoHit>>(emptyList()) }
     group?.let { cluster ->
-        GroupSheet(cluster, viewModel, onDismiss = { group = null }, onShowPhoto = { hit, loaded -> sheetPhotos = loaded; viewing = hit })
+        GroupSheet(cluster, viewModel, gone, onDismiss = { group = null }, onShowPhoto = { hit, loaded -> sheetPhotos = loaded; viewing = hit })
     }
     viewing?.let { hit ->
 
@@ -271,6 +273,7 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
                     deleteLauncher.launch(IntentSenderRequest.Builder(sender).build())
                 } else {
                     viewModel.removeDeleted(pendingDelete)
+                    gone = gone + pendingDelete
                     pendingDelete = emptySet()
                 }
                 viewing = null
@@ -297,7 +300,7 @@ private fun darkMapFilter(): android.graphics.ColorMatrixColorFilter {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-private fun GroupSheet(cluster: PhotoCluster, viewModel: AppViewModel, onDismiss: () -> Unit, onShowPhoto: (com.opensolr.photos.search.PhotoHit, List<com.opensolr.photos.search.PhotoHit>) -> Unit) {
+private fun GroupSheet(cluster: PhotoCluster, viewModel: AppViewModel, gone: Set<String>, onDismiss: () -> Unit, onShowPhoto: (com.opensolr.photos.search.PhotoHit, List<com.opensolr.photos.search.PhotoHit>) -> Unit) {
     val p = LocalPalette.current
     val context = LocalContext.current
 
@@ -336,6 +339,7 @@ private fun GroupSheet(cluster: PhotoCluster, viewModel: AppViewModel, onDismiss
                 }
             }
             LaunchedEffect(cluster) { more() }
+            LaunchedEffect(gone) { loaded.removeAll { it.id in gone } }
             SectionLabel(pluralStringResource(R.plurals.mp_n_here, total.toInt(), Actions.formatCount(total)))
 
             val place = remember(cluster, loaded.size) {

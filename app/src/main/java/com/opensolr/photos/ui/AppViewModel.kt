@@ -2179,7 +2179,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
 
     /** The pins of the area the map is showing; null asks for the newest ones, to place the camera. */
+    // the area and zoom of the last pins asked for, so a delete on the map can ask for the same view again
+    private var lastPinArea: com.opensolr.photos.search.SearchRepository.MapArea? = null
+    private var lastPinZoom = 4.0
+
     fun loadPins(area: com.opensolr.photos.search.SearchRepository.MapArea? = null, zoom: Double = 4.0) {
+        lastPinArea = area; lastPinZoom = zoom
         val current = _state.value
         pinsJob?.cancel()
         _state.update { it.copy(pinsLoading = true, pinsError = null) }
@@ -2648,6 +2653,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             searches.clearCache()
 
             if (_state.value.screen == Screen.Search) refresh()
+            // on the map, the pins of the current view are asked again, so a deleted photo leaves the map too
+            if (_state.value.screen == Screen.Map) loadPins(lastPinArea, lastPinZoom)
         }
     }
 
