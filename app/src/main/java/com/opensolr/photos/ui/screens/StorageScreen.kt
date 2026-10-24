@@ -83,6 +83,7 @@ private fun StorageOverview(state: UiState, viewModel: AppViewModel, storage: St
     val status = state.storageStatus
     var confirmForget by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
+    var confirmDownloadAll by remember { mutableStateOf(false) }
     var typed by remember { mutableStateOf("") }
 
     SectionLabel(stringResource(R.string.stg_status))
@@ -139,6 +140,11 @@ private fun StorageOverview(state: UiState, viewModel: AppViewModel, storage: St
     GhostButton(stringResource(R.string.stg_read_manifests), onClick = { viewModel.rereadBackend() }, enabled = !status.busy, modifier = Modifier.fillMaxWidth())
     Spacer(Modifier.height(10.dp))
     val cloudOnly = stats?.cloudOnly ?: 0L
+    // every photo held here only as its 720p copy brought down at its backup quality, after a look at the free space
+    if (cloudOnly > 0) {
+        GhostButton(stringResource(R.string.stg_download_all), onClick = { confirmDownloadAll = true }, enabled = !status.busy, modifier = Modifier.fillMaxWidth())
+        Spacer(Modifier.height(10.dp))
+    }
     Spacer(Modifier.height(14.dp))
 
     SectionLabel(stringResource(R.string.stg_change))
@@ -156,6 +162,22 @@ private fun StorageOverview(state: UiState, viewModel: AppViewModel, storage: St
     Spacer(Modifier.height(10.dp))
     GhostButton(if (state.storageClearing) stringResource(R.string.stg_saving) else stringResource(R.string.stg_clear), onClick = { typed = ""; confirmClear = true }, enabled = !status.busy && !state.storageClearing, modifier = Modifier.fillMaxWidth())
 
+    if (confirmDownloadAll) {
+        val need = stats?.cloudOnlyBytes ?: 0L
+        val free = remember { Actions.freeBytes() }
+        val fits = free > need
+        AlertDialog(
+            onDismissRequest = { confirmDownloadAll = false },
+            title = { Text(stringResource(R.string.stg_download_all)) },
+            text = { com.opensolr.photos.ui.KeyboardBack()
+                if (fits) Text(stringResource(R.string.stg_download_all_text, Actions.formatCount(cloudOnly), Actions.formatFileSize(need), Actions.formatFileSize(free)))
+                else Text(stringResource(R.string.stg_download_all_no_space, Actions.formatFileSize(need), Actions.formatFileSize(free)), color = p.accent)
+            },
+            confirmButton = { if (fits) TextButton(onClick = { confirmDownloadAll = false; viewModel.downloadAllOriginals() }) { Text(stringResource(R.string.stg_download_all_start), color = p.accent) } },
+            dismissButton = { TextButton(onClick = { confirmDownloadAll = false }) { Text(stringResource(R.string.stg_cancel), color = p.ink) } },
+            containerColor = p.paper,
+        )
+    }
     if (confirmForget) {
         AlertDialog(
             onDismissRequest = { confirmForget = false },
@@ -276,9 +298,21 @@ private fun StorageForm(state: UiState, viewModel: AppViewModel, current: Storag
     GhostButton(if (state.storageTesting) stringResource(R.string.stg_testing) else stringResource(R.string.stg_test), onClick = { viewModel.testStorage(config) }, enabled = !state.storageTesting && !state.storageSaving, modifier = Modifier.fillMaxWidth())
     Spacer(Modifier.height(10.dp))
     val tested = state.storageTested
+    // replacing a backend that is already set is asked once more: the new one starts empty
+    var confirmChange by remember { mutableStateOf(false) }
+    if (confirmChange) {
+        AlertDialog(
+            onDismissRequest = { confirmChange = false },
+            title = { Text(stringResource(R.string.stg_change)) },
+            text = { com.opensolr.photos.ui.KeyboardBack(); Text(stringResource(R.string.stg_change_text)) },
+            confirmButton = { TextButton(onClick = { confirmChange = false; viewModel.saveStorage() }) { Text(stringResource(R.string.stg_change), color = LocalPalette.current.accent) } },
+            dismissButton = { TextButton(onClick = { confirmChange = false }) { Text(stringResource(R.string.stg_cancel), color = LocalPalette.current.ink) } },
+            containerColor = LocalPalette.current.paper,
+        )
+    }
     AccentButton(
         if (state.storageSaving) stringResource(R.string.stg_saving) else stringResource(R.string.stg_save),
-        onClick = { viewModel.saveStorage() },
+        onClick = { if (current != null) confirmChange = true else viewModel.saveStorage() },
         enabled = tested != null && tested.copy(fields = tested.fields - "host_key", updated = 0L) == config.copy(fields = config.fields - "host_key", updated = 0L) && !state.storageSaving,
         modifier = Modifier.fillMaxWidth(),
     )

@@ -1,0 +1,3 @@
+- One library on every phone of the account: new photos, clips and PDFs, deletions and edits pass between phones by themselves; swipe down brings everything new.
+- PDFs saved next to the first photo, with backup-quality pictures at 1024 px; Download all originals back, every backend action asks first.
+- Fast grid and scroller, clip pictures kept once, iPhone Live Photo clips read with their date, full-screen player, map pictures fixed, Stats by kind.

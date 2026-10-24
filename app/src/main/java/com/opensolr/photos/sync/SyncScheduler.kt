@@ -82,7 +82,12 @@ object SyncScheduler {
             .addTag(TAG)
             .addTag(NOW)
             .build()
-        WorkManager.getInstance(context).enqueueUniqueWork(NOW, ExistingWorkPolicy.KEEP, request)
+        val manager = WorkManager.getInstance(context)
+        // a sync in progress is kept; one left waiting (a backoff after the app was killed mid-run) starts now
+        Thread {
+            val runningNow = runCatching { manager.getWorkInfosForUniqueWork(NOW).get().any { it.state == WorkInfo.State.RUNNING } }.getOrDefault(false)
+            manager.enqueueUniqueWork(NOW, if (runningNow) ExistingWorkPolicy.KEEP else ExistingWorkPolicy.REPLACE, request)
+        }.start()
     }
 
     fun watchMedia(context: Context) {

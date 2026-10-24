@@ -9,7 +9,7 @@
     <string name="al_share">Trimite</string>
     <string name="al_delete">Șterge</string>
     <string name="al_cancel">Anulează</string>
-    <string name="al_delete_q">Ștergi pozele?</string>
+    <string name="al_delete_q">Ștergi aceste elemente?</string>
     <string name="al_del_sections">Se șterge fiecare poză din fiecare album din: %1$s.</string>
     <string name="al_del_album">Se șterge fiecare poză din albumul %1$s.</string>
     <string name="al_del_albums">Se șterge fiecare poză din albumele: %1$s.</string>

@@ -5,7 +5,7 @@
     <string name="st_partial">此手机仍在读取索引副本，数字会随之增加。</string>
     <string name="st_overview">概览</string>
     <string name="st_photos">照片</string>
-    <string name="st_size">手机上的大小</string>
+    <string name="st_size">总大小</string>
     <string name="st_tagged">已加标签</string>
     <string name="st_with_people">有人物</string>
     <string name="st_with_place">有地点</string>
@@ -37,4 +37,8 @@
     <string name="st_show_all">显示全部（%1$s）</string>
     <string name="st_show_fewer">收起</string>
     <string name="st_open">打开这些照片</string>
+    <string name="st_items">项目</string>
+    <string name="st_clips">视频片段</string>
+    <string name="st_pdf_docs">PDF 文档</string>
+    <string name="st_pdf_pages">%1$s 页</string>
 </resources>

@@ -52,7 +52,9 @@ object PdfPhoto {
         val resolver = context.contentResolver
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         try {
-            resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return false
+            // a bounds-only read returns no bitmap by design: only a stream that cannot be opened is a failure
+            val stream = resolver.openInputStream(uri) ?: return false
+            stream.use { BitmapFactory.decodeStream(it, null, bounds) }
         } catch (e: Exception) {
             return false
         }
@@ -116,7 +118,9 @@ object PdfPhoto {
         val resolver = context.contentResolver
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         try {
-            resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) } ?: return false
+            // a bounds-only read returns no bitmap by design: only a stream that cannot be opened is a failure
+            val stream = resolver.openInputStream(uri) ?: return false
+            stream.use { BitmapFactory.decodeStream(it, null, bounds) }
         } catch (e: Exception) {
             return false
         }
@@ -164,8 +168,8 @@ object PdfPhoto {
     }
 
     private const val QUALITY = 85
-    // 300 dpi along the long side of an A4 page (11.69 in)
-    private const val MAX_EDGE = 3508
+    // no photo goes into a PDF larger than 1024 px on its long side
+    private const val MAX_EDGE = 1024
     private const val BAND_PIXELS = 12_000_000L
     private const val BAND_STEP = 16
 }

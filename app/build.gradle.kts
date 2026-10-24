@@ -27,8 +27,8 @@ android {
         applicationId = "com.opensolr.photos.main"
         minSdk = 26
         targetSdk = 36
-        versionCode = 155
-        versionName = "3.23.9"
+        versionCode = 156
+        versionName = "3.24.0"
         // the face models run natively, on phones (arm)
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
@@ -69,6 +69,18 @@ android {
     // the NDK only extracts the symbols of the native libraries for Google Play's crash reports
     ndkVersion = "27.0.12077973"
     buildTypes {
+        // test builds: no minification, signed with the same key so they install over the app without losing its data
+        debug {
+            if (!signingProperties.isEmpty) {
+                signingConfig = signingConfigs.getByName("release")
+            }
+        }
+        // speed checks: like the test build, but not debuggable, so it runs as fast as the app does for its users
+        create("profile") {
+            initWith(getByName("debug"))
+            isDebuggable = false
+            matchingFallbacks += listOf("debug")
+        }
         release {
             ndk { debugSymbolLevel = "SYMBOL_TABLE" }
             isMinifyEnabled = true

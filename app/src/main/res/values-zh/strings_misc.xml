@@ -9,7 +9,7 @@
     <string name="al_share">分享</string>
     <string name="al_delete">删除</string>
     <string name="al_cancel">取消</string>
-    <string name="al_delete_q">删除照片？</string>
+    <string name="al_delete_q">删除这些项目？</string>
     <string name="al_del_sections">将删除以下分类中每个相册的每张照片：%1$s。</string>
     <string name="al_del_album">将删除相册 %1$s 中的每张照片。</string>
     <string name="al_del_albums">将删除以下相册中的每张照片：%1$s。</string>

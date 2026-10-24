@@ -37,6 +37,7 @@ class StorageWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         stopRequested.set(false)
         try {
             promote(AppText.s(R.string.stg_preparing), 0, 0)
+            runCatching { Deletions.push(applicationContext); Deletions.pull(applicationContext) }
             val report = StorageEngine(applicationContext).run { progress ->
                 setProgress(workDataOf(KEY_PHASE to progress.phase, KEY_DONE to progress.done, KEY_TOTAL to progress.total))
                 val now = System.currentTimeMillis()
@@ -117,7 +118,12 @@ object StorageScheduler {
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
             .addTag(TAG).addTag(NOW)
             .build()
-        WorkManager.getInstance(context).enqueueUniqueWork(NOW, ExistingWorkPolicy.KEEP, request)
+        val manager = WorkManager.getInstance(context)
+        // a run in progress is kept; one left waiting (a backoff after the app was killed mid-run) starts now
+        Thread {
+            val runningNow = runCatching { manager.getWorkInfosForUniqueWork(NOW).get().any { it.state == WorkInfo.State.RUNNING } }.getOrDefault(false)
+            manager.enqueueUniqueWork(NOW, if (runningNow || StorageWorker.running.get()) ExistingWorkPolicy.KEEP else ExistingWorkPolicy.REPLACE, request)
+        }.start()
     }
 
     fun runLater(context: Context, delayMs: Long) {

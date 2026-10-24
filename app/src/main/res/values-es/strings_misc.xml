@@ -9,7 +9,7 @@
     <string name="al_share">Compartir</string>
     <string name="al_delete">Eliminar</string>
     <string name="al_cancel">Cancelar</string>
-    <string name="al_delete_q">¿Eliminar fotos?</string>
+    <string name="al_delete_q">¿Eliminar estos elementos?</string>
     <string name="al_del_sections">Esto elimina todas las fotos de todos los álbumes de: %1$s.</string>
     <string name="al_del_album">Esto elimina todas las fotos del álbum %1$s.</string>
     <string name="al_del_albums">Esto elimina todas las fotos de los álbumes: %1$s.</string>

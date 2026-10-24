@@ -3,6 +3,10 @@ package com.opensolr.photos.data
 data class LibraryStats(
     val total: Int,
     val bytes: Long,
+    val photos: Int = 0,
+    val clips: Int = 0,
+    val pdfDocs: Int = 0,
+    val pdfPages: Int = 0,
     val tagged: Int,
     val withPeople: Int,
     val withPlace: Int,

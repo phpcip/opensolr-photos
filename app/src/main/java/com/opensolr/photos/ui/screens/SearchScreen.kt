@@ -205,6 +205,7 @@ import com.opensolr.photos.ui.UiState
 import com.opensolr.photos.ui.theme.LocalPalette
 import android.content.ContentUris
 import android.net.Uri
+import kotlinx.coroutines.flow.first
 import android.provider.MediaStore
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.composed
@@ -283,6 +284,24 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         if (result.resultCode == Activity.RESULT_OK) viewModel.removeDeleted(pendingDelete)
         pendingDelete = emptySet()
     }
+    // files of items deleted on another device that Android lets go only with the owner's yes: asked once, here
+    var askIds by remember { mutableStateOf<List<String>>(emptyList()) }
+    val askLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { _ ->
+        val done = askIds
+        askIds = emptyList()
+        Thread { com.opensolr.photos.storage.Deletions.promptsDone(context, done) }.start()
+    }
+    LaunchedEffect(Unit) {
+        val waiting = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opensolr.photos.data.PhotoCache.of(context).promptDeleted() }
+        if (waiting.isEmpty()) return@LaunchedEffect
+        val sender = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            val where = com.opensolr.photos.data.PhotoCache.of(context).mediaFor(waiting)
+            val uris = waiting.mapNotNull { id -> (com.opensolr.photos.storage.LocalFiles.mediaId(id) ?: where[id]?.first)?.takeIf { it > 0 }?.let { android.content.ContentUris.withAppendedId(android.provider.MediaStore.Files.getContentUri("external"), it) } }.distinct()
+            Actions.deleteRequest(context, uris)
+        }
+        if (sender != null) { askIds = waiting; askLauncher.launch(IntentSenderRequest.Builder(sender).build()) }
+        else Thread { com.opensolr.photos.storage.Deletions.promptsDone(context, waiting) }.start()
+    }
     val deleteScope = rememberCoroutineScope()
     val deleteSelected = {
         val chosen = viewModel.photosToTag()
@@ -303,6 +322,12 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         Unit
     }
 
+    val selectedItems by remember(state.selectedIds, state.hits) {
+        derivedStateOf {
+            val known = state.hits.filter { it.id in state.selectedIds }
+            Actions.shareItems(known).size + (state.selectedIds.size - known.size)
+        }
+    }
     val nearEnd by remember(rows) {
         derivedStateOf {
             val last = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
@@ -491,7 +516,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
 
             val countText = when {
 
-                state.selecting -> Actions.formatCompact(state.selectedIds.size.toLong())
+                // what is checked counts as items: a PDF once, whatever its pages
+                state.selecting -> Actions.formatCompact(selectedItems.toLong())
                 state.searching && state.hits.isEmpty() -> stringResource(R.string.count_searching)
 
                 state.skippedMode ->
@@ -736,10 +762,19 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 )
             },
         ) {
+            val touch = remember { GridTouch() }
+            LaunchedEffect(gridState) {
+                androidx.compose.runtime.snapshotFlow { gridState.isScrollInProgress }.collect { moving ->
+                    GridMotion.flinging.value = moving
+                    if (!moving) touch.lastScrollEnd = android.os.SystemClock.uptimeMillis()
+                }
+            }
+            androidx.compose.runtime.DisposableEffect(Unit) { onDispose { GridMotion.flinging.value = false; GridMotion.scroller.value = false } }
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(112.dp),
                 state = gridState,
                 modifier = Modifier.fillMaxSize().dragSelect(
+                    touch = touch,
                     gridState = gridState,
                     idAt = { (currentRows.getOrNull(it) as? GridRow.Photo)?.hit?.id },
                     onStart = { id -> Haptics.tick(view, strong = true); viewModel.beginDragSelect(id) },
@@ -758,15 +793,37 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 ) { row ->
                     when (row) {
                         is GridRow.Heading -> {
+                            // the scroller held: the title alone, same size, so the place is readable and nothing else is built
+                            if (GridMotion.scroller.value) {
+                                Row(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(start = 8.dp + (row.level * 12).dp, end = 8.dp, top = if (row.level > 0) 5.dp else 10.dp, bottom = 5.dp)
+                                        .clip(Corner)
+                                        .background(headingBand(row.level))
+                                        .padding(start = 8.dp, end = 10.dp, top = 9.dp, bottom = 9.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Spacer(Modifier.size(if (row.level > 0) 20.dp else 22.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(row.text, style = headingStyle(row.level), fontWeight = FontWeight.Bold, color = p.ink, modifier = Modifier.weight(1f))
+                                }
+                                return@items
+                            }
 
                             if (!row.collapsed && row.range != null && row.ids.size < row.count) {
                                 LaunchedEffect(row.key, row.count, row.ids.size) {
+                                    // a group flown past is never loaded: only where the grid stops
+                                    androidx.compose.runtime.snapshotFlow { GridMotion.moving }.first { !it }
                                     viewModel.loadGroupPhotos(row.key, row.range.first, row.range.second, row.ids.size, row.count)
                                 }
                             }
 
                             if (row.missing) {
-                                LaunchedEffect(row.key) { viewModel.loadResultGroup(row.name, row.ids) }
+                                LaunchedEffect(row.key) {
+                                    androidx.compose.runtime.snapshotFlow { GridMotion.moving }.first { !it }
+                                    viewModel.loadResultGroup(row.name, row.ids)
+                                }
                             }
 
                             val allPicked = state.selecting &&
@@ -788,12 +845,13 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                     .combinedClickable(
 
                                         onClick = {
+                                            if (touch.blocked) return@combinedClickable
                                             Haptics.tick(view, strong = false)
                                             if (state.selecting && row.selectable) viewModel.toggleSelectedGroup(row.key, row.ids, row.range)
                                             else viewModel.toggleHeading(row.key)
                                         },
                                         onLongClick = {
-                                            if (row.selectable) {
+                                            if (row.selectable && !touch.blocked) {
                                                 if (!state.selecting) Haptics.tick(view, strong = true)
                                                 viewModel.toggleSelectedGroup(row.key, row.ids, row.range)
                                             }
@@ -829,6 +887,11 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                             }
                         }
                         is GridRow.Photo -> {
+                            // the scroller held: a plain square per cell, nothing else is built until it is let go
+                            if (GridMotion.scroller.value) {
+                                Box(Modifier.aspectRatio(1f).background(p.chip))
+                                return@items
+                            }
                             val hit = row.hit
                             val selected = hit.id in state.selectedIds
 
@@ -846,7 +909,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                     modifier = Modifier
                                         .combinedClickable(
                                             onClick = {
-                                                if (state.selecting) { Haptics.toggle(view, hit.id !in state.selectedIds); row.all.forEach { viewModel.toggleSelected(it.id) } } else viewing = hit
+                                                if (touch.blocked) return@combinedClickable
+                                                if (state.selecting) { val on = hit.id !in state.selectedIds; Haptics.toggle(view, on); viewModel.setSelected(row.all.map { it.id }, on) } else viewing = hit
                                             },
                                         )
                                         .semantics {
@@ -916,7 +980,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                 if (state.selecting && !hit.pending) {
                                     PickTick(
                                         selected = selected,
-                                        onClick = { viewModel.toggleSelected(hit.id) },
+                                        onClick = { if (!touch.blocked) viewModel.setSelected(row.all.map { it.id }, !selected) },
                                         modifier = Modifier.align(Alignment.TopEnd),
                                     )
                                 }
@@ -950,10 +1014,20 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     }
 
     if (confirmDelete) {
-        val chosen = state.selectedIds.size
+        // the title names what goes: photos, clips, documents (a PDF counts once, whatever its pages), or items when mixed
+        val picked = remember(state.selectedIds) { viewModel.photosToTag() }
+        val items = remember(picked) { Actions.shareItems(picked) }
+        val chosen = items.size.takeIf { it > 0 } ?: state.selectedIds.size
+        val kinds = items.map { it.mediaKind }.toSet()
+        val titleRes = when (kinds) {
+            setOf(com.opensolr.photos.media.Kind.PDF) -> R.plurals.delete_title_docs
+            setOf(com.opensolr.photos.media.Kind.VIDEO) -> R.plurals.delete_title_clips
+            setOf(com.opensolr.photos.media.Kind.PHOTO), emptySet<com.opensolr.photos.media.Kind>() -> R.plurals.delete_title
+            else -> R.plurals.delete_title_items
+        }
         AlertDialog(
             onDismissRequest = { confirmDelete = false },
-            title = { Text(pluralStringResource(R.plurals.delete_title, chosen, Actions.formatCount(chosen.toLong()))) },
+            title = { Text(pluralStringResource(titleRes, chosen, Actions.formatCount(chosen.toLong()))) },
             text = { com.opensolr.photos.ui.KeyboardBack(); Text(stringResource(R.string.delete_text)) },
             confirmButton = { TextButton(onClick = { confirmDelete = false; deleteSelected() }) { Text(stringResource(R.string.delete), color = p.accent) } },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text(stringResource(R.string.cancel), color = p.ink) } },
@@ -1860,10 +1934,27 @@ internal fun absentHere(hit: PhotoHit): Boolean =
     com.opensolr.photos.storage.LocalFiles.ready.value && !hit.pending &&
         !com.opensolr.photos.storage.CloudFiles.has(hit.id) && !com.opensolr.photos.storage.LocalFiles.has(hit.id)
 
+private const val GRID_THUMB_PX = 360
+
+/** Whether the grid is moving: while it is, cells that come into view load nothing until it stops. */
+internal object GridMotion {
+    val flinging = mutableStateOf(false)
+    val scroller = mutableStateOf(false)
+    val moving: Boolean get() = flinging.value || scroller.value
+}
+
 @Composable
 private fun Thumbnail(hit: PhotoHit, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
     val context = LocalContext.current
+    // a cell that comes into view while the grid moves stays an empty square: nothing is read or decoded until it stops
+    // a picture already on the phone shows at once; only one that must be made waits for the grid to stop
+    var allowed by remember(hit.id) { mutableStateOf(!GridMotion.moving || com.opensolr.photos.ui.Images.readyNow(context, hit, EditedPhotos.stamp(hit.mediaId), GRID_THUMB_PX)) }
+    if (!allowed) {
+        LaunchedEffect(hit.id) { androidx.compose.runtime.snapshotFlow { GridMotion.moving }.collect { if (!it) allowed = true } }
+        Box(modifier.aspectRatio(1f).background(p.chip))
+        return
+    }
     if (absentHere(hit)) {
         // never opened by another phone's id: a sign of its kind until it is here
         Box(modifier.aspectRatio(1f).background(p.chip), contentAlignment = Alignment.Center) {
@@ -1871,21 +1962,22 @@ private fun Thumbnail(hit: PhotoHit, modifier: Modifier = Modifier) {
         }
         return
     }
-    val uri = com.opensolr.photos.ui.Images.model(context, hit)
-
     val edited = EditedPhotos.stamp(hit.mediaId)
-    val request = remember(uri, hit.sizeBytes, edited) { ImageRequest.Builder(context).data(uri).size(360).setParameter("bytes", hit.sizeBytes).setParameter("edited", edited).crossfade(true).build() }
+    // the grid's photos: the thumbnail the phone already keeps, never the whole file decoded
+    val uri = com.opensolr.photos.ui.Images.model(context, hit).let { m -> if (m is Uri && hit.mediaKind == com.opensolr.photos.media.Kind.PHOTO && m.scheme == "content") com.opensolr.photos.ui.PhotoThumb(m, edited, hit.sizeBytes) else m }
+    val request = remember(uri, hit.sizeBytes, edited) { ImageRequest.Builder(context).data(uri).size(GRID_THUMB_PX).setParameter("bytes", hit.sizeBytes).setParameter("edited", edited).crossfade(true).build() }
     // a file whose picture cannot be drawn on this phone shows a sign of its kind instead of an empty square
-    val sign = painterResource(if (hit.isVideo) R.drawable.ic_play else if (hit.isPdfPage) R.drawable.ic_pdf else R.drawable.ic_skipped)
-    AsyncImage(
-        model = request,
-        error = sign,
-        contentDescription = hit.meaning.ifBlank { hit.fileName },
-        contentScale = ContentScale.Crop,
-        modifier = modifier
-            .aspectRatio(1f)
-            .background(p.chip),
-    )
+    var failed by remember(uri) { mutableStateOf(false) }
+    Box(modifier.aspectRatio(1f).background(p.chip), contentAlignment = Alignment.Center) {
+        AsyncImage(
+            model = request,
+            onError = { failed = true },
+            contentDescription = hit.meaning.ifBlank { hit.fileName },
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize(),
+        )
+        if (failed) Icon(painterResource(if (hit.isVideo) R.drawable.ic_play else if (hit.isPdfPage) R.drawable.ic_pdf else R.drawable.ic_skipped), contentDescription = null, tint = p.muted, modifier = Modifier.size(28.dp))
+    }
 }
 
 @Composable
@@ -2115,6 +2207,8 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
     val scope = rememberCoroutineScope()
     val total = rows.size
     var dragging by remember { mutableStateOf(false) }
+    // the grid draws nothing new while the scroller is held
+    LaunchedEffect(dragging) { GridMotion.scroller.value = dragging }
 
     var aimed by remember { mutableIntStateOf(-1) }
 
@@ -2178,9 +2272,9 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
         out
     }
 
-    val info = gridState.layoutInfo
-    val viewportPx = info.viewportSize.height.toFloat()
-    val paddingPx = (info.beforeContentPadding + info.afterContentPadding).toFloat()
+    // read through derived state: the scroller recomposes when the viewport changes, not on every scrolled frame
+    val viewportPx by remember(gridState) { derivedStateOf { gridState.layoutInfo.viewportSize.height.toFloat() } }
+    val paddingPx by remember(gridState) { derivedStateOf { gridState.layoutInfo.let { (it.beforeContentPadding + it.afterContentPadding).toFloat() } } }
     val travelledPx = tops[rows.size] + paddingPx - viewportPx
     val scrollable = travelledPx > 1f
     val scrollablePx = travelledPx.coerceAtLeast(1f)
@@ -2461,6 +2555,21 @@ internal fun PhotoViewer(
     }
     val view = LocalView.current
     var showActions by remember { mutableStateOf(true) }
+    // a clip's controls on screen: a sideways drag is the slider's, not the next item
+    var videoControls by remember { mutableStateOf(false) }
+    // a clip full screen: by its button, or by turning the phone sideways; nothing of the viewer over it
+    var videoFull by remember { mutableStateOf(false) }
+    val landscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+    val viewerActivity = LocalContext.current.let { c -> var x: android.content.Context? = c; while (x is android.content.ContextWrapper && x !is android.app.Activity) x = x.baseContext; x as? android.app.Activity }
+    val onClipNow = hits.getOrNull(pager.currentPage)?.let { it.isVideo && !absentHere(it) && com.opensolr.photos.storage.CloudFiles.model(LocalContext.current, it.id) == null } == true
+    val clipFull = onClipNow && (videoFull || landscape)
+    fun setVideoFull(on: Boolean, portraitClip: Boolean) {
+        videoFull = on
+        // like other players: a wide clip turns the screen sideways; leaving gives the turn back to the phone
+        viewerActivity?.requestedOrientation = if (on && !portraitClip) android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE else android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    }
+    LaunchedEffect(pager.currentPage) { if (videoFull) setVideoFull(false, false) }
+    androidx.compose.runtime.DisposableEffect(Unit) { onDispose { viewerActivity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED } }
 
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
@@ -2517,7 +2626,7 @@ internal fun PhotoViewer(
             HorizontalPager(
                 state = pager,
 
-                userScrollEnabled = scale <= 1.01f,
+                userScrollEnabled = scale <= 1.01f && !videoControls,
                 modifier = Modifier.fillMaxSize(),
             ) { page ->
                 val hit = hits.getOrNull(page) ?: return@HorizontalPager
@@ -2547,7 +2656,7 @@ internal fun PhotoViewer(
                     }
                 } else if (playable) {
                     // the player takes every touch: a layer over it gives the clip the same swipes as a photo
-                    VideoPage(uri, active = page == pager.currentPage, onTap = { shown -> showActions = shown }, gestures = Modifier.pointerInput(hit.id) {
+                    VideoPage(uri, still = model, active = page == pager.currentPage, full = clipFull, onFull = { on, portrait -> setVideoFull(on, portrait) }, onTap = { shown -> showActions = shown }, onControls = { shown -> if (page == pager.currentPage) videoControls = shown }, gestures = Modifier.pointerInput(hit.id) {
                         detectVerticalDragGestures(
                             onVerticalDrag = { change, amount ->
                                 change.consume()
@@ -2725,7 +2834,7 @@ internal fun PhotoViewer(
 
             val hit = hits.getOrNull(pager.currentPage)
 
-            if (showActions && hit != null) {
+            if (showActions && hit != null && !clipFull) {
 
                 if (scale <= 1.01f) {
                 val drift = rememberInfiniteTransition(label = "swipeHint")
@@ -2809,7 +2918,7 @@ internal fun PhotoViewer(
                 androidx.compose.material3.AlertDialog(
                     onDismissRequest = { confirmPdfDelete = null },
                     title = { Text(stringResource(R.string.pdf_delete_title)) },
-                    text = { com.opensolr.photos.ui.KeyboardBack(); Text(stringResource(R.string.pdf_delete_text, one.fileName, Actions.formatCount(one.pages.toLong()))) },
+                    text = { com.opensolr.photos.ui.KeyboardBack(); Text(pluralStringResource(R.plurals.pdf_delete_text, one.pages.coerceAtLeast(1), one.fileName, Actions.formatCount(one.pages.coerceAtLeast(1).toLong()))) },
                     confirmButton = { com.opensolr.photos.ui.TextButton(onClick = { confirmPdfDelete = null; onDelete(one) }) { Text(stringResource(R.string.act_delete), color = LocalPalette.current.accent) } },
                     dismissButton = { com.opensolr.photos.ui.TextButton(onClick = { confirmPdfDelete = null }) { Text(stringResource(R.string.cancel), color = LocalPalette.current.ink) } },
                     containerColor = LocalPalette.current.paper,
@@ -3406,8 +3515,19 @@ internal fun headingStyle(level: Int): androidx.compose.ui.text.TextStyle =
         else -> MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp)
     }
 
+/** A touch that stops a moving grid, or comes right after it stopped, picks nothing and opens nothing. */
+internal class GridTouch {
+    @Volatile var lastScrollEnd = 0L
+    @Volatile var blocked = false
+}
+
+/** Held this long without moving, a cell starts a selection: longer than the system's long press, so a pause while scrolling is not one. */
+private const val SELECT_HOLD_MS = 600L
+private const val AFTER_SCROLL_MS = 350L
+
 /** Long press on a grid cell, then drag: every cell between the first and the finger is selected, the grid scrolling at the edges. */
 internal fun <T : Any> Modifier.dragSelect(
+    touch: GridTouch,
     gridState: androidx.compose.foundation.lazy.grid.LazyGridState,
     idAt: (Int) -> T?,
     onStart: (T) -> Unit,
@@ -3446,8 +3566,10 @@ internal fun <T : Any> Modifier.dragSelect(
     this.pointerInput(Unit) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            touch.blocked = gridState.isScrollInProgress || android.os.SystemClock.uptimeMillis() - touch.lastScrollEnd < AFTER_SCROLL_MS
+            if (touch.blocked) return@awaitEachGesture
 
-            val left = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+            val left = withTimeoutOrNull(maxOf(viewConfiguration.longPressTimeoutMillis, SELECT_HOLD_MS)) {
                 var moved = false
                 while (!moved) {
                     val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -3524,11 +3646,26 @@ private val DRAG_STEP = 14.dp
 
 /** A clip on this phone, played in place; it starts when its page is the one shown and stops when it is not. */
 @Composable
-private fun VideoPage(uri: Uri, active: Boolean, onTap: (Boolean) -> Unit, gestures: Modifier = Modifier) {
+private fun VideoPage(uri: Uri, still: Any, active: Boolean, full: Boolean = false, onFull: (Boolean, Boolean) -> Unit = { _, _ -> }, onTap: (Boolean) -> Unit, onControls: (Boolean) -> Unit = {}, gestures: Modifier = Modifier) {
     val context = LocalContext.current
+    // only the clip on screen has a player; the ones next to it show their picture, so no memory goes to them
+    if (!active) {
+        Box(Modifier.fillMaxSize().then(gestures).background(Color.Black)) {
+            AsyncImage(model = still, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+        }
+        return
+    }
     var failed by remember(uri) { mutableStateOf(false) }
+    // while the player's controls show, every touch is theirs: play, seek, the slider
+    var controls by remember(uri) { mutableStateOf(false) }
     val player = remember(uri) {
-        androidx.media3.exoplayer.ExoPlayer.Builder(context).build().apply {
+        // a bounded buffer: a few seconds ahead, never the whole clip in memory
+        val load = androidx.media3.exoplayer.DefaultLoadControl.Builder()
+            .setBufferDurationsMs(2_000, 15_000, 1_000, 2_000)
+            .setTargetBufferBytes(24 * 1024 * 1024)
+            .setPrioritizeTimeOverSizeThresholds(false)
+            .build()
+        androidx.media3.exoplayer.ExoPlayer.Builder(context).setLoadControl(load).build().apply {
             setMediaItem(androidx.media3.common.MediaItem.fromUri(uri))
             addListener(object : androidx.media3.common.Player.Listener {
                 override fun onPlayerError(error: androidx.media3.common.PlaybackException) { failed = true }
@@ -3537,7 +3674,13 @@ private fun VideoPage(uri: Uri, active: Boolean, onTap: (Boolean) -> Unit, gestu
         }
     }
     androidx.compose.runtime.DisposableEffect(player) { onDispose { player.release() } }
-    LaunchedEffect(active) { player.playWhenReady = active; if (!active) player.pause() }
+    LaunchedEffect(active) {
+        player.playWhenReady = active
+        if (!active) { player.pause(); return@LaunchedEffect }
+        // a clip that never gets ready is not left black: the phone's own player is offered
+        kotlinx.coroutines.delay(6000)
+        if (player.playbackState != androidx.media3.common.Player.STATE_READY && player.playbackState != androidx.media3.common.Player.STATE_ENDED) failed = true
+    }
     val playerView = remember(uri) {
         androidx.media3.ui.PlayerView(context).apply {
             this.player = player
@@ -3545,11 +3688,36 @@ private fun VideoPage(uri: Uri, active: Boolean, onTap: (Boolean) -> Unit, gestu
             controllerShowTimeoutMs = 3000
             setShowPreviousButton(false)
             setShowNextButton(false)
-            // the controls sit above the viewer's row of actions
-            setPadding(0, 0, 0, (context.resources.displayMetrics.density * 190).toInt())
             setBackgroundColor(android.graphics.Color.BLACK)
+            // the controls alone over the clip: no dark veil across the whole picture
+            findViewById<android.view.View>(androidx.media3.ui.R.id.exo_controls_background)?.setBackgroundColor(android.graphics.Color.TRANSPARENT)
+            // the full screen button of the controls
+            setFullscreenButtonClickListener { on -> onFull(on, player.videoSize.height > player.videoSize.width) }
+            // the player's controls and the viewer's actions show and hide together, however the controls change
+            setControllerVisibilityListener(androidx.media3.ui.PlayerView.ControllerVisibilityListener { visibility ->
+                val shown = visibility == android.view.View.VISIBLE
+                controls = shown
+                onTap(shown)
+                onControls(shown)
+            })
         }
     }
+    androidx.compose.runtime.DisposableEffect(uri) { onDispose { onControls(false) } }
+    // full screen: the controls go to the bottom edge and the system bars hide; back in the viewer they make room again
+    val pageView = LocalView.current
+    LaunchedEffect(full) {
+        // the clip stays centred on the screen; only the controls make room for the viewer's row of actions
+        playerView.setPadding(0, 0, 0, 0)
+        // the same room at the top keeps play and pause on the middle of the clip
+        val room = if (full) 0 else (context.resources.displayMetrics.density * 190).toInt()
+        playerView.findViewById<android.view.View>(androidx.media3.ui.R.id.exo_controller)?.setPadding(0, room, 0, room)
+        (pageView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window?.let { w ->
+            androidx.core.view.WindowCompat.getInsetsController(w, w.decorView).apply {
+                if (full) hide(androidx.core.view.WindowInsetsCompat.Type.navigationBars()) else show(androidx.core.view.WindowInsetsCompat.Type.navigationBars())
+            }
+        }
+    }
+    androidx.activity.compose.BackHandler(enabled = full) { onFull(false, false) }
     Box(Modifier.fillMaxSize().then(gestures)) {
         if (failed) {
             // a clip this phone cannot play here: its first frame, and the phone's own player one tap away
@@ -3557,15 +3725,8 @@ private fun VideoPage(uri: Uri, active: Boolean, onTap: (Boolean) -> Unit, gestu
             com.opensolr.photos.ui.GhostButton(stringResource(R.string.act_open_video), onClick = { Actions.openFile(context, uri, "video/*") }, modifier = Modifier.align(Alignment.Center).padding(24.dp))
         } else {
             androidx.compose.ui.viewinterop.AndroidView(factory = { playerView }, modifier = Modifier.fillMaxSize())
-            // above the player: a tap shows its controls and the row of actions; swipes go to the viewer
-            Box(Modifier.fillMaxSize().pointerInput(uri) {
-                // the player's controls and the viewer's actions show and hide together
-                detectTapGestures(onTap = {
-                    val show = !playerView.isControllerFullyVisible
-                    if (show) playerView.showController() else playerView.hideController()
-                    onTap(show)
-                })
-            })
+            // controls hidden: a layer over the player gives the clip the viewer's swipes, and a tap shows the controls
+            if (!controls) Box(Modifier.fillMaxSize().pointerInput(uri) { detectTapGestures(onTap = { playerView.showController() }) })
         }
     }
 }

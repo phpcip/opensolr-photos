@@ -51,6 +51,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         db.execSQL(ALIASES_TABLE)
         db.execSQL(PDF_PAGES_TABLE)
         db.execSQL(SEEN_TABLE)
+        db.execSQL(DELETED_TABLE)
     }
 
     private fun createFaceTables(db: SQLiteDatabase) {
@@ -195,6 +196,9 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
             db.execSQL(SEEN_TABLE)
             db.execSQL("INSERT OR IGNORE INTO seen (id) SELECT id FROM docs")
             db.execSQL("INSERT OR IGNORE INTO seen (id) SELECT id FROM parked_docs")
+        }
+        if (oldVersion < 34) {
+            db.execSQL(DELETED_TABLE)
         }
         if (oldVersion < 24) {
             // who named a face: 0 the owner, 1 learned from the photos' tags, 2 the matcher on its own
@@ -598,7 +602,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
     /** Backed-up ids the clone has no document for: written by another phone after this one read the index. */
     fun remoteWithoutDoc(): List<String> {
         val out = ArrayList<String>()
-        readableDatabase.rawQuery("SELECT id FROM remote WHERE id NOT IN (SELECT id FROM docs) AND id NOT IN (SELECT id FROM parked_docs)", null).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        readableDatabase.rawQuery("SELECT id FROM remote WHERE id NOT IN (SELECT id FROM docs) AND id NOT IN (SELECT id FROM parked_docs) AND id NOT IN (SELECT id FROM deleted)", null).use { c -> while (c.moveToNext()) out += c.getString(0) }
         return out
     }
 
@@ -606,6 +610,35 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
     fun cloudVideosAndPages(): List<String> {
         val out = ArrayList<String>()
         readableDatabase.rawQuery("SELECT c.id FROM cloud c INNER JOIN docs d ON d.id = c.id WHERE d.json LIKE '%\"kind_s\":\"video\"%' OR d.json LIKE '%\"kind_s\":\"pdf_page\"%'", null).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        return out
+    }
+
+    /** A document's file as the clone knows it, and where the backend keeps it (null when not backed up). */
+    data class DocFile(val mediaId: Long, val path: String, val size: Long, val remotePath: String?, val remoteBytes: Long)
+
+    /** Ids of the documents matching a fixed condition written in this app's code (never user input). */
+    fun docIdsWhere(condition: String): Set<String> {
+        val out = HashSet<String>()
+        readableDatabase.rawQuery("SELECT id FROM docs WHERE $condition", null).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        return out
+    }
+
+    fun docFilesOf(ids: Collection<String>): Map<String, DocFile> {
+        val out = HashMap<String, DocFile>()
+        ids.chunked(400).forEach { batch ->
+            val marks = batch.joinToString(",") { "?" }
+            readableDatabase.rawQuery("SELECT d.id, d.media_id, d.path, d.size_bytes, r.path, r.bytes FROM docs d LEFT JOIN remote r ON r.id = d.id WHERE d.id IN ($marks)", batch.toTypedArray()).use { c ->
+                while (c.moveToNext()) out[c.getString(0)] = DocFile(c.getLong(1), if (c.isNull(2)) "" else c.getString(2), c.getLong(3), if (c.isNull(4)) null else c.getString(4), if (c.isNull(5)) 0L else c.getLong(5))
+            }
+        }
+        return out
+    }
+
+    fun docFiles(): Map<String, DocFile> {
+        val out = HashMap<String, DocFile>()
+        readableDatabase.rawQuery("SELECT d.id, d.media_id, d.path, d.size_bytes, r.path, r.bytes FROM docs d LEFT JOIN remote r ON r.id = d.id", null).use { c ->
+            while (c.moveToNext()) out[c.getString(0)] = DocFile(c.getLong(1), if (c.isNull(2)) "" else c.getString(2), c.getLong(3), if (c.isNull(4)) null else c.getString(4), if (c.isNull(5)) 0L else c.getLong(5))
+        }
         return out
     }
 
@@ -673,34 +706,24 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
     private fun readRemote(c: android.database.Cursor) = Remote(c.getString(0), c.getString(1), c.getString(2), c.getLong(3), c.getString(4), if (c.isNull(5)) null else c.getString(5), c.getLong(6))
 
     /** The photos of the index that are in the backend but have no file on this phone, newest first; [limit] of them. */
-    fun restoreCandidates(local: Set<String>, limit: Int): List<Remote> {
-        val out = ArrayList<Remote>()
+    /** The next [limit] backed-up documents without a 720 px copy here, newest first, after the cursor (taken, id): each with its date. */
+    fun restoreCandidates(limit: Int, afterTaken: Long, afterId: String): List<Pair<Remote, Long>> {
+        val out = ArrayList<Pair<Remote, Long>>()
         readableDatabase.rawQuery(
-            "SELECT r.id, r.device, r.kind, r.bytes, r.path, r.md5, r.at FROM remote r INNER JOIN docs d ON d.id = r.id WHERE r.id NOT IN (SELECT id FROM cloud) ORDER BY d.taken_ms DESC",
-            null,
+            "SELECT r.id, r.device, r.kind, r.bytes, r.path, r.md5, r.at, d.taken_ms FROM remote r INNER JOIN docs d ON d.id = r.id " +
+                "WHERE r.id NOT IN (SELECT id FROM cloud) AND r.id NOT IN (SELECT id FROM deleted) AND (d.taken_ms < ? OR (d.taken_ms = ? AND r.id < ?)) ORDER BY d.taken_ms DESC, r.id DESC LIMIT ?",
+            arrayOf(afterTaken.toString(), afterTaken.toString(), afterId, limit.toString()),
         ).use { c ->
-            while (c.moveToNext() && out.size < limit) {
-                val id = c.getString(0)
-                if (id in local) continue
-                out += readRemote(c)
-            }
+            while (c.moveToNext()) out += readRemote(c) to c.getLong(7)
         }
         return out
     }
 
-    /** How many photos the backend has that this phone lacks and has no 720 px copy of yet: the restore's real total. */
-    fun restorePendingIds(local: Set<String>): List<String> {
-        val out = ArrayList<String>()
-        readableDatabase.rawQuery("SELECT r.id FROM remote r INNER JOIN docs d ON d.id = r.id WHERE r.id NOT IN (SELECT id FROM cloud)", null).use { c ->
-            while (c.moveToNext()) { val id = c.getString(0); if (id !in local) out += id }
-        }
-        return out
-    }
-
-    fun restorePendingCount(local: Set<String>): Int {
+    /** How many backed-up documents without a 720 px copy here pass [wanted]: the restore's real total. */
+    fun restorePendingCount(wanted: (String) -> Boolean): Int {
         var n = 0
         readableDatabase.rawQuery("SELECT r.id FROM remote r INNER JOIN docs d ON d.id = r.id WHERE r.id NOT IN (SELECT id FROM cloud)", null).use { c ->
-            while (c.moveToNext()) if (c.getString(0) !in local) n++
+            while (c.moveToNext()) if (wanted(c.getString(0))) n++
         }
         return n
     }
@@ -748,9 +771,10 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
     fun cloudOnlyTotals(): Pair<Long, Long> =
         readableDatabase.rawQuery("SELECT COUNT(*), COALESCE(SUM(r.bytes), 0) FROM cloud c INNER JOIN remote r ON r.id = c.id", null).use { c -> if (c.moveToFirst()) c.getLong(0) to c.getLong(1) else 0L to 0L }
 
-    fun cloudOnlyIds(limit: Int): List<String> {
+    /** The next [limit] photos held here only as 720p copies, by id after [afterId]: a walk that never meets the same one twice. */
+    fun cloudOnlyIds(limit: Int, afterId: String = ""): List<String> {
         val out = ArrayList<String>()
-        readableDatabase.rawQuery("SELECT c.id FROM cloud c INNER JOIN remote r ON r.id = c.id INNER JOIN docs d ON d.id = c.id ORDER BY d.taken_ms DESC LIMIT ?", arrayOf(limit.toString())).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        readableDatabase.rawQuery("SELECT c.id FROM cloud c INNER JOIN remote r ON r.id = c.id INNER JOIN docs d ON d.id = c.id WHERE c.id > ? AND c.id NOT IN (SELECT id FROM deleted) ORDER BY c.id LIMIT ?", arrayOf(afterId, limit.toString())).use { c -> while (c.moveToNext()) out += c.getString(0) }
         return out
     }
 
@@ -1513,6 +1537,90 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         }
     }
 
+    // ---- deletions shared by every device of the index ----
+
+    fun markDeleted(ids: Collection<String>, at: Long, sent: Boolean) {
+        if (ids.isEmpty()) return
+        val db = writableDatabase
+        db.beginTransaction()
+        try {
+            ids.forEach { id ->
+                // insert, else keep the later time and a sent mark (older Androids have no upsert)
+                db.execSQL("INSERT OR IGNORE INTO deleted (id, at, sent, prompt) VALUES (?, ?, ?, 0)", arrayOf<Any>(id, at, if (sent) 1 else 0))
+                db.execSQL("UPDATE deleted SET at = MAX(at, ?), sent = MAX(sent, ?) WHERE id = ?", arrayOf<Any>(at, if (sent) 1 else 0, id))
+            }
+            db.setTransactionSuccessful()
+        } finally {
+            db.endTransaction()
+        }
+    }
+
+    fun unsentDeleted(limit: Int): List<String> {
+        val out = ArrayList<String>()
+        readableDatabase.rawQuery("SELECT id FROM deleted WHERE sent = 0 LIMIT ?", arrayOf(limit.toString())).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        return out
+    }
+
+    fun markDeletedSent(ids: Collection<String>) = updateByIds("UPDATE deleted SET sent = 1 WHERE id IN", ids)
+
+    fun setDeletePrompt(ids: Collection<String>, on: Boolean) = updateByIds("UPDATE deleted SET prompt = ${if (on) 1 else 0} WHERE id IN", ids)
+
+    fun promptDeleted(): List<String> {
+        val out = ArrayList<String>()
+        readableDatabase.rawQuery("SELECT id FROM deleted WHERE prompt = 1", null).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        return out
+    }
+
+    /** When each of [ids] was deleted, for those that were. */
+    fun deletedAmong(ids: Collection<String>): Map<String, Long> {
+        val out = HashMap<String, Long>()
+        ids.chunked(400).forEach { batch ->
+            val marks = batch.joinToString(",") { "?" }
+            readableDatabase.rawQuery("SELECT id, at FROM deleted WHERE id IN ($marks)", batch.toTypedArray()).use { c -> while (c.moveToNext()) out[c.getString(0)] = c.getLong(1) }
+        }
+        return out
+    }
+
+    /** A file of that name came back after the deletion: it is a new one, no longer deleted. */
+    fun forgetDeleted(ids: Collection<String>) = deleteByIds("deleted", ids)
+
+    /** Deleted items the backend still holds: id and path, for the storage run to remove. */
+    fun deletedInRemote(limit: Int): List<Remote> {
+        val out = ArrayList<Remote>()
+        readableDatabase.rawQuery("SELECT r.id, r.device, r.kind, r.bytes, r.path, r.md5, r.at FROM remote r INNER JOIN deleted d ON d.id = r.id LIMIT ?", arrayOf(limit.toString())).use { c -> while (c.moveToNext()) out += readRemote(c) }
+        return out
+    }
+
+    fun removeRemote(ids: Collection<String>) = deleteByIds("remote", ids)
+
+    /** Those of [ids] with an edit or a read still waiting to go up: never overwritten from the index. */
+    fun pendingAmong(ids: Collection<String>): Set<String> {
+        val out = HashSet<String>()
+        ids.chunked(400).forEach { batch ->
+            val marks = batch.joinToString(",") { "?" }
+            readableDatabase.rawQuery("SELECT id FROM actions WHERE id IN ($marks) UNION SELECT id FROM deleted WHERE id IN ($marks)", (batch + batch).toTypedArray()).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        }
+        return out
+    }
+
+    fun remotePathInUse(path: String): Boolean =
+        readableDatabase.rawQuery("SELECT 1 FROM remote WHERE path = ? AND id NOT IN (SELECT id FROM deleted) LIMIT 1", arrayOf(path)).use { it.moveToFirst() }
+
+    /** Every trace of [ids] on this phone's side, except what the backend holds (the storage run removes that). */
+    fun dropDeleted(ids: Collection<String>) {
+        removeDocs(ids)
+        deleteByIds("parked_docs", ids)
+        deleteByIds("cloud", ids)
+        deleteByIds("seen", ids)
+        deleteByIds("actions", ids)
+    }
+
+    private fun updateByIds(sqlPrefix: String, ids: Collection<String>) {
+        ids.chunked(400).forEach { batch ->
+            writableDatabase.execSQL("$sqlPrefix (" + batch.joinToString(",") { "?" } + ")", batch.toTypedArray())
+        }
+    }
+
     fun removeDocs(ids: Collection<String>) {
         deleteByIds("docs", ids)
         deleteByIds("doc_words", ids)
@@ -1684,6 +1792,27 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
                 withText = c.getInt(5)
             }
         }
+        // what the library holds by kind: clips, PDF documents (a file once, whatever its pages) and their pages
+        var clips = 0
+        var pdfPages = 0
+        var pdfDocs = 0
+        db.rawQuery(
+            "SELECT COALESCE(SUM(json LIKE '%\"kind_s\":\"video\"%'), 0), COALESCE(SUM(json LIKE '%\"kind_s\":\"pdf_page\"%'), 0), " +
+                "COUNT(DISTINCT CASE WHEN json LIKE '%\"kind_s\":\"pdf_page\"%' THEN COALESCE(NULLIF(substr(json, instr(json, '\"parent_s\":\"') + 12, 32), ''), path) END) FROM docs",
+            null,
+        ).use { c ->
+            if (c.moveToFirst()) {
+                clips = c.getInt(0)
+                pdfPages = c.getInt(1)
+                pdfDocs = c.getInt(2)
+            }
+        }
+        // a PDF's bytes once, not once per page
+        db.rawQuery(
+            "SELECT COALESCE(SUM(size_bytes), 0) FROM docs WHERE json LIKE '%\"kind_s\":\"pdf_page\"%' AND json NOT LIKE '%\"page_i\":1,%' AND json NOT LIKE '%\"page_i\":1}%'",
+            null,
+        ).use { c -> if (c.moveToFirst()) bytes -= c.getLong(0) }
+
         val unread = db.rawQuery(
             "SELECT COUNT(*) FROM docs WHERE meaning IS NULL OR meaning = '' OR embed_model IS NULL OR embed_model = ''",
             null,
@@ -1760,6 +1889,10 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         return LibraryStats(
             total = total,
             bytes = bytes,
+            photos = (total - clips - pdfPages).coerceAtLeast(0),
+            clips = clips,
+            pdfDocs = pdfDocs,
+            pdfPages = pdfPages,
             tagged = tagged,
             withPeople = withPeople,
             withPlace = withPlace,
@@ -2052,7 +2185,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
     companion object {
         private const val NAME = "photo_cache.db"
-        private const val VERSION = 33
+        private const val VERSION = 34
 
         @Volatile private var shared: PhotoCache? = null
 
@@ -2131,6 +2264,8 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         private const val CLOUD_TABLE = "CREATE TABLE IF NOT EXISTS cloud (id TEXT PRIMARY KEY NOT NULL, bytes INTEGER NOT NULL, at INTEGER NOT NULL)"
         private const val ALIASES_TABLE = "CREATE TABLE IF NOT EXISTS aliases (alias_id TEXT PRIMARY KEY NOT NULL, id TEXT NOT NULL)"
         private const val SEEN_TABLE = "CREATE TABLE IF NOT EXISTS seen (id TEXT PRIMARY KEY NOT NULL)"
+        // items deleted on any device of the index: when (ms), whether the account was told, whether this phone must still ask to remove its file
+        private const val DELETED_TABLE = "CREATE TABLE IF NOT EXISTS deleted (id TEXT PRIMARY KEY NOT NULL, at INTEGER NOT NULL, sent INTEGER NOT NULL DEFAULT 0, prompt INTEGER NOT NULL DEFAULT 0)"
         private const val PDF_PAGES_TABLE = "CREATE TABLE IF NOT EXISTS pdf_pages (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, pages INTEGER NOT NULL)"
     }
 }

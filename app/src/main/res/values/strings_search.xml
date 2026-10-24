@@ -33,7 +33,7 @@
     <string name="cd_has_people">Has people</string>
     <string name="cd_has_location">Has a location</string>
     <string name="this_one">This one</string>
-    <string name="delete_text">They are removed from this phone and from your index. This cannot be undone.</string>
+    <string name="delete_text">Removed from every device, from your index and from your backup. This cannot be undone.</string>
     <string name="delete">Delete</string>
     <string name="cancel">Cancel</string>
     <string name="cd_remove">Remove</string>
@@ -144,4 +144,7 @@
         <item>Same photo (EXIF)</item>
         <item>Same file (exact copy)</item>
     </string-array>
+    <plurals name="delete_title_docs"><item quantity="one">Delete %1$s document?</item><item quantity="other">Delete %1$s documents?</item></plurals>
+    <plurals name="delete_title_clips"><item quantity="one">Delete %1$s clip?</item><item quantity="other">Delete %1$s clips?</item></plurals>
+    <plurals name="delete_title_items"><item quantity="one">Delete %1$s item?</item><item quantity="other">Delete %1$s items?</item></plurals>
 </resources>

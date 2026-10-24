@@ -34,6 +34,10 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                 prefs.lastWatchSyncAt = System.currentTimeMillis()
             }
             promote("Preparing", 0, 0)
+            // deletions first: this phone's are told to the account, the other devices' are removed here
+            runCatching { com.opensolr.photos.storage.Deletions.push(applicationContext); com.opensolr.photos.storage.Deletions.pull(applicationContext) }
+            // and what the other devices changed in the index comes into this phone's copy before anything is sent
+            runCatching { com.opensolr.photos.search.IndexChanges.pull(applicationContext) }
             val report = SyncEngine(applicationContext).run { progress ->
                 setProgress(workDataOf(KEY_PHASE to progress.phase, KEY_DONE to progress.done, KEY_TOTAL to progress.total))
                 val now = System.currentTimeMillis()

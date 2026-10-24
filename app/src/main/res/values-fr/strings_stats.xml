@@ -5,7 +5,7 @@
     <string name="st_partial">Ce téléphone lit encore sa copie de votre index. Les chiffres grandissent avec.</string>
     <string name="st_overview">Aperçu</string>
     <string name="st_photos">Photos</string>
-    <string name="st_size">Taille sur le téléphone</string>
+    <string name="st_size">Taille totale</string>
     <string name="st_tagged">Étiquetées</string>
     <string name="st_with_people">Avec des personnes</string>
     <string name="st_with_place">Avec un lieu</string>
@@ -37,4 +37,8 @@
     <string name="st_show_all">Tout afficher (%1$s)</string>
     <string name="st_show_fewer">Afficher moins</string>
     <string name="st_open">Ouvrir ces photos</string>
+    <string name="st_items">Éléments</string>
+    <string name="st_clips">Clips</string>
+    <string name="st_pdf_docs">Documents PDF</string>
+    <string name="st_pdf_pages">%1$s pages</string>
 </resources>

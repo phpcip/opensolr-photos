@@ -119,7 +119,7 @@ class PhotoClusterOverlay(
         dst.set(cluster.centerX - half, cluster.centerY - half, cluster.centerX + half, cluster.centerY + half)
 
         val first = cluster.pins.first().hit
-        val thumb = thumbs.get(first.id) ?: run { requestThumb(first.id, first.mediaId, mapView); null }
+        val thumb = thumbs.get(first.id) ?: run { requestThumb(first, mapView); null }
 
         canvas.save()
         clipPath.reset()
@@ -150,11 +150,12 @@ class PhotoClusterOverlay(
         }
     }
 
-    private fun requestThumb(id: String, mediaId: Long, mapView: MapView) {
-        if (mediaId <= 0 || !loading.add(id)) return
-        val uri = ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, mediaId)
+    private fun requestThumb(hit: com.opensolr.photos.search.PhotoHit, mapView: MapView) {
+        val id = hit.id
+        if (!loading.add(id)) return
+        // this phone's copy of the photo (its file, or its 720p copy), never another phone's file id
         val request = ImageRequest.Builder(context)
-            .data(uri)
+            .data(com.opensolr.photos.ui.Images.small(context, hit))
             .size(max(1, (markerSize * 2).roundToInt()))
             .allowHardware(false)
             .target(

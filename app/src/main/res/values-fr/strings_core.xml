@@ -172,9 +172,11 @@
         <item quantity="other">Enregistrer %1$s photos en PDF</item>
     </plurals>
     <string name="pdf_name">Nom du fichier</string>
-    <string name="pdf_pick">Choisir où</string>
+    <string name="pdf_pick">Enregistrer</string>
     <string name="pdf_saved">%1$s enregistré</string>
     <string name="pdf_saved_some">%1$s enregistré : %2$s photos sur %3$s. Les autres n’ont pas pu être lues.</string>
     <string name="pdf_failed">Le PDF n’a pas pu être enregistré.</string>
     <string name="pdf_default_name">Photos %1$s</string>
+    <plurals name="sh_files"><item quantity="one">Partager %1$s fichier</item><item quantity="other">Partager %1$s fichiers</item></plurals>
+    <string name="ac_share_files">Partager des fichiers</string>
 </resources>

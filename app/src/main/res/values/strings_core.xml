@@ -165,10 +165,12 @@
         <item quantity="other">Save %1$s photos as PDF</item>
     </plurals>
     <string name="pdf_name">File name</string>
-    <string name="pdf_pick">Choose where</string>
+    <string name="pdf_pick">Save</string>
     <string name="pdf_saved">Saved %1$s</string>
     <string name="pdf_saved_some">Saved %1$s: %2$s of %3$s photos. The rest could not be read.</string>
     <string name="pdf_failed">The PDF could not be saved.</string>
     <string name="pdf_default_name">Photos %1$s</string>
     <string name="dock_pdf" translatable="false">PDF</string>
+    <plurals name="sh_files"><item quantity="one">Share %1$s file</item><item quantity="other">Share %1$s files</item></plurals>
+    <string name="ac_share_files">Share files</string>
 </resources>

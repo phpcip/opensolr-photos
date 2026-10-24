@@ -158,9 +158,11 @@
         <item quantity="other">将 %1$s 张照片保存为 PDF</item>
     </plurals>
     <string name="pdf_name">文件名</string>
-    <string name="pdf_pick">选择位置</string>
+    <string name="pdf_pick">保存</string>
     <string name="pdf_saved">已保存 %1$s</string>
     <string name="pdf_saved_some">已保存 %1$s（%3$s 张中的 %2$s 张，其余无法读取）</string>
     <string name="pdf_failed">无法保存 PDF。</string>
     <string name="pdf_default_name">照片 %1$s</string>
+    <plurals name="sh_files"><item quantity="other">分享 %1$s 个文件</item></plurals>
+    <string name="ac_share_files">分享文件</string>
 </resources>

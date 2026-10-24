@@ -5,7 +5,7 @@
     <string name="st_partial">この端末はまだインデックスのコピーを読み込み中です。数値は読み込みに合わせて増えます。</string>
     <string name="st_overview">概要</string>
     <string name="st_photos">写真</string>
-    <string name="st_size">端末上のサイズ</string>
+    <string name="st_size">合計サイズ</string>
     <string name="st_tagged">タグ付き</string>
     <string name="st_with_people">人物あり</string>
     <string name="st_with_place">場所あり</string>
@@ -37,4 +37,8 @@
     <string name="st_show_all">すべて表示（%1$s）</string>
     <string name="st_show_fewer">表示を減らす</string>
     <string name="st_open">これらの写真を開く</string>
+    <string name="st_items">項目</string>
+    <string name="st_clips">クリップ</string>
+    <string name="st_pdf_docs">PDF ドキュメント</string>
+    <string name="st_pdf_pages">%1$s ページ</string>
 </resources>

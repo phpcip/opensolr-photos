@@ -165,9 +165,11 @@
         <item quantity="other">%1$s Fotos als PDF speichern</item>
     </plurals>
     <string name="pdf_name">Dateiname</string>
-    <string name="pdf_pick">Ort wählen</string>
+    <string name="pdf_pick">Speichern</string>
     <string name="pdf_saved">%1$s gespeichert</string>
     <string name="pdf_saved_some">%1$s gespeichert: %2$s von %3$s Fotos. Der Rest war nicht lesbar.</string>
     <string name="pdf_failed">Das PDF konnte nicht gespeichert werden.</string>
     <string name="pdf_default_name">Fotos %1$s</string>
+    <plurals name="sh_files"><item quantity="one">%1$s Datei teilen</item><item quantity="other">%1$s Dateien teilen</item></plurals>
+    <string name="ac_share_files">Dateien teilen</string>
 </resources>

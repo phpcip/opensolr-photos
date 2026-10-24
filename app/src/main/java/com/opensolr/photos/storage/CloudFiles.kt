@@ -25,7 +25,10 @@ object CloudFiles {
         }
     }
 
-    fun dir(context: Context): File = File(context.filesDir, DIR).apply { mkdirs() }
+    @Volatile private var folder: File? = null
+
+    // the folder is made once; the grid asks for files of it on every cell
+    fun dir(context: Context): File = folder ?: File(context.filesDir, DIR).apply { mkdirs() }.also { folder = it }
 
     fun file(context: Context, id: String): File = File(dir(context), "$id.jpg")
 
@@ -41,6 +44,7 @@ object CloudFiles {
     fun clear(context: Context) {
         ids.clear()
         dir(context).deleteRecursively()
+        folder = null
     }
 
     /** What the picture loader opens for [id]: the 720 px copy when the photo is only in the backend, else null. */

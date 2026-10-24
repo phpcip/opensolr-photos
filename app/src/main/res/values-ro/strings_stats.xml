@@ -5,7 +5,7 @@
     <string name="st_partial">Telefonul încă citește copia indexului tău. Cifrele cresc odată cu ea.</string>
     <string name="st_overview">Pe scurt</string>
     <string name="st_photos">Poze</string>
-    <string name="st_size">Mărime pe telefon</string>
+    <string name="st_size">Mărime totală</string>
     <string name="st_tagged">Etichetate</string>
     <string name="st_with_people">Cu persoane</string>
     <string name="st_with_place">Cu loc</string>
@@ -37,4 +37,8 @@
     <string name="st_show_all">Arată tot (%1$s)</string>
     <string name="st_show_fewer">Arată mai puțin</string>
     <string name="st_open">Deschide pozele</string>
+    <string name="st_items">Elemente</string>
+    <string name="st_clips">Clipuri</string>
+    <string name="st_pdf_docs">Documente PDF</string>
+    <string name="st_pdf_pages">%1$s pagini</string>
 </resources>

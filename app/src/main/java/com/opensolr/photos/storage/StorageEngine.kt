@@ -60,10 +60,22 @@ class StorageEngine(private val context: Context) {
                 ?: return report("failed", message = AppText.s(R.string.sy_cannot_read))
             val localIds = local.keys
 
-            if (prefs.manifestsReadAt == 0L || System.currentTimeMillis() - prefs.manifestsReadAt > MANIFEST_MAX_AGE_MS) {
-                onProgress(Progress(AppText.s(R.string.stg_reading_manifests), 0, 0))
-                readManifests(backend, layout)
-                prefs.manifestsReadAt = System.currentTimeMillis()
+            // what the other phones sent: their manifests are read again as soon as one changed size, so a file another
+            // phone backed up is known here on the next run, not a day later
+            kotlin.run {
+                val sp = context.getSharedPreferences("opensolr_photos", Context.MODE_PRIVATE)
+                val known = runCatching { JSONObject(sp.getString("manifest_sizes", "{}") ?: "{}") }.getOrDefault(JSONObject())
+                val names = backend.list(layout.home).filter { it.startsWith("manifest-") && it.endsWith(".jsonl") }
+                val sizes = names.associateWith { backend.stat(layout.home + "/" + it) ?: -1L }
+                val full = prefs.manifestsReadAt == 0L || System.currentTimeMillis() - prefs.manifestsReadAt > MANIFEST_MAX_AGE_MS
+                val own = "manifest-$device.jsonl"
+                val changed = if (full) names else names.filter { it != own && sizes[it] != known.optLong(it, -2L) }
+                if (changed.isNotEmpty()) {
+                    onProgress(Progress(AppText.s(R.string.stg_reading_manifests), 0, 0))
+                    readManifests(backend, layout, changed)
+                    sp.edit().putString("manifest_sizes", JSONObject(sizes as Map<*, *>).toString()).apply()
+                    if (full) prefs.manifestsReadAt = System.currentTimeMillis()
+                }
             }
 
             // once: the clone read before 3.23.3 lacked the kind of each document (video, PDF page): read again
@@ -79,6 +91,25 @@ class StorageEngine(private val context: Context) {
                 runCatching { com.opensolr.photos.search.EditRepository(context).readDocsIntoCache(ids) }
             }
 
+            // items deleted on any device: their files in the backend go, and this phone's manifest stops listing them
+            var ownGone = false
+            while (true) {
+                val gone = cache.deletedInRemote(BATCH)
+                if (gone.isEmpty()) break
+                for (r in gone) {
+                    guard()
+                    runCatching { backend.delete(layout.restoreCopy(r.id)) }
+                }
+                cache.removeRemote(gone.map { it.id })
+                // a PDF's file goes with its last page
+                gone.map { it.path }.distinct().filter { !cache.remotePathInUse(it) }.forEach { path ->
+                    runCatching { backend.delete(layout.main(path.substringBeforeLast('/', ""), path.substringAfterLast('/'))) }
+                }
+                if (gone.any { it.device == device }) ownGone = true
+                if (gone.size < BATCH) break
+            }
+            if (ownGone) writeManifest(backend, layout, device)
+
             // a run cut short (reinstall, killed app) can leave a half-written file pending in MediaStore: it goes
             dropPendingWrites()
             dropOwnDuplicates()
@@ -92,59 +123,63 @@ class StorageEngine(private val context: Context) {
 
             // originals asked for in bulk (before a change or a clear) come down first
             if (prefs.downloadAllOriginals) {
-                var total = cache.cloudOnlyTotals().first.toInt()
+                val total = cache.cloudOnlyTotals().first.toInt()
                 var done = 0
+                var after = ""
                 while (true) {
-                    val batch = cache.cloudOnlyIds(BATCH)
+                    val batch = cache.cloudOnlyIds(BATCH, after)
                     if (batch.isEmpty()) break
+                    after = batch.last()
                     for (id in batch) {
                         guard()
                         try {
                             downloadOriginal(backend, layout, id)
                             done++
                         } catch (e: NotFoundException) {
+                            // the full copy is not up there: the 720p copy stays, nothing is removed on a miss
                             failed++
-                            cache.removeCloud(id)
-                            CloudFiles.remove(context, id)
                         }
-                        onProgress(Progress(AppText.s(R.string.stg_downloading_originals), done, total))
+                        onProgress(Progress(AppText.s(R.string.stg_downloading_originals), done + failed, total))
                     }
                     if (batch.size < BATCH) break
                 }
+                // a run cut short (Wi-Fi, battery, stop) leaves the request on: the next run carries on
                 prefs.downloadAllOriginals = false
             }
 
             // restore: the photos in the backend that this phone has no file for
             val cloudDir = CloudFiles.dir(context)
-            // the total is counted once, over everything to bring, so the bar and N of M are true from the start
-            // files an earlier run already wrote outside the synced folders are not counted again
-            val toRestore = cache.restorePendingIds(localIds).let { ids ->
-                val paths = cache.mediaFor(ids)
-                val onDisk = MediaScanner.existingPaths(context, paths.values.map { it.second }.filter { it.isNotEmpty() && !it.contains("/files/cloud/") })
-                ids.count { id -> paths[id]?.second?.let { it in onDisk } != true }
-            }
-            // ids dealt with in this run: a clip or a PDF comes back as its file, every page of a PDF at once
-            val handled = HashSet<String>()
+            // which documents have their file here, in whatever folder an earlier run wrote it: never brought twice
+            LocalFiles.refresh(context, local)
+            val toRestore = cache.restorePendingCount { id -> id !in localIds && !LocalFiles.has(id) }
+            // walked by date with a cursor, so files already here never hold back the ones after them
+            var afterTaken = Long.MAX_VALUE
+            var afterId = "\uffff"
             while (true) {
-                // a file an earlier run already wrote (outside the synced folders, so not in the scan) is there: not again
-                val raw = cache.restoreCandidates(localIds, BATCH).filter { it.id !in handled && it.id !in missing }
-                val paths = cache.mediaFor(raw.map { it.id })
-                val onDisk = MediaScanner.existingPaths(context, paths.values.map { it.second }.filter { it.isNotEmpty() && !it.contains("/files/cloud/") })
-                raw.filter { r -> paths[r.id]?.second?.let { it in onDisk } == true }.forEach { handled += it.id }
-                val batch = raw.filter { it.id !in handled }
-                if (raw.isNotEmpty() && batch.isEmpty()) { if (raw.size < BATCH) break else continue }
-                if (batch.isEmpty()) break
-                for (remote in batch) {
+                val page = cache.restoreCandidates(BATCH, afterTaken, afterId)
+                if (page.isEmpty()) break
+                afterTaken = page.last().second
+                afterId = page.last().first.id
+                for ((remote, _) in page) {
+                    // on this phone already, or a page of a PDF whose file just came down with an earlier page
+                    // a clip brought back earlier without its picture: the backend's picture is fetched, nothing drawn here
+                    if (remote.id !in localIds && LocalFiles.has(remote.id) && !ClipThumbs.has(context, remote.id) &&
+                        cache.doc(remote.id)?.json?.let { runCatching { JSONObject(it).optString("kind_s") }.getOrNull() } == "video") {
+                        guard()
+                        runCatching {
+                            val out = java.io.ByteArrayOutputStream()
+                            backend.get(layout.restoreCopy(remote.id), out)
+                            if (out.size() > 0) ClipThumbs.save(context, remote.id, out.toByteArray())
+                        }
+                    }
+                    if (remote.id in localIds || remote.id in missing || LocalFiles.has(remote.id)) continue
                     guard()
-                    if (remote.id in handled) continue
-                    handled += remote.id
                     // videos and PDFs come back as the original file; photos as 720 px copies
                     val doc = cache.doc(remote.id)?.json?.let { runCatching { JSONObject(it) }.getOrNull() }
                     val kind = doc?.optString("kind_s").orEmpty()
                     if (kind == "video" || kind == "pdf_page") {
                         try {
                             downloadOriginal(backend, layout, remote.id)
-                            if (kind == "pdf_page") doc?.optString("parent_s")?.takeIf { it.isNotBlank() }?.let { parent -> handled += cache.docIdsOfParent(parent) }
                             restored++
                         } catch (e: NotFoundException) {
                             failed++
@@ -183,7 +218,7 @@ class StorageEngine(private val context: Context) {
                     }
                     onProgress(Progress(AppText.s(R.string.stg_restoring), restored + failed, maxOf(toRestore, restored + failed)))
                 }
-                if (batch.size < BATCH) break
+                if (page.size < BATCH) break
             }
 
             // backup: what is indexed and on this phone but not in the backend yet
@@ -247,17 +282,34 @@ class StorageEngine(private val context: Context) {
         if (held != null) {
             if (!prefs.storageSynced) {
                 runCatching { api.photosStorageSave(session, indexName, held) }.onSuccess { prefs.storageSynced = true }
-            } else if (System.currentTimeMillis() - prefs.storageAskedAt > CONFIG_MAX_AGE_MS) {
-                // the account's copy wins when another phone changed it since
+            } else {
+                // the account decides, every run: another phone changed the backend, or forgot it
+                // (a failed question changes nothing; only a clear answer does)
                 runCatching { api.photosStorageGet(session, indexName) }.onSuccess { answer ->
                     prefs.storageAskedAt = System.currentTimeMillis()
                     val theirs = answer.first
-                    if (theirs != null && theirs.updated > held.updated) prefs.storage = theirs
+                    when {
+                        theirs == null -> {
+                            // forgotten on another phone: forgotten here too; files on this phone stay as they are
+                            prefs.storage = null
+                            prefs.manifestsReadAt = 0L
+                            cache.clearRemote()
+                            context.getSharedPreferences("opensolr_photos", Context.MODE_PRIVATE).edit().remove("manifest_sizes").apply()
+                        }
+                        theirs.updated > held.updated -> {
+                            // another backend: what the old one held no longer applies here
+                            if (theirs.kind != held.kind || theirs.host != held.host || theirs.fields - "host_key" != held.fields - "host_key") {
+                                cache.clearRemote()
+                                prefs.manifestsReadAt = 0L
+                                context.getSharedPreferences("opensolr_photos", Context.MODE_PRIVATE).edit().remove("manifest_sizes").apply()
+                            }
+                            prefs.storage = theirs
+                        }
+                    }
                 }
             }
             return prefs.storage
         }
-        if (System.currentTimeMillis() - prefs.storageAskedAt < CONFIG_ASK_MS) return null
         val answer = api.photosStorageGet(session, indexName)
         prefs.storageAskedAt = System.currentTimeMillis()
         answer.first?.let {
@@ -269,8 +321,7 @@ class StorageEngine(private val context: Context) {
     }
 
     /** Every manifest in the index's folder read into the clone, line by line. */
-    private fun readManifests(backend: Backend, layout: Layout) {
-        val names = backend.list(layout.home).filter { it.startsWith("manifest-") && it.endsWith(".jsonl") }
+    private fun readManifests(backend: Backend, layout: Layout, names: List<String>) {
         val tmp = File.createTempFile("manifest", ".jsonl", context.cacheDir)
         try {
             for (name in names) {
@@ -282,16 +333,21 @@ class StorageEngine(private val context: Context) {
                         val row = parseLine(line, device) ?: continue
                         rows += row
                         if (rows.size >= 500) {
-                            cache.putRemote(rows)
+                            putLive(rows)
                             rows.clear()
                         }
                     }
                 }
-                cache.putRemote(rows)
+                putLive(rows)
             }
         } finally {
             tmp.delete()
         }
+    }
+
+    /** Manifest rows; those of deleted items are kept too, so this run removes their files from the backend. */
+    private fun putLive(rows: List<PhotoCache.Remote>) {
+        if (rows.isNotEmpty()) cache.putRemote(rows)
     }
 
     private fun parseLine(line: String, device: String): PhotoCache.Remote? {
@@ -330,7 +386,11 @@ class StorageEngine(private val context: Context) {
         try {
             // the restore copy: the photo, a clip's first frame or the page itself, at 720 px
             // a file whose picture cannot be drawn still goes up; its restore copy is the stand-in
-            val smallBytes = PhotoReader.representativeJpeg(context, photo, RESTORE_EDGE) ?: PhotoReader.placeholderJpeg(photo.kind, 1280)
+            // a clip's kept picture goes up as it is; one made now is kept too
+            val isClip = photo.kind == com.opensolr.photos.media.Kind.VIDEO
+            val kept = if (isClip && ClipThumbs.has(context, photo.id)) runCatching { ClipThumbs.file(context, photo.id).readBytes() }.getOrNull() else null
+            val made = kept ?: PhotoReader.representativeJpeg(context, photo, RESTORE_EDGE)?.also { if (isClip) runCatching { ClipThumbs.save(context, photo.id, it) } }
+            val smallBytes = made ?: PhotoReader.placeholderJpeg(photo.kind, 1280)
             small.writeBytes(smallBytes)
             val result: Triple<String, Long, String?>
             val already = sentFiles[mainPath]
@@ -404,7 +464,16 @@ class StorageEngine(private val context: Context) {
                     if (n > 0) cache.putAlias(MediaScanner.pageId(newFileId, n), pageId)
                 }
             }
-            LocalFiles.add(pages)
+            LocalFiles.add(pages.associateWith { written.mediaId })
+            // a clip keeps the picture the backend holds for it: the grid shows that one, nothing is drawn here
+            val isClip = cache.doc(id)?.json?.let { runCatching { org.json.JSONObject(it).optString("kind_s") }.getOrNull() } == "video"
+            if (isClip && !ClipThumbs.has(context, id)) {
+                runCatching {
+                    val out = java.io.ByteArrayOutputStream()
+                    backend.get(layout.restoreCopy(id), out)
+                    if (out.size() > 0) ClipThumbs.save(context, id, out.toByteArray())
+                }
+            }
             for (docId in pages) {
                 // the file on the phone is now the one the index knows: its size and hash, so the sync reads nothing
                 cache.updateDocSize(docId, tmp.length(), 0L, md5)
@@ -463,40 +532,24 @@ class StorageEngine(private val context: Context) {
     private data class Written(val folder: String, val name: String, val mediaId: Long, val absolutePath: String)
 
     private fun writeIntoFolders(file: File, folder: String, name: String): Written {
-        val ext = name.substringAfterLast('.', "").lowercase()
-        val mime = when (ext) {
-            "png" -> "image/png"
-            "webp" -> "image/webp"
-            "heic", "heif" -> "image/heic"
-            "gif" -> "image/gif"
-            "mp4", "m4v" -> "video/mp4"
-            "mov" -> "video/quicktime"
-            "mkv" -> "video/x-matroska"
-            "webm" -> "video/webm"
-            "3gp" -> "video/3gpp"
-            "pdf" -> "application/pdf"
-            else -> "image/jpeg"
-        }
-        // each kind into a folder Android lets it live in: its own when allowed, else a folder of the same name there
-        fun under(vararg tops: String) = tops.any { folder.equals(it, true) || folder.startsWith("$it/", true) }
-        val (allowed, fallback) = when {
-            mime.startsWith("video/") -> under("DCIM", "Movies", "Pictures") to "Movies/"
-            mime == "application/pdf" -> under("Download", "Documents") to "Documents/"
-            else -> under("DCIM", "Pictures") to "Pictures/"
-        }
-        val target = (if (allowed) folder else fallback + folder).trim('/') + "/"
+        val mime = mimeOf(name)
+        val target = placedFolder(folder, name)
         val resolver = context.contentResolver
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+        if (anyFolder()) {
             @Suppress("DEPRECATION")
             val root = android.os.Environment.getExternalStorageDirectory()
             val dir = File(root, target).apply { mkdirs() }
+            // the same file already there (an earlier run, or the phone had it): used as it is, never written twice
+            File(dir, name).takeIf { it.exists() && it.length() == file.length() }?.let { same ->
+                val found = MediaScanner.findByPath(context, same.absolutePath)
+                if (found != null) return Written(target, same.name, found.mediaId, same.absolutePath)
+            }
             var out = File(dir, name)
             var n = 1
             while (out.exists()) out = File(dir, name.substringBeforeLast('.') + " (" + n++ + ")" + name.substringAfterLast('.', "").let { if (it.isEmpty()) "" else ".$it" })
             file.copyTo(out, overwrite = false)
-            android.media.MediaScannerConnection.scanFile(context, arrayOf(out.absolutePath), arrayOf(mime), null)
-            val found = MediaScanner.findByPath(context, out.absolutePath)
-            return Written(target, out.name, found?.mediaId ?: 0L, out.absolutePath)
+            // Android is told of the file and its id is known before the run goes on
+            return Written(target, out.name, scanNow(out.absolutePath, mime), out.absolutePath)
         }
         val collection = when {
             mime.startsWith("video/") -> MediaStore.Video.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
@@ -540,6 +593,18 @@ class StorageEngine(private val context: Context) {
         return Written(shownFolder, shownName, android.content.ContentUris.parseId(created), absolute)
     }
 
+    /** The file at [path] added to Android's media list now; its id (0 when Android did not answer within a few seconds). */
+    private fun scanNow(path: String, mime: String): Long {
+        val latch = java.util.concurrent.CountDownLatch(1)
+        var id = 0L
+        android.media.MediaScannerConnection.scanFile(context, arrayOf(path), arrayOf(mime)) { _, uri ->
+            id = uri?.let { runCatching { android.content.ContentUris.parseId(it) }.getOrNull() } ?: 0L
+            latch.countDown()
+        }
+        latch.await(10, java.util.concurrent.TimeUnit.SECONDS)
+        return if (id > 0) id else MediaScanner.findByPath(context, path)?.mediaId ?: 0L
+    }
+
     private fun guard() {
         if (StorageWorker.stopRequested.get()) throw StoppedException()
         checkBattery()
@@ -556,6 +621,46 @@ class StorageEngine(private val context: Context) {
         StorageReport(System.currentTimeMillis(), status, uploaded, restored, failed, message)
 
     companion object {
+
+        fun mimeOf(name: String): String = when (name.substringAfterLast('.', "").lowercase()) {
+            "png" -> "image/png"
+            "webp" -> "image/webp"
+            "heic", "heif" -> "image/heic"
+            "gif" -> "image/gif"
+            "mp4", "m4v" -> "video/mp4"
+            "mov" -> "video/quicktime"
+            "mkv" -> "video/x-matroska"
+            "webm" -> "video/webm"
+            "3gp" -> "video/3gpp"
+            "pdf" -> "application/pdf"
+            else -> "image/jpeg"
+        }
+
+        /** With All files access (or before Android 10) a file can go into any folder: the very one it had on the other phone. */
+        fun anyFolder(): Boolean = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
+            (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && android.os.Environment.isExternalStorageManager())
+
+        /** The folder a file of the backend is written into: its own where Android allows the kind there, else one of the same name under Movies, Documents or Pictures. */
+        fun placedFolder(folder: String, name: String): String {
+            if (anyFolder() && folder.isNotBlank()) return folder.trim('/') + "/"
+            val mime = mimeOf(name)
+            fun under(vararg tops: String) = tops.any { folder.equals(it, true) || folder.startsWith("$it/", true) }
+            val (allowed, fallback) = when {
+                mime.startsWith("video/") -> under("DCIM", "Movies", "Pictures") to "Movies/"
+                mime == "application/pdf" -> under("Download", "Documents") to "Documents/"
+                else -> under("DCIM", "Pictures") to "Pictures/"
+            }
+            return (if (allowed) folder else fallback + folder).trim('/') + "/"
+        }
+
+        /** The full path on this phone where the backend's file at [remotePath] is written. */
+        @Suppress("DEPRECATION")
+        fun placedPath(remotePath: String): String {
+            val folder = remotePath.substringBeforeLast('/', "").trim('/')
+            val name = remotePath.substringAfterLast('/')
+            return android.os.Environment.getExternalStorageDirectory().absolutePath + "/" + placedFolder(folder, name) + name
+        }
+
         const val RESTORE_EDGE = 1280
         const val FULL_HD_EDGE = 1920
         const val BATTERY_PAUSE_PERCENT = 10

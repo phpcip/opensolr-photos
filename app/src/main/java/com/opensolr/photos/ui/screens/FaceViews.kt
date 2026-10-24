@@ -236,10 +236,15 @@ internal fun FaceReviewPanel(review: FaceReview, topPad: androidx.compose.ui.uni
             if (review.faces.isEmpty()) {
                 Text(stringResource(R.string.fc_none, review.person), style = MaterialTheme.typography.bodyMedium, color = p.ink, modifier = Modifier.padding(horizontal = 16.dp))
             } else {
+            val touch = androidx.compose.runtime.remember { GridTouch() }
+            androidx.compose.runtime.LaunchedEffect(grid) {
+                androidx.compose.runtime.snapshotFlow { grid.isScrollInProgress }.collect { moving -> if (!moving) touch.lastScrollEnd = android.os.SystemClock.uptimeMillis() }
+            }
             LazyVerticalGrid(
                 state = grid,
                 columns = GridCells.Fixed(3),
                 modifier = Modifier.fillMaxSize().dragSelect(
+                    touch = touch,
                     gridState = grid,
                     idAt = { review.faces.getOrNull(it)?.fid },
                     onStart = { fid ->

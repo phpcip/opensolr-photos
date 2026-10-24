@@ -213,6 +213,14 @@ class SyncEngine(private val context: Context) {
                 local = MediaScanner.scan(context, prefs.folders, cache.aliases(), com.opensolr.photos.media.ScanOptions.of(context))
                     ?: return report("failed", message = AppText.s(R.string.sy_cannot_read))
             }
+            // items deleted on any device: a file of theirs still here (waiting for the owner's yes) is never indexed
+            // again; a file of that name written well after the deletion is a new item
+            val dead = cache.deletedAmong(local.keys)
+            if (dead.isNotEmpty()) {
+                val renewed = dead.filter { (id, at) -> (local[id]?.modifiedSec ?: 0L) * 1000L > at + 60_000L }.keys
+                if (renewed.isNotEmpty()) cache.forgetDeleted(renewed)
+                local = local.filterKeys { it !in dead || it in renewed }
+            }
             localCount = local.size
             onPhone = local.keys
 
@@ -262,6 +270,13 @@ class SyncEngine(private val context: Context) {
             if (!sp.getBoolean("skipped_retry_3232", false)) {
                 cache.skipped().forEach { cache.clearSkipped(it.id) }
                 sp.edit().putBoolean("skipped_retry_3232", true).apply()
+            }
+            // clips indexed without picture, length or date (Android could not read them) are read once more:
+            // the app now reads such files itself
+            if (!sp.getBoolean("noread_retry_3240", false)) {
+                val unread = cache.docIdsWhere("json LIKE '%\"no_picture_b\":true%'")
+                if (unread.isNotEmpty()) prefs.resyncIds = prefs.resyncIds + unread
+                sp.edit().putBoolean("noread_retry_3240", true).apply()
             }
             val forced = prefs.resyncIds
             val wordingReset = prefs.wordingResetIds
@@ -330,8 +345,12 @@ class SyncEngine(private val context: Context) {
                     if (faces != null && edits == null && names.isEmpty()) {
                         names = cache.facesOf(photo.id).mapNotNull { it.person }.distinctBy { it.lowercase() }
                     }
+                    // a clip Android could not measure gets its length from the file's own boxes
+                    val measured = if (photo.kind == com.opensolr.photos.media.Kind.VIDEO && photo.durationMs <= 0)
+                        com.opensolr.photos.media.Mp4Info.read(context, photo.uri)?.durationMs?.takeIf { it > 0 }?.let { photo.copy(durationMs = it) } ?: photo
+                        else photo
                     items += IngestItem(
-                        photo, jpeg, tags, meaning, weighed[photo.id] ?: read.md5, names, resetWording = cleared || photo.id in wordingReset,
+                        measured, jpeg, tags, meaning, weighed[photo.id] ?: read.md5, names, resetWording = cleared || photo.id in wordingReset,
                         ownerTags = edits != null, ownerPersons = edits?.persons != null, ownerMeaning = !edits?.meaning.isNullOrEmpty(),
                         faces = faces, pixelHash = read.pixelHash, noRead = read.noRead,
                     )

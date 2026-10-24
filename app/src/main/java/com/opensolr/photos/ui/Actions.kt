@@ -82,26 +82,38 @@ object Actions {
     }
 
 
-    fun contentUris(context: Context, hits: List<PhotoHit>): List<Uri> {
+    fun contentUris(context: Context, hits: List<PhotoHit>, keepIds: MutableMap<String, Uri>? = null): List<Uri> {
         if (hits.isEmpty()) return emptyList()
 
-        val wanted = hits.mapNotNull { it.mediaId.takeIf { id -> id > 0 } }.toSet()
+        val wanted = hits.mapNotNull { idHere(it).takeIf { id -> id > 0 } }.toSet()
         val alive = MediaScanner.existing(context, wanted)
         val authority = context.packageName + ".share"
-        return hits.mapNotNull { hit ->
+        return hits.mapNotNull { hit -> uriFor(context, hit, alive, authority)?.also { keepIds?.put(hit.id, it) } }
+    }
+
+    // this phone's own MediaStore id of the file, never another phone's
+    private fun idHere(hit: PhotoHit): Long = com.opensolr.photos.storage.LocalFiles.mediaId(hit.id) ?: hit.mediaId
+
+    private fun uriFor(context: Context, hit: PhotoHit, alive: Set<Long>, authority: String): Uri? = run {
             // a photo only the backend has is shared as its 720 px copy
             com.opensolr.photos.storage.CloudFiles.model(context, hit.id)?.let { file ->
-                return@mapNotNull androidx.core.content.FileProvider.getUriForFile(context, authority, file)
+                return@run androidx.core.content.FileProvider.getUriForFile(context, authority, file)
             }
             // a video or a PDF: the file itself, from its own collection
-            if (hit.mediaKind != com.opensolr.photos.media.Kind.PHOTO && hit.mediaId > 0) return@mapNotNull hit.uri
+            if (hit.mediaKind != com.opensolr.photos.media.Kind.PHOTO && idHere(hit) > 0) return@run hit.uri
             val mediaId = when {
-                hit.mediaId > 0 && hit.mediaId in alive -> hit.mediaId
+                idHere(hit) > 0 && idHere(hit) in alive -> idHere(hit)
 
                 else -> MediaScanner.findByPath(context, hit.path)?.mediaId
             }
             mediaId?.let { ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, it) }
         }
+
+    /** [contentUris] per hit id, for callers that must keep each one in its place. */
+    fun contentUrisByHit(context: Context, hits: List<PhotoHit>): Map<String, Uri> {
+        val out = LinkedHashMap<String, Uri>(hits.size)
+        contentUris(context, hits, keepIds = out)
+        return out
     }
 
     fun contentUrisByPhoto(context: Context, hits: List<PhotoHit>): Map<String, Uri> {
@@ -119,13 +131,29 @@ object Actions {
         return out
     }
 
+    /** What is shared: every page of one PDF is that one PDF file. */
+    fun shareItems(hits: List<PhotoHit>): List<PhotoHit> =
+        hits.distinctBy { if (it.isPdfPage) "pdf:" + (it.parentId ?: it.path) else it.id }
+
+    /** The type the receiving app is told: photos, clips, PDFs, or any file when they are mixed. */
+    private fun shareType(hits: List<PhotoHit>): String {
+        val kinds = hits.map { it.mediaKind }.toSet()
+        return when {
+            kinds == setOf(com.opensolr.photos.media.Kind.PHOTO) -> "image/*"
+            kinds == setOf(com.opensolr.photos.media.Kind.VIDEO) -> "video/*"
+            kinds == setOf(com.opensolr.photos.media.Kind.PDF) -> "application/pdf"
+            else -> "*/*"
+        }
+    }
+
     fun sharePhotos(context: Context, hits: List<PhotoHit>) {
-        val uris = ArrayList(contentUris(context, hits))
+        val items = shareItems(hits)
+        val uris = ArrayList(contentUris(context, items))
         if (uris.isEmpty()) {
             toast(context, R.string.ac_photos_gone)
             return
         }
-        startShare(context, uris, "image/*")
+        startShare(context, uris, shareType(items))
     }
 
     /**
@@ -133,8 +161,12 @@ object Actions {
      * of the share before are removed first. [progress] gets (done, total). Runs off the main thread.
      */
     suspend fun shareCopies(context: Context, hits: List<PhotoHit>, edge: Int, progress: (Int, Int) -> Unit = { _, _ -> }) {
-        val sources = contentUris(context, hits)
-        if (sources.isEmpty()) {
+        // only photos are made smaller; clips and PDFs always go as their own files
+        val items = shareItems(hits)
+        val photos = items.filter { it.mediaKind == com.opensolr.photos.media.Kind.PHOTO }
+        val files = contentUris(context, items.filter { it.mediaKind != com.opensolr.photos.media.Kind.PHOTO })
+        val sources = contentUris(context, photos)
+        if (sources.isEmpty() && files.isEmpty()) {
             toast(context, R.string.ac_photos_gone)
             return
         }
@@ -149,11 +181,12 @@ object Actions {
             }
             progress(i + 1, sources.size)
         }
+        uris += files
         if (uris.isEmpty()) {
             toast(context, R.string.ac_photos_gone)
             return
         }
-        startShare(context, uris, "image/jpeg")
+        startShare(context, uris, if (files.isEmpty()) "image/jpeg" else "*/*")
     }
 
     private fun startShare(context: Context, uris: ArrayList<Uri>, type: String) {
@@ -167,7 +200,7 @@ object Actions {
         // the receiving app gets read access to every file, not only the first
         intent.clipData = android.content.ClipData.newRawUri("", uris.first()).apply { uris.drop(1).forEach { addItem(android.content.ClipData.Item(it)) } }
         try {
-            context.startActivity(Intent.createChooser(intent, AppText.s(R.string.ac_share_photos)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            context.startActivity(Intent.createChooser(intent, AppText.s(if (type.startsWith("image/")) R.string.ac_share_photos else R.string.ac_share_files)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         } catch (e: ActivityNotFoundException) {
             toast(context, R.string.ac_no_share)
         }
@@ -217,12 +250,19 @@ object Actions {
     const val SHARE_EDGE_PX = 1024
     private const val SHARE_DIR = "share"
 
-    fun deleteRequest(context: Context, uris: List<Uri>): IntentSender? {
+    fun deleteRequest(context: Context, all: List<Uri>): IntentSender? {
+        // only files on this phone are asked about; a 720p copy or another phone's item goes from the index alone
+        val uris = all.filter { it.authority == MediaStore.AUTHORITY }
         if (uris.isEmpty()) return null
+        // Android's delete prompt takes photos and clips only; a PDF (a plain file) is removed here directly,
+        // which this app may do for its own files and, with All files access, for any
+        val (media, files) = uris.partition { u -> u.pathSegments.any { it == "images" || it == "video" } }
+        files.forEach { runCatching { context.contentResolver.delete(it, null, null) } }
+        if (media.isEmpty()) return null
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            MediaStore.createDeleteRequest(context.contentResolver, uris).intentSender
+            runCatching { MediaStore.createDeleteRequest(context.contentResolver, media).intentSender }.getOrNull()
         } else {
-            uris.forEach {
+            media.forEach {
                 try {
                     context.contentResolver.delete(it, null, null)
                 } catch (e: Exception) {

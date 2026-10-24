@@ -33,7 +33,7 @@
     <string name="cd_has_people">Mit Personen</string>
     <string name="cd_has_location">Mit Ort</string>
     <string name="this_one">Dieses</string>
-    <string name="delete_text">Sie werden von diesem Telefon und aus Ihrem Index entfernt. Das lässt sich nicht rückgängig machen.</string>
+    <string name="delete_text">Wird von allen Geräten, aus deinem Index und aus deinem Backup entfernt. Das kann nicht rückgängig gemacht werden.</string>
     <string name="delete">Löschen</string>
     <string name="cancel">Abbrechen</string>
     <string name="cd_remove">Entfernen</string>
@@ -144,4 +144,7 @@
         <item>Gleiches Foto (EXIF)</item>
         <item>Gleiche Datei (exakte Kopie)</item>
     </string-array>
+    <plurals name="delete_title_docs"><item quantity="one">%1$s Dokument löschen?</item><item quantity="other">%1$s Dokumente löschen?</item></plurals>
+    <plurals name="delete_title_clips"><item quantity="one">%1$s Clip löschen?</item><item quantity="other">%1$s Clips löschen?</item></plurals>
+    <plurals name="delete_title_items"><item quantity="one">%1$s Element löschen?</item><item quantity="other">%1$s Elemente löschen?</item></plurals>
 </resources>

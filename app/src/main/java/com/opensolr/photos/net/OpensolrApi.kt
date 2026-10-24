@@ -588,6 +588,22 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
         Unit
     }
 
+    /** Tells the account that [ids] were deleted on this device, so every other device of the index removes them too. */
+    suspend fun photosDeletedAdd(session: Session, name: String, ids: Collection<String>, device: String) = withContext(Dispatchers.IO) {
+        storageAnswer(post(MANAGEMENT + "photos_deleted_add", form(session) { add("core_name", name); add("ids", ids.joinToString(",")); add("device", device) }))
+        Unit
+    }
+
+    /** The deletions recorded after [since]: (id, when) pairs, the next cursor, and whether more follow. */
+    suspend fun photosDeletedSince(session: Session, name: String, since: Long): Triple<List<Pair<String, Long>>, Long, Boolean> = withContext(Dispatchers.IO) {
+        val json = storageAnswer(post(MANAGEMENT + "photos_deleted_since", form(session) { add("core_name", name); add("since", since.toString()); add("limit", "2000") }))
+        val msg = json.optJSONObject("msg") ?: JSONObject()
+        val list = msg.optJSONArray("deleted")
+        val out = ArrayList<Pair<String, Long>>()
+        if (list != null) for (i in 0 until list.length()) list.optJSONObject(i)?.let { o -> out += o.optString("id") to o.optLong("at") }
+        Triple(out, msg.optLong("next", since), msg.optBoolean("more", false))
+    }
+
     private fun storageAnswer(text: String): JSONObject {
         val json = parseObject(text)
         if (!json.optBoolean("status")) throw ServiceException(platformMessage(text))

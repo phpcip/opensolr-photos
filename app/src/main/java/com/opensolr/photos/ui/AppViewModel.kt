@@ -1330,10 +1330,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val local = scanned.keys
                 val (count, bytes) = photoCache.remoteTotals()
                 val (cloud, cloudBytes) = photoCache.cloudOnlyTotals()
-                // on the phone: the files in the synced folders (a PDF once, not per page) plus the 720p copies
-                val fileBytes = scanned.values.distinctBy { it.parentId ?: it.id }.sumOf { it.sizeBytes }
+                // on the phone: every item whose file is here, in any folder (a restored clip or PDF too), plus the 720p copies
+                com.opensolr.photos.storage.LocalFiles.refresh(context, scanned)
+                val here = com.opensolr.photos.storage.LocalFiles.ids.keys.toSet()
+                val cloudIds = photoCache.cloudIds()
+                val elsewhere = here - local
+                val files = photoCache.docFilesOf(elsewhere)
+                // a file's bytes once, however many pages of it are items
+                val fileBytes = scanned.values.distinctBy { it.parentId ?: it.id }.sumOf { it.sizeBytes } +
+                    files.values.filter { it.path.isNotEmpty() }.distinctBy { it.path }.sumOf { it.size }
                 val copyBytes = com.opensolr.photos.storage.CloudFiles.dir(context).listFiles()?.sumOf { it.length() } ?: 0L
-                StorageStats(count, bytes, photoCache.backupPendingCount(local), cloud, cloudBytes, local.size + cloud.toInt(), fileBytes + copyBytes)
+                StorageStats(count, bytes, photoCache.backupPendingCount(local), cloud, cloudBytes, (here + cloudIds).size, fileBytes + copyBytes)
             }
             _state.update { it.copy(storageStats = stats, storage = prefs.storage, storageReport = prefs.storageReport) }
         }
@@ -2337,6 +2344,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** One item (a photo, a clip, a PDF with all its pages) checked or unchecked as a whole, never half of it. */
+    fun setSelected(ids: List<String>, on: Boolean) {
+        val waiting = pendingIds()
+        _state.update {
+            val next = if (on) it.selectedIds + ids.filter { id -> id !in waiting } else it.selectedIds - ids.toSet()
+            if (next.isEmpty()) it.copy(selecting = false, selectedIds = emptySet(), selectedOffscreen = emptyMap(), selectedGroups = emptyMap())
+            else it.copy(selecting = true, selectedIds = next)
+        }
+    }
+
     fun toggleSelectedGroup(key: String, allIds: List<String>, range: Pair<Long, Long>? = null) {
         val waiting = pendingIds()
         val ids = allIds.filter { it !in waiting }
@@ -2582,8 +2599,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun removeDeleted(ids: Set<String>) {
-        if (ids.isEmpty()) return
+    fun removeDeleted(asked: Set<String>) {
+        if (asked.isEmpty()) return
+        // a PDF goes whole: every page of a deleted file leaves the index and the other devices, not just the one shown
+        val byId = _state.value.hits.associateBy { it.id }
+        val ids = asked.flatMap { id ->
+            val hit = byId[id]
+            val parent = hit?.parentId
+            if (hit != null && hit.isPdfPage && parent != null) {
+                listOf(id) + (1..hit.pages.coerceAtLeast(1)).map { com.opensolr.photos.media.MediaScanner.pageId(parent, it) }
+            } else listOf(id)
+        }.toSet()
         _state.update {
             it.copy(
                 hits = it.hits.filterNot { hit -> hit.id in ids },
@@ -2597,7 +2623,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val connection = prefs.connection ?: return@launch
 
                 com.opensolr.photos.net.SolrClient(connection).delete(ids, now = true)
-                withContext(Dispatchers.IO) { photoCache.removeDocs(ids); photoCache.clearActions(ids) }
+                // deleted everywhere: every other device of the index removes it too, and the backend's copy goes
+                withContext(Dispatchers.IO) { com.opensolr.photos.storage.Deletions.deletedHere(context, ids); photoCache.clearActions(ids) }
             } catch (e: Exception) {
 
             }

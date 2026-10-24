@@ -33,7 +33,7 @@
     <string name="cd_has_people">Con personas</string>
     <string name="cd_has_location">Con lugar</string>
     <string name="this_one">Esta</string>
-    <string name="delete_text">Se eliminan de este teléfono y de tu índice. No se puede deshacer.</string>
+    <string name="delete_text">Se elimina de todos los dispositivos, de tu índice y de tu copia de seguridad. No se puede deshacer.</string>
     <string name="delete">Eliminar</string>
     <string name="cancel">Cancelar</string>
     <string name="cd_remove">Quitar</string>
@@ -147,4 +147,7 @@
         <item>Misma foto (EXIF)</item>
         <item>Mismo archivo (copia exacta)</item>
     </string-array>
+    <plurals name="delete_title_docs"><item quantity="one">¿Eliminar %1$s documento?</item><item quantity="other">¿Eliminar %1$s documentos?</item></plurals>
+    <plurals name="delete_title_clips"><item quantity="one">¿Eliminar %1$s clip?</item><item quantity="other">¿Eliminar %1$s clips?</item></plurals>
+    <plurals name="delete_title_items"><item quantity="one">¿Eliminar %1$s elemento?</item><item quantity="other">¿Eliminar %1$s elementos?</item></plurals>
 </resources>

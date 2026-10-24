@@ -63,7 +63,8 @@ object VideoFrames {
     fun frame(context: Context, uri: Uri, edge: Int): Bitmap? {
         val a = retrieverFrame(context, uri)
         val b = if (a == null) systemThumbnail(context, uri, edge) else null
-        val c = if (a == null && b == null) exoFrame(context, uri) else null
+        // a clip Android cannot read: the app's own player, turned the way the clip is shown
+        val c = if (a == null && b == null) playerFrame(context, uri, edge) else null
         val raw = a ?: b ?: c ?: return null
         val longEdge = max(raw.width, raw.height)
         if (longEdge <= edge) return raw
@@ -73,13 +74,56 @@ object VideoFrames {
         return small
     }
 
+    /**
+     * For the grid: the thumbnail the phone already keeps for the clip, else one frame read at grid size. Never
+     * a player: a grid holds dozens of clips at once.
+     */
+    fun thumbnail(context: Context, uri: Uri, edge: Int): Bitmap? =
+        systemThumbnail(context, uri, edge)?.takeIf { !isBlank(it) } ?: scaledFrame(context, uri, edge)
+
+    /** True when the picture is all but black (a clip that fades in, a dark first second): never kept as its picture. */
+    fun isBlank(bitmap: Bitmap?): Boolean {
+        if (bitmap == null || bitmap.width <= 0 || bitmap.height <= 0) return true
+        var brightest = 0
+        for (yi in 0 until 12) for (xi in 0 until 12) {
+            val c = bitmap.getPixel(bitmap.width * (2 * xi + 1) / 24, bitmap.height * (2 * yi + 1) / 24)
+            brightest = maxOf(brightest, (Color.red(c) * 3 + Color.green(c) * 6 + Color.blue(c)) / 10)
+            if (brightest > 24) return false
+        }
+        return true
+    }
+
+    /** The moments tried in turn for a clip's picture: one second in (half way for a short clip), then a quarter and half of it. */
+    private fun moments(durationMs: Long): List<Long> =
+        if (durationMs in 1..1999) listOf(durationMs * 500L)
+        else listOf(1_000_000L, durationMs * 250L, durationMs * 500L).filter { durationMs <= 0 || it < durationMs * 1000L }.distinct()
+
+    private fun scaledFrame(context: Context, uri: Uri, edge: Int): Bitmap? {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(context, uri)
+            val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+            var found: Bitmap? = null
+            for (atUs in moments(durationMs)) {
+                val b = if (android.os.Build.VERSION.SDK_INT >= 27) runCatching { retriever.getScaledFrameAtTime(atUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC, edge, edge) }.getOrNull()
+                    else runCatching { retriever.getFrameAtTime(atUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC) }.getOrNull()
+                if (b != null && !isBlank(b)) { found = b; break }
+                b?.recycle()
+            }
+            found
+        } catch (e: Exception) {
+            null
+        } finally {
+            runCatching { retriever.release() }
+        }
+    }
+
     private fun retrieverFrame(context: Context, uri: Uri): Bitmap? {
         val retriever = MediaMetadataRetriever()
         return try {
             retriever.setDataSource(context, uri)
             val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-            val atUs = if (durationMs in 1..1999) durationMs * 500L else 1_000_000L
-            runCatching { retriever.getFrameAtTime(atUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC) }.getOrNull()
+            moments(durationMs).firstNotNullOfOrNull { atUs -> runCatching { retriever.getFrameAtTime(atUs, MediaMetadataRetriever.OPTION_CLOSEST_SYNC) }.getOrNull()?.takeIf { !isBlank(it) } }
                 ?: runCatching { retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST) }.getOrNull()
                 ?: runCatching { retriever.getFrameAtTime(-1) }.getOrNull()
                 ?: runCatching { if (android.os.Build.VERSION.SDK_INT >= 28) retriever.getFrameAtIndex(0) else null }.getOrNull()
@@ -94,41 +138,56 @@ object VideoFrames {
      * Last way: ExoPlayer, which parses QuickTime itself, decodes the first frame onto an ImageReader. Runs on a
      * thread of its own with a looper; gives up after a few seconds.
      */
+    /**
+     * Last way, for clips Android's own reader refuses (an iPhone Live Photo clip with raw PCM sound): the app's
+     * player reads the file itself. One at a time, never several players at once; the picture is kept after.
+     */
+    @Synchronized
+    fun playerFrame(context: Context, uri: Uri, edge: Int): Bitmap? {
+        val frame = exoFrame(context, uri) ?: return null
+        if (isBlank(frame)) { frame.recycle(); return null }
+        // the decoder gives the picture as stored: it is turned the way the clip is shown
+        val turn = Mp4Info.read(context, uri)?.rotation ?: 0
+        val raw = if (turn == 0) frame else Bitmap.createBitmap(frame, 0, 0, frame.width, frame.height, Matrix().apply { postRotate(turn.toFloat()) }, true).also { if (it !== frame) frame.recycle() }
+        val longEdge = max(raw.width, raw.height)
+        if (longEdge <= edge) return raw
+        val scale = edge.toFloat() / longEdge
+        val small = Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, Matrix().apply { postScale(scale, scale) }, true)
+        if (small !== raw) raw.recycle()
+        return small
+    }
+
     private fun exoFrame(context: Context, uri: Uri): Bitmap? {
         val thread = android.os.HandlerThread("exo-frame").apply { start() }
         val handler = android.os.Handler(thread.looper)
         val latch = java.util.concurrent.CountDownLatch(1)
         var out: Bitmap? = null
-        var reader: android.media.ImageReader? = null
         var player: androidx.media3.exoplayer.ExoPlayer? = null
+        val known = Mp4Info.read(context, uri)
+
+        // the surface the decoder draws into, read back through an offscreen texture: works whatever the decoder writes
+        var grab: GlFrame? = null
+        fun attach(p: androidx.media3.exoplayer.ExoPlayer, width: Int, height: Int) {
+            if (grab != null || width <= 0 || height <= 0) return
+            val g = runCatching { GlFrame(width, height, handler) { bitmap -> if (!isBlank(bitmap)) { out = bitmap; latch.countDown() } } }.getOrNull() ?: return
+            grab = g
+            p.setVideoSurface(g.surface)
+        }
+
         handler.post {
             try {
                 val p = androidx.media3.exoplayer.ExoPlayer.Builder(context).setLooper(thread.looper).build()
                 player = p
                 p.volume = 0f
+                // the picture only: the sound track (raw PCM in Live Photo clips) is not opened at all
+                p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+                    .setTrackTypeDisabled(androidx.media3.common.C.TRACK_TYPE_AUDIO, true).build()
                 p.addListener(object : androidx.media3.common.Player.Listener {
-                    override fun onVideoSizeChanged(size: androidx.media3.common.VideoSize) {
-                        if (size.width <= 0 || size.height <= 0 || reader != null) return
-                        val r = android.media.ImageReader.newInstance(size.width, size.height, android.graphics.PixelFormat.RGBA_8888, 2)
-                        reader = r
-                        r.setOnImageAvailableListener({ ir ->
-                            val image = runCatching { ir.acquireLatestImage() }.getOrNull() ?: return@setOnImageAvailableListener
-                            try {
-                                val plane = image.planes[0]
-                                val padded = plane.rowStride / plane.pixelStride
-                                val full = Bitmap.createBitmap(padded, image.height, Bitmap.Config.ARGB_8888)
-                                full.copyPixelsFromBuffer(plane.buffer)
-                                out = Bitmap.createBitmap(full, 0, 0, image.width, image.height).also { if (it !== full) full.recycle() }
-                            } catch (e: Exception) {
-                            } finally {
-                                image.close()
-                                latch.countDown()
-                            }
-                        }, handler)
-                        p.setVideoSurface(r.surface)
-                    }
+                    override fun onVideoSizeChanged(size: androidx.media3.common.VideoSize) { attach(p, size.width, size.height) }
                     override fun onPlayerError(error: androidx.media3.common.PlaybackException) { latch.countDown() }
                 })
+                // the file's own boxes give the picture's size: the surface is there before the first frame
+                if (known != null) attach(p, known.width, known.height)
                 p.setMediaItem(androidx.media3.common.MediaItem.fromUri(uri))
                 p.prepare()
                 p.play()
@@ -136,8 +195,8 @@ object VideoFrames {
                 latch.countDown()
             }
         }
-        latch.await(6, java.util.concurrent.TimeUnit.SECONDS)
-        handler.post { runCatching { player?.release() }; runCatching { reader?.close() }; thread.quitSafely() }
+        latch.await(8, java.util.concurrent.TimeUnit.SECONDS)
+        handler.post { runCatching { player?.release() }; runCatching { grab?.release() }; thread.quitSafely() }
         return out
     }
 
@@ -154,7 +213,7 @@ object VideoFrames {
                 listOf("yyyyMMdd'T'HHmmss.SSS'Z'", "yyyyMMdd'T'HHmmss'Z'", "yyyy-MM-dd'T'HH:mm:ss'Z'").firstNotNullOfOrNull { f ->
                     runCatching { java.text.SimpleDateFormat(f, java.util.Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.parse(d)?.time }.getOrNull()
                 }
-            }?.takeIf { it > 0 }
+            }?.takeIf { it > 0 } ?: Mp4Info.read(context, uri)?.createdMs
             val location = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_LOCATION)
             val match = location?.let { Regex("^([+-]\\d+(?:\\.\\d+)?)([+-]\\d+(?:\\.\\d+)?)").find(it) }
             val lat = match?.groupValues?.get(1)?.toDoubleOrNull()?.takeIf { kotlin.math.abs(it) <= 90 }
@@ -162,7 +221,8 @@ object VideoFrames {
             val rotation = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
             Facts(taken, lat, lon, rotation)
         } catch (e: Exception) {
-            Facts(null, null, null, 0)
+            // Android's reader refuses the file: its own boxes still give when it was made
+            Facts(Mp4Info.read(context, uri)?.createdMs, null, null, 0)
         } finally {
             runCatching { retriever.release() }
         }

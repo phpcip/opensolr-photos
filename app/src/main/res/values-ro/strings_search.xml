@@ -33,7 +33,7 @@
     <string name="cd_has_people">Are persoane</string>
     <string name="cd_has_location">Are loc</string>
     <string name="this_one">Aceasta</string>
-    <string name="delete_text">Sunt șterse de pe telefon și din index. Nu se poate anula.</string>
+    <string name="delete_text">Se șterge de pe toate dispozitivele, din index și din backup. Nu se poate anula.</string>
     <string name="delete">Șterge</string>
     <string name="cancel">Anulează</string>
     <string name="cd_remove">Scoate</string>
@@ -147,4 +147,7 @@
         <item>Aceeași poză (EXIF)</item>
         <item>Același fișier (copie exactă)</item>
     </string-array>
+    <plurals name="delete_title_docs"><item quantity="one">Ștergi %1$s document?</item><item quantity="few">Ștergi %1$s documente?</item><item quantity="other">Ștergi %1$s de documente?</item></plurals>
+    <plurals name="delete_title_clips"><item quantity="one">Ștergi %1$s clip?</item><item quantity="few">Ștergi %1$s clipuri?</item><item quantity="other">Ștergi %1$s de clipuri?</item></plurals>
+    <plurals name="delete_title_items"><item quantity="one">Ștergi %1$s element?</item><item quantity="few">Ștergi %1$s elemente?</item><item quantity="other">Ștergi %1$s de elemente?</item></plurals>
 </resources>

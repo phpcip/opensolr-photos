@@ -172,9 +172,11 @@
         <item quantity="other">Salvează %1$s de poze ca PDF</item>
     </plurals>
     <string name="pdf_name">Numele fișierului</string>
-    <string name="pdf_pick">Alege unde</string>
+    <string name="pdf_pick">Salvează</string>
     <string name="pdf_saved">Salvat %1$s</string>
     <string name="pdf_saved_some">Salvat %1$s: %2$s din %3$s poze. Restul nu au putut fi citite.</string>
     <string name="pdf_failed">PDF-ul nu a putut fi salvat.</string>
     <string name="pdf_default_name">Poze %1$s</string>
+    <plurals name="sh_files"><item quantity="one">Partajează %1$s fișier</item><item quantity="few">Partajează %1$s fișiere</item><item quantity="other">Partajează %1$s de fișiere</item></plurals>
+    <string name="ac_share_files">Partajează fișiere</string>
 </resources>

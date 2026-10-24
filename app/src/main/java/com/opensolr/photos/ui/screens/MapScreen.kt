@@ -318,7 +318,8 @@ private fun GroupSheet(cluster: PhotoCluster, onDismiss: () -> Unit, onShowPhoto
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 items(cluster.pins, key = { it.hit.id }) { pin ->
-                    val uri = remember(pin.hit.mediaId) { ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, pin.hit.mediaId) }
+                    // this phone's copy of the photo (its file, or its 720p copy), never another phone's file id
+                    val uri = remember(pin.hit.id) { com.opensolr.photos.ui.Images.small(context, pin.hit) }
                     AsyncImage(
                         model = ImageRequest.Builder(context).data(uri).size(320).setParameter("bytes", pin.hit.sizeBytes).setParameter("edited", EditedPhotos.stamp(pin.hit.mediaId)).crossfade(true).build(),
                         contentDescription = pin.hit.meaning.ifBlank { pin.hit.fileName },

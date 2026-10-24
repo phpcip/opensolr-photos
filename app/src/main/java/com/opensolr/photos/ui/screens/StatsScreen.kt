@@ -279,8 +279,12 @@ private fun Overview(stats: LibraryStats, locale: Locale) {
     val context = LocalContext.current
     val number = NumberFormat.getIntegerInstance(locale)
     val tiles = buildList {
-        add(Triple(number.format(stats.total), stringResource(R.string.st_photos), null))
+        // everything, then by kind: photos, clips, PDF documents with their pages
+        add(Triple(number.format(stats.photos + stats.clips + stats.pdfDocs), stringResource(R.string.st_items), null))
         add(Triple(android.text.format.Formatter.formatShortFileSize(context, stats.bytes), stringResource(R.string.st_size), null))
+        add(Triple(number.format(stats.photos), stringResource(R.string.st_photos), null))
+        add(Triple(number.format(stats.clips), stringResource(R.string.st_clips), null))
+        add(Triple(number.format(stats.pdfDocs), stringResource(R.string.st_pdf_docs), if (stats.pdfPages > 0) stringResource(R.string.st_pdf_pages, number.format(stats.pdfPages)) else null))
         add(Triple(number.format(stats.tagged), stringResource(R.string.st_tagged), share(stats.tagged, stats.total, locale)))
         add(Triple(number.format(stats.withPeople), stringResource(R.string.st_with_people), share(stats.withPeople, stats.total, locale)))
         add(Triple(number.format(stats.withPlace), stringResource(R.string.st_with_place), share(stats.withPlace, stats.total, locale)))

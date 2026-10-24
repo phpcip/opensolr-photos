@@ -29,8 +29,15 @@ class PhotosApp : Application(), coil.ImageLoaderFactory {
         // the photos only the backend has, for the grid; the daily storage run
         com.opensolr.photos.storage.CloudFiles.load(this)
         // which files are on this phone, looked up off the main thread
-        Thread { runCatching { com.opensolr.photos.storage.LocalFiles.refresh(this) } }.start()
+        Thread {
+            runCatching { com.opensolr.photos.storage.ClipThumbs.warm(this); com.opensolr.photos.ui.Thumbs.warm(this) }
+            runCatching { com.opensolr.photos.storage.LocalFiles.refresh(this) }
+            // what was deleted on the other devices goes from here as the app opens
+            runCatching { kotlinx.coroutines.runBlocking { com.opensolr.photos.storage.Deletions.push(this@PhotosApp); com.opensolr.photos.storage.Deletions.pull(this@PhotosApp) } }
+        }.start()
         com.opensolr.photos.storage.StorageScheduler.applySchedule(this)
+        // a backup or restore cut short (reinstall, killed app) carries on at once, never after a wait
+        if (com.opensolr.photos.data.AppPrefs(this).storage != null) com.opensolr.photos.storage.StorageScheduler.runNow(this)
 
         Configuration.getInstance().apply {
             userAgentValue = "opensolr-photos/" + BuildConfig.VERSION_NAME

@@ -265,6 +265,14 @@ object PhotoReader {
         val stand = if (decoded == null) placeholderJpeg(photo.kind) else null
         val upright = decoded ?: BitmapFactory.decodeByteArray(stand, 0, stand!!.size)
         val pixelHash = if (noRead) null else pixelHashOf(upright)
+        // the clip's picture is kept from this one read: the grid and the backup use it, nothing is drawn again
+        if (photo.kind == Kind.VIDEO && decoded != null && !com.opensolr.photos.storage.ClipThumbs.has(context, photo.id)) {
+            runCatching {
+                val kept = scaled(decoded, com.opensolr.photos.storage.StorageEngine.RESTORE_EDGE)
+                com.opensolr.photos.storage.ClipThumbs.save(context, photo.id, kept)
+                if (kept !== decoded) kept.recycle()
+            }
+        }
         val small = scaled(upright, CLIP_EDGE_PX)
         val out = ByteArrayOutputStream()
         small.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, out)

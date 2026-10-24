@@ -41,20 +41,30 @@ fun ShareChooser(hits: List<PhotoHit>, fullScreen: Boolean = false, onDismiss: (
     var done by remember { mutableStateOf(0) }
     val preparing = job != null
     fun close() { job?.cancel(); onDismiss() }
+    val items = remember(hits) { Actions.shareItems(hits) }
+    val photoCount = items.count { it.mediaKind == com.opensolr.photos.media.Kind.PHOTO }
+    // no photo in it: clips and PDFs go as their files, nothing to choose
+    if (photoCount == 0) {
+        androidx.compose.runtime.LaunchedEffect(items) {
+            withContext(Dispatchers.IO) { Actions.sharePhotos(context, items) }
+            onDismiss()
+        }
+        return
+    }
 
     AlertDialog(
         onDismissRequest = { close() },
         confirmButton = {},
         dismissButton = { TextButton(onClick = { close() }) { Text(stringResource(R.string.cancel), color = p.ink) } },
-        title = { Text(pluralStringResource(R.plurals.sh_title, hits.size, Actions.formatCount(hits.size.toLong()))) },
+        title = { Text(if (photoCount == items.size) pluralStringResource(R.plurals.sh_title, items.size, Actions.formatCount(items.size.toLong())) else pluralStringResource(R.plurals.sh_files, items.size, Actions.formatCount(items.size.toLong()))) },
         text = { com.opensolr.photos.ui.KeyboardBack();
             // over the full screen viewer the status bar stays hidden
             if (fullScreen) HideStatusBar()
             if (preparing) {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(stringResource(R.string.sh_preparing, Actions.formatCount(done.toLong()), Actions.formatCount(hits.size.toLong())), color = p.ink)
+                    Text(stringResource(R.string.sh_preparing, Actions.formatCount(done.toLong()), Actions.formatCount(photoCount.toLong())), color = p.ink)
                     LinearProgressIndicator(
-                        progress = { if (hits.isEmpty()) 0f else done.toFloat() / hits.size },
+                        progress = { if (photoCount == 0) 0f else done.toFloat() / photoCount },
                         modifier = Modifier.fillMaxWidth(),
                         color = p.accent,
                         trackColor = p.hairline,

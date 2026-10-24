@@ -201,8 +201,8 @@ data class PhotoHit(
     val isVideo: Boolean get() = kind == "video"
     val isPdfPage: Boolean get() = kind == "pdf_page"
     val mediaKind: com.opensolr.photos.media.Kind get() = when (kind) { "video" -> com.opensolr.photos.media.Kind.VIDEO; "pdf_page" -> com.opensolr.photos.media.Kind.PDF; else -> com.opensolr.photos.media.Kind.PHOTO }
-    /** The file on this phone, in the collection its kind lives in. */
-    val uri: android.net.Uri get() = com.opensolr.photos.media.MediaScanner.uriOf(mediaKind, mediaId)
+    /** The file on this phone, in the collection its kind lives in, by the id the phone gives it now. */
+    val uri: android.net.Uri get() = com.opensolr.photos.media.MediaScanner.uriOf(mediaKind, com.opensolr.photos.storage.LocalFiles.mediaId(id) ?: mediaId)
 
     val latLon: Pair<Double, Double>? get() = parseLatLon(location)
 
