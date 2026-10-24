@@ -47,6 +47,7 @@ class StorageWorker(context: Context, params: WorkerParameters) : CoroutineWorke
                 }
             }
             prefs.storageReport = report
+            runCatching { LocalFiles.refresh(applicationContext) }
             when (report.status) {
                 "waiting_battery" -> StorageScheduler.runLater(applicationContext, BATTERY_RETRY_MS)
                 "waiting_wifi" -> StorageScheduler.runLater(applicationContext, NETWORK_RETRY_MS)

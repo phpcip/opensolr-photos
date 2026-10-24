@@ -689,6 +689,14 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
     }
 
     /** How many photos the backend has that this phone lacks and has no 720 px copy of yet: the restore's real total. */
+    fun restorePendingIds(local: Set<String>): List<String> {
+        val out = ArrayList<String>()
+        readableDatabase.rawQuery("SELECT r.id FROM remote r INNER JOIN docs d ON d.id = r.id WHERE r.id NOT IN (SELECT id FROM cloud)", null).use { c ->
+            while (c.moveToNext()) { val id = c.getString(0); if (id !in local) out += id }
+        }
+        return out
+    }
+
     fun restorePendingCount(local: Set<String>): Int {
         var n = 0
         readableDatabase.rawQuery("SELECT r.id FROM remote r INNER JOIN docs d ON d.id = r.id WHERE r.id NOT IN (SELECT id FROM cloud)", null).use { c ->

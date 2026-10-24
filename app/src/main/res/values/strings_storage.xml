@@ -92,6 +92,7 @@
     <string name="stg_n_restored">%1$s brought back</string>
     <string name="stg_n_failed">%1$s failed</string>
     <string name="stg_nothing">Nothing to do</string>
+    <string name="stg_not_here">Not on this phone yet</string>
     <string name="stg_mark">Only in the backend</string>
     <string name="stg_original_in">Full copy in %1$s · %2$s</string>
     <string name="stg_download">Download</string>

@@ -1,0 +1,2 @@
+- A second phone sees the whole library in search, shows what is not on it yet with a sign and Download, and plays clips with the controls above the actions.
+- Restore counts only what is left, never writes a file twice, and survives a reinstall in the middle.

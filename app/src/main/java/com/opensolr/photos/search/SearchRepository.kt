@@ -911,6 +911,8 @@ class SearchRepository(private val context: Context) {
      * out of every list, count, facet, map and duplicate group, and come back when the folder is added again.
      */
     private fun visible(params: List<Pair<String, String>>): List<Pair<String, String>> {
+        // with a storage backend the whole library is this phone's, whatever folders it syncs: nothing is cut
+        if (prefs.storage != null) return params
         val roots = folderRoots()
         if (roots.isEmpty() || params.any { it.first == "visv_0" }) return params
         val out = ArrayList(params)

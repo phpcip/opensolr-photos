@@ -53,6 +53,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             running.set(false)
 
             if (AppPrefs(applicationContext).session != null) SyncScheduler.watchMedia(applicationContext)
+            runCatching { com.opensolr.photos.storage.LocalFiles.refresh(applicationContext) }
             // after a sync: the people are learned and the newest photos named, nothing is read
             FaceWorker.next(applicationContext)
             // then the storage backend, when the index has one: restore what is missing, send what is new

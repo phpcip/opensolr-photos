@@ -28,6 +28,8 @@ class PhotosApp : Application(), coil.ImageLoaderFactory {
 
         // the photos only the backend has, for the grid; the daily storage run
         com.opensolr.photos.storage.CloudFiles.load(this)
+        // which files are on this phone, looked up off the main thread
+        Thread { runCatching { com.opensolr.photos.storage.LocalFiles.refresh(this) } }.start()
         com.opensolr.photos.storage.StorageScheduler.applySchedule(this)
 
         Configuration.getInstance().apply {

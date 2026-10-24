@@ -889,7 +889,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                         hasPlace = !hit.location.isNullOrBlank(),
                                         hasPeople = hit.persons.isNotBlank(),
                                         hasTags = hit.customTags.isNotEmpty(),
-                                        cloud = com.opensolr.photos.storage.CloudFiles.has(hit.id),
+                                        cloud = com.opensolr.photos.storage.CloudFiles.has(hit.id) || absentHere(hit),
                                         label = when {
                                             row.extra.isNotEmpty() -> stringResource(R.string.mark_pages, Actions.formatCount((row.extra.size + 1).toLong()))
                                             hit.isPdfPage -> "${hit.page}/${hit.pages}"
@@ -1855,10 +1855,22 @@ private fun PlaceButton(label: String, onClick: () -> Unit) {
     }
 }
 
+/** The file is neither on this phone nor a 720p copy here: another phone's, or not brought back yet. */
+internal fun absentHere(hit: PhotoHit): Boolean =
+    com.opensolr.photos.storage.LocalFiles.ready.value && !hit.pending &&
+        !com.opensolr.photos.storage.CloudFiles.has(hit.id) && !com.opensolr.photos.storage.LocalFiles.has(hit.id)
+
 @Composable
 private fun Thumbnail(hit: PhotoHit, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
     val context = LocalContext.current
+    if (absentHere(hit)) {
+        // never opened by another phone's id: a sign of its kind until it is here
+        Box(modifier.aspectRatio(1f).background(p.chip), contentAlignment = Alignment.Center) {
+            Icon(painterResource(if (hit.isVideo) R.drawable.ic_play else if (hit.isPdfPage) R.drawable.ic_pdf else R.drawable.ic_cloud), contentDescription = hit.fileName, tint = p.muted, modifier = Modifier.size(28.dp))
+        }
+        return
+    }
     val uri = com.opensolr.photos.ui.Images.model(context, hit)
 
     val edited = EditedPhotos.stamp(hit.mediaId)
@@ -2517,14 +2529,25 @@ internal fun PhotoViewer(
                 // a clip on this phone plays; one only the backend has shows its first frame like a photo
                 val playable = hit.isVideo && cloudFile == null
                 Box(Modifier.fillMaxSize()) {
-                if (hit.noPicture && !hit.isVideo && cloudFile == null) {
+                if (absentHere(hit)) {
+                    // not on this phone: where it is and Download, never another phone's file id
+                    Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                        Icon(painterResource(if (hit.isVideo) R.drawable.ic_play else if (hit.isPdfPage) R.drawable.ic_pdf else R.drawable.ic_cloud), contentDescription = null, tint = Color.White, modifier = Modifier.size(48.dp))
+                        Spacer(Modifier.height(12.dp))
+                        Text(stringResource(R.string.stg_not_here), color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                        if (viewerState.storage != null) {
+                            Spacer(Modifier.height(16.dp))
+                            com.opensolr.photos.ui.GhostButton(if (hit.id in viewerState.downloading) stringResource(R.string.stg_downloading) else stringResource(R.string.stg_download), onClick = { viewModel.downloadOriginal(hit) }, enabled = hit.id !in viewerState.downloading)
+                        }
+                    }
+                } else if (hit.noPicture && !hit.isVideo && cloudFile == null) {
                     // this phone cannot draw it: the file opens in an app that can
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         com.opensolr.photos.ui.GhostButton(stringResource(R.string.act_open_other_app), onClick = { Actions.openFile(context, hit.uri, hit.mime.ifBlank { "*/*" }) }, modifier = Modifier.padding(24.dp))
                     }
                 } else if (playable) {
                     // the player takes every touch: a layer over it gives the clip the same swipes as a photo
-                    VideoPage(uri, active = page == pager.currentPage, onTap = { showActions = !showActions }, gestures = Modifier.pointerInput(hit.id) {
+                    VideoPage(uri, active = page == pager.currentPage, onTap = { shown -> showActions = shown }, gestures = Modifier.pointerInput(hit.id) {
                         detectVerticalDragGestures(
                             onVerticalDrag = { change, amount ->
                                 change.consume()
@@ -2753,7 +2776,7 @@ internal fun PhotoViewer(
                     // a photo still syncing shows its actions greyed out until its document is back;
                     // one only the backend has keeps its words and sharing, the file itself comes with Download
                     val on = !hit.pending
-                    val cloud = com.opensolr.photos.storage.CloudFiles.has(hit.id)
+                    val cloud = com.opensolr.photos.storage.CloudFiles.has(hit.id) || absentHere(hit)
                     val photo = hit.mediaKind == com.opensolr.photos.media.Kind.PHOTO
                     if (!hit.isPdfPage) ViewerIconAction(stringResource(R.string.fc_people), Icons.Filled.Face, on) { facesOn = !facesOn }
                     ViewerAction(stringResource(R.string.act_tag), R.drawable.ic_tag, on) { editFor = hit }
@@ -3151,8 +3174,10 @@ internal fun DetailsSheet(
             val uri: Any = com.opensolr.photos.ui.Images.model(context, hit)
 
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-                Box(Modifier.size(104.dp).clip(Corner).background(p.chip)) {
-                    AsyncImage(
+                Box(Modifier.size(104.dp).clip(Corner).background(p.chip), contentAlignment = Alignment.Center) {
+                    if (absentHere(hit)) {
+                        Icon(painterResource(if (hit.isVideo) R.drawable.ic_play else if (hit.isPdfPage) R.drawable.ic_pdf else R.drawable.ic_cloud), contentDescription = null, tint = p.muted, modifier = Modifier.size(32.dp))
+                    } else AsyncImage(
                         model = ImageRequest.Builder(context).data(uri).size(360).setParameter("bytes", hit.sizeBytes).setParameter("edited", EditedPhotos.stamp(hit.mediaId)).build(),
                         contentDescription = hit.meaning,
                         contentScale = ContentScale.Crop,
@@ -3206,7 +3231,7 @@ internal fun DetailsSheet(
                 Spacer(Modifier.height(16.dp))
             }
 
-            if (cloudFile != null) {
+            if (cloudFile != null || absentHere(hit)) {
                 SectionLabel(stringResource(R.string.stg_mark))
                 Spacer(Modifier.height(10.dp))
                 val where = fresh.storage?.let { it.label.ifBlank { it.host } }.orEmpty()
@@ -3499,7 +3524,7 @@ private val DRAG_STEP = 14.dp
 
 /** A clip on this phone, played in place; it starts when its page is the one shown and stops when it is not. */
 @Composable
-private fun VideoPage(uri: Uri, active: Boolean, onTap: () -> Unit, gestures: Modifier = Modifier) {
+private fun VideoPage(uri: Uri, active: Boolean, onTap: (Boolean) -> Unit, gestures: Modifier = Modifier) {
     val context = LocalContext.current
     var failed by remember(uri) { mutableStateOf(false) }
     val player = remember(uri) {
@@ -3518,6 +3543,10 @@ private fun VideoPage(uri: Uri, active: Boolean, onTap: () -> Unit, gestures: Mo
             this.player = player
             useController = true
             controllerShowTimeoutMs = 3000
+            setShowPreviousButton(false)
+            setShowNextButton(false)
+            // the controls sit above the viewer's row of actions
+            setPadding(0, 0, 0, (context.resources.displayMetrics.density * 190).toInt())
             setBackgroundColor(android.graphics.Color.BLACK)
         }
     }
@@ -3530,9 +3559,11 @@ private fun VideoPage(uri: Uri, active: Boolean, onTap: () -> Unit, gestures: Mo
             androidx.compose.ui.viewinterop.AndroidView(factory = { playerView }, modifier = Modifier.fillMaxSize())
             // above the player: a tap shows its controls and the row of actions; swipes go to the viewer
             Box(Modifier.fillMaxSize().pointerInput(uri) {
+                // the player's controls and the viewer's actions show and hide together
                 detectTapGestures(onTap = {
-                    if (playerView.isControllerFullyVisible) playerView.hideController() else playerView.showController()
-                    onTap()
+                    val show = !playerView.isControllerFullyVisible
+                    if (show) playerView.showController() else playerView.hideController()
+                    onTap(show)
                 })
             })
         }

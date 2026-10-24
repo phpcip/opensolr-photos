@@ -199,10 +199,11 @@ object MediaScanner {
         paths.chunked(500).forEach { batch ->
             val marks = batch.joinToString(",") { "?" }
             try {
+                // every kind: photos, videos and PDFs all live in the files collection
                 context.contentResolver.query(
-                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                    arrayOf(MediaStore.Images.Media.DATA),
-                    "${MediaStore.Images.Media.DATA} IN ($marks)",
+                    MediaStore.Files.getContentUri("external"),
+                    arrayOf(MediaStore.MediaColumns.DATA),
+                    "${MediaStore.MediaColumns.DATA} IN ($marks)",
                     batch.toTypedArray(),
                     null,
                 )?.use { c -> while (c.moveToNext()) out += c.getString(0) }
