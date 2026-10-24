@@ -479,6 +479,21 @@ class SyncEngine(private val context: Context) {
                     toDelete += missing
                 }
 
+                // a backed-up photo moved or renamed on this phone: the very same file (same md5) under a new name.
+                // The old entry goes everywhere, as a deletion (index, backend, the other phones), and what the owner
+                // put on it goes to the new name, which is read and backed up as a new photo: no duplicate is left.
+                val keptHere = cache.cloudIds()
+                val strays = known.keys.filter { it !in local && it in cloud && it in seen && it !in keptHere }
+                if (strays.isNotEmpty()) {
+                    val moved = movedTo(strays, local.values.filter { it.id !in known })
+                    if (moved.isNotEmpty()) {
+                        carryOver(moved, local.values.filter { it.id !in known })
+                        moved.chunked(500).forEach { batch -> solr.delete(batch) }
+                        com.opensolr.photos.storage.Deletions.deletedHere(context, moved)
+                        deleted += moved.size
+                    }
+                }
+
                 val waiting = cache.wordRetriesWaiting(System.currentTimeMillis())
 
                 val toIndex = ArrayList<String>()
@@ -706,6 +721,23 @@ class SyncEngine(private val context: Context) {
      * Photos about to leave the index whose file is still on the phone under another name (same md5): their tags,
      * people, wording and place are given to the new name before it is read, so they are sent and written again.
      */
+    /** Of [leaving], those whose file is on the phone under another name: same size and same md5 as one of [arriving]. */
+    private fun movedTo(leaving: Collection<String>, arriving: List<LocalPhoto>): List<String> {
+        if (arriving.isEmpty()) return emptyList()
+        val byHash = HashMap<String, String>()
+        leaving.forEach { id -> cache.docFileHash(id)?.let { byHash[it] = id } }
+        if (byHash.isEmpty()) return emptyList()
+        // only files of a size one of the leaving photos had are hashed, so a big import costs nothing extra
+        val sizes = leaving.mapNotNull { cache.doc(it)?.sizeBytes }.toHashSet()
+        val out = LinkedHashSet<String>()
+        for (photo in arriving) {
+            if (photo.sizeBytes !in sizes) continue
+            val hash = PhotoReader.fileMd5(context, photo) ?: continue
+            byHash[hash]?.let { out += it }
+        }
+        return out.toList()
+    }
+
     private fun carryOver(leaving: Collection<String>, arriving: List<LocalPhoto>) {
         if (arriving.isEmpty()) return
         val byHash = HashMap<String, String>()
