@@ -634,6 +634,16 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         return out
     }
 
+    /** Which of [paths] a document of the clone points at. */
+    fun docPathsAmong(paths: Collection<String>): Set<String> {
+        val out = HashSet<String>()
+        paths.chunked(400).forEach { batch ->
+            val marks = batch.joinToString(",") { "?" }
+            readableDatabase.rawQuery("SELECT path FROM docs WHERE path IN ($marks)", batch.toTypedArray()).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        }
+        return out
+    }
+
     fun docFiles(): Map<String, DocFile> {
         val out = HashMap<String, DocFile>()
         readableDatabase.rawQuery("SELECT d.id, d.media_id, d.path, d.size_bytes, r.path, r.bytes FROM docs d LEFT JOIN remote r ON r.id = d.id", null).use { c ->
@@ -1310,6 +1320,42 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         return flags
     }
 
+    /** The faces the clone's document carries for a photo this phone has none for, taken in. True when some were. */
+    fun importFacesFromClone(photoId: String, mediaId: Long): Boolean {
+        val json = readableDatabase.rawQuery("SELECT json FROM docs WHERE id = ?", arrayOf(photoId)).use { c -> if (c.moveToFirst()) c.getString(0) else null } ?: return false
+        val stored = FaceStore.decode(runCatching { org.json.JSONObject(json).optString("faces_json") }.getOrNull()?.ifBlank { null }) ?: return false
+        if (faceScanned(photoId, stored.sizeBytes)) return false
+        importFaces(photoId, mediaId, stored)
+        return true
+    }
+
+    /** Every photo of the clone without faces on this phone gets those its document carries, in pages by id. */
+    fun importAllFacesFromClone(mediaOf: (String) -> Long) {
+        var after = ""
+        while (true) {
+            val page = ArrayList<Pair<String, String>>(FACE_PAGE)
+            readableDatabase.rawQuery(
+                "SELECT id, json FROM docs WHERE id > ? AND json LIKE '%\"faces_json\"%' AND id NOT IN (SELECT photo_id FROM face_scanned) ORDER BY id LIMIT $FACE_PAGE",
+                arrayOf(after),
+            ).use { c -> while (c.moveToNext()) page += c.getString(0) to c.getString(1) }
+            if (page.isEmpty()) return
+            // one write per page, not one per photo
+            val db = writableDatabase
+            db.beginTransaction()
+            try {
+                page.forEach { (id, json) ->
+                    val stored = FaceStore.decode(runCatching { org.json.JSONObject(json).optString("faces_json") }.getOrNull()?.ifBlank { null })
+                    if (stored != null) importFaces(id, mediaOf(id), stored)
+                }
+                db.setTransactionSuccessful()
+            } finally {
+                db.endTransaction()
+            }
+            after = page.last().first
+            if (page.size < FACE_PAGE) return
+        }
+    }
+
     /** Faces read back from the index for a photo this phone has not read itself: stored as they were, nothing computed. */
     fun importFaces(photoId: String, mediaId: Long, stored: FaceStore.Stored) {
         val db = writableDatabase
@@ -1514,10 +1560,10 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         }
     }
 
-    /** Faces and their read marks of photos no longer on the phone nor kept hidden in the index. */
+    /** Faces and their read marks of photos no longer on the phone nor in the library (clone or kept hidden in the index). */
     fun dropFacesExcept(keep: Set<String>) {
         val stale = ArrayList<String>()
-        readableDatabase.rawQuery("SELECT photo_id FROM face_scanned WHERE photo_id NOT IN (SELECT id FROM parked_docs)", null).use { c ->
+        readableDatabase.rawQuery("SELECT photo_id FROM face_scanned WHERE photo_id NOT IN (SELECT id FROM parked_docs) AND photo_id NOT IN (SELECT id FROM docs)", null).use { c ->
             while (c.moveToNext()) c.getString(0).let { if (it !in keep) stale += it }
         }
         if (stale.isEmpty()) return

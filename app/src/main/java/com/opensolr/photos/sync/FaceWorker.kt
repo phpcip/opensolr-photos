@@ -40,6 +40,12 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         val adopted = local.values.filter { cache.adoptFaces(it.id, it.mediaId) }.map { it.id }
         if (adopted.isNotEmpty()) { cache.queueActions(adopted, PhotoCache.ACTION_WORDS); SyncScheduler.runNow(ctx) }
         cache.dropFacesExcept(local.keys)
+        // once: faces read on another phone (kept in the clone's documents) that earlier versions dropped come back
+        val sp = ctx.getSharedPreferences("faces", Context.MODE_PRIVATE)
+        if (!sp.getBoolean(CLONE_FACES, false)) {
+            cache.importAllFacesFromClone { id -> local[id]?.mediaId ?: 0L }
+            sp.edit().putBoolean(CLONE_FACES, true).apply()
+        }
         return if (inputData.getBoolean(SCAN_ALL, false)) scanAll(ctx, prefs, cache, edits, local.values) else learn(ctx, cache, edits, local.values)
     }
 
@@ -116,6 +122,7 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
     data class Progress(val running: Boolean, val done: Int, val total: Int)
 
     companion object {
+        private const val CLONE_FACES = "clone_faces_3241"
         private const val WORK_LEARN = "faces"
         private const val WORK_SCAN = "faces_all"
         private const val SCAN_ALL = "scan_all"

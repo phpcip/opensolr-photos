@@ -1,0 +1,3 @@
+- Faces read on another phone stay on this one: the face button and the people review work on every phone of the account.
+- Smoother grid on large libraries; faces found in clips show their picture in the review.
+- Clips restored earlier are never downloaded twice, duplicate copies are removed, and nothing a stopped run leaves behind stays on the phone; an edited photo saved over the original is put back whole if the save is cut short.

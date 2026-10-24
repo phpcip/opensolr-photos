@@ -492,3 +492,22 @@ object Actions {
     fun formatMb(mb: Double): String =
         if (mb >= 1000) String.format(Locale.US, "%.1f GB", mb / 1000) else String.format(Locale.US, "%.0f MB", mb)
 }
+
+/** The date names of one build of the grid, worked out once per day of the photos instead of once per photo. */
+class DayNames {
+
+    class Names(val recent: String?, val year: String, val month: String, val day: String)
+
+    private val tz = TimeZone.getDefault()
+    private val byDay = HashMap<Long, Names>()
+
+    fun of(millis: Long): Names =
+        byDay.getOrPut(Math.floorDiv(millis + tz.getOffset(millis), 86_400_000L)) {
+            Names(
+                recent = if (Actions.isRecentDay(millis)) Actions.dateHeading(millis) else null,
+                year = Actions.yearHeading(millis),
+                month = Actions.monthKey(millis),
+                day = Actions.dayKey(millis),
+            )
+        }
+}

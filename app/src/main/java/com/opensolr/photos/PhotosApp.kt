@@ -30,6 +30,10 @@ class PhotosApp : Application(), coil.ImageLoaderFactory {
         com.opensolr.photos.storage.CloudFiles.load(this)
         // which files are on this phone, looked up off the main thread
         Thread {
+            // what an earlier run left behind goes before anything else reads the app's folders
+            // a photo whose overwrite the app died in gets its own bytes back (only here: no edit runs yet)
+            runCatching { com.opensolr.photos.media.PhotoEditor.restoreUnfinished(this) }
+            runCatching { com.opensolr.photos.storage.Residue.sweep(this) }
             runCatching { com.opensolr.photos.storage.ClipThumbs.warm(this); com.opensolr.photos.ui.Thumbs.warm(this) }
             runCatching { com.opensolr.photos.storage.LocalFiles.refresh(this) }
             // what was deleted on the other devices goes from here as the app opens

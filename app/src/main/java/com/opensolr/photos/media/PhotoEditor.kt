@@ -509,11 +509,48 @@ object PhotoEditor {
         return file
     }
 
-    /** [encoded] written over the original's own bytes; the original keeps its name, folder and place in the gallery. */
+    /**
+     * [encoded] written over the original's own bytes; the original keeps its name, folder and place in the gallery.
+     * The original's bytes are kept aside first: a write that fails, comes out short, or is cut by the app dying
+     * puts them back, so a photo is never left half written.
+     */
     fun overwrite(context: Context, original: Uri, encoded: File) {
-        val out = context.contentResolver.openOutputStream(original, "wt") ?: throw java.io.IOException("no output stream")
-        out.use { stream -> encoded.inputStream().use { it.copyTo(stream, BUFFER) } }
+        val dir = File(context.filesDir, OVERWRITE_DIR).apply { mkdirs() }
+        val kept = File(dir, OVERWRITE_BYTES)
+        val target = File(dir, OVERWRITE_URI)
+        val resolver = context.contentResolver
+        resolver.openInputStream(original)?.use { input -> kept.outputStream().use { input.copyTo(it, BUFFER) } } ?: throw java.io.IOException("no input stream")
+        target.writeText(original.toString())
+        try {
+            resolver.openOutputStream(original, "wt")?.use { stream -> encoded.inputStream().use { it.copyTo(stream, BUFFER) } } ?: throw java.io.IOException("no output stream")
+            val written = resolver.openFileDescriptor(original, "r")?.use { it.statSize } ?: -1L
+            if (written != encoded.length()) throw java.io.IOException("short write")
+        } catch (e: Exception) {
+            // the kept bytes stay on disk until they are back over the photo (else the next start puts them back)
+            putBack(context, original, kept)
+            target.delete()
+            kept.delete()
+            throw e
+        }
+        target.delete()
+        kept.delete()
         rescan(context, original)
+    }
+
+    /** An overwrite the app died in the middle of: the original's kept bytes go back over the photo. */
+    fun restoreUnfinished(context: Context) {
+        val dir = File(context.filesDir, OVERWRITE_DIR)
+        val kept = File(dir, OVERWRITE_BYTES)
+        val target = File(dir, OVERWRITE_URI)
+        if (target.exists() && kept.exists() && kept.length() > 0) {
+            val uri = runCatching { Uri.parse(target.readText()) }.getOrNull()
+            if (uri != null && runCatching { putBack(context, uri, kept) }.isSuccess) rescan(context, uri) else return
+        }
+        dir.deleteRecursively()
+    }
+
+    private fun putBack(context: Context, original: Uri, kept: File) {
+        context.contentResolver.openOutputStream(original, "wt")?.use { stream -> kept.inputStream().use { it.copyTo(stream, BUFFER) } } ?: throw java.io.IOException("no output stream")
     }
 
     /** [encoded] as a new photo in the original's folder (or Pictures, where that folder takes no photos); its folder and name. */
@@ -610,6 +647,9 @@ object PhotoEditor {
     }
 
     private const val EDIT_DIR = "edit"
+    private const val OVERWRITE_DIR = "overwrite"
+    private const val OVERWRITE_BYTES = "original.bin"
+    private const val OVERWRITE_URI = "uri.txt"
     private const val ARROW_BARB = 0.5f
     private const val ELLIPSE_HIT_POINTS = 48
     private const val QUALITY = 95

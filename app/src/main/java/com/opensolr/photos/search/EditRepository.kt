@@ -220,7 +220,7 @@ class EditRepository(private val context: Context) {
         val answer = JSONObject(answered.toString()).apply { PhotoCache.ANSWER_KEYS.forEach { remove(it) } }
         // the faces the index keeps for this photo: taken as they are when this phone has none for this file
         com.opensolr.photos.data.FaceStore.decode(answer.optString("faces_json").ifBlank { null })?.let { stored ->
-            if (!cache.faceScanned(id, stored.sizeBytes)) cache.importFaces(id, answer.optLong("media_id", -1L), stored)
+            if (!cache.faceScanned(id, stored.sizeBytes)) cache.importFaces(id, com.opensolr.photos.storage.LocalFiles.mediaId(id) ?: 0L, stored)
         }
         fun words(field: String): List<String> =
             answer.optJSONArray(field)?.let { a -> (0 until a.length()).map { a.optString(it) } }?.filter { it.isNotBlank() } ?: emptyList()

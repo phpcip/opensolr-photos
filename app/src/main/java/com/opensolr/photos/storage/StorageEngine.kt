@@ -113,6 +113,8 @@ class StorageEngine(private val context: Context) {
             // a run cut short (reinstall, killed app) can leave a half-written file pending in MediaStore: it goes
             dropPendingWrites()
             dropOwnDuplicates()
+            // whatever runs cut short left behind on this phone
+            Residue.sweep(context)
 
             // videos and PDF pages an older version brought back as pictures come back as their files
             val oldCopies = cache.cloudVideosAndPages()
@@ -510,6 +512,24 @@ class StorageEngine(private val context: Context) {
             val original = byKey[r.folder + "\u0000" + base] ?: continue
             if (original.size == r.size && r.size > 0) runCatching { resolver.delete(android.content.ContentUris.withAppendedId(collection, r.id), null, null) }
         }
+        // the same file written into two folders (the folder rule changed between runs): the copy no document
+        // points at goes, only when one document's copy is there and both are byte for byte the same
+        @Suppress("DEPRECATION")
+        val root = android.os.Environment.getExternalStorageDirectory().absolutePath + "/"
+        fun pathOf(r: Row) = root + r.folder.trimEnd('/') + "/" + r.name
+        val groups = rows.filter { it.size > 0 }.groupBy { it.name to it.size }.values.filter { g -> g.map { it.folder }.distinct().size > 1 }
+        if (groups.isEmpty()) return
+        val known = cache.docPathsAmong(groups.flatten().map { pathOf(it) })
+        for (g in groups) {
+            if (g.all { pathOf(it) in known }) continue
+            val kept = g.firstOrNull { pathOf(it) in known } ?: continue
+            val keptMd5 = PhotoReader.fileMd5(context, android.content.ContentUris.withAppendedId(collection, kept.id)) ?: continue
+            for (r in g) {
+                if (r === kept || pathOf(r) in known) continue
+                val uri = android.content.ContentUris.withAppendedId(collection, r.id)
+                if (PhotoReader.fileMd5(context, uri) == keptMd5) runCatching { resolver.delete(uri, null, null) }
+            }
+        }
     }
 
     /** This app's files still marked pending in MediaStore (a write cut short) are removed before new ones are written. */
@@ -643,6 +663,11 @@ class StorageEngine(private val context: Context) {
         /** The folder a file of the backend is written into: its own where Android allows the kind there, else one of the same name under Movies, Documents or Pictures. */
         fun placedFolder(folder: String, name: String): String {
             if (anyFolder() && folder.isNotBlank()) return folder.trim('/') + "/"
+            return keptFolder(folder, name)
+        }
+
+        /** Where the file is written without access to every folder: its own where Android allows the kind there, else under Movies, Documents or Pictures. */
+        private fun keptFolder(folder: String, name: String): String {
             val mime = mimeOf(name)
             fun under(vararg tops: String) = tops.any { folder.equals(it, true) || folder.startsWith("$it/", true) }
             val (allowed, fallback) = when {
@@ -659,6 +684,19 @@ class StorageEngine(private val context: Context) {
             val folder = remotePath.substringBeforeLast('/', "").trim('/')
             val name = remotePath.substringAfterLast('/')
             return android.os.Environment.getExternalStorageDirectory().absolutePath + "/" + placedFolder(folder, name) + name
+        }
+
+        /** Every path an earlier run may have written the file to: with access to every folder and without it. */
+        @Suppress("DEPRECATION")
+        fun placedPaths(remotePath: String): List<String> {
+            val folder = remotePath.substringBeforeLast('/', "").trim('/')
+            val name = remotePath.substringAfterLast('/')
+            val root = android.os.Environment.getExternalStorageDirectory().absolutePath + "/"
+            return listOfNotNull(
+                root + placedFolder(folder, name) + name,
+                folder.takeIf { it.isNotBlank() }?.let { root + it + "/" + name },
+                root + keptFolder(folder, name) + name,
+            ).distinct()
         }
 
         const val RESTORE_EDGE = 1280

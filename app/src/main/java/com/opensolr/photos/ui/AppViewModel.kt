@@ -249,7 +249,11 @@ data class UiState(
     val albumsWorking: Boolean = false,
 
     val flash: String? = null,
-)
+) {
+    // a new state is a change: comparing every field would walk the whole list of results on each update
+    override fun equals(other: Any?): Boolean = this === other
+    override fun hashCode(): Int = System.identityHashCode(this)
+}
 
 data class MapFocus(val lat: Double, val lon: Double, val zoom: Double)
 
@@ -450,14 +454,19 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** The faces of [hit]; a photo whose faces were not read yet is read now. */
     suspend fun facesFor(hit: PhotoHit): List<com.opensolr.photos.data.PhotoCache.FaceRow> = withContext(Dispatchers.IO) {
-        if (photoCache.adoptFaces(hit.id, hit.mediaId)) { photoCache.queueAction(hit.id, com.opensolr.photos.data.PhotoCache.ACTION_WORDS); SyncScheduler.runNow(context) }
-        if (!photoCache.faceScanned(hit.id, hit.sizeBytes) && hit.mediaId > 0) {
-            val uri = android.content.ContentUris.withAppendedId(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, hit.mediaId)
+        // only this phone's own file is read: another phone's media id must never be opened
+        val media = com.opensolr.photos.storage.LocalFiles.mediaId(hit.id)
+            ?: hit.mediaId.takeIf { !com.opensolr.photos.storage.LocalFiles.ready.value && !com.opensolr.photos.storage.CloudFiles.has(hit.id) } ?: 0L
+        if (photoCache.adoptFaces(hit.id, media)) { photoCache.queueAction(hit.id, com.opensolr.photos.data.PhotoCache.ACTION_WORDS); SyncScheduler.runNow(context) }
+        // faces another phone read come with the clone's document
+        photoCache.importFacesFromClone(hit.id, media)
+        if (!photoCache.faceScanned(hit.id, hit.sizeBytes) && media > 0) {
+            val uri = android.content.ContentUris.withAppendedId(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, media)
             val bitmap = runCatching { PhotoReader.uprightBitmap(context, uri, com.opensolr.photos.media.FaceEngine.READ_EDGE) }.getOrNull()
             if (bitmap != null) {
                 val faces = try { com.opensolr.photos.media.FaceEngine.of(context).analyze(bitmap) } finally { bitmap.recycle() }
                 // a photo read here, before the background pass, is named the same way: the file's names, then the matcher
-                com.opensolr.photos.search.FaceMatcher.fromFile(context, photoCache, uri, photoCache.putFaces(hit.id, hit.mediaId, hit.sizeBytes, faces))
+                com.opensolr.photos.search.FaceMatcher.fromFile(context, photoCache, uri, photoCache.putFaces(hit.id, media, hit.sizeBytes, faces))
                 com.opensolr.photos.search.FaceMatcher.fromOriginal(context, photoCache, hit.id).takeIf { it.isNotEmpty() }?.let { edits.queueForAll(listOf(hit.id), null, false, it, false); SyncScheduler.runNow(context) }
                 com.opensolr.photos.search.FaceMatcher.nameOnlyFace(photoCache, hit.id)
                 val stored = photoCache.facesWithVectors(hit.id)

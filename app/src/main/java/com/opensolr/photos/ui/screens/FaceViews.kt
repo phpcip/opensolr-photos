@@ -301,10 +301,17 @@ internal fun FaceReviewPanel(review: FaceReview, topPad: androidx.compose.ui.uni
 @Composable
 internal fun FaceThumb(f: PhotoCache.FaceRow) {
     val context = LocalContext.current
-    val request = remember(f.fid) {
+    val ready = com.opensolr.photos.storage.LocalFiles.ready.value
+    val request = remember(f.fid, ready) {
         val edge = (THUMB_PX / max(f.w, 0.01f)).roundToInt().coerceIn(256, 2048)
         ImageRequest.Builder(context)
-            .data(ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, f.mediaId))
+            // a clip's faces were read from its kept picture; a photo's from this phone's file, else its 720 px copy from the backend
+            .data(
+                com.opensolr.photos.storage.ClipThumbs.file(context, f.photoId).takeIf { com.opensolr.photos.storage.ClipThumbs.has(context, f.photoId) }
+                    ?: com.opensolr.photos.storage.LocalFiles.mediaId(f.photoId)?.let { ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, it) }
+                    ?: com.opensolr.photos.storage.CloudFiles.model(context, f.photoId)
+                    ?: ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, f.mediaId)
+            )
             .size(edge)
             .transformations(FaceCrop(f))
             .build()

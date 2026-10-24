@@ -48,7 +48,7 @@ object LocalFiles {
                     out += d.path
                     copySuffix.matchEntire(d.path)?.let { m -> out += m.groupValues[1] + m.groupValues[2] }
                 }
-                d.remotePath?.let { out += StorageEngine.placedPath(it) }
+                d.remotePath?.let { out += StorageEngine.placedPaths(it) }
                 return out
             }
             val wanted = HashSet<String>()

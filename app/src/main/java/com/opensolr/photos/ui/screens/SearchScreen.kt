@@ -1353,19 +1353,18 @@ private fun buildSkeletonRows(
     val rows = ArrayList<GridRow>(hits.size + skeleton.size)
 
     val byName = HashMap<String, MutableList<PhotoHit>>()
+    val names = com.opensolr.photos.ui.DayNames()
     hits.forEach { hit ->
         val at = hit.takenMs
         if (at == null) {
             rows += GridRow.Photo(hit)
             return@forEach
         }
-        if (Actions.isRecentDay(at)) {
-            byName.getOrPut(Actions.dateHeading(at)) { ArrayList() } += hit
-            return@forEach
-        }
-        byName.getOrPut(Actions.yearHeading(at)) { ArrayList() } += hit
-        byName.getOrPut(Actions.monthKey(at)) { ArrayList() } += hit
-        byName.getOrPut(Actions.dayKey(at)) { ArrayList() } += hit
+        val n = names.of(at)
+        n.recent?.let { byName.getOrPut(it) { ArrayList() } += hit; return@forEach }
+        byName.getOrPut(n.year) { ArrayList() } += hit
+        byName.getOrPut(n.month) { ArrayList() } += hit
+        byName.getOrPut(n.day) { ArrayList() } += hit
     }
 
     val withChildren = HashSet<String>()
@@ -1507,19 +1506,21 @@ private fun buildRows(
     var lastYear: String? = null
     var lastMonth: String? = null
     var lastRecent: String? = null
+    val names = com.opensolr.photos.ui.DayNames()
     hits.forEach { hit ->
         val millis = hit.takenMs
+        val n = millis?.let { names.of(it) }
         when {
-            millis != null && Actions.isRecentDay(millis) -> {
-                val heading = Actions.dateHeading(millis)
+            n?.recent != null -> {
+                val heading = n.recent
                 recent.getOrPut(heading) { ArrayList() } += hit
                 lastRecent = heading
                 lastYear = null
                 lastMonth = null
             }
-            millis != null -> {
-                val year = Actions.yearHeading(millis)
-                val month = Actions.monthKey(millis)
+            n != null -> {
+                val year = n.year
+                val month = n.month
                 years.getOrPut(year) { LinkedHashMap() }.getOrPut(month) { ArrayList() } += hit
                 lastYear = year
                 lastMonth = month
@@ -1553,7 +1554,7 @@ private fun buildRows(
             if (rows.addGroup(monthKey, monthPhotos, text = monthText, level = 1, range = monthMillis?.let { Actions.monthSpan(it) })) return@forEach
             val days = LinkedHashMap<String, MutableList<PhotoHit>>()
             monthPhotos.forEach { hit ->
-                val key = hit.takenMs?.let { Actions.dayKey(it) } ?: days.keys.lastOrNull()
+                val key = hit.takenMs?.let { names.of(it).day } ?: days.keys.lastOrNull()
                 if (key == null) days.getOrPut("") { ArrayList() } += hit else days.getOrPut(key) { ArrayList() } += hit
             }
 

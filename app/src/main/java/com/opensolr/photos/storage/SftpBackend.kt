@@ -75,14 +75,20 @@ class SftpBackend(private val config: StorageConfig, private val onHostKey: ((St
             val tmp = "$path.part"
             val file = client().open(tmp, EnumSet.of(OpenMode.WRITE, OpenMode.CREAT, OpenMode.TRUNC))
             try {
-                file.RemoteFileOutputStream(0, WRITE_AHEAD).use { out ->
-                    source().use { it.copyTo(out, BUFFER) }
+                try {
+                    file.RemoteFileOutputStream(0, WRITE_AHEAD).use { out ->
+                        source().use { it.copyTo(out, BUFFER) }
+                    }
+                } finally {
+                    file.close()
                 }
-            } finally {
-                file.close()
+                runCatching { client().rm(path) }
+                client().rename(tmp, path)
+            } catch (e: Exception) {
+                // an upload cut short leaves nothing behind on the server
+                runCatching { client().rm(tmp) }
+                throw e
             }
-            runCatching { client().rm(path) }
-            client().rename(tmp, path)
         }
     }
 
