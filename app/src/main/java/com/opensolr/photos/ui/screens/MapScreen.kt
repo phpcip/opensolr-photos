@@ -136,10 +136,12 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
     }
 
     var area by remember { mutableStateOf<com.opensolr.photos.search.SearchRepository.MapArea?>(null) }
+    // the map moved by the app itself (fitting the pins, a photo's spot) asks nothing: only the owner's moves do
+    val placing = remember { booleanArrayOf(false) }
     DisposableEffect(mapView) {
         val listener = object : MapListener {
-            override fun onScroll(e: ScrollEvent?): Boolean { area = areaOf(mapView); return false }
-            override fun onZoom(e: ZoomEvent?): Boolean { area = areaOf(mapView); return false }
+            override fun onScroll(e: ScrollEvent?): Boolean { if (!placing[0]) area = areaOf(mapView); return false }
+            override fun onZoom(e: ZoomEvent?): Boolean { if (!placing[0]) area = areaOf(mapView); return false }
         }
         mapView.addMapListener(listener)
         onDispose { mapView.removeMapListener(listener) }
@@ -173,14 +175,17 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
         if (focus != null) {
             // Once the map has its size, so the area asked for afterwards is the one on screen
             mapView.post {
+                placing[0] = true
                 mapView.controller.setZoom(focus.zoom)
                 mapView.controller.setCenter(GeoPoint(focus.lat, focus.lon))
-                if (mapView.width > 0 && mapView.height > 0) area = areaOf(mapView)
+                mapView.post { placing[0] = false }
             }
             fitted = true
         } else if (state.pins.isNotEmpty()) {
             val box = BoundingBox.fromGeoPoints(state.pins.map { GeoPoint(it.lat, it.lon) })
             mapView.post {
+                placing[0] = true
+                mapView.post { placing[0] = false }
                 if (mapView.width > 0 && mapView.height > 0) {
                     if (box.latitudeSpan < 0.0005 && box.longitudeSpanWithDateLine < 0.0005) {
                         mapView.controller.setZoom(16.0)

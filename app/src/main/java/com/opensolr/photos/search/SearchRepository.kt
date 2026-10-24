@@ -14,8 +14,6 @@ import com.opensolr.photos.net.SolrAuthException
 import com.opensolr.photos.net.SolrClient
 import com.opensolr.photos.net.VectorNotAllowedException
 import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -748,29 +746,30 @@ class SearchRepository(private val context: Context) {
         val latStep = (north - south) / MAP_GRID
         val lonStep = (east - west) / MAP_GRID
 
-        val cells = ArrayList<Pair<Int, Int>>(MAP_GRID * MAP_GRID)
-        for (row in 0 until MAP_GRID) for (col in 0 until MAP_GRID) cells += row to col
-
-        val answers = kotlinx.coroutines.coroutineScope {
-            cells.map { (row, col) ->
-                async {
-                    val params = ArrayList(base)
-                    params += "fq" to "location:[" + corner(south + row * latStep, west + col * lonStep) +
-                        " TO " + corner(south + (row + 1) * latStep, west + (col + 1) * lonStep) + "]"
-                    params += "rows" to MAP_CELL_ROWS.toString()
-                    runCatching { parse(select(params), false, null) }.getOrNull()
-                }
-            }.awaitAll()
+        // ONE request: every cell is a group of the same answer, each with its own newest few
+        val params = ArrayList(base)
+        params += "rows" to MAP_CELL_ROWS.toString()
+        params += "group" to "true"
+        params += "group.limit" to MAP_CELL_ROWS.toString()
+        for (row in 0 until MAP_GRID) for (col in 0 until MAP_GRID) {
+            params += "group.query" to "location:[" + corner(south + row * latStep, west + col * lonStep) +
+                " TO " + corner(south + (row + 1) * latStep, west + (col + 1) * lonStep) + "]"
         }
+        val grouped = select(params).optJSONObject("grouped") ?: JSONObject()
+        val docs = JSONArray()
+        var total = 0
+        grouped.keys().forEach { key ->
+            val list = grouped.optJSONObject(key)?.optJSONObject("doclist") ?: return@forEach
+            total += list.optInt("numFound")
+            val found = list.optJSONArray("docs") ?: return@forEach
+            for (i in 0 until found.length()) docs.put(found.get(i))
+        }
+        val page = parse(JSONObject().put("response", JSONObject().put("numFound", total).put("docs", docs)), false, null)
 
         val seen = HashSet<String>()
         val pins = ArrayList<PhotoPin>()
-        var total = 0
-        answers.filterNotNull().forEach { page ->
-            total += page.numFound.toInt()
-            page.hits.forEach { hit ->
-                if (seen.add(hit.id)) hit.latLon?.let { (lat, lon) -> pins += PhotoPin(hit, lat, lon) }
-            }
+        page.hits.forEach { hit ->
+            if (seen.add(hit.id)) hit.latLon?.let { (lat, lon) -> pins += PhotoPin(hit, lat, lon) }
         }
         return MapPins(pins, total)
     }
