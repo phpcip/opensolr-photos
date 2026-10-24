@@ -28,6 +28,9 @@ import kotlin.math.roundToInt
 
 class PhotoCluster(val pins: List<PhotoPin>, val centerX: Float, val centerY: Float) {
 
+    /** The photos the cluster stands for: each pin from the index counts its whole map cell. */
+    val count: Int get() = pins.sumOf { it.count }
+
     val geoCenter: GeoPoint get() = GeoPoint(pins.map { it.lat }.average(), pins.map { it.lon }.average())
 }
 
@@ -140,11 +143,17 @@ class PhotoClusterOverlay(
         canvas.drawRoundRect(dst, corner, corner, hairline)
         canvas.drawRoundRect(dst, corner, corner, border)
 
-        if (cluster.pins.size > 1) {
+        val total = cluster.count
+        if (total > 1) {
             val bx = dst.right - badgeRadius * 0.6f
             val by = dst.top + badgeRadius * 0.6f
             canvas.drawCircle(bx, by, badgeRadius, badge)
-            val label = if (cluster.pins.size > 999) "999+" else cluster.pins.size.toString()
+            val label = when {
+                total >= 1_000_000 -> String.format(java.util.Locale.US, "%.1fM", total / 1_000_000.0)
+                total >= 10_000 -> "${total / 1000}k"
+                total >= 1000 -> String.format(java.util.Locale.US, "%.1fk", total / 1000.0)
+                else -> total.toString()
+            }
             val textY = by - (badgeText.descent() + badgeText.ascent()) / 2
             canvas.drawText(label, bx, textY, badgeText)
         }

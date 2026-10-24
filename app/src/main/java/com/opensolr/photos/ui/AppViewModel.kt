@@ -2137,14 +2137,21 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    /** Where the map was last left, this session: opening it again asks only for that view. */
+    var lastMapView: MapFocus? = null
+
     fun openMap(focus: MapFocus? = null) {
-        _state.update { it.copy(screen = Screen.Map, mapFocus = focus) }
-        // On one photo: the photos around that spot, not the newest of the whole library
-        if (focus != null) {
-            loadPins(com.opensolr.photos.search.SearchRepository.MapArea(focus.lat - 0.002, focus.lon - 0.003, focus.lat + 0.002, focus.lon + 0.003))
-        } else {
-            loadPins()
-        }
+        // a photo's spot, or the view the map was left on: the map asks for that view once it has its size;
+        // the first time, the library's cells at the widest zoom place the camera
+        val at = focus ?: lastMapView
+        _state.update { it.copy(screen = Screen.Map, mapFocus = at) }
+        if (at == null) loadPins(null, 4.0)
+    }
+
+    /** The photos of map cells, a page at a time, under the map's search and filters. */
+    suspend fun cellPhotos(field: String, cells: List<String>, start: Int): Pair<List<PhotoHit>, Long> {
+        val s = _state.value
+        return searches.cellPhotos(s.query, s.filters, field, cells, start)
     }
 
     private var pinsJob: kotlinx.coroutines.Job? = null
@@ -2172,14 +2179,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
 
     /** The pins of the area the map is showing; null asks for the newest ones, to place the camera. */
-    fun loadPins(area: com.opensolr.photos.search.SearchRepository.MapArea? = null) {
+    fun loadPins(area: com.opensolr.photos.search.SearchRepository.MapArea? = null, zoom: Double = 4.0) {
         val current = _state.value
         pinsJob?.cancel()
         _state.update { it.copy(pinsLoading = true, pinsError = null) }
         pinsJob = viewModelScope.launch {
             try {
                 val found = try {
-                    searches.pins(current.query, current.filters, area)
+                    searches.pins(current.query, current.filters, area, zoom)
                 } catch (e: kotlinx.coroutines.CancellationException) {
                     throw e
                 } catch (e: SignInRequiredException) {

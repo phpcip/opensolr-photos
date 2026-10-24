@@ -66,6 +66,7 @@ import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import com.opensolr.photos.R
 import com.opensolr.photos.search.PhotoPin
+import kotlinx.coroutines.launch
 import com.opensolr.photos.ui.Actions
 import com.opensolr.photos.ui.AppViewModel
 import com.opensolr.photos.ui.Notice
@@ -149,7 +150,10 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
     LaunchedEffect(area) {
         val asked = area ?: return@LaunchedEffect
         kotlinx.coroutines.delay(400)
-        viewModel.loadPins(asked)
+        // one request for the view, and the view remembered for the next time the map opens
+        val c = mapView.mapCenter
+        viewModel.lastMapView = com.opensolr.photos.ui.MapFocus(c.latitude, c.longitude, mapView.zoomLevelDouble)
+        viewModel.loadPins(asked, mapView.zoomLevelDouble)
     }
 
     DisposableEffect(lifecycleOwner) {
@@ -178,14 +182,15 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
                 placing[0] = true
                 mapView.controller.setZoom(focus.zoom)
                 mapView.controller.setCenter(GeoPoint(focus.lat, focus.lon))
-                mapView.post { placing[0] = false }
+                mapView.post { placing[0] = false; if (mapView.width > 0 && mapView.height > 0) area = areaOf(mapView) }
             }
             fitted = true
         } else if (state.pins.isNotEmpty()) {
             val box = BoundingBox.fromGeoPoints(state.pins.map { GeoPoint(it.lat, it.lon) })
             mapView.post {
                 placing[0] = true
-                mapView.post { placing[0] = false }
+                // the camera placed on the library's cells: then the cells of this view, asked once
+                mapView.post { placing[0] = false; if (mapView.width > 0 && mapView.height > 0) area = areaOf(mapView) }
                 if (mapView.width > 0 && mapView.height > 0) {
                     if (box.latitudeSpan < 0.0005 && box.longitudeSpanWithDateLine < 0.0005) {
                         mapView.controller.setZoom(16.0)
@@ -217,7 +222,7 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
             }) {
                 Icon(Icons.Filled.Search, contentDescription = stringResource(R.string.mp_search_area), tint = p.accent, modifier = Modifier.size(22.dp))
             }
-            IconButton(onClick = { fitted = false; viewModel.loadPins() }, enabled = !state.pinsLoading) {
+            IconButton(onClick = { viewModel.loadPins(areaOf(mapView), mapView.zoomLevelDouble) }, enabled = !state.pinsLoading) {
                 Icon(painterResource(R.drawable.ic_reload), contentDescription = stringResource(R.string.mp_reload), tint = p.accent, modifier = Modifier.size(20.dp))
             }
         }
@@ -239,12 +244,13 @@ fun MapScreen(state: UiState, viewModel: AppViewModel) {
         }
     }
 
+    var sheetPhotos by remember { mutableStateOf<List<com.opensolr.photos.search.PhotoHit>>(emptyList()) }
     group?.let { cluster ->
-        GroupSheet(cluster, onDismiss = { group = null }, onShowPhoto = { hit -> viewing = hit })
+        GroupSheet(cluster, viewModel, onDismiss = { group = null }, onShowPhoto = { hit, loaded -> sheetPhotos = loaded; viewing = hit })
     }
     viewing?.let { hit ->
 
-        val photos = remember(group, hit.id) { group?.pins?.map { it.hit } ?: listOf(hit) }
+        val photos = remember(sheetPhotos, hit.id) { sheetPhotos.ifEmpty { listOf(hit) } }
         val startAt = remember(photos, hit.id) { photos.indexOfFirst { it.id == hit.id }.coerceAtLeast(0) }
         PhotoViewer(
             hits = photos,
@@ -291,7 +297,7 @@ private fun darkMapFilter(): android.graphics.ColorMatrixColorFilter {
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-private fun GroupSheet(cluster: PhotoCluster, onDismiss: () -> Unit, onShowPhoto: (com.opensolr.photos.search.PhotoHit) -> Unit) {
+private fun GroupSheet(cluster: PhotoCluster, viewModel: AppViewModel, onDismiss: () -> Unit, onShowPhoto: (com.opensolr.photos.search.PhotoHit, List<com.opensolr.photos.search.PhotoHit>) -> Unit) {
     val p = LocalPalette.current
     val context = LocalContext.current
 
@@ -302,13 +308,41 @@ private fun GroupSheet(cluster: PhotoCluster, onDismiss: () -> Unit, onShowPhoto
         shape = RoundedCornerShape(2.dp),
     ) { com.opensolr.photos.ui.KeyboardBack();
         Column(Modifier.fillMaxWidth().fillMaxHeight().padding(horizontal = 20.dp).navigationBarsPadding()) {
-            SectionLabel(pluralStringResource(R.plurals.mp_n_here, cluster.pins.size, Actions.formatCount(cluster.pins.size.toLong())))
+            // a cluster of index cells shows all their photos, a page at a time; pins drawn from the phone are the photos themselves
+            val field = cluster.pins.firstNotNullOfOrNull { it.field }
+            val cells = remember(cluster) { cluster.pins.mapNotNull { it.cell }.distinct() }
+            val loaded = remember(cluster) { androidx.compose.runtime.mutableStateListOf<com.opensolr.photos.search.PhotoHit>().apply { if (field == null) addAll(cluster.pins.map { it.hit }) } }
+            var total by remember(cluster) { mutableStateOf(if (field == null) cluster.pins.size.toLong() else cluster.count.toLong()) }
+            var paging by remember(cluster) { mutableStateOf(false) }
+            var ended by remember(cluster) { mutableStateOf(field == null) }
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            fun more() {
+                if (paging || ended || field == null) return
+                paging = true
+                scope.launch {
+                    try {
+                        val (hits, found) = viewModel.cellPhotos(field, cells, loaded.size)
+                        val seen = loaded.mapTo(HashSet()) { it.id }
+                        loaded.addAll(hits.filter { seen.add(it.id) })
+                        total = found
+                        if (hits.isEmpty() || loaded.size >= found) ended = true
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (e: Exception) {
+                        ended = true
+                    } finally {
+                        paging = false
+                    }
+                }
+            }
+            LaunchedEffect(cluster) { more() }
+            SectionLabel(pluralStringResource(R.plurals.mp_n_here, total.toInt(), Actions.formatCount(total)))
 
-            val place = remember(cluster) {
+            val place = remember(cluster, loaded.size) {
                 fun commonest(of: (com.opensolr.photos.search.PhotoHit) -> String?): String? =
-                    cluster.pins.mapNotNull { of(it.hit)?.trim()?.takeIf { v -> v.isNotEmpty() } }
+                    loaded.mapNotNull { of(it)?.trim()?.takeIf { v -> v.isNotEmpty() } }
                         .groupingBy { it }.eachCount().maxByOrNull { it.value }?.key
-                listOfNotNull(commonest { it.city }, commonest { it.country }).joinToString(" · ").ifBlank { null }
+                listOfNotNull(commonest { it.city ?: it.province }, commonest { it.country }).joinToString(" · ").ifBlank { null }
             }
             place?.let {
                 Spacer(Modifier.height(4.dp))
@@ -322,7 +356,9 @@ private fun GroupSheet(cluster: PhotoCluster, onDismiss: () -> Unit, onShowPhoto
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                items(cluster.pins, key = { it.hit.id }) { pin ->
+                items(loaded.size, key = { loaded[it].id }) { index ->
+                    if (index >= loaded.size - 12) LaunchedEffect(loaded.size) { more() }
+                    val pin = com.opensolr.photos.search.PhotoPin(loaded[index], 0.0, 0.0)
                     // this phone's copy of the photo (its file, or its 720p copy), never another phone's file id
                     val uri = remember(pin.hit.id) { com.opensolr.photos.ui.Images.small(context, pin.hit) }
                     AsyncImage(
@@ -332,7 +368,7 @@ private fun GroupSheet(cluster: PhotoCluster, onDismiss: () -> Unit, onShowPhoto
                         modifier = Modifier
                             .aspectRatio(1f)
                             .background(p.chip)
-                            .combinedClickable(onClick = { onShowPhoto(pin.hit) }),
+                            .combinedClickable(onClick = { onShowPhoto(pin.hit, loaded.toList()) }),
                     )
                 }
             }

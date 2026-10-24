@@ -135,7 +135,8 @@ data class DuplicatePage(
     val totalPhotos: Int = 0,
 )
 
-data class PhotoPin(val hit: PhotoHit, val lat: Double, val lon: Double)
+/** A photo on the map; from the index it stands for its whole map [cell] ([field] = the zoom's cell field) and its [count] photos. */
+data class PhotoPin(val hit: PhotoHit, val lat: Double, val lon: Double, val count: Int = 1, val field: String? = null, val cell: String? = null)
 
 data class Album(val field: String, val value: String, val title: String, val count: Int, val covers: List<Long>)
 
@@ -723,56 +724,68 @@ class SearchRepository(private val context: Context) {
     /** What the map got, and how many photos that piece of the world really holds. */
     data class MapPins(val pins: List<PhotoPin>, val total: Int)
 
-    // The photos of the area on screen. The area is cut into a grid and every cell is asked for its
-    // own newest few, so a place with thousands of photos cannot crowd out a trip abroad: asking the
-    // whole area for its newest thousand showed nothing but the city one lives in (Cip, 09/23/2026).
-    suspend fun pins(query: String, filters: SearchFilters, area: MapArea? = null): MapPins {
-        val (base, _, _) = queryParams(query, filters)
-        base += "fq" to "has_location:true"
-        base += "fl" to FIELDS
-        base += "start" to "0"
-        if (area == null) {
-            val params = ArrayList(base)
-            params += "rows" to MAP_ROWS.toString()
-            val page = parse(select(params), false, null)
-            return MapPins(page.hits.mapNotNull { hit -> hit.latLon?.let { (lat, lon) -> PhotoPin(hit, lat, lon) } }, page.numFound.toInt())
+    // The map of the area on screen, in ONE request: the index groups the photos on their map cell at this zoom
+    // (tile_z<zoom>_s, written at indexing), each cell with its exact count and its newest photo. The cells are
+    // fixed on the globe, so moving the map a little shows the same cells with the same counts.
+    suspend fun pins(query: String, filters: SearchFilters, area: MapArea?, zoom: Double): MapPins {
+        val z = cellZoom(zoom)
+        val field = "tile_z${z}_s"
+        val (params, _, _) = queryParams(query, filters)
+        params += "fq" to "has_location:true"
+        if (area != null) {
+            val x0 = tileX(area.west, z); val x1 = tileX(area.east, z)
+            val y0 = tileY(area.north, z); val y1 = tileY(area.south, z)
+            params += "fq" to "location:[" + corner(tileLat(y1 + 1, z), tileLon(x0, z)) + " TO " + corner(tileLat(y0, z), minOf(180.0, tileLon(x1 + 1, z))) + "]"
         }
-
-        val south = area.south.coerceIn(-90.0, 90.0)
-        val north = area.north.coerceIn(-90.0, 90.0)
-        val west = area.west.coerceIn(-180.0, 180.0)
-        val east = area.east.coerceIn(-180.0, 180.0)
-        if (north <= south || east <= west) return MapPins(emptyList(), 0)
-        val latStep = (north - south) / MAP_GRID
-        val lonStep = (east - west) / MAP_GRID
-
-        // ONE request: every cell is a group of the same answer, each with its own newest few
-        val params = ArrayList(base)
-        params += "rows" to MAP_CELL_ROWS.toString()
+        params += "fl" to FIELDS
+        params += "start" to "0"
+        params += "rows" to MAP_GROUPS.toString()
         params += "group" to "true"
-        params += "group.limit" to MAP_CELL_ROWS.toString()
-        for (row in 0 until MAP_GRID) for (col in 0 until MAP_GRID) {
-            params += "group.query" to "location:[" + corner(south + row * latStep, west + col * lonStep) +
-                " TO " + corner(south + (row + 1) * latStep, west + (col + 1) * lonStep) + "]"
-        }
-        val grouped = select(params).optJSONObject("grouped") ?: JSONObject()
+        params += "group.field" to field
+        params += "group.limit" to "1"
+        val grouped = select(params).optJSONObject("grouped")?.optJSONObject(field) ?: JSONObject()
+        val groups = grouped.optJSONArray("groups") ?: JSONArray()
         val docs = JSONArray()
-        var total = 0
-        grouped.keys().forEach { key ->
-            val list = grouped.optJSONObject(key)?.optJSONObject("doclist") ?: return@forEach
-            total += list.optInt("numFound")
-            val found = list.optJSONArray("docs") ?: return@forEach
-            for (i in 0 until found.length()) docs.put(found.get(i))
+        val counts = HashMap<String, Pair<Int, String>>()
+        for (i in 0 until groups.length()) {
+            val g = groups.optJSONObject(i) ?: continue
+            val value = g.optString("groupValue").takeIf { it.isNotBlank() && it != "null" } ?: continue
+            val list = g.optJSONObject("doclist") ?: continue
+            val cover = list.optJSONArray("docs")?.optJSONObject(0) ?: continue
+            counts[cover.optString("id")] = list.optInt("numFound", 1) to value
+            docs.put(cover)
         }
-        val page = parse(JSONObject().put("response", JSONObject().put("numFound", total).put("docs", docs)), false, null)
-
-        val seen = HashSet<String>()
-        val pins = ArrayList<PhotoPin>()
-        page.hits.forEach { hit ->
-            if (seen.add(hit.id)) hit.latLon?.let { (lat, lon) -> pins += PhotoPin(hit, lat, lon) }
+        val page = parse(JSONObject().put("response", JSONObject().put("numFound", grouped.optInt("matches")).put("docs", docs)), false, null)
+        val pins = page.hits.mapNotNull { hit ->
+            val (n, value) = counts[hit.id] ?: return@mapNotNull null
+            hit.latLon?.let { (lat, lon) -> PhotoPin(hit, lat, lon, n, field, value) }
         }
-        return MapPins(pins, total)
+        return MapPins(pins, grouped.optInt("matches"))
     }
+
+    /** The photos of map cells, a page at a time, newest first (under the search and filters of the map). */
+    suspend fun cellPhotos(query: String, filters: SearchFilters, field: String, cells: List<String>, start: Int, rows: Int = CELL_PAGE): Pair<List<PhotoHit>, Long> {
+        if (!Regex("^tile_z\\d{1,2}_s$").matches(field) || cells.isEmpty()) return emptyList<PhotoHit>() to 0L
+        val (params, _, _) = queryParams(query, filters)
+        params += "fq" to "has_location:true"
+        params += "fq" to "{!terms f=$field separator=| v=\$cellv}"
+        params += "cellv" to cells.filter { '|' !in it }.joinToString("|")
+        params += "fl" to FIELDS
+        params += "start" to start.coerceAtLeast(0).toString()
+        params += "rows" to rows.coerceIn(1, 200).toString()
+        val page = parse(select(params), false, null)
+        return page.hits to page.numFound
+    }
+
+    private fun cellZoom(zoom: Double): Int = (kotlin.math.floor(zoom).toInt() + 1).coerceIn(CELL_MIN, CELL_MAX)
+    private fun tileX(lon: Double, z: Int): Int { val n = 1 shl z; return kotlin.math.floor((lon.coerceIn(-180.0, 179.9999999) + 180.0) / 360.0 * n).toInt().coerceIn(0, n - 1) }
+    private fun tileY(lat: Double, z: Int): Int {
+        val n = 1 shl z
+        val r = Math.toRadians(lat.coerceIn(-85.05112878, 85.05112878))
+        return kotlin.math.floor((1.0 - kotlin.math.ln(kotlin.math.tan(r) + 1.0 / kotlin.math.cos(r)) / Math.PI) / 2.0 * n).toInt().coerceIn(0, n - 1)
+    }
+    private fun tileLon(x: Int, z: Int): Double = x.toDouble() / (1 shl z) * 360.0 - 180.0
+    private fun tileLat(y: Int, z: Int): Double { val k = Math.PI - 2.0 * Math.PI * y / (1 shl z); return Math.toDegrees(kotlin.math.atan(kotlin.math.sinh(k))) }
 
     /** A corner of a cell, as Solr reads a point: latitude first. */
     private fun corner(lat: Double, lon: Double): String =
@@ -1204,9 +1217,15 @@ class SearchRepository(private val context: Context) {
         /** The most pins one view of the map holds: past that, zoom in and the area asks again. */
         const val MAP_ROWS = 1000
 
-        /** The view is cut into this many cells each way, and every cell brings its own newest few. */
-        const val MAP_GRID = 3
-        const val MAP_CELL_ROWS = 120
+        /** The most map cells one view brings (each one with its count and its newest photo). */
+        const val MAP_GROUPS = 2000
+
+        /** The zooms the map cells are written for at indexing (tile_z5_s … tile_z20_s). */
+        const val CELL_MIN = 5
+        const val CELL_MAX = 20
+
+        /** Photos of one map cell per page, in its sheet. */
+        const val CELL_PAGE = 60
 
         const val GROUP_TICK_MAX = 20000
 
