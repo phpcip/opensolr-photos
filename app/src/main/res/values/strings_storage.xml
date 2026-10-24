@@ -92,4 +92,8 @@
     <string name="stg_downloaded">Downloaded into %1$s</string>
     <string name="stg_download_failed">Could not download</string>
     <string name="stg_cloud_action">Download the full copy first</string>
+    <string name="sec_storage">Storage</string>
+    <string name="stg_size_here">On this phone · %1$s</string>
+    <string name="stg_copy_here">720p copy on this phone · %1$s</string>
+    <string name="stg_not_backed_up">Not in the backend yet</string>
 </resources>

@@ -67,6 +67,9 @@ class Layout(config: StorageConfig, private val indexName: String) {
 
     fun manifest(deviceId: String): String = join(home, "manifest-$deviceId.jsonl")
 
+    /** The small grid picture the web made from the 720 px copy. */
+    fun webThumb(id: String): String = join(home, "t", "$id.jpg")
+
     val mainRoot: String get() = join(home, "o")
     val restoreRoot: String get() = join(home, "r")
 

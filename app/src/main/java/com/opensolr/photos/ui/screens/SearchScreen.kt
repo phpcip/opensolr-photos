@@ -3359,17 +3359,45 @@ internal fun DetailsSheet(
                 Spacer(Modifier.height(16.dp))
             }
 
-            if (cloudFile != null || absentHere(hit)) {
-                SectionLabel(stringResource(R.string.stg_mark))
-                Spacer(Modifier.height(10.dp))
-                val where = fresh.storage?.let { it.label.ifBlank { it.host } }.orEmpty()
+            // where the file is: on this phone (its size, or the 720p copy's) and in the backend (the full copy's size)
+            SectionLabel(stringResource(R.string.sec_storage))
+            Spacer(Modifier.height(10.dp))
+            val hereBytes by androidx.compose.runtime.produceState(-1L, hit.id, cloudFile) {
+                value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    val media = com.opensolr.photos.storage.LocalFiles.mediaId(hit.id)
+                    when {
+                        media != null && media > 0 -> runCatching {
+                            context.contentResolver.query(
+                                android.content.ContentUris.withAppendedId(android.provider.MediaStore.Files.getContentUri("external"), media),
+                                arrayOf(android.provider.MediaStore.MediaColumns.SIZE), null, null, null,
+                            )?.use { c -> if (c.moveToFirst()) c.getLong(0) else -1L } ?: -1L
+                        }.getOrDefault(-1L)
+                        cloudFile != null -> -2L
+                        else -> -1L
+                    }
+                }
+            }
+            val here = when {
+                hereBytes >= 0 -> stringResource(R.string.stg_size_here, Actions.formatFileSize(hereBytes).ifBlank { "0 B" })
+                hereBytes == -2L -> stringResource(R.string.stg_copy_here, Actions.formatFileSize(cloudFile?.length() ?: 0L).ifBlank { "0 B" })
+                else -> stringResource(R.string.stg_not_here)
+            }
+            Text(here, style = MaterialTheme.typography.bodyMedium, color = p.ink)
+            fresh.storage?.let { storage ->
+                Spacer(Modifier.height(4.dp))
+                val where = storage.label.ifBlank { storage.host }
                 val bytes = remember(hit.id) { com.opensolr.photos.data.PhotoCache.of(context).remote(hit.id)?.bytes ?: 0L }
-                Text(stringResource(R.string.stg_original_in, where, Actions.formatFileSize(bytes)), style = MaterialTheme.typography.bodyMedium, color = p.ink)
+                Text(
+                    if (bytes > 0) stringResource(R.string.stg_original_in, where, Actions.formatFileSize(bytes)) else stringResource(R.string.stg_not_backed_up),
+                    style = MaterialTheme.typography.bodyMedium, color = p.ink,
+                )
+            }
+            if (cloudFile != null || absentHere(hit)) {
                 Spacer(Modifier.height(10.dp))
                 val downloading = hit.id in fresh.downloading
                 com.opensolr.photos.ui.GhostButton(if (downloading) stringResource(R.string.stg_downloading) else stringResource(R.string.stg_download), onClick = { viewModel.downloadOriginal(hit) }, enabled = !downloading, modifier = Modifier.fillMaxWidth())
-                Spacer(Modifier.height(16.dp))
             }
+            Spacer(Modifier.height(16.dp))
 
             SectionLabel(stringResource(R.string.sec_place))
             Spacer(Modifier.height(10.dp))

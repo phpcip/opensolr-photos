@@ -99,6 +99,7 @@ class StorageEngine(private val context: Context) {
                 for (r in gone) {
                     guard()
                     runCatching { backend.delete(layout.restoreCopy(r.id)) }
+                    runCatching { backend.delete(layout.webThumb(r.id)) }
                 }
                 cache.removeRemote(gone.map { it.id })
                 // a PDF's file goes with its last page
@@ -236,7 +237,12 @@ class StorageEngine(private val context: Context) {
                     val photo = local[item.id] ?: continue
                     try {
                         val sent = upload(backend, layout, photo, quality)
+                        if (Changed.has(context, item.id)) {
+                            runCatching { backend.delete(layout.webThumb(item.id)) }
+                            Changed.done(context, item.id)
+                        }
                         cache.putRemote(listOf(PhotoCache.Remote(item.id, device, sent.first, sent.second, item.folder.trim('/') + "/" + item.fileName, sent.third, System.currentTimeMillis())))
+                        Changed.manifestOwed(context, true)
                         uploaded++
                         sinceManifest++
                     } catch (e: UnreadableException) {
@@ -250,7 +256,7 @@ class StorageEngine(private val context: Context) {
                     onProgress(Progress(AppText.s(R.string.stg_backing_up), uploaded + failed, maxOf(toSend, uploaded + failed)))
                 }
             }
-            if (sinceManifest > 0) writeManifest(backend, layout, device)
+            if (sinceManifest > 0 || Changed.manifestOwed(context)) writeManifest(backend, layout, device)
             return report("ok", uploaded, restored, failed)
         } catch (e: CancellationException) {
             throw e
@@ -371,6 +377,7 @@ class StorageEngine(private val context: Context) {
                 }
             }
             backend.put(layout.manifest(device), tmp.length()) { tmp.inputStream() }
+            Changed.manifestOwed(context, false)
         } finally {
             tmp.delete()
         }

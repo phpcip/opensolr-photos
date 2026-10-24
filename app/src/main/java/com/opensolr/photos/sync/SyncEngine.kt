@@ -488,6 +488,7 @@ class SyncEngine(private val context: Context) {
                 // document takes this phone's id and path, as data, with the next words batch
                 val where = cache.docMedia()
                 val relocated = ArrayList<String>()
+                val remoteNow = cache.remoteIds()
 
                 local.values.forEach { photo ->
                     val stamp = known[photo.id]
@@ -513,6 +514,10 @@ class SyncEngine(private val context: Context) {
                             cache.updateDocSize(photo.id, photo.sizeBytes, photo.modifiedSec, now)
                             if (wasPixels != null) takeWordsFromFile(photo)
                             if (photo.id !in forced && photo.id !in needWords && photo.id !in reread) return@forEach
+                        } else if (photo.id in remoteNow) {
+                            // the picture itself changed (an edit): the backup's full copy and 720 px copy are sent again
+                            com.opensolr.photos.storage.Changed.mark(context, listOf(photo.id))
+                            cache.removeRemote(listOf(photo.id))
                         }
                     }
                     if (changed || photo.id in forced || photo.id in needWords || photo.id in reread) {
