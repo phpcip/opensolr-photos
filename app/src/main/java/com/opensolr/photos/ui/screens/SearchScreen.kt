@@ -3722,6 +3722,35 @@ private fun VideoPage(uri: Uri, still: Any, active: Boolean, full: Boolean = fal
         return
     }
     var failed by remember(uri) { mutableStateOf(false) }
+    // VLC plays what the phone's own decoders cannot (format, size or frame rate), and takes over from the
+    // phone's player when that fails or never gets ready; the clip goes on where it was
+    var vlc by remember(uri) { mutableStateOf<Long?>(null) }
+    val checked by androidx.compose.runtime.produceState<Boolean?>(null, uri) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opensolr.photos.media.VideoSupport.phoneCanPlay(context, uri) }
+    }
+    if (checked == false && vlc == null) vlc = 0L
+    vlc?.let { startAt ->
+        Box(Modifier.fillMaxSize().then(gestures)) {
+            if (failed) {
+                AsyncImage(model = still, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                com.opensolr.photos.ui.GhostButton(stringResource(R.string.act_open_video), onClick = { Actions.openFile(context, uri, "video/*") }, modifier = Modifier.align(Alignment.Center).padding(24.dp))
+            } else {
+                com.opensolr.photos.ui.VlcVideo(
+                    uri = uri, active = active, startMs = startAt,
+                    controlsRoom = if (full) 0.dp else 190.dp,
+                    onControls = { shown -> onTap(shown); onControls(shown) },
+                    onFailed = { failed = true },
+                )
+            }
+        }
+        return
+    }
+    if (checked == null) {
+        Box(Modifier.fillMaxSize().then(gestures).background(Color.Black)) {
+            AsyncImage(model = still, contentDescription = null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+        }
+        return
+    }
     // while the player's controls show, every touch is theirs: play, seek, the slider
     var controls by remember(uri) { mutableStateOf(false) }
     val player = remember(uri) {
@@ -3734,7 +3763,7 @@ private fun VideoPage(uri: Uri, still: Any, active: Boolean, full: Boolean = fal
         androidx.media3.exoplayer.ExoPlayer.Builder(context).setLoadControl(load).build().apply {
             setMediaItem(androidx.media3.common.MediaItem.fromUri(uri))
             addListener(object : androidx.media3.common.Player.Listener {
-                override fun onPlayerError(error: androidx.media3.common.PlaybackException) { failed = true }
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) { vlc = currentPosition.coerceAtLeast(0L) }
             })
             prepare()
         }
@@ -3745,7 +3774,7 @@ private fun VideoPage(uri: Uri, still: Any, active: Boolean, full: Boolean = fal
         if (!active) { player.pause(); return@LaunchedEffect }
         // a clip that never gets ready is not left black: the phone's own player is offered
         kotlinx.coroutines.delay(6000)
-        if (player.playbackState != androidx.media3.common.Player.STATE_READY && player.playbackState != androidx.media3.common.Player.STATE_ENDED) failed = true
+        if (player.playbackState != androidx.media3.common.Player.STATE_READY && player.playbackState != androidx.media3.common.Player.STATE_ENDED) vlc = player.currentPosition.coerceAtLeast(0L)
     }
     val playerView = remember(uri) {
         androidx.media3.ui.PlayerView(context).apply {
