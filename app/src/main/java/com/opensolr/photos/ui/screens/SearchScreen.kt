@@ -2585,6 +2585,7 @@ internal fun PhotoViewer(
     var sheetFor by remember { mutableStateOf<PhotoHit?>(null) }
     var viewerShare by remember { mutableStateOf<PhotoHit?>(null) }
     var confirmPdfDelete by remember { mutableStateOf<PhotoHit?>(null) }
+    var confirmOneDelete by remember { mutableStateOf<PhotoHit?>(null) }
     var wallpaperFor by remember { mutableStateOf<PhotoHit?>(null) }
     var editing by remember { mutableStateOf<PhotoHit?>(null) }
     // faces: shown on demand on the photo on screen, a tap on one names it
@@ -2929,7 +2930,7 @@ internal fun PhotoViewer(
                         ViewerAction(stringResource(R.string.act_map), R.drawable.ic_map, on) { onClose(); viewModel.openMap(MapFocus(lat, lon, 19.0)) }
                         ViewerIconAction(stringResource(R.string.act_nearby), Icons.Filled.LocationOn, on) { onClose(); viewModel.searchNear(lat, lon, 5.0) }
                     }
-                    if (!cloud) ViewerAction(stringResource(R.string.act_delete), R.drawable.ic_delete, on) { if (hit.isPdfPage) confirmPdfDelete = hit else onDelete(hit) }
+                    if (!cloud) ViewerAction(stringResource(R.string.act_delete), R.drawable.ic_delete, on) { if (hit.isPdfPage) confirmPdfDelete = hit else confirmOneDelete = hit }
                 }
             }
 
@@ -2941,6 +2942,19 @@ internal fun PhotoViewer(
                     confirmButton = { com.opensolr.photos.ui.TextButton(onClick = { confirmPdfDelete = null; onDelete(one) }) { Text(stringResource(R.string.act_delete), color = LocalPalette.current.accent) } },
                     dismissButton = { com.opensolr.photos.ui.TextButton(onClick = { confirmPdfDelete = null }) { Text(stringResource(R.string.cancel), color = LocalPalette.current.ink) } },
                     containerColor = LocalPalette.current.paper,
+                )
+            }
+
+            confirmOneDelete?.let { one ->
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { confirmOneDelete = null },
+                    title = { Text(pluralStringResource(if (one.isVideo) R.plurals.delete_title_clips else R.plurals.delete_title, 1, Actions.formatCount(1L))) },
+                    text = { com.opensolr.photos.ui.KeyboardBack(); Text(stringResource(R.string.delete_text)) },
+                    confirmButton = { com.opensolr.photos.ui.TextButton(onClick = { confirmOneDelete = null; onDelete(one) }) { Text(stringResource(R.string.act_delete), color = LocalPalette.current.accent) } },
+                    dismissButton = { com.opensolr.photos.ui.TextButton(onClick = { confirmOneDelete = null }) { Text(stringResource(R.string.cancel), color = LocalPalette.current.ink) } },
+                    containerColor = LocalPalette.current.paper,
+                    titleContentColor = LocalPalette.current.ink,
+                    textContentColor = LocalPalette.current.muted,
                 )
             }
 
