@@ -58,7 +58,8 @@ class PhotoClusterOverlay(
     private val corner = 2f * density
     private val badgeRadius = 12f * density
 
-    private val loader = ImageLoader(context)
+    // the app's own loader: it knows clips (their kept picture), PDF pages and the 720 px copies
+    private val loader: ImageLoader = coil.Coil.imageLoader(context)
     private val thumbs = object : LruCache<String, Bitmap>(64) {}
     private val loading = HashSet<String>()
 
@@ -194,7 +195,6 @@ class PhotoClusterOverlay(
     override fun onDetach(mapView: MapView?) {
         thumbs.evictAll()
         loading.clear()
-        loader.shutdown()
         super.onDetach(mapView)
     }
 
