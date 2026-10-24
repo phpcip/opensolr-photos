@@ -8,7 +8,14 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.animation.rememberSplineBasedDecay
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.navigationBarsPadding
@@ -89,15 +96,44 @@ private fun ExternalPhoto(uri: Uri) {
     var offset by remember { mutableStateOf(Offset.Zero) }
     var failed by remember { mutableStateOf(false) }
     val request = remember(uri) { ImageRequest.Builder(context).data(uri).size(PHOTO_EDGE).build() }
+    val scope = rememberCoroutineScope()
+    var glide by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    val panDecay = rememberSplineBasedDecay<Float>()
     Box(
         Modifier.fillMaxSize()
             .pointerInput(uri) {
-                detectTapGestures(onDoubleTap = { if (scale > 1f) { scale = 1f; offset = Offset.Zero } else scale = DOUBLE_TAP_ZOOM })
+                detectTapGestures(onDoubleTap = { glide?.cancel(); if (scale > 1f) { scale = 1f; offset = Offset.Zero } else scale = DOUBLE_TAP_ZOOM })
             }
             .pointerInput(uri) {
-                detectTransformGestures { _, pan, zoom, _ ->
-                    scale = (scale * zoom).coerceIn(1f, MAX_ZOOM)
-                    offset = if (scale == 1f) Offset.Zero else offset + pan
+                awaitEachGesture {
+                    awaitFirstDown(requireUnconsumed = false)
+                    glide?.cancel()
+                    val tracker = VelocityTracker()
+                    var panned = false
+                    do {
+                        val event = awaitPointerEvent()
+                        if (event.changes.size > 1) {
+                            tracker.resetTracking()
+                            panned = false
+                        } else {
+                            event.changes.firstOrNull()?.let { tracker.addPosition(it.uptimeMillis, it.position) }
+                        }
+                        val zoom = event.calculateZoom()
+                        val pan = event.calculatePan()
+                        if (zoom == 1f && (pan == Offset.Zero || scale <= 1f)) continue
+                        scale = (scale * zoom).coerceIn(1f, MAX_ZOOM)
+                        val limitX = size.width * (scale - 1f) / 2f
+                        val limitY = size.height * (scale - 1f) / 2f
+                        offset = if (scale == 1f) Offset.Zero else Offset((offset.x + pan.x).coerceIn(-limitX, limitX), (offset.y + pan.y).coerceIn(-limitY, limitY))
+                        if (event.changes.size == 1) panned = true
+                        event.changes.forEach { it.consume() }
+                    } while (event.changes.any { it.pressed })
+                    // let go while panning a zoomed photo: it keeps going and slows down
+                    if (panned && scale > 1f) {
+                        val limit = Offset(size.width * (scale - 1f) / 2f, size.height * (scale - 1f) / 2f)
+                        val velocity = tracker.calculateVelocity()
+                        glide = scope.launch { glidePan(velocity, offset, limit, panDecay) { offset = it } }
+                    }
                 }
             },
         contentAlignment = Alignment.Center,

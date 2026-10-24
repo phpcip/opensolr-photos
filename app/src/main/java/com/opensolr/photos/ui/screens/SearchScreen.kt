@@ -3,6 +3,11 @@ package com.opensolr.photos.ui.screens
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.ui.unit.Dp
+import androidx.compose.animation.rememberSplineBasedDecay
+import androidx.compose.ui.input.pointer.util.VelocityTracker
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import android.app.Activity
 import android.os.Build
 import androidx.compose.ui.window.DialogWindowProvider
@@ -766,7 +771,6 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             LaunchedEffect(gridState) {
                 androidx.compose.runtime.snapshotFlow { gridState.isScrollInProgress }.collect { moving ->
                     GridMotion.flinging.value = moving
-                    if (!moving) touch.lastScrollEnd = android.os.SystemClock.uptimeMillis()
                 }
             }
             androidx.compose.runtime.DisposableEffect(Unit) { onDispose { GridMotion.flinging.value = false; GridMotion.scroller.value = false } }
@@ -2576,6 +2580,7 @@ internal fun PhotoViewer(
     var offset by remember { mutableStateOf(Offset.Zero) }
     var zoomJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     LaunchedEffect(pager.currentPage) { zoomJob?.cancel(); scale = 1f; offset = Offset.Zero }
+    val panDecay = rememberSplineBasedDecay<Float>()
 
     var sheetFor by remember { mutableStateOf<PhotoHit?>(null) }
     var viewerShare by remember { mutableStateOf<PhotoHit?>(null) }
@@ -2695,11 +2700,16 @@ internal fun PhotoViewer(
                         .pointerInput(hit.id) {
                             awaitEachGesture {
                                 awaitFirstDown(requireUnconsumed = false)
+                                // a touch stops a glide still going
+                                zoomJob?.cancel()
+                                val tracker = VelocityTracker()
+                                var panned = false
                                 do {
                                     val event = awaitPointerEvent()
                                     if (event.changes.size > 1) {
 
-                                        zoomJob?.cancel()
+                                        tracker.resetTracking()
+                                        panned = false
                                         val next = (scale * event.calculateZoom()).coerceAtLeast(1f)
                                         if (next <= 1.01f) {
                                             scale = 1f
@@ -2720,6 +2730,7 @@ internal fun PhotoViewer(
                                         event.changes.forEach { it.consume() }
                                     } else if (scale > 1f) {
 
+                                        event.changes.firstOrNull()?.let { tracker.addPosition(it.uptimeMillis, it.position) }
                                         val pan = event.calculatePan()
                                         if (pan != Offset.Zero) {
                                             val limitX = size.width * (scale - 1f) / 2f
@@ -2728,10 +2739,17 @@ internal fun PhotoViewer(
                                                 (offset.x + pan.x).coerceIn(-limitX, limitX),
                                                 (offset.y + pan.y).coerceIn(-limitY, limitY),
                                             )
+                                            panned = true
                                             event.changes.forEach { it.consume() }
                                         }
                                     }
                                 } while (event.changes.any { it.pressed })
+                                // let go while panning a zoomed picture: it keeps going and slows down, like a scrolled list
+                                if (panned && scale > 1f) {
+                                    val velocity = tracker.calculateVelocity()
+                                    val limit = Offset(size.width * (scale - 1f) / 2f, size.height * (scale - 1f) / 2f)
+                                    zoomJob = scope.launch { com.opensolr.photos.ui.glidePan(velocity, offset, limit, panDecay) { offset = it } }
+                                }
                             }
                         }
                         .pointerInput(hit.id) {
@@ -3516,15 +3534,21 @@ internal fun headingStyle(level: Int): androidx.compose.ui.text.TextStyle =
         else -> MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp)
     }
 
-/** A touch that stops a moving grid, or comes right after it stopped, picks nothing and opens nothing. */
+/** A touch that stops a grid still visibly moving picks nothing and opens nothing; once it barely creeps, the touch is the user's. */
 internal class GridTouch {
-    @Volatile var lastScrollEnd = 0L
     @Volatile var blocked = false
+    @Volatile var lastMoveNanos = 0L
+    @Volatile var speedPxPerSec = 0f
 }
 
-/** Held this long without moving, a cell starts a selection: longer than the system's long press, so a pause while scrolling is not one. */
-private const val SELECT_HOLD_MS = 600L
-private const val AFTER_SCROLL_MS = 350L
+/** Held this long without moving, a cell starts a selection. */
+private const val SELECT_HOLD_MS = 300L
+
+/** Slower than this the grid reads as stopped, so a tap or a long press on it counts. */
+private val GRID_STOPPED_SPEED = 200.dp
+
+/** A speed reading older than this is stale: the grid has not moved since. */
+private const val GRID_SPEED_FRESH_NANOS = 60_000_000L
 
 /** Long press on a grid cell, then drag: every cell between the first and the finger is selected, the grid scrolling at the edges. */
 internal fun <T : Any> Modifier.dragSelect(
@@ -3541,6 +3565,19 @@ internal fun <T : Any> Modifier.dragSelect(
     val anchorIndex = remember { mutableStateOf<Int?>(null) }
     val edgePx = with(LocalDensity.current) { DRAG_EDGE.toPx() }
     val stepPx = with(LocalDensity.current) { DRAG_STEP.toPx() }
+    val stoppedPx = with(LocalDensity.current) { GRID_STOPPED_SPEED.toPx() }
+    // every scroll step of the grid, fling included, gives its speed
+    val speed = remember(touch) {
+        object : NestedScrollConnection {
+            override fun onPostScroll(consumed: Offset, available: Offset, source: NestedScrollSource): Offset {
+                val now = System.nanoTime()
+                val dt = now - touch.lastMoveNanos
+                if (consumed.y != 0f && dt in 1..GRID_SPEED_FRESH_NANOS) touch.speedPxPerSec = kotlin.math.abs(consumed.y) * 1e9f / dt
+                if (consumed.y != 0f) touch.lastMoveNanos = now
+                return Offset.Zero
+            }
+        }
+    }
 
     fun rowIndexAt(point: Offset): Int? {
         val items = gridState.layoutInfo.visibleItemsInfo
@@ -3564,13 +3601,13 @@ internal fun <T : Any> Modifier.dragSelect(
         return (from..to).mapNotNull { idAt(it) }
     }
 
-    this.pointerInput(Unit) {
+    this.nestedScroll(speed).pointerInput(Unit) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-            touch.blocked = gridState.isScrollInProgress || android.os.SystemClock.uptimeMillis() - touch.lastScrollEnd < AFTER_SCROLL_MS
+            touch.blocked = gridState.isScrollInProgress && System.nanoTime() - touch.lastMoveNanos < GRID_SPEED_FRESH_NANOS && touch.speedPxPerSec > stoppedPx
             if (touch.blocked) return@awaitEachGesture
 
-            val left = withTimeoutOrNull(maxOf(viewConfiguration.longPressTimeoutMillis, SELECT_HOLD_MS)) {
+            val left = withTimeoutOrNull(minOf(viewConfiguration.longPressTimeoutMillis, SELECT_HOLD_MS)) {
                 var moved = false
                 while (!moved) {
                     val event = awaitPointerEvent(PointerEventPass.Initial)
