@@ -1,7 +1,5 @@
 package com.opensolr.photos.ui.screens
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -34,7 +32,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -214,9 +211,8 @@ private fun StorageOverview(state: UiState, viewModel: AppViewModel, storage: St
 @Composable
 private fun StorageForm(state: UiState, viewModel: AppViewModel, current: StorageConfig?) {
     val p = LocalPalette.current
-    val context = LocalContext.current
     val view = androidx.compose.ui.platform.LocalView.current
-    var kind by remember { mutableStateOf(current?.kind ?: StorageConfig.KIND_SFTP) }
+    var kind by remember { mutableStateOf(current?.kind ?: StorageConfig.KIND_S3) }
     var label by remember { mutableStateOf(current?.label.orEmpty()) }
     var quality by remember { mutableStateOf(current?.quality ?: StorageConfig.QUALITY_ORIGINAL) }
     val fields = remember { androidx.compose.runtime.mutableStateMapOf<String, String>().apply { current?.fields?.forEach { (k, v) -> put(k, v) } } }
@@ -225,13 +221,6 @@ private fun StorageForm(state: UiState, viewModel: AppViewModel, current: Storag
     // anything typed again has to be tested again
     LaunchedEffect(kind, label, fields.toMap()) { if (state.storageTested != null) viewModel.editStorage(true) }
 
-    val keyPicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-        if (uri != null) runCatching {
-            context.contentResolver.openInputStream(uri)?.use { it.readBytes() }?.let { bytes ->
-                if (bytes.size <= KEY_MAX_BYTES) set("private_key", String(bytes, Charsets.UTF_8))
-            }
-        }
-    }
 
     if (current == null) {
         Text(stringResource(R.string.stg_none), style = MaterialTheme.typography.titleMedium, color = p.ink)
@@ -242,7 +231,7 @@ private fun StorageForm(state: UiState, viewModel: AppViewModel, current: Storag
     SectionLabel(stringResource(R.string.stg_backend))
     Spacer(Modifier.height(10.dp))
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        listOf(StorageConfig.KIND_SFTP, StorageConfig.KIND_S3, StorageConfig.KIND_WEBDAV).forEach { k ->
+        listOf(StorageConfig.KIND_S3, StorageConfig.KIND_WEBDAV).forEach { k ->
             val on = k == kind
             Text(
                 kindLabel(k),
@@ -259,18 +248,6 @@ private fun StorageForm(state: UiState, viewModel: AppViewModel, current: Storag
     Spacer(Modifier.height(14.dp))
     Field(label, { label = it }, stringResource(R.string.stg_label))
     when (kind) {
-        StorageConfig.KIND_SFTP -> {
-            Field(f("host"), { set("host", it) }, stringResource(R.string.stg_host), KeyboardType.Uri)
-            Field(f("port").ifBlank { "22" }, { set("port", it.filter { c -> c.isDigit() }) }, stringResource(R.string.stg_port), KeyboardType.Number)
-            Field(f("user"), { set("user", it) }, stringResource(R.string.stg_user))
-            Field(f("path"), { set("path", it) }, stringResource(R.string.stg_path), KeyboardType.Uri)
-            Field(f("private_key"), { set("private_key", it) }, stringResource(R.string.stg_private_key), lines = 4, hint = stringResource(R.string.stg_private_key_hint))
-            GhostButton(stringResource(R.string.stg_import_key), onClick = { keyPicker.launch(arrayOf("*/*")) }, modifier = Modifier.fillMaxWidth())
-            Spacer(Modifier.height(8.dp))
-            Field(f("passphrase"), { set("passphrase", it) }, stringResource(R.string.stg_passphrase), secret = true)
-            Field(f("password"), { set("password", it) }, stringResource(R.string.stg_password), secret = true)
-            f("host_key").takeIf { it.isNotBlank() }?.let { InfoRow(stringResource(R.string.stg_host_key), it) }
-        }
         StorageConfig.KIND_S3 -> {
             Field(f("endpoint"), { set("endpoint", it) }, stringResource(R.string.stg_endpoint), KeyboardType.Uri, hint = stringResource(R.string.stg_endpoint_hint))
             Field(f("region"), { set("region", it) }, stringResource(R.string.stg_region))
@@ -313,7 +290,7 @@ private fun StorageForm(state: UiState, viewModel: AppViewModel, current: Storag
     AccentButton(
         if (state.storageSaving) stringResource(R.string.stg_saving) else stringResource(R.string.stg_save),
         onClick = { if (current != null) confirmChange = true else viewModel.saveStorage() },
-        enabled = tested != null && tested.copy(fields = tested.fields - "host_key", updated = 0L) == config.copy(fields = config.fields - "host_key", updated = 0L) && !state.storageSaving,
+        enabled = tested != null && tested.copy(updated = 0L) == config.copy(updated = 0L) && !state.storageSaving,
         modifier = Modifier.fillMaxWidth(),
     )
     if (current != null) {
@@ -352,8 +329,7 @@ private fun QualityOption(label: String, selected: Boolean, onSelect: () -> Unit
 @Composable
 internal fun kindLabel(kind: String): String = when (kind) {
     StorageConfig.KIND_S3 -> stringResource(R.string.stg_kind_s3)
-    StorageConfig.KIND_WEBDAV -> stringResource(R.string.stg_kind_webdav)
-    else -> stringResource(R.string.stg_kind_sftp)
+    else -> stringResource(R.string.stg_kind_webdav)
 }
 
 @Composable
@@ -367,5 +343,4 @@ private fun storageResult(status: String): String = when (status) {
     else -> stringResource(R.string.stg_rs_failed)
 }
 
-private const val KEY_MAX_BYTES = 64 * 1024
 private const val SPACE_MARGIN = 512L * 1024 * 1024

@@ -64,7 +64,7 @@ Six problems, in the order they mattered. Everything in the feature table below 
 | **Stats** | Your library in numbers, counted on the phone with no request: photos, size, tagged, with people, with a place, with text; then per year, month, weekday and hour, and the people, tags, things, countries, cities and cameras, each a chart with its full table. Tap a line and its photos open; Back returns to the same spot. |
 | **Videos** | The clips in your folders are indexed by their first frame and their facts (date, place, length), so a clip is found by what it shows. The clip itself never goes to Opensolr. It plays in the viewer, with its length on the thumbnail. |
 | **PDF files, page by page** | Every page of a PDF in your folders is a result of its own, with its printed text read, so a line on page 7 of a contract is found like a receipt. Pages of one file fold into one cell and swipe one after another; *Open PDF* opens the file. Up to 100 pages per file by default. PDFs saved by other apps (Download, WhatsApp) need *All files access* in the GitHub build. |
-| **Backup to your own storage** | Optional: your photos, videos and PDFs copied straight from the phone to **your** S3 bucket (AWS, Backblaze B2, Cloudflare R2, Wasabi, MinIO), SFTP server or WebDAV folder, as originals or 1080p. Opensolr never holds a file; it keeps only the sealed credentials, so a new phone finds the backup by itself. |
+| **Backup to your own storage** | Optional: your photos, videos and PDFs copied straight from the phone to **your** S3 bucket (AWS, Backblaze B2, Cloudflare R2, Wasabi, MinIO) or WebDAV folder, as originals or 1080p. Opensolr never holds a file; it keeps only the sealed credentials, so a new phone finds the backup by itself. |
 | **A new phone gets your library back** | Sign in, pick your index: every photo comes back as a 720 px copy with a cloud mark, with its people, tags, text and places already there and nothing read again. *Download* brings the full file into its folder. |
 | **Marks on the thumbnails** | A person mark on photos with people named on them, a tag mark on photos you tagged, a cloud on photos only in your backup, the length of a clip, the page of a PDF. |
 | **Similar photos** | A slider groups alike photos: *Same faces* (around one photo, compared on the phone), *Same first 2 words, same camera*, *Same first 3 words, same camera*, *Same description, same camera*, *Same photo (EXIF)* and *Same file (exact copy)*. Around one photo the comparison is about that photo alone: typed words and filters are left aside. *Select 1 of each group* ticks one photo per group, leaving the first alone, for review, sharing or deleting. The keys come from the picture and its EXIF only, never from your tags. |
@@ -145,7 +145,7 @@ The APK is signed with the Opensolr Photos release key. SHA-256 of the signing c
   original's EXIF (time, camera, position) and the names of any people other apps already wrote into the file;
   the copy is processed in memory and not stored. Faces are found and compared on the phone only. The position, rounded, is turned into a place name on the server.
 - **The map** draws OpenStreetMap tiles, requested only while the map screen is open.
-- **Your backup, if you set one,** goes from the phone straight to your own S3 bucket, SFTP server or WebDAV
+- **Your backup, if you set one,** goes from the phone straight to your own S3 bucket or WebDAV
   folder. Opensolr keeps only the credentials, sealed, so a new phone can reach it.
 - **Mobile data** is used only if you allow it (one switch for sync, backup and restore); nothing waits for
   the charger, and work pauses under 10% battery.
@@ -180,7 +180,7 @@ Full account: [privacy and security](docs/privacy-and-security.md).
 | [Building from source](docs/building.md) | Toolchain, signing, debug builds |
 | [Contributing](CONTRIBUTING.md) | How changes get in, conventions, and how to become a contributor |
 | [Troubleshooting](docs/troubleshooting.md) | Common situations and what to do |
-| [Backup and restore](https://opensolr.com/opensolr-photos-docs/backup) | Your own storage, step by step for AWS S3, other S3 services, SFTP and WebDAV, and a new phone |
+| [Backup and restore](https://opensolr.com/opensolr-photos-docs/backup) | Your own storage, step by step for AWS S3, other S3 services and WebDAV, and a new phone |
 | [Videos](https://opensolr.com/opensolr-photos-docs/videos) and [PDF files](https://opensolr.com/opensolr-photos-docs/pdf-files) | What goes to the index, how they show and play, the switches |
 
 ## Build from source

@@ -14,7 +14,6 @@ data class StorageConfig(
     fun field(name: String): String = fields[name].orEmpty().trim()
 
     val host: String get() = when (kind) {
-        KIND_SFTP -> field("host")
         KIND_S3 -> field("bucket")
         else -> runCatching { java.net.URI(field("url")).host }.getOrNull().orEmpty()
     }
@@ -27,7 +26,6 @@ data class StorageConfig(
         .put("updated", updated)
 
     companion object {
-        const val KIND_SFTP = "sftp"
         const val KIND_S3 = "s3"
         const val KIND_WEBDAV = "webdav"
 
@@ -37,7 +35,7 @@ data class StorageConfig(
         /** The same shape the platform answers with: kind, label, quality, config. */
         fun fromJson(json: JSONObject): StorageConfig? {
             val kind = json.optString("kind")
-            if (kind !in listOf(KIND_SFTP, KIND_S3, KIND_WEBDAV)) return null
+            if (kind !in listOf(KIND_S3, KIND_WEBDAV)) return null
             val config = json.optJSONObject("config") ?: JSONObject()
             val fields = HashMap<String, String>()
             config.keys().forEach { k -> fields[k] = config.optString(k) }

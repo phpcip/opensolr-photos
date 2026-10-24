@@ -1,0 +1,1 @@
+- Backup goes to your own S3 bucket or WebDAV folder; the SFTP option is gone.

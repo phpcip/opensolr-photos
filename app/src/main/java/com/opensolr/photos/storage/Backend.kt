@@ -9,7 +9,7 @@ class BackendException(message: String, cause: Throwable? = null) : Exception(me
 
 class NotFoundException(path: String) : Exception(path)
 
-/** One place files are kept: the owner's SFTP server, S3 bucket or WebDAV share. Paths are full remote paths. */
+/** One place files are kept: the owner's S3 bucket or WebDAV share. Paths are full remote paths. */
 interface Backend : Closeable {
 
     /** Opens the connection; the host key or the first answer is checked here. */
@@ -38,8 +38,7 @@ interface Backend : Closeable {
 
     companion object {
 
-        fun open(config: StorageConfig, onHostKey: ((String) -> Unit)? = null): Backend = when (config.kind) {
-            StorageConfig.KIND_SFTP -> SftpBackend(config, onHostKey)
+        fun open(config: StorageConfig): Backend = when (config.kind) {
             StorageConfig.KIND_S3 -> S3Backend(config)
             StorageConfig.KIND_WEBDAV -> WebDavBackend(config)
             else -> throw BackendException("Unknown storage kind")
@@ -51,7 +50,6 @@ interface Backend : Closeable {
 class Layout(config: StorageConfig, private val indexName: String) {
 
     private val root: String = when (config.kind) {
-        StorageConfig.KIND_SFTP -> config.field("path").trimEnd('/').ifBlank { "." }
         StorageConfig.KIND_S3 -> config.field("prefix").trim('/')
         else -> config.field("url").trimEnd('/')
     }

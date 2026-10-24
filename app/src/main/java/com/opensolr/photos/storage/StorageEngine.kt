@@ -300,7 +300,7 @@ class StorageEngine(private val context: Context) {
                         }
                         theirs.updated > held.updated -> {
                             // another backend: what the old one held no longer applies here
-                            if (theirs.kind != held.kind || theirs.host != held.host || theirs.fields - "host_key" != held.fields - "host_key") {
+                            if (theirs.kind != held.kind || theirs.host != held.host || theirs.fields != held.fields) {
                                 cache.clearRemote()
                                 prefs.manifestsReadAt = 0L
                                 context.getSharedPreferences("opensolr_photos", Context.MODE_PRIVATE).edit().remove("manifest_sizes").apply()
@@ -710,12 +710,10 @@ class StorageEngine(private val context: Context) {
 
         /**
          * The backend as typed, tried for real: connect, the index's folder made, a small file written, read back
-         * and removed. The host key seen on the way (SFTP) comes back inside the config. Throws [BackendException].
+         * and removed. Throws [BackendException].
          */
         fun test(config: StorageConfig, indexName: String): StorageConfig {
-            var hostKey = config.field("host_key")
-            val probed = config.copy(fields = config.fields - "host_key")
-            val backend = Backend.open(if (hostKey.isBlank()) probed else config) { seen -> hostKey = seen }
+            val backend = Backend.open(config)
             try {
                 backend.connect()
                 val layout = Layout(config, indexName)
@@ -728,7 +726,7 @@ class StorageEngine(private val context: Context) {
             } finally {
                 backend.close()
             }
-            return if (config.kind == StorageConfig.KIND_SFTP) config.copy(fields = config.fields + ("host_key" to hostKey)) else config
+            return config
         }
     }
 }
