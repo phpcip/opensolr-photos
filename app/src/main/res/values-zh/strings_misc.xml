@@ -61,4 +61,5 @@
         <item quantity="other">%1$s 张照片</item>
     </plurals>
     <string name="rt_device_note">这会让你的照片和 Opensolr 账户资源与这台手机绑定。</string>
+    <string name="ext_cannot_open">此文件无法在此打开。</string>
 </resources>

@@ -27,4 +27,5 @@
     <string name="pdf_delete_title">Delete the whole PDF?</string>
     <plurals name="pdf_delete_text"><item quantity="one">%1$s has %2$s page. Deleting removes the file everywhere.</item><item quantity="other">%1$s has %2$s pages. Deleting removes the file and every page of it, everywhere.</item></plurals>
     <string name="ac_no_app">No app on this phone can open it.</string>
+    <string name="ext_cannot_open">This file cannot be opened here.</string>
 </resources>

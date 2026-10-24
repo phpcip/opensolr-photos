@@ -1,0 +1,2 @@
+- Open photos and clips from any app with Opensolr Photos: Files, chats, browsers and cameras that hand the picture on. Pinch to zoom, double tap, play clips, share; Back returns to the app you came from.
+- Set it as the app that opens your photos and videos: open one from Files, pick Opensolr Photos, then Always.

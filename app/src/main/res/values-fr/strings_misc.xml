@@ -67,4 +67,5 @@
         <item quantity="other">%1$s photos</item>
     </plurals>
     <string name="rt_device_note">Cela garde vos photos et les ressources de votre compte Opensolr liées à ce téléphone.</string>
+    <string name="ext_cannot_open">Ce fichier ne peut pas être ouvert ici.</string>
 </resources>

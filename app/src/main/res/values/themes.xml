@@ -7,6 +7,10 @@
         <item name="android:colorAccent">@color/accent</item>
     </style>
 
+    <style name="Theme.OpensolrPhotos.Black" parent="Theme.OpensolrPhotos">
+        <item name="android:windowBackground">@android:color/black</item>
+    </style>
+
     <style name="Theme.OpensolrPhotos.Transparent" parent="android:Theme.Translucent.NoTitleBar">
         <item name="android:windowNoTitle">true</item>
     </style>
