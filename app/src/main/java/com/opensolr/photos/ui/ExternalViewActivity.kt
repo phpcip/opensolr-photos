@@ -154,32 +154,21 @@ private fun ExternalPhoto(uri: Uri) {
 private fun ExternalClip(uri: Uri) {
     val context = LocalContext.current
     var failed by remember(uri) { mutableStateOf(false) }
-    // VLC for what the phone's decoders cannot play smoothly, or when the phone's player fails or drops frames
-    var vlc by remember(uri) { mutableStateOf<Long?>(null) }
-    val checked by androidx.compose.runtime.produceState<Boolean?>(null, uri) {
-        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opensolr.photos.media.VideoSupport.phoneCanPlay(context, uri) }
-    }
-    if (checked == false && vlc == null) vlc = 0L
-    if (failed) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.ext_cannot_open), color = Color.White) }
-        return
-    }
-    vlc?.let { startAt ->
-        VlcVideo(uri = uri, active = true, startMs = startAt, modifier = Modifier.navigationBarsPadding(), onFailed = { failed = true })
-        return
-    }
-    if (checked == null) return
     val player = remember(uri) {
         androidx.media3.exoplayer.ExoPlayer.Builder(context).build().apply {
             setMediaItem(androidx.media3.common.MediaItem.fromUri(uri))
             addListener(object : androidx.media3.common.Player.Listener {
-                override fun onPlayerError(error: androidx.media3.common.PlaybackException) { vlc = currentPosition.coerceAtLeast(0L) }
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) { failed = true }
             })
             playWhenReady = true
             prepare()
         }
     }
     DisposableEffect(player) { onDispose { player.release() } }
+    if (failed) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.ext_cannot_open), color = Color.White) }
+        return
+    }
     AndroidView(
         factory = { ctx ->
             androidx.media3.ui.PlayerView(ctx).apply {

@@ -6,6 +6,3 @@
 -keep class org.tensorflow.lite.** { *; }
 -keep class com.opensolr.photos.storage.StorageWorker { <init>(...); }
 -dontwarn androidx.media3.**
-
-# VLC: native code calls into these classes by name
--keep class org.videolan.libvlc.** { *; }

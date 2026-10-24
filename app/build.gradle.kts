@@ -153,6 +153,4 @@ dependencies {
     implementation(libs.slf4j.nop)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
-    // the fallback player for clips the phone's own decoders cannot play smoothly: VLC's decoders, frames dropped to stay in time
-    implementation("org.videolan.android:libvlc-all:3.7.7") { exclude(group = "org.jetbrains.kotlin") }
 }
