@@ -81,6 +81,17 @@ private fun StorageOverview(state: UiState, viewModel: AppViewModel, storage: St
     var confirmForget by remember { mutableStateOf(false) }
     var confirmClear by remember { mutableStateOf(false) }
     var confirmDownloadAll by remember { mutableStateOf(false) }
+    var confirmSaver by remember { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+    // the ids whose copies are made and whose full files the phone is being asked about
+    var saverAsked by remember { mutableStateOf<List<String>>(emptyList()) }
+    val saverLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.StartIntentSenderForResult()
+    ) { _ ->
+        val done = saverAsked
+        saverAsked = emptyList()
+        viewModel.spaceSaverDone(done)
+    }
     var typed by remember { mutableStateOf("") }
 
     SectionLabel(stringResource(R.string.stg_status))
@@ -144,6 +155,26 @@ private fun StorageOverview(state: UiState, viewModel: AppViewModel, storage: St
     }
     Spacer(Modifier.height(14.dp))
 
+    // Room back on the phone: a photo the backup already holds does not have to sit here at full size too
+    val saver = state.spaceSaver
+    if (saver != null && saver.count > 0) {
+        SectionLabel(stringResource(R.string.sv_title))
+        Spacer(Modifier.height(10.dp))
+        Text(
+            stringResource(R.string.sv_text, Actions.formatCount(saver.count.toLong()), Actions.formatFileSize(saver.savedBytes).ifBlank { "0" }),
+            style = MaterialTheme.typography.bodySmall,
+            color = p.muted,
+        )
+        Spacer(Modifier.height(10.dp))
+        GhostButton(
+            if (state.spaceSaverBusy) stringResource(R.string.sv_working) else stringResource(R.string.sv_move, Actions.formatFileSize(saver.savedBytes).ifBlank { "0" }),
+            onClick = { confirmSaver = true },
+            enabled = !status.busy && !state.spaceSaverBusy,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(Modifier.height(24.dp))
+    }
+
     SectionLabel(stringResource(R.string.stg_change))
     Spacer(Modifier.height(10.dp))
     Text(stringResource(R.string.stg_change_text), style = MaterialTheme.typography.bodySmall, color = p.muted)
@@ -172,6 +203,34 @@ private fun StorageOverview(state: UiState, viewModel: AppViewModel, storage: St
             },
             confirmButton = { if (fits) TextButton(onClick = { confirmDownloadAll = false; viewModel.downloadAllOriginals() }) { Text(stringResource(R.string.stg_download_all_start), color = p.accent) } },
             dismissButton = { TextButton(onClick = { confirmDownloadAll = false }) { Text(stringResource(R.string.stg_cancel), color = p.ink) } },
+            containerColor = p.paper,
+        )
+    }
+    if (confirmSaver) {
+        val saver2 = state.spaceSaver
+        val batch = minOf(saver2?.count ?: 0, com.opensolr.photos.storage.SpaceSaver.BATCH)
+        AlertDialog(
+            onDismissRequest = { confirmSaver = false },
+            title = { Text(stringResource(R.string.sv_confirm_title)) },
+            text = { com.opensolr.photos.ui.KeyboardBack()
+                Text(stringResource(R.string.sv_confirm_text, Actions.formatCount(batch.toLong())))
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmSaver = false
+                    val ids = com.opensolr.photos.storage.SpaceSaver.candidates(context, batch)
+                    viewModel.spaceSaverMove(ids) { ready ->
+                        val sender = Actions.deleteRequest(context, com.opensolr.photos.storage.SpaceSaver.urisOf(context, ready))
+                        if (sender != null) {
+                            saverAsked = ready
+                            saverLauncher.launch(androidx.activity.result.IntentSenderRequest.Builder(sender).build())
+                        } else {
+                            viewModel.spaceSaverDone(ready)
+                        }
+                    }
+                }) { Text(stringResource(R.string.sv_confirm_ok), color = p.accent) }
+            },
+            dismissButton = { TextButton(onClick = { confirmSaver = false }) { Text(stringResource(R.string.stg_cancel), color = p.ink) } },
             containerColor = p.paper,
         )
     }

@@ -763,6 +763,33 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         return n
     }
 
+    /**
+     * The photos this phone still holds at their full size although the backend already has them: how many
+     * and how much room they take here. Clips and PDFs are left out: the backend keeps those as they are and
+     * there is no smaller copy of them to fall back on.
+     */
+    fun spaceSaverTotals(): Pair<Int, Long> =
+        readableDatabase.rawQuery(SPACE_SAVER_COUNT, null).use { c -> if (c.moveToFirst()) c.getInt(0) to c.getLong(1) else 0 to 0L }
+
+    /** The same photos, newest first, [limit] of them. */
+    fun spaceSaverIds(limit: Int): List<String> {
+        val out = ArrayList<String>()
+        readableDatabase.rawQuery(SPACE_SAVER_IDS, arrayOf(limit.toString())).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        return out
+    }
+
+    /** Of [ids], the ones that can be moved: a photo, in the backend, and still here at full size. */
+    fun spaceSaverAmong(ids: Collection<String>): Set<String> {
+        val out = HashSet<String>()
+        ids.chunked(400).forEach { batch ->
+            val marks = batch.joinToString(",") { "?" }
+            readableDatabase.rawQuery(SPACE_SAVER_SOME.replace("?IDS?", marks), batch.toTypedArray()).use { c ->
+                while (c.moveToNext()) out += c.getString(0)
+            }
+        }
+        return out
+    }
+
     fun putCloud(id: String, bytes: Long) {
         writableDatabase.execSQL("INSERT OR REPLACE INTO cloud (id, bytes, at) VALUES (?, ?, ?)", arrayOf<Any>(id, bytes, System.currentTimeMillis()))
     }
@@ -2245,6 +2272,20 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         private val PLACE_NAME_FIELDS = listOf("city", "region", "province", "community", "country", "country_code", "street_s", "postal_code_s")
 
         private const val DOCS_TABLE = "CREATE TABLE IF NOT EXISTS docs (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, indexed_at INTEGER NOT NULL, taken_at TEXT, tags_json TEXT, persons_json TEXT, meaning TEXT, ocr TEXT, city TEXT, country TEXT, json TEXT, modified INTEGER NOT NULL DEFAULT 0, taken_ms INTEGER NOT NULL DEFAULT 0, embed_model TEXT, file_hash TEXT, region TEXT, folder TEXT, camera TEXT, camera_model TEXT, media_id INTEGER NOT NULL DEFAULT 0, path TEXT)"
+
+        // One shape for the space-saver reads: in the backend, still here with a file of its own, not already
+        // a 720 px copy, and a photo (the kind is in the document the index holds).
+        private const val SPACE_SAVER_WHERE =
+            "FROM docs d INNER JOIN remote r ON r.id = d.id " +
+                "WHERE d.media_id > 0 AND d.size_bytes > 0 AND d.id NOT IN (SELECT id FROM cloud) " +
+                "AND d.id NOT IN (SELECT id FROM deleted) " +
+                "AND IFNULL(d.json, '') NOT LIKE '%\"kind_s\":\"video\"%' AND IFNULL(d.json, '') NOT LIKE '%\"kind_s\":\"pdf_page\"%'"
+
+        private const val SPACE_SAVER_COUNT = "SELECT COUNT(*), COALESCE(SUM(d.size_bytes), 0) $SPACE_SAVER_WHERE"
+
+        private const val SPACE_SAVER_IDS = "SELECT d.id $SPACE_SAVER_WHERE ORDER BY d.taken_ms DESC, d.id DESC LIMIT ?"
+
+        private const val SPACE_SAVER_SOME = "SELECT d.id $SPACE_SAVER_WHERE AND d.id IN (?IDS?)"
 
         private const val DOCS_TAKEN_INDEX = "CREATE INDEX IF NOT EXISTS docs_taken_ms ON docs (taken_ms)"
 

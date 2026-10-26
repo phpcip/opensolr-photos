@@ -171,4 +171,13 @@
     <string name="dock_pdf" translatable="false">PDF</string>
     <plurals name="sh_files"><item quantity="one">Share %1$s file</item><item quantity="other">Share %1$s files</item></plurals>
     <string name="ac_share_files">Share files</string>
+    <!-- Space saver: photos the backup already holds that still sit here at full size -->
+    <string name="sv_title">Space saver</string>
+    <string name="sv_text">%1$s photos sit on this phone at their full size although your backup already holds them. Move them and only their 720p copies stay here, which frees about %2$s. They stay searchable, and Download all originals brings the full files back whenever you want them.</string>
+    <string name="sv_move">Free about %1$s</string>
+    <string name="sv_working">Making the copies…</string>
+    <string name="sv_dock">Move</string>
+    <string name="sv_confirm_title">Move to the cloud</string>
+    <string name="sv_confirm_text">The full files of %1$s photos leave this phone; their 720p copies stay. Your backup keeps the originals.</string>
+    <string name="sv_confirm_ok">Move</string>
 </resources>

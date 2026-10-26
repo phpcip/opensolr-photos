@@ -225,6 +225,11 @@ data class UiState(
     val storageSaving: Boolean = false,
     val storageError: String? = null,
     val storageClearing: Boolean = false,
+    /** What a clean-up would move: photos the backend already holds that still sit here at full size. */
+    val spaceSaver: com.opensolr.photos.storage.SpaceSaver.Survey? = null,
+    val spaceSaverBusy: Boolean = false,
+    /** Of what is ticked right now, the ones that can be moved; empty hides the action. */
+    val movable: Set<String> = emptySet(),
     val downloading: Set<String> = emptySet(),
 
     val cachedCount: Int = 0,
@@ -1350,7 +1355,52 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 val copyBytes = com.opensolr.photos.storage.CloudFiles.dir(context).listFiles()?.sumOf { it.length() } ?: 0L
                 StorageStats(count, bytes, photoCache.backupPendingCount(local), cloud, cloudBytes, (here + cloudIds).size, fileBytes + copyBytes)
             }
-            _state.update { it.copy(storageStats = stats, storage = prefs.storage, storageReport = prefs.storageReport) }
+            val saver = withContext(Dispatchers.IO) { com.opensolr.photos.storage.SpaceSaver.survey(context) }
+            _state.update { it.copy(storageStats = stats, storage = prefs.storage, storageReport = prefs.storageReport, spaceSaver = saver) }
+        }
+    }
+
+    /** What is ticked, looked up once: the Move action is offered only when every one of them can go. */
+    fun refreshMovable(ids: Set<String>) {
+        if (ids.isEmpty()) {
+            if (_state.value.movable.isNotEmpty()) _state.update { it.copy(movable = emptySet()) }
+            return
+        }
+        viewModelScope.launch {
+            val can = withContext(Dispatchers.IO) { com.opensolr.photos.storage.SpaceSaver.movable(context, ids) }
+            _state.update { it.copy(movable = if (can.size == ids.size) can else emptySet()) }
+        }
+    }
+
+    /**
+     * The 720 px copies of [ids] are written first and the phone is then asked to let the full files go.
+     * [onAsk] gets what is ready; nothing counts as moved until [spaceSaverDone] is told what really went.
+     */
+    fun spaceSaverMove(ids: List<String>, onAsk: (List<String>) -> Unit) {
+        if (ids.isEmpty() || _state.value.spaceSaverBusy) return
+        _state.update { it.copy(spaceSaverBusy = true) }
+        viewModelScope.launch {
+            val ready = withContext(Dispatchers.IO) { com.opensolr.photos.storage.SpaceSaver.prepare(context, ids) }
+            if (ready.isEmpty()) {
+                _state.update { it.copy(spaceSaverBusy = false) }
+                return@launch
+            }
+            onAsk(ready)
+        }
+    }
+
+    /** After the phone's prompt: the ones whose file really went keep their copy, the rest give theirs back. */
+    fun spaceSaverDone(ready: List<String>) {
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                com.opensolr.photos.storage.LocalFiles.refresh(context)
+                val gone = ready.filter { com.opensolr.photos.storage.SpaceSaver.uriOf(context, it) == null }
+                com.opensolr.photos.storage.SpaceSaver.commit(context, gone)
+                com.opensolr.photos.storage.SpaceSaver.rollback(context, ready - gone.toSet())
+            }
+            _state.update { it.copy(spaceSaverBusy = false, movable = emptySet()) }
+            refreshStorageStats()
+            refreshLocalQuietly()
         }
     }
 

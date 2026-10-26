@@ -307,6 +307,19 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         if (sender != null) { askIds = waiting; askLauncher.launch(IntentSenderRequest.Builder(sender).build()) }
         else Thread { com.opensolr.photos.storage.Deletions.promptsDone(context, waiting) }.start()
     }
+    // Move to the cloud: offered only when every ticked item is a photo the backup already holds and that
+    // still sits here at full size. One ticked clip, PDF, or photo already moved, and the action is gone.
+    var confirmMove by remember { mutableStateOf(false) }
+    var moveAsked by remember { mutableStateOf<List<String>>(emptyList()) }
+    val moveLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { _ ->
+        val done = moveAsked
+        moveAsked = emptyList()
+        viewModel.spaceSaverDone(done)
+    }
+    LaunchedEffect(state.selectedIds, state.selecting) {
+        viewModel.refreshMovable(if (state.selecting) state.selectedIds else emptySet())
+    }
+
     val deleteScope = rememberCoroutineScope()
     val deleteSelected = {
         val chosen = viewModel.photosToTag()
@@ -998,10 +1011,39 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         }
     }
 
+    if (confirmMove) {
+        val chosen = state.movable.toList()
+        AlertDialog(
+            onDismissRequest = { confirmMove = false },
+            title = { Text(stringResource(R.string.sv_confirm_title)) },
+            text = { com.opensolr.photos.ui.KeyboardBack()
+                Text(stringResource(R.string.sv_confirm_text, Actions.formatCount(chosen.size.toLong())))
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmMove = false
+                    viewModel.setSelecting(false)
+                    viewModel.spaceSaverMove(chosen) { ready ->
+                        val sender = Actions.deleteRequest(context, com.opensolr.photos.storage.SpaceSaver.urisOf(context, ready))
+                        if (sender != null) {
+                            moveAsked = ready
+                            moveLauncher.launch(IntentSenderRequest.Builder(sender).build())
+                        } else {
+                            viewModel.spaceSaverDone(ready)
+                        }
+                    }
+                }) { Text(stringResource(R.string.sv_confirm_ok), color = p.accent) }
+            },
+            dismissButton = { TextButton(onClick = { confirmMove = false }) { Text(stringResource(R.string.cancel), color = p.ink) } },
+            containerColor = p.paper,
+        )
+    }
+
     if (state.selecting) {
         SelectionDock(
             count = state.selectedIds.size,
             modifier = Modifier.align(Alignment.BottomCenter),
+            canMove = state.movable.isNotEmpty(),
             onShare = { shareFor = viewModel.photosToTag() },
             onPdf = { pdfFor = viewModel.photosToTag() },
 
@@ -1009,6 +1051,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
             onResync = { viewModel.resyncSelected() },
 
             onTag = { bulkTagging = true },
+            onMove = { confirmMove = true },
         )
     }
     }
@@ -1248,11 +1291,13 @@ private fun Pill(label: String, onClick: () -> Unit, accent: Boolean = false, tr
 private fun SelectionDock(
     count: Int,
     modifier: Modifier = Modifier,
+    canMove: Boolean,
     onShare: () -> Unit,
     onPdf: () -> Unit,
     onDelete: () -> Unit,
     onResync: () -> Unit,
     onTag: () -> Unit,
+    onMove: () -> Unit,
 ) {
     val p = LocalPalette.current
     Row(
@@ -1272,12 +1317,16 @@ private fun SelectionDock(
         DockAction(R.drawable.ic_pdf, stringResource(R.string.dock_pdf), enabled = count > 0, padX = DOCK_PAD_X, onClick = onPdf)
         DockAction(R.drawable.ic_sync, if (count > 0) stringResource(R.string.dock_resync_n, Actions.formatCompact(count.toLong())) else stringResource(R.string.dock_resync), enabled = count > 0, accent = true, padX = DOCK_PAD_X, onClick = onResync)
 
+        // only when every ticked item is a photo the backup already holds and that still sits here at full size
+        if (canMove) {
+            DockAction(R.drawable.ic_cloud, stringResource(R.string.sv_dock), enabled = count > 0, padX = DOCK_PAD_X, onClick = onMove)
+        }
         DockAction(R.drawable.ic_delete, stringResource(R.string.dock_delete), enabled = count > 0, padX = DOCK_PAD_X, onClick = onDelete)
     }
 }
 
 @Composable
-internal fun DockAction(icon: Int, label: String, enabled: Boolean, accent: Boolean = false, padX: androidx.compose.ui.unit.Dp = 12.dp, onClick: () -> Unit) {
+internal fun androidx.compose.foundation.layout.RowScope.DockAction(icon: Int, label: String, enabled: Boolean, accent: Boolean = false, padX: androidx.compose.ui.unit.Dp = 12.dp, onClick: () -> Unit) {
     val p = LocalPalette.current
     val tint = when {
         !enabled -> p.hairline
@@ -1286,6 +1335,7 @@ internal fun DockAction(icon: Int, label: String, enabled: Boolean, accent: Bool
     }
     Column(
         Modifier
+            .weight(1f)
             .padding(horizontal = 3.dp)
             .clip(Corner)
 
