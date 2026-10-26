@@ -226,6 +226,9 @@ private val Corner = RoundedCornerShape(2.dp)
 // five actions in the selection dock: tighter sides so they fit a narrow phone
 private val DOCK_PAD_X = 8.dp
 
+/** How long the grid must hold still before the photos on the screen are asked for. */
+private const val GRID_SETTLE_MS = 140L
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SearchScreen(state: UiState, viewModel: AppViewModel) {
@@ -786,6 +789,15 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                     GridMotion.flinging.value = moving
                 }
             }
+            // Held still for a moment: what is on the screen is asked for, even with the finger still down
+            LaunchedEffect(gridState) {
+                androidx.compose.runtime.snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
+                    .collect {
+                        GridMotion.settled.value = false
+                        kotlinx.coroutines.delay(GRID_SETTLE_MS)
+                        GridMotion.settled.value = true
+                    }
+            }
             androidx.compose.runtime.DisposableEffect(Unit) { onDispose { GridMotion.flinging.value = false; GridMotion.scroller.value = false } }
             LazyVerticalGrid(
                 columns = GridCells.Adaptive(112.dp),
@@ -810,6 +822,23 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 ) { row ->
                     when (row) {
                         is GridRow.Heading -> {
+                            // Asked for before anything is drawn, so a group the scroller came to rest on fills
+                            // in with the finger still down. A group merely flown past is never asked for.
+                            if (!row.collapsed && row.range != null && row.ids.size < row.count) {
+                                LaunchedEffect(row.key, row.count, row.ids.size) {
+                                    // a group flown past is never loaded: only one the grid came to rest on
+                                    androidx.compose.runtime.snapshotFlow { GridMotion.settled.value }.first { it }
+                                    viewModel.loadGroupPhotos(row.key, row.range.first, row.range.second, row.ids.size, row.count)
+                                }
+                            }
+
+                            if (row.missing) {
+                                LaunchedEffect(row.key) {
+                                    androidx.compose.runtime.snapshotFlow { GridMotion.settled.value }.first { it }
+                                    viewModel.loadResultGroup(row.name, row.ids)
+                                }
+                            }
+
                             // the scroller held: the title alone, same size, so the place is readable and nothing else is built
                             if (GridMotion.scroller.value) {
                                 Row(
@@ -826,21 +855,6 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                     Text(row.text, style = headingStyle(row.level), fontWeight = FontWeight.Bold, color = p.ink, modifier = Modifier.weight(1f))
                                 }
                                 return@items
-                            }
-
-                            if (!row.collapsed && row.range != null && row.ids.size < row.count) {
-                                LaunchedEffect(row.key, row.count, row.ids.size) {
-                                    // a group flown past is never loaded: only where the grid stops
-                                    androidx.compose.runtime.snapshotFlow { GridMotion.moving }.first { !it }
-                                    viewModel.loadGroupPhotos(row.key, row.range.first, row.range.second, row.ids.size, row.count)
-                                }
-                            }
-
-                            if (row.missing) {
-                                LaunchedEffect(row.key) {
-                                    androidx.compose.runtime.snapshotFlow { GridMotion.moving }.first { !it }
-                                    viewModel.loadResultGroup(row.name, row.ids)
-                                }
                             }
 
                             val allPicked = state.selecting &&
@@ -904,9 +918,11 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                             }
                         }
                         is GridRow.Photo -> {
-                            // the scroller held: a plain square per cell, nothing else is built until it is let go
+                            // the scroller held: the picture and nothing else. No click handling, no selection,
+                            // no borders are built until it is let go, and the picture itself is only the one
+                            // the phone already keeps (see Thumbnail), so dragging stays as light as it was.
                             if (GridMotion.scroller.value) {
-                                Box(Modifier.aspectRatio(1f).background(p.chip))
+                                Thumbnail(hit = row.hit, modifier = Modifier)
                                 return@items
                             }
                             val hit = row.hit
@@ -1996,6 +2012,13 @@ internal object GridMotion {
     val flinging = mutableStateOf(false)
     val scroller = mutableStateOf(false)
     val moving: Boolean get() = flinging.value || scroller.value
+
+    /**
+     * True once the grid has held still for a moment, with the finger still down or not. The photos of a
+     * group are asked for then, so dragging the scroller fills the screen as it goes instead of waiting for
+     * the finger to come off, while a group merely flown past is never asked for.
+     */
+    val settled = mutableStateOf(true)
 }
 
 @Composable
@@ -2006,7 +2029,8 @@ private fun Thumbnail(hit: PhotoHit, modifier: Modifier = Modifier) {
     // own store and only if it comes back at once. What costs real work -- a clip's first frame, a page of a
     // PDF, a picture that has to be made -- waits for the grid to stop, as it always did.
     val moving = GridMotion.moving
-    val cheap = !hit.isVideo && !hit.isPdfPage && com.opensolr.photos.storage.LocalFiles.has(hit.id)
+    val cheap = !hit.isVideo && !hit.isPdfPage &&
+        (com.opensolr.photos.storage.LocalFiles.has(hit.id) || com.opensolr.photos.storage.CloudFiles.has(hit.id))
     var allowed by remember(hit.id) { mutableStateOf(!moving || cheap || com.opensolr.photos.ui.Images.readyNow(context, hit, EditedPhotos.stamp(hit.mediaId), GRID_THUMB_PX)) }
     if (!allowed) {
         LaunchedEffect(hit.id) { androidx.compose.runtime.snapshotFlow { GridMotion.moving }.collect { if (!it) allowed = true } }

@@ -56,12 +56,11 @@ class PhotoThumbFetcher(private val data: PhotoThumb, private val options: Optio
         val wanted = ((options.size.width as? Dimension.Pixels)?.px?.coerceAtLeast(64) ?: 360).coerceAtMost(512)
         // kept on disk once made: the next time, and while the grid moves, it is just read
         val bitmap = Thumbs.get(context, "i", data.uri, data.sizeBytes, data.stamp, wanted) {
+            // The phone's own thumbnail, which it keeps for every photo it scanned: cheap, and the same one
+            // the system gallery shows. While the grid moves that is all that is tried; decoding the whole
+            // file, which is the expensive part, waits for the grid to stop.
             val kept = if (android.os.Build.VERSION.SDK_INT >= 29) {
-                // while the grid moves, the phone's own thumbnail is waited for only a moment: one it has to
-                // make itself is left for when the grid stops, so nothing holds the scroller back
-                if (data.quick) kotlinx.coroutines.withTimeoutOrNull(QUICK_MS) {
-                    runCatching { context.contentResolver.loadThumbnail(data.uri, android.util.Size(wanted, wanted), null) }.getOrNull()
-                } else runCatching { context.contentResolver.loadThumbnail(data.uri, android.util.Size(wanted, wanted), null) }.getOrNull()
+                runCatching { context.contentResolver.loadThumbnail(data.uri, android.util.Size(wanted, wanted), null) }.getOrNull()
             } else null
             kept ?: if (data.quick) null else runCatching { com.opensolr.photos.media.PhotoReader.uprightBitmap(context, data.uri, wanted) }.getOrNull()
         } ?: return null
@@ -72,10 +71,6 @@ class PhotoThumbFetcher(private val data: PhotoThumb, private val options: Optio
         override fun create(data: PhotoThumb, options: Options, imageLoader: ImageLoader): Fetcher = PhotoThumbFetcher(data, options)
     }
 
-    companion object {
-        /** How long the phone's own thumbnail is waited for while the grid moves. */
-        private const val QUICK_MS = 80L
-    }
 
     class Key : Keyer<PhotoThumb> {
         override fun key(data: PhotoThumb, options: Options): String = "photo:${data.uri}:${data.stamp}"
@@ -145,7 +140,7 @@ object Thumbs {
     private val writes = java.util.concurrent.atomic.AtomicInteger(0)
 
     // a few files read at once: the phone's decoders are shared, and a cell scrolled away gives its turn up
-    private val drawing = kotlinx.coroutines.sync.Semaphore(3)
+    private val drawing = kotlinx.coroutines.sync.Semaphore(6)
 
     suspend fun <T> drawOne(draw: () -> T): T = drawing.withPermit { draw() }
 
