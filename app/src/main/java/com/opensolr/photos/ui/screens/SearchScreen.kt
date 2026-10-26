@@ -2002,9 +2002,12 @@ internal object GridMotion {
 private fun Thumbnail(hit: PhotoHit, modifier: Modifier = Modifier) {
     val p = LocalPalette.current
     val context = LocalContext.current
-    // a cell that comes into view while the grid moves stays an empty square: nothing is read or decoded until it stops
-    // a picture already on the phone shows at once; only one that must be made waits for the grid to stop
-    var allowed by remember(hit.id) { mutableStateOf(!GridMotion.moving || com.opensolr.photos.ui.Images.readyNow(context, hit, EditedPhotos.stamp(hit.mediaId), GRID_THUMB_PX)) }
+    // While the grid moves, a plain photo of this phone still shows: its thumbnail is taken from the phone's
+    // own store and only if it comes back at once. What costs real work -- a clip's first frame, a page of a
+    // PDF, a picture that has to be made -- waits for the grid to stop, as it always did.
+    val moving = GridMotion.moving
+    val cheap = !hit.isVideo && !hit.isPdfPage && com.opensolr.photos.storage.LocalFiles.has(hit.id)
+    var allowed by remember(hit.id) { mutableStateOf(!moving || cheap || com.opensolr.photos.ui.Images.readyNow(context, hit, EditedPhotos.stamp(hit.mediaId), GRID_THUMB_PX)) }
     if (!allowed) {
         LaunchedEffect(hit.id) { androidx.compose.runtime.snapshotFlow { GridMotion.moving }.collect { if (!it) allowed = true } }
         Box(modifier.aspectRatio(1f).background(p.chip))
@@ -2019,14 +2022,15 @@ private fun Thumbnail(hit: PhotoHit, modifier: Modifier = Modifier) {
     }
     val edited = EditedPhotos.stamp(hit.mediaId)
     // the grid's photos: the thumbnail the phone already keeps, never the whole file decoded
-    val uri = com.opensolr.photos.ui.Images.model(context, hit).let { m -> if (m is Uri && hit.mediaKind == com.opensolr.photos.media.Kind.PHOTO && m.scheme == "content") com.opensolr.photos.ui.PhotoThumb(m, edited, hit.sizeBytes) else m }
+    val uri = com.opensolr.photos.ui.Images.model(context, hit).let { m -> if (m is Uri && hit.mediaKind == com.opensolr.photos.media.Kind.PHOTO && m.scheme == "content") com.opensolr.photos.ui.PhotoThumb(m, edited, hit.sizeBytes, quick = moving) else m }
     val request = remember(uri, hit.sizeBytes, edited) { ImageRequest.Builder(context).data(uri).size(GRID_THUMB_PX).setParameter("bytes", hit.sizeBytes).setParameter("edited", edited).crossfade(true).build() }
-    // a file whose picture cannot be drawn on this phone shows a sign of its kind instead of an empty square
+    // a file whose picture cannot be drawn on this phone shows a sign of its kind instead of an empty square;
+    // one that simply was not ready while the grid moved is left blank and tried again when it stops
     var failed by remember(uri) { mutableStateOf(false) }
     Box(modifier.aspectRatio(1f).background(p.chip), contentAlignment = Alignment.Center) {
         AsyncImage(
             model = request,
-            onError = { failed = true },
+            onError = { if (!moving) failed = true },
             contentDescription = hit.meaning.ifBlank { hit.fileName },
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),

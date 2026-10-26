@@ -43,7 +43,11 @@ class PdfPageFetcher(private val data: PdfPage, private val options: Options) : 
 }
 
 /** A photo for the grid: the thumbnail the phone keeps for it, else the photo read small. */
-data class PhotoThumb(val uri: Uri, val stamp: Long, val sizeBytes: Long)
+/**
+ * A photo for the picture loader. [quick] is the grid in motion: only the thumbnail the phone already keeps
+ * is taken, and only if it comes back at once. Nothing is decoded, so dragging the scroller stays smooth.
+ */
+data class PhotoThumb(val uri: Uri, val stamp: Long, val sizeBytes: Long, val quick: Boolean = false)
 
 class PhotoThumbFetcher(private val data: PhotoThumb, private val options: Options) : Fetcher {
 
@@ -52,14 +56,25 @@ class PhotoThumbFetcher(private val data: PhotoThumb, private val options: Optio
         val wanted = ((options.size.width as? Dimension.Pixels)?.px?.coerceAtLeast(64) ?: 360).coerceAtMost(512)
         // kept on disk once made: the next time, and while the grid moves, it is just read
         val bitmap = Thumbs.get(context, "i", data.uri, data.sizeBytes, data.stamp, wanted) {
-            (if (android.os.Build.VERSION.SDK_INT >= 29) runCatching { context.contentResolver.loadThumbnail(data.uri, android.util.Size(wanted, wanted), null) }.getOrNull() else null)
-                ?: runCatching { com.opensolr.photos.media.PhotoReader.uprightBitmap(context, data.uri, wanted) }.getOrNull()
+            val kept = if (android.os.Build.VERSION.SDK_INT >= 29) {
+                // while the grid moves, the phone's own thumbnail is waited for only a moment: one it has to
+                // make itself is left for when the grid stops, so nothing holds the scroller back
+                if (data.quick) kotlinx.coroutines.withTimeoutOrNull(QUICK_MS) {
+                    runCatching { context.contentResolver.loadThumbnail(data.uri, android.util.Size(wanted, wanted), null) }.getOrNull()
+                } else runCatching { context.contentResolver.loadThumbnail(data.uri, android.util.Size(wanted, wanted), null) }.getOrNull()
+            } else null
+            kept ?: if (data.quick) null else runCatching { com.opensolr.photos.media.PhotoReader.uprightBitmap(context, data.uri, wanted) }.getOrNull()
         } ?: return null
         return DrawableResult(BitmapDrawable(context.resources, bitmap), isSampled = true, dataSource = DataSource.DISK)
     }
 
     class Factory : Fetcher.Factory<PhotoThumb> {
         override fun create(data: PhotoThumb, options: Options, imageLoader: ImageLoader): Fetcher = PhotoThumbFetcher(data, options)
+    }
+
+    companion object {
+        /** How long the phone's own thumbnail is waited for while the grid moves. */
+        private const val QUICK_MS = 80L
     }
 
     class Key : Keyer<PhotoThumb> {
@@ -152,7 +167,7 @@ object Thumbs {
     fun has(context: Context, kind: String, uri: Uri, sizeBytes: Long, page: Long, edge: Int): Boolean =
         index(context).contains(key(kind, uri, sizeBytes, page, edge))
 
-    suspend fun get(context: Context, kind: String, uri: Uri, sizeBytes: Long, page: Long, edge: Int, draw: () -> android.graphics.Bitmap?): android.graphics.Bitmap? {
+    suspend fun get(context: Context, kind: String, uri: Uri, sizeBytes: Long, page: Long, edge: Int, draw: suspend () -> android.graphics.Bitmap?): android.graphics.Bitmap? {
         // only grid sizes are kept; the viewer's large pictures are drawn each time
         if (edge > GRID_EDGE) return drawing.withPermit { draw() }
         val dir = java.io.File(context.cacheDir, "thumbs").apply { mkdirs() }
