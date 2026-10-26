@@ -31,7 +31,10 @@ object SpaceSaver {
     /** How many photos are in that state, how much room they take, and what the copies would cost. */
     fun survey(context: Context): Survey {
         val cache = PhotoCache.of(context)
-        val totals = cache.spaceSaverTotals()
+        // which files are really here is what the phone says, not what the clone wrote earlier
+        LocalFiles.refresh(context)
+        val here = LocalFiles.ids.keys.toList()
+        val totals = cache.spaceSaverTotals(here)
         val count = totals.first
         val localBytes = totals.second
         if (count == 0) return Survey(0, 0L, 0L)
@@ -41,7 +44,7 @@ object SpaceSaver {
         val perCopy = if (made.isNotEmpty()) {
             made.take(20).map { it.length() }.average()
         } else {
-            val sample = cache.spaceSaverIds(SAMPLE).mapNotNull { id -> copySize(context, id) }
+            val sample = cache.spaceSaverIds(here, SAMPLE).mapNotNull { id -> copySize(context, id) }
             if (sample.isEmpty()) 0.0 else sample.average()
         }
         return Survey(count, localBytes, (perCopy * count).toLong())
@@ -61,11 +64,18 @@ object SpaceSaver {
     }
 
     /** The photos a clean-up would move, newest first. */
-    fun candidates(context: Context, limit: Int): List<String> = PhotoCache.of(context).spaceSaverIds(limit)
+    fun candidates(context: Context, limit: Int): List<String> {
+        LocalFiles.refresh(context)
+        return PhotoCache.of(context).spaceSaverIds(LocalFiles.ids.keys.toList(), limit)
+    }
 
     /** Of what is ticked, the ones that can be moved. Empty when even one of them cannot. */
-    fun movable(context: Context, ids: Collection<String>): Set<String> =
-        if (ids.isEmpty()) emptySet() else PhotoCache.of(context).spaceSaverAmong(ids)
+    fun movable(context: Context, ids: Collection<String>): Set<String> {
+        if (ids.isEmpty()) return emptySet()
+        val here = LocalFiles.ids.keys
+        val present = ids.filter { it in here }
+        return if (present.isEmpty()) emptySet() else PhotoCache.of(context).spaceSaverAmong(present)
+    }
 
     /**
      * Writes the 720 px copy of each photo into the app's own files, WITHOUT letting go of the full file:

@@ -157,21 +157,24 @@ private fun StorageOverview(state: UiState, viewModel: AppViewModel, storage: St
 
     // Room back on the phone: a photo the backup already holds does not have to sit here at full size too
     val saver = state.spaceSaver
-    if (saver != null && saver.count > 0) {
+    if (saver != null) {
         SectionLabel(stringResource(R.string.sv_title))
         Spacer(Modifier.height(10.dp))
         Text(
-            stringResource(R.string.sv_text, Actions.formatCount(saver.count.toLong()), Actions.formatFileSize(saver.savedBytes).ifBlank { "0" }),
+            if (saver.count > 0) stringResource(R.string.sv_text, Actions.formatCount(saver.count.toLong()), Actions.formatFileSize(saver.savedBytes).ifBlank { "0" })
+            else stringResource(R.string.sv_none),
             style = MaterialTheme.typography.bodySmall,
             color = p.muted,
         )
         Spacer(Modifier.height(10.dp))
-        GhostButton(
-            if (state.spaceSaverBusy) stringResource(R.string.sv_working) else stringResource(R.string.sv_move, Actions.formatFileSize(saver.savedBytes).ifBlank { "0" }),
-            onClick = { confirmSaver = true },
-            enabled = !status.busy && !state.spaceSaverBusy,
-            modifier = Modifier.fillMaxWidth(),
-        )
+        if (saver.count > 0) {
+            GhostButton(
+                if (state.spaceSaverBusy) stringResource(R.string.sv_working) else stringResource(R.string.sv_move, Actions.formatFileSize(saver.savedBytes).ifBlank { "0" }),
+                onClick = { confirmSaver = true },
+                enabled = !status.busy && !state.spaceSaverBusy,
+                modifier = Modifier.fillMaxWidth(),
+            )
+        }
         Spacer(Modifier.height(24.dp))
     }
 

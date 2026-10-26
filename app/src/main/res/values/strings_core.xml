@@ -176,6 +176,7 @@
     <string name="sv_text">%1$s photos sit on this phone at their full size although your backup already holds them. Move them and only their 720p copies stay here, which frees about %2$s. They stay searchable, and Download all originals brings the full files back whenever you want them.</string>
     <string name="sv_move">Free about %1$s</string>
     <string name="sv_working">Making the copies…</string>
+    <string name="sv_none">Nothing to free: every photo your backup holds is already here as a 720p copy, or its full file is not on this phone.</string>
     <string name="sv_dock">Move</string>
     <string name="sv_confirm_title">Move to the cloud</string>
     <string name="sv_confirm_text">The full files of %1$s photos leave this phone; their 720p copies stay. Your backup keeps the originals.</string>
