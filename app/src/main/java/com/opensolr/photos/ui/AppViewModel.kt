@@ -229,7 +229,6 @@ data class UiState(
 
     val cachedCount: Int = 0,
 
-    val deviceChoices: List<AccountIndex> = emptyList(),
     /** Indexed photos the last sync found gone from the phone and kept, until the owner says to remove them. */
     val missingHeld: Int = 0,
 
@@ -1642,11 +1641,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch {
             try {
                 val (connection, outcome) = indexes.ensure(session) { step -> _state.update { it.copy(setupStep = step) } }
-                if (outcome == IndexManager.Outcome.NEEDS_CHOICE) {
-
-                    _state.update { it.copy(deviceChoices = indexes.choices, setupStep = AppText.s(R.string.vm_which_device)) }
-                    return@launch
-                }
                 SyncScheduler.applySchedule(context, prefs.schedule)
                 SyncScheduler.watchMedia(context)
                 SyncScheduler.runNow(context)
@@ -1661,33 +1655,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 _state.update { it.copy(setupError = friendlyMessage(e, AppText.s(R.string.vm_setup_failed))) }
             }
         }
-    }
-
-    private fun askDeviceChoice() {
-        val session = prefs.session ?: return
-        viewModelScope.launch {
-            try {
-                val others = api.indexes(session).filter { it.isPhotos }
-                if (others.isNotEmpty()) _state.update { it.copy(deviceChoices = others) } else chooseNewDevice()
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                throw e
-            } catch (e: Exception) {
-            }
-        }
-    }
-
-    fun chooseDevice(index: AccountIndex) {
-        prefs.chosenIndexName = index.name
-        prefs.connection = null
-        _state.update { it.copy(deviceChoices = emptyList(), screen = Screen.Setup) }
-        runSetup()
-    }
-
-    fun chooseNewDevice() {
-        prefs.chosenIndexName = indexes.ownIndexName
-        prefs.connection = null
-        _state.update { it.copy(deviceChoices = emptyList(), screen = Screen.Setup) }
-        runSetup()
     }
 
     suspend fun personSuggestions(typed: String, onPhoto: Collection<String>): List<String> =
@@ -2821,7 +2788,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         if (report?.status == "rebuild_required") _state.update { it.copy(rebuildRequired = true) }
-        if (report?.status == "device_choice") askDeviceChoice()
         if (report?.status == "update_app") _state.update { it.copy(notice = report.message) }
         refreshSkippedCount()
         refreshPlacesToWrite()

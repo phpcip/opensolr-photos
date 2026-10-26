@@ -38,11 +38,7 @@ class IndexManager(
 
         CONFIG_NEWER,
 
-        NEEDS_CHOICE,
     }
-
-    var choices: List<AccountIndex> = emptyList()
-        private set
 
     val deviceId: String
         @SuppressLint("HardwareIds")
@@ -66,10 +62,12 @@ class IndexManager(
 
     suspend fun ensure(session: Session, prefetched: OpensolrApi.SyncInfo? = null, onStep: suspend (String) -> Unit = {}): Pair<IndexConnection, Outcome> {
         onStep(AppText.s(R.string.ix_looking))
-        val name = indexName
         val account = prefetched?.indexes ?: api.indexes(session)
+        // One photos index per Opensolr account: an index already on the account is taken as it is, whichever phone
+        // made it, so every phone of the account sees the same photos. Only an account without one gets a new index.
+        val name = account.filter { it.isPhotos }.map { it.name }.minOrNull() ?: ownIndexName
         if (account.any { it.name == name }) {
-            if (prefs.chosenIndexName == null) prefs.chosenIndexName = name
+            if (prefs.chosenIndexName != name) prefs.chosenIndexName = name
             val connection = prefetched?.connectionFor(name) ?: connectionWithRetry(session, name)
             prefs.connection = connection
 
@@ -78,14 +76,6 @@ class IndexManager(
                 version < CONFIG_VERSION -> Outcome.NEEDS_REBUILD
                 version > CONFIG_VERSION -> Outcome.CONFIG_NEWER
                 else -> Outcome.EXISTING
-            }
-        }
-
-        if (prefs.chosenIndexName == null) {
-            val others = account.filter { it.isPhotos }
-            if (others.isNotEmpty()) {
-                choices = others
-                return IndexConnection(name, "", "", "", "") to Outcome.NEEDS_CHOICE
             }
         }
 

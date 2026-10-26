@@ -43,11 +43,6 @@
     <string name="rt_ok">OK</string>
     <string name="rt_busy_title">A sync is already running</string>
     <string name="rt_busy_text">A sync is already running.</string>
-    <string name="rt_new_device">No, start a new index</string>
-    <string name="rt_which_device">Re-use one of these indexes from your Opensolr account?</string>
-    <string name="rt_unknown_phone">Unknown phone</string>
-    <string name="rt_last_synced">last synced %1$s</string>
-    <string name="rt_since">since %1$s</string>
     <string name="cp_open_site">Open on opensolr.com</string>
     <string name="cp_x_of_y">%1$s of %2$s</string>
     <string name="cp_back">Back</string>
@@ -58,10 +53,6 @@
     <plurals name="mp_n_here">
         <item quantity="one">%1$s photo here</item>
         <item quantity="other">%1$s photos here</item>
-    </plurals>
-    <plurals name="rt_n_photos">
-        <item quantity="one">%1$s photo</item>
-        <item quantity="other">%1$s photos</item>
     </plurals>
     <string name="rt_device_note">This keeps your photos and the resources of your Opensolr account tied to this phone.</string>
 </resources>

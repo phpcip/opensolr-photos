@@ -96,10 +96,6 @@ fun AppRoot(viewModel: AppViewModel) {
         }
     }
 
-    if (state.deviceChoices.isNotEmpty()) {
-        DeviceChoiceDialog(state, viewModel)
-    }
-
     if (state.rebuildRequired) {
         AlertDialog(
             onDismissRequest = { viewModel.postponeRebuild() },
@@ -126,43 +122,5 @@ fun AppRoot(viewModel: AppViewModel) {
     }
 }
 
-@Composable
-private fun DeviceChoiceDialog(state: UiState, viewModel: AppViewModel) {
-    val view = androidx.compose.ui.platform.LocalView.current
-    val p = LocalPalette.current
-    AlertDialog(
-        onDismissRequest = {},
-        confirmButton = {},
-        dismissButton = { TextButton(onClick = { viewModel.chooseNewDevice() }) { Text(stringResource(R.string.rt_new_device), color = p.muted) } },
-        title = { Text(stringResource(R.string.rt_which_device)) },
-        text = {
-            Column(Modifier.fillMaxWidth().verticalScroll(rememberScrollState())) {
-                state.deviceChoices.forEach { choice ->
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable { Haptics.tap(view); viewModel.chooseDevice(choice) }
-                            .padding(vertical = 12.dp)
-                    ) {
-                        Text(choice.deviceName ?: stringResource(R.string.rt_unknown_phone), style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold), color = p.ink)
-                        val photos = pluralStringResource(R.plurals.rt_n_photos, choice.numDocs, Actions.formatCount(choice.numDocs.toLong()))
-                        val synced = stringResource(R.string.rt_last_synced, Actions.formatDate(choice.lastIndex * 1000L).substringBefore(' '))
-                        val since = stringResource(R.string.rt_since, Actions.formatDate(choice.created * 1000L).substringBefore(' '))
-                        val details = buildList {
-                            if (choice.numDocs > 0) add(photos)
-                            if (choice.lastIndex > 0) add(synced)
-                            else if (choice.created > 0) add(since)
-                        }
-                        if (details.isNotEmpty()) Text(details.joinToString(" · "), style = MaterialTheme.typography.bodySmall, color = p.muted)
-                    }
-                    HorizontalDivider(color = p.hairline)
-                }
-            }
-        },
-        containerColor = p.paper,
-        titleContentColor = p.ink,
-        textContentColor = p.muted,
-    )
-}
 
 private const val SCREEN_FADE_MS = 180

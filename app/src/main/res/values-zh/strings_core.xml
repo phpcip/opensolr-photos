@@ -29,7 +29,6 @@
     <string name="err_no_region">目前没有支持向量搜索的 Opensolr 环境可用</string>
     <string name="sy_sign_in">登录 Opensolr 才能同步。</string>
     <string name="sy_checking">正在检查你的索引</string>
-    <string name="sy_device">打开 Opensolr Photos，选择是否重新使用你 Opensolr 账户中的索引。</string>
     <string name="sy_newer">你的索引由更新版本的 Opensolr Photos 设置。请更新应用以继续同步。</string>
     <string name="sy_rebuild">此版本的 Opensolr Photos 带来新的索引配置。继续之前，必须重置索引并完整重新同步。</string>
     <string name="sy_looking">正在查找照片</string>
@@ -109,7 +108,6 @@
     <string name="vm_signin_failed">登录失败。请再次点按登录。</string>
     <string name="vm_need_photos">Opensolr Photos 需要访问你的照片才能建立索引。请允许以继续。</string>
     <string name="vm_connecting">正在连接 Opensolr</string>
-    <string name="vm_which_device">重新使用你 Opensolr 账户中的其中一个索引？</string>
     <string name="vm_signed_out">你的 Opensolr 登录已失效。请重新登录。</string>
     <string name="vm_setup_failed">无法设置索引。</string>
     <string name="vm_search_failed">搜索失败。</string>

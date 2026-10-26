@@ -43,11 +43,6 @@
     <string name="rt_ok">OK</string>
     <string name="rt_busy_title">Un sync rulează deja</string>
     <string name="rt_busy_text">Un sync rulează deja.</string>
-    <string name="rt_new_device">Nu, creează un index nou</string>
-    <string name="rt_which_device">Refolosești unul dintre acești indecși din contul tău Opensolr?</string>
-    <string name="rt_unknown_phone">Telefon necunoscut</string>
-    <string name="rt_last_synced">ultimul sync %1$s</string>
-    <string name="rt_since">din %1$s</string>
     <string name="cp_open_site">Deschide pe opensolr.com</string>
     <string name="cp_x_of_y">%1$s din %2$s</string>
     <string name="cp_back">Înapoi</string>
@@ -60,11 +55,6 @@
         <item quantity="one">%1$s poză aici</item>
         <item quantity="few">%1$s poze aici</item>
         <item quantity="other">%1$s de poze aici</item>
-    </plurals>
-    <plurals name="rt_n_photos">
-        <item quantity="one">%1$s poză</item>
-        <item quantity="few">%1$s poze</item>
-        <item quantity="other">%1$s de poze</item>
     </plurals>
     <string name="rt_device_note">Așa pozele tale și resursele contului Opensolr rămân legate de acest telefon.</string>
     <string name="ext_cannot_open">Acest fișier nu poate fi deschis aici.</string>

@@ -43,11 +43,6 @@
     <string name="rt_ok">OK</string>
     <string name="rt_busy_title">すでに同期中です</string>
     <string name="rt_busy_text">すでに同期中です。</string>
-    <string name="rt_new_device">いいえ、新しいインデックスを作成</string>
-    <string name="rt_which_device">Opensolrアカウントのこれらのインデックスのいずれかを再利用しますか？</string>
-    <string name="rt_unknown_phone">不明な端末</string>
-    <string name="rt_last_synced">最終同期 %1$s</string>
-    <string name="rt_since">%1$s から</string>
     <string name="cp_open_site">opensolr.com で開く</string>
     <string name="cp_x_of_y">%1$s / %2$s</string>
     <string name="cp_back">戻る</string>
@@ -56,9 +51,6 @@
     </plurals>
     <plurals name="mp_n_here">
         <item quantity="other">ここに写真 %1$s 枚</item>
-    </plurals>
-    <plurals name="rt_n_photos">
-        <item quantity="other">写真 %1$s 枚</item>
     </plurals>
     <string name="rt_device_note">写真とOpensolrアカウントのリソースをこの端末に紐づけておくためです。</string>
     <string name="ext_cannot_open">このファイルはここでは開けません。</string>

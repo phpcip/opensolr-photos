@@ -46,7 +46,6 @@
     <string name="st_sign_in">Pauză: autentifică-te din nou în Opensolr.</string>
     <string name="st_rebuild">În așteptare: indexul trebuie resetat și sincronizat complet pentru noua versiune. Deschide ecranul de poze ca să pornească.</string>
     <string name="st_update">Pauză: actualizează Opensolr Photos ca să continue sincronizarea.</string>
-    <string name="st_device">În așteptare: deschide aplicația și alege dacă refolosești un index din contul tău Opensolr.</string>
     <string name="st_battery">Așteaptă bateria: %1$s</string>
     <string name="st_retry">Pauză scurtă: Opensolr a cerut încetinire. Continuă singur.</string>
     <string name="st_failed">Ultimul sync nu s-a terminat. Se reîncearcă la următorul Re-Sync.</string>
@@ -56,7 +55,6 @@
     <string name="rs_sign_in">Trebuie autentificare</string>
     <string name="rs_rebuild">Trebuie reset și re-sync complet</string>
     <string name="rs_update">Trebuie actualizată aplicația</string>
-    <string name="rs_device">Dispozitivul nu e ales încă</string>
     <string name="rs_battery">Așteaptă bateria</string>
     <string name="rs_retry">Continuă în curând</string>
     <string name="rs_failed">Nu s-a terminat</string>

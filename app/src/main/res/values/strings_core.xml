@@ -29,7 +29,6 @@
     <string name="err_no_region">No Opensolr environment with vector search is available right now</string>
     <string name="sy_sign_in">Sign in to Opensolr to sync.</string>
     <string name="sy_checking">Checking your index</string>
-    <string name="sy_device">Open Opensolr Photos and choose whether to re-use an index from your Opensolr account.</string>
     <string name="sy_newer">Your index was set up by a newer version of Opensolr Photos. Update the app to keep syncing.</string>
     <string name="sy_rebuild">This version of Opensolr Photos comes with a new index configuration. Your index must be reset and fully re-synced before syncing continues.</string>
     <string name="sy_looking">Looking for photos</string>
@@ -109,7 +108,6 @@
     <string name="vm_signin_failed">Sign-in failed. Tap Sign in again.</string>
     <string name="vm_need_photos">Opensolr Photos needs access to your photos to index them. Allow it to continue.</string>
     <string name="vm_connecting">Connecting to Opensolr</string>
-    <string name="vm_which_device">Re-use one of these indexes from your Opensolr account?</string>
     <string name="vm_signed_out">Your Opensolr sign-in stopped working. Sign in again.</string>
     <string name="vm_setup_failed">The index could not be set up.</string>
     <string name="vm_search_failed">Search failed.</string>

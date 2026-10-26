@@ -29,7 +29,6 @@
     <string name="err_no_region">Derzeit ist keine Opensolr-Umgebung mit Vektorsuche verfügbar</string>
     <string name="sy_sign_in">Melden Sie sich bei Opensolr an, um zu synchronisieren.</string>
     <string name="sy_checking">Index wird geprüft</string>
-    <string name="sy_device">Öffnen Sie Opensolr Photos und wählen Sie, ob ein Index aus Ihrem Opensolr-Konto wiederverwendet werden soll.</string>
     <string name="sy_newer">Ihr Index wurde von einer neueren Version von Opensolr Photos eingerichtet. Aktualisieren Sie die App, um weiter zu synchronisieren.</string>
     <string name="sy_rebuild">Diese Version von Opensolr Photos bringt eine neue Indexkonfiguration. Ihr Index muss zurückgesetzt und komplett neu synchronisiert werden, bevor es weitergeht.</string>
     <string name="sy_looking">Fotos werden gesucht</string>
@@ -109,7 +108,6 @@
     <string name="vm_signin_failed">Anmeldung fehlgeschlagen. Tippen Sie erneut auf Anmelden.</string>
     <string name="vm_need_photos">Opensolr Photos braucht Zugriff auf Ihre Fotos, um sie zu indexieren. Erlauben Sie ihn, um fortzufahren.</string>
     <string name="vm_connecting">Verbindung zu Opensolr</string>
-    <string name="vm_which_device">Einen dieser Indizes aus Ihrem Opensolr-Konto wiederverwenden?</string>
     <string name="vm_signed_out">Ihre Opensolr-Anmeldung funktioniert nicht mehr. Melden Sie sich erneut an.</string>
     <string name="vm_setup_failed">Der Index konnte nicht eingerichtet werden.</string>
     <string name="vm_search_failed">Suche fehlgeschlagen.</string>

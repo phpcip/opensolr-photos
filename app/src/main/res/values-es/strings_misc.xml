@@ -43,11 +43,6 @@
     <string name="rt_ok">OK</string>
     <string name="rt_busy_title">Ya hay una sincronización en curso</string>
     <string name="rt_busy_text">Ya hay una sincronización en curso.</string>
-    <string name="rt_new_device">No, crear un índice nuevo</string>
-    <string name="rt_which_device">¿Reutilizar uno de estos índices de tu cuenta de Opensolr?</string>
-    <string name="rt_unknown_phone">Teléfono desconocido</string>
-    <string name="rt_last_synced">última sincronización %1$s</string>
-    <string name="rt_since">desde %1$s</string>
     <string name="cp_open_site">Abrir en opensolr.com</string>
     <string name="cp_x_of_y">%1$s de %2$s</string>
     <string name="cp_back">Atrás</string>
@@ -60,11 +55,6 @@
         <item quantity="one">%1$s foto aquí</item>
         <item quantity="many">%1$s fotos aquí</item>
         <item quantity="other">%1$s fotos aquí</item>
-    </plurals>
-    <plurals name="rt_n_photos">
-        <item quantity="one">%1$s foto</item>
-        <item quantity="many">%1$s fotos</item>
-        <item quantity="other">%1$s fotos</item>
     </plurals>
     <string name="rt_device_note">Así tus fotos y los recursos de tu cuenta de Opensolr quedan ligados a este teléfono.</string>
     <string name="ext_cannot_open">Este archivo no se puede abrir aquí.</string>

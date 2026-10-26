@@ -46,7 +46,6 @@
     <string name="st_sign_in">En pause : reconnectez-vous à Opensolr.</string>
     <string name="st_rebuild">En attente : votre index doit être réinitialisé et entièrement resynchronisé pour la nouvelle version. Ouvrez l\'écran des photos pour commencer.</string>
     <string name="st_update">En pause : mettez à jour Opensolr Photos pour continuer.</string>
-    <string name="st_device">En attente : ouvrez l\'app et choisissez de réutiliser ou non un index de votre compte Opensolr.</string>
     <string name="st_battery">En attente de batterie : %1$s</string>
     <string name="st_retry">Brève pause : Opensolr a demandé de ralentir. Cela reprend tout seul.</string>
     <string name="st_failed">La dernière synchro ne s\'est pas terminée. Elle sera retentée au prochain Resync.</string>
@@ -56,7 +55,6 @@
     <string name="rs_sign_in">Connexion requise</string>
     <string name="rs_rebuild">Réinitialisation et resync complète requises</string>
     <string name="rs_update">Mise à jour de l\'app requise</string>
-    <string name="rs_device">Appareil pas encore choisi</string>
     <string name="rs_battery">En attente de batterie</string>
     <string name="rs_retry">Reprend bientôt</string>
     <string name="rs_failed">Non terminée</string>

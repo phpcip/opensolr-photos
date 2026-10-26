@@ -46,7 +46,6 @@
     <string name="st_sign_in">Pausiert: Melden Sie sich erneut bei Opensolr an.</string>
     <string name="st_rebuild">Wartet: Ihr Index muss für die neue Version zurückgesetzt und neu synchronisiert werden. Öffnen Sie den Fotobildschirm der App, um zu starten.</string>
     <string name="st_update">Pausiert: Aktualisieren Sie Opensolr Photos, um weiter zu synchronisieren.</string>
-    <string name="st_device">Wartet: Öffnen Sie die App und wählen Sie, ob ein Index aus Ihrem Opensolr-Konto wiederverwendet werden soll.</string>
     <string name="st_battery">Wartet auf Akku: %1$s</string>
     <string name="st_retry">Kurz pausiert: Opensolr bat die App, langsamer zu werden. Es geht von selbst weiter.</string>
     <string name="st_failed">Der letzte Sync wurde nicht beendet. Er wird beim nächsten Neu-Sync wiederholt.</string>
@@ -56,7 +55,6 @@
     <string name="rs_sign_in">Anmeldung nötig</string>
     <string name="rs_rebuild">Reset und kompletter Sync nötig</string>
     <string name="rs_update">App-Update nötig</string>
-    <string name="rs_device">Gerät noch nicht gewählt</string>
     <string name="rs_battery">Wartet auf Akku</string>
     <string name="rs_retry">Geht gleich weiter</string>
     <string name="rs_failed">Nicht beendet</string>

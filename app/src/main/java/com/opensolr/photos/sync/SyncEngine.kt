@@ -177,9 +177,6 @@ class SyncEngine(private val context: Context) {
             var connection = initialConnection
             var solr = SolrClient(connection)
 
-            if (outcome == IndexManager.Outcome.NEEDS_CHOICE) {
-                return report("device_choice", message = AppText.s(R.string.sy_device))
-            }
             if (outcome == IndexManager.Outcome.CONFIG_NEWER) {
                 return report("update_app", message = AppText.s(R.string.sy_newer))
             }
