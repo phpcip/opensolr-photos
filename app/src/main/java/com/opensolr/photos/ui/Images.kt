@@ -15,6 +15,9 @@ import com.opensolr.photos.media.PdfPages
 import com.opensolr.photos.search.PhotoHit
 import kotlinx.coroutines.sync.withPermit
 
+/** The size a picture is made at is part of its key: one made for the grid is never taken for a larger view. */
+internal fun edgeOf(options: Options): String = (options.size.width as? Dimension.Pixels)?.px?.toString() ?: "o"
+
 /** One page of a PDF as something the picture loader can open. */
 data class PdfPage(val uri: Uri, val page: Int, val sizeBytes: Long)
 
@@ -25,7 +28,7 @@ class PdfPageFetcher(private val data: PdfPage, private val options: Options) : 
         val bitmap = Thumbs.get(options.context, "p", data.uri, data.sizeBytes, data.page.toLong(), wanted) {
             PdfPages.render(options.context, data.uri, data.page, wanted)
         } ?: return null
-        return DrawableResult(BitmapDrawable(options.context.resources, bitmap), isSampled = true, dataSource = DataSource.DISK)
+        return DrawableResult(BitmapDrawable(options.context.resources, bitmap), isSampled = false, dataSource = DataSource.DISK)
     }
 
     class Factory : Fetcher.Factory<PdfPage> {
@@ -33,7 +36,7 @@ class PdfPageFetcher(private val data: PdfPage, private val options: Options) : 
     }
 
     class Key : Keyer<PdfPage> {
-        override fun key(data: PdfPage, options: Options): String = "pdf:${data.uri}:${data.page}:${data.sizeBytes}"
+        override fun key(data: PdfPage, options: Options): String = "pdf:${data.uri}:${data.page}:${data.sizeBytes}:${edgeOf(options)}"
     }
 
     companion object {
@@ -45,9 +48,12 @@ class PdfPageFetcher(private val data: PdfPage, private val options: Options) : 
 /** A photo for the grid: the thumbnail the phone keeps for it, else the photo read small. */
 /**
  * A photo for the picture loader. [quick] is the grid in motion: only the thumbnail the phone already keeps
- * is taken, and only if it comes back at once. Nothing is decoded, so dragging the scroller stays smooth.
+ * is taken, nothing is decoded. It is not part of the photo's identity, so the grid starting or stopping
+ * never asks again for a picture already shown.
  */
-data class PhotoThumb(val uri: Uri, val stamp: Long, val sizeBytes: Long, val quick: Boolean = false)
+data class PhotoThumb(val uri: Uri, val stamp: Long, val sizeBytes: Long) {
+    var quick: Boolean = false
+}
 
 class PhotoThumbFetcher(private val data: PhotoThumb, private val options: Options) : Fetcher {
 
@@ -64,7 +70,7 @@ class PhotoThumbFetcher(private val data: PhotoThumb, private val options: Optio
             } else null
             kept ?: if (data.quick) null else runCatching { com.opensolr.photos.media.PhotoReader.uprightBitmap(context, data.uri, wanted) }.getOrNull()
         } ?: return null
-        return DrawableResult(BitmapDrawable(context.resources, bitmap), isSampled = true, dataSource = DataSource.DISK)
+        return DrawableResult(BitmapDrawable(context.resources, bitmap), isSampled = false, dataSource = DataSource.DISK)
     }
 
     class Factory : Fetcher.Factory<PhotoThumb> {
@@ -73,7 +79,7 @@ class PhotoThumbFetcher(private val data: PhotoThumb, private val options: Optio
 
 
     class Key : Keyer<PhotoThumb> {
-        override fun key(data: PhotoThumb, options: Options): String = "photo:${data.uri}:${data.stamp}"
+        override fun key(data: PhotoThumb, options: Options): String = "photo:${data.uri}:${data.stamp}:${edgeOf(options)}"
     }
 }
 
@@ -112,7 +118,7 @@ class VideoThumbFetcher(private val data: VideoThumb, private val options: Optio
             bitmap = com.opensolr.photos.storage.ClipThumbs.read(context, data.id, wanted)
         }
         if (bitmap == null) return null
-        return DrawableResult(BitmapDrawable(context.resources, bitmap), isSampled = true, dataSource = DataSource.DISK)
+        return DrawableResult(BitmapDrawable(context.resources, bitmap), isSampled = false, dataSource = DataSource.DISK)
     }
 
     class Factory : Fetcher.Factory<VideoThumb> {
@@ -120,7 +126,7 @@ class VideoThumbFetcher(private val data: VideoThumb, private val options: Optio
     }
 
     class Key : Keyer<VideoThumb> {
-        override fun key(data: VideoThumb, options: Options): String = "clip:${data.id}"
+        override fun key(data: VideoThumb, options: Options): String = "clip:${data.id}:${edgeOf(options)}"
     }
 
     companion object {

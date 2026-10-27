@@ -96,6 +96,10 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean("ids_relative", false)
         set(value) { prefs.edit().putBoolean("ids_relative", value).commit() }
 
+    var clipAliasesChecked: Boolean
+        get() = prefs.getBoolean("clip_aliases_checked", false)
+        set(value) { prefs.edit().putBoolean("clip_aliases_checked", value).apply() }
+
     /** Photos gone from the phone in numbers: the owner said to take them out of the index. */
     var removeMissingApproved: Boolean
         get() = prefs.getBoolean("remove_missing_ok", false)

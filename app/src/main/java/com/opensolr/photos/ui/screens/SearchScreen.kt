@@ -2046,15 +2046,29 @@ private fun Thumbnail(hit: PhotoHit, modifier: Modifier = Modifier) {
     }
     val edited = EditedPhotos.stamp(hit.mediaId)
     // the grid's photos: the thumbnail the phone already keeps, never the whole file decoded
-    val uri = com.opensolr.photos.ui.Images.model(context, hit).let { m -> if (m is Uri && hit.mediaKind == com.opensolr.photos.media.Kind.PHOTO && m.scheme == "content") com.opensolr.photos.ui.PhotoThumb(m, edited, hit.sizeBytes, quick = moving) else m }
-    val request = remember(uri, hit.sizeBytes, edited) { ImageRequest.Builder(context).data(uri).size(GRID_THUMB_PX).setParameter("bytes", hit.sizeBytes).setParameter("edited", edited).crossfade(true).build() }
+    val uri = com.opensolr.photos.ui.Images.model(context, hit).let { m -> if (m is Uri && hit.mediaKind == com.opensolr.photos.media.Kind.PHOTO && m.scheme == "content") com.opensolr.photos.ui.PhotoThumb(m, edited, hit.sizeBytes) else m }
+    // the request stays the same while the grid starts and stops: a picture on the screen is never asked for again
+    var retry by remember(uri) { mutableStateOf(0) }
+    val request = remember(uri, hit.sizeBytes, edited, retry) {
+        (uri as? com.opensolr.photos.ui.PhotoThumb)?.quick = GridMotion.moving
+        ImageRequest.Builder(context).data(uri).size(GRID_THUMB_PX).setParameter("bytes", hit.sizeBytes).setParameter("edited", edited).crossfade(true).build()
+    }
+    val quick = (uri as? com.opensolr.photos.ui.PhotoThumb)?.quick == true
     // a file whose picture cannot be drawn on this phone shows a sign of its kind instead of an empty square;
     // one that simply was not ready while the grid moved is left blank and tried again when it stops
     var failed by remember(uri) { mutableStateOf(false) }
+    var missed by remember(uri) { mutableStateOf(false) }
+    if (missed) {
+        LaunchedEffect(uri) {
+            androidx.compose.runtime.snapshotFlow { GridMotion.moving }.first { !it }
+            missed = false
+            retry++
+        }
+    }
     Box(modifier.aspectRatio(1f).background(p.chip), contentAlignment = Alignment.Center) {
         AsyncImage(
             model = request,
-            onError = { if (!moving) failed = true },
+            onError = { if (quick || moving) missed = true else failed = true },
             contentDescription = hit.meaning.ifBlank { hit.fileName },
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize(),

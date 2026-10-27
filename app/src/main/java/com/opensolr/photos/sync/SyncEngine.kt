@@ -138,6 +138,42 @@ class SyncEngine(private val context: Context) {
         prefs.idsRelative = true
     }
 
+    /** [photo] is the file [doc] describes; a clip's document can hold its full md5 (written by a download). */
+    private fun sameFile(doc: PhotoCache.Doc, photo: LocalPhoto): Boolean {
+        val hash = doc.fileHash ?: return doc.sizeBytes == photo.sizeBytes
+        if (hash == PhotoReader.fileMd5(context, photo)) return true
+        return photo.kind == com.opensolr.photos.media.Kind.VIDEO && doc.sizeBytes == photo.sizeBytes &&
+            hash == PhotoReader.fileMd5(context, photo.uri)
+    }
+
+    /**
+     * Clips that got an id of their own although they are the very file of another phone's document: the alias
+     * goes, and the second document leaves the index and this phone. Nothing is told to the other phones: their
+     * own file has the same name.
+     */
+    private suspend fun dropFalseClipAliases(local: Map<String, LocalPhoto>, solr: SolrClient): Boolean {
+        val wrong = cache.aliases().mapNotNull { (aliasId, ownId) ->
+            val photo = local[ownId]?.takeIf { it.kind == com.opensolr.photos.media.Kind.VIDEO } ?: return@mapNotNull null
+            val doc = cache.doc(aliasId) ?: return@mapNotNull null
+            if (sameFile(doc, photo)) Triple(aliasId, ownId, photo) else null
+        }
+        if (wrong.isEmpty()) return false
+        val second = wrong.map { it.second }.filter { cache.doc(it) != null }
+        if (second.isNotEmpty()) solr.delete(second, now = true)
+        cache.removeAliases(wrong.map { it.first })
+        wrong.forEach { (aliasId, _, photo) -> cache.updateDocSize(aliasId, photo.sizeBytes, photo.modifiedSec, PhotoReader.fileMd5(context, photo)) }
+        if (second.isNotEmpty()) {
+            cache.markDeleted(second, System.currentTimeMillis(), sent = true)
+            cache.dropDeleted(second)
+            second.forEach { id ->
+                com.opensolr.photos.storage.ClipThumbs.remove(context, id)
+                com.opensolr.photos.storage.CloudFiles.remove(context, id)
+                com.opensolr.photos.storage.LocalFiles.ids.remove(id)
+            }
+        }
+        return true
+    }
+
     private suspend fun runOnce(onProgress: suspend (Progress) -> Unit, quick: Boolean): SyncReport {
         val session = prefs.session ?: return report("sign_in_required", message = AppText.s(R.string.sy_sign_in))
         if (!prefs.idsRelative) migrateIds()
@@ -193,11 +229,18 @@ class SyncEngine(private val context: Context) {
                 ?: return report("failed", message = AppText.s(R.string.sy_cannot_read))
             // Another phone's file under the same folder and name (WhatsApp, screenshots) is a different photo:
             // this phone's file gets an id of its own, so neither replaces the other in the index or the backup.
+            // a clip brought down from the backup once got an id of its own here, as if it were another clip
+            if (!prefs.clipAliasesChecked) {
+                if (dropFalseClipAliases(local, solr)) {
+                    local = MediaScanner.scan(context, prefs.folders, cache.aliases(), com.opensolr.photos.media.ScanOptions.of(context))
+                        ?: return report("failed", message = AppText.s(R.string.sy_cannot_read))
+                }
+                prefs.clipAliasesChecked = true
+            }
             val seenBefore = cache.seenIds()
             val clashes = local.values.filter { it.id !in seenBefore && it.page <= 1 }.mapNotNull { photo ->
                 val doc = cache.doc(photo.id) ?: return@mapNotNull null
-                val same = doc.fileHash?.let { it == PhotoReader.fileMd5(context, photo) } ?: (doc.sizeBytes == photo.sizeBytes)
-                if (same) null else photo
+                if (sameFile(doc, photo)) null else photo
             }
             if (clashes.isNotEmpty()) {
                 val device = com.opensolr.photos.auth.AuthFlow.deviceId(context)

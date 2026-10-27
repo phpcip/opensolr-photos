@@ -460,7 +460,9 @@ class StorageEngine(private val context: Context) {
         val tmp = File.createTempFile("original", ".bin", context.cacheDir)
         try {
             tmp.outputStream().use { backend.get(layout.main(folder, name), it) }
-            val md5 = md5Of(tmp)
+            val isClip = cache.doc(id)?.json?.let { runCatching { org.json.JSONObject(it).optString("kind_s") }.getOrNull() } == "video"
+            // the file's identity as the sync reads it: a clip's partial hash, the md5 of anything else
+            val md5 = (if (isClip) com.opensolr.photos.media.PartialHash.of(context, Uri.fromFile(tmp)) else null) ?: md5Of(tmp)
             val written = writeIntoFolders(tmp, folder, name)
             val fileId = MediaScanner.photoId(MediaScanner.folderKey(folder) + name)
             val newFileId = MediaScanner.photoId(MediaScanner.folderKey(written.folder) + written.name)
@@ -475,7 +477,6 @@ class StorageEngine(private val context: Context) {
             }
             LocalFiles.add(pages.associateWith { written.mediaId })
             // a clip keeps the picture the backend holds for it: the grid shows that one, nothing is drawn here
-            val isClip = cache.doc(id)?.json?.let { runCatching { org.json.JSONObject(it).optString("kind_s") }.getOrNull() } == "video"
             if (isClip && !ClipThumbs.has(context, id)) {
                 runCatching {
                     val out = java.io.ByteArrayOutputStream()

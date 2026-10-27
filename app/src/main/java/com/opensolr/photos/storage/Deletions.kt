@@ -97,7 +97,10 @@ object Deletions {
             (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && android.os.Environment.isExternalStorageManager())
         val ask = ArrayList<String>()
         val done = HashSet<String>()
+        // only an item this phone has had as its own file: another phone's item can share a path with a file here
+        val seen = cache.seenIds()
         for ((id, at) in deleted) {
+            if (id !in seen) continue
             val (mediaId, path) = where[id] ?: continue
             if (path.isEmpty() || path.contains("/files/cloud/") || path in done) continue
             val file = File(path)

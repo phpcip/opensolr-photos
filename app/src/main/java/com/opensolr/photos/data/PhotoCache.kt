@@ -838,6 +838,8 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         writableDatabase.execSQL("INSERT OR REPLACE INTO aliases (alias_id, id) VALUES (?, ?)", arrayOf<Any>(aliasId, id))
     }
 
+    fun removeAliases(aliasIds: Collection<String>) = deleteByIds("aliases", aliasIds, "alias_id")
+
     /** The ids this phone has ever had as files: only those can be missing here; the rest are other phones'. */
     fun seenIds(): Set<String> {
         val out = HashSet<String>()
