@@ -2989,10 +2989,13 @@ internal fun PhotoViewer(
                         .background(Color(0x99000000), androidx.compose.foundation.shape.RoundedCornerShape(2.dp)).padding(horizontal = 10.dp, vertical = 4.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text(
-                        "${Actions.formatCount(hit.page.toLong())} / ${Actions.formatCount(hit.pages.coerceAtLeast(hit.page).toLong())}",
-                        style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.8f),
-                    )
+                    // a tap on the number: a box to jump to a page
+                    com.opensolr.photos.ui.PageJump(hit.page, hit.pages.coerceAtLeast(hit.page), Color.White.copy(alpha = 0.8f)) { n ->
+                        val item = items.getOrNull(pager.currentPage).orEmpty()
+                        val to = item.indexOfFirst { it.page >= n }.let { if (it < 0) item.size - 1 else it }
+                        val parent = hit.parentId
+                        if (parent != null && to >= 0) { pageOf[parent] = to; shownId = item[to].id }
+                    }
                     Text(
                         hit.fileName, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f),
                         maxLines = 1, overflow = TextOverflow.Ellipsis,
