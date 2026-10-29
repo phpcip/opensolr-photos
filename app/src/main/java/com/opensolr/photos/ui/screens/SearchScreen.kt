@@ -122,6 +122,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.calculatePan
 import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.ui.text.style.TextAlign
@@ -2985,12 +2986,13 @@ internal fun PhotoViewer(
             if (showActions && hit != null && hit.isPdfPage) {
                 // which page of the document is on screen (changes with the page arrows), the file's name under it on one line
                 Column(
-                    Modifier.align(Alignment.TopCenter).padding(top = maxOf(topInset, 24.dp) + 8.dp, start = 24.dp + sideLeft, end = 24.dp + sideRight)
-                        .background(Color(0x99000000), androidx.compose.foundation.shape.RoundedCornerShape(2.dp)).padding(horizontal = 10.dp, vertical = 4.dp),
+                    // clear of the front camera: under the cutout, with room to spare
+                    Modifier.align(Alignment.TopCenter).padding(top = maxOf(topInset, WindowInsets.displayCutout.asPaddingValues().calculateTopPadding(), 24.dp) + 28.dp, start = 24.dp + sideLeft, end = 24.dp + sideRight)
+                        .background(Color(0x99000000), androidx.compose.foundation.shape.RoundedCornerShape(2.dp)).padding(horizontal = 10.dp, vertical = 6.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     // a tap on the number: a box to jump to a page
-                    com.opensolr.photos.ui.PageJump(hit.page, hit.pages.coerceAtLeast(hit.page), Color.White.copy(alpha = 0.8f)) { n ->
+                    com.opensolr.photos.ui.PageJump(hit.page, hit.pages.coerceAtLeast(hit.page), Color.White.copy(alpha = 0.9f)) { n ->
                         val item = items.getOrNull(pager.currentPage).orEmpty()
                         val to = item.indexOfFirst { it.page >= n }.let { if (it < 0) item.size - 1 else it }
                         val parent = hit.parentId
@@ -2998,7 +3000,7 @@ internal fun PhotoViewer(
                     }
                     Text(
                         hit.fileName, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f),
-                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(top = 4.dp),
                     )
                 }
             }
