@@ -2613,6 +2613,20 @@ private fun FilterSwitch(title: String, hint: String, checked: Boolean, onChange
     }
 }
 
+/** The viewer's items: one per photo or clip, one per PDF with its pages in order (those in the list). */
+private fun viewerItems(hits: List<PhotoHit>): List<List<PhotoHit>> {
+    val out = ArrayList<List<PhotoHit>>()
+    var i = 0
+    while (i < hits.size) {
+        val first = hits[i]
+        var j = i + 1
+        if (first.isPdfPage && first.parentId != null) while (j < hits.size && hits[j].parentId == first.parentId) j++
+        out += if (j - i > 1) hits.subList(i, j).sortedBy { it.page } else listOf(first)
+        i = j
+    }
+    return out
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun PhotoViewer(
@@ -2631,10 +2645,25 @@ internal fun PhotoViewer(
     viewModel: AppViewModel,
 ) {
     val context = LocalContext.current
-    val pager = rememberPagerState(initialPage = start) { hits.size }
+    // one swipe = one item: the pages of a PDF are one item, turned only by the page arrows of the toolbar
+    val items = remember(hits) { viewerItems(hits) }
+    // the page shown of each PDF, by its file's id
+    val pageOf = remember { androidx.compose.runtime.mutableStateMapOf<String, Int>() }
+    fun hitAt(i: Int): PhotoHit? = items.getOrNull(i)?.let { item -> item[(item[0].parentId?.let { pageOf[it] } ?: 0).coerceIn(0, item.size - 1)] }
+    fun itemOf(id: String?): Int = if (id == null) -1 else items.indexOfFirst { item -> item.any { it.id == id } }
+    // the item opened, on the page that was tapped
+    val startItem = remember { itemOf(hits.getOrNull(start)?.id).coerceAtLeast(0) }
+    remember {
+        val item = items.getOrNull(startItem)
+        val parent = item?.get(0)?.parentId
+        if (item != null && parent != null) pageOf[parent] = item.indexOfFirst { it.id == hits.getOrNull(start)?.id }.coerceAtLeast(0)
+        true
+    }
+    val pager = rememberPagerState(initialPage = startItem) { items.size }
     // the viewer follows the photo, not its position: a list re-read during a sync must not swap the photo on screen
     var shownId by remember { mutableStateOf(hits.getOrNull(start)?.id) }
     val latestHits by androidx.compose.runtime.rememberUpdatedState(hits)
+    val latestItems by androidx.compose.runtime.rememberUpdatedState(items)
     // only a swipe changes the photo followed; a page moved by a shorter or reordered list does not
     var swiped by remember { mutableStateOf(false) }
     LaunchedEffect(pager) {
@@ -2642,13 +2671,19 @@ internal fun PhotoViewer(
     }
     LaunchedEffect(pager) {
         snapshotFlow { pager.settledPage }.collect {
-            if (swiped && !pager.isScrollInProgress) { swiped = false; shownId = latestHits.getOrNull(it)?.id ?: shownId }
+            if (swiped && !pager.isScrollInProgress) {
+                swiped = false
+                val item = latestItems.getOrNull(it)
+                shownId = item?.let { one -> one[(one[0].parentId?.let { p -> pageOf[p] } ?: 0).coerceIn(0, one.size - 1)].id } ?: shownId
+            }
         }
     }
-    LaunchedEffect(hits) {
+    LaunchedEffect(items) {
         val id = shownId ?: return@LaunchedEffect
-        val at = hits.indexOfFirst { it.id == id }
-        if (at >= 0 && at != pager.currentPage) pager.scrollToPage(at)
+        val at = itemOf(id)
+        if (at < 0) return@LaunchedEffect
+        items[at][0].parentId?.let { parent -> pageOf[parent] = items[at].indexOfFirst { it.id == id }.coerceAtLeast(0) }
+        if (at != pager.currentPage) pager.scrollToPage(at)
     }
     val view = LocalView.current
     var showActions by remember { mutableStateOf(true) }
@@ -2658,7 +2693,7 @@ internal fun PhotoViewer(
     var videoFull by remember { mutableStateOf(false) }
     val landscape = androidx.compose.ui.platform.LocalConfiguration.current.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
     val viewerActivity = LocalContext.current.let { c -> var x: android.content.Context? = c; while (x is android.content.ContextWrapper && x !is android.app.Activity) x = x.baseContext; x as? android.app.Activity }
-    val onClipNow = hits.getOrNull(pager.currentPage)?.let { it.isVideo && !absentHere(it) && com.opensolr.photos.storage.CloudFiles.model(LocalContext.current, it.id) == null } == true
+    val onClipNow = hitAt(pager.currentPage)?.let { it.isVideo && !absentHere(it) && com.opensolr.photos.storage.CloudFiles.model(LocalContext.current, it.id) == null } == true
     val clipFull = onClipNow && (videoFull || landscape)
     fun setVideoFull(on: Boolean, portraitClip: Boolean) {
         videoFull = on
@@ -2671,7 +2706,7 @@ internal fun PhotoViewer(
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     var zoomJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-    LaunchedEffect(pager.currentPage) { zoomJob?.cancel(); scale = 1f; offset = Offset.Zero }
+    LaunchedEffect(pager.currentPage, hitAt(pager.currentPage)?.id) { zoomJob?.cancel(); scale = 1f; offset = Offset.Zero }
     val panDecay = rememberSplineBasedDecay<Float>()
 
     var sheetFor by remember { mutableStateOf<PhotoHit?>(null) }
@@ -2690,14 +2725,14 @@ internal fun PhotoViewer(
     LaunchedEffect(facesOn, pager.currentPage, facesVersion, hits.size) {
         faces = null
         if (!facesOn) return@LaunchedEffect
-        val hit = hits.getOrNull(pager.currentPage) ?: return@LaunchedEffect
+        val hit = hitAt(pager.currentPage) ?: return@LaunchedEffect
         faces = runCatching { viewModel.facesFor(hit) }.getOrDefault(emptyList())
     }
 
     var editFor by remember { mutableStateOf<PhotoHit?>(null) }
 
-    LaunchedEffect(pager.currentPage, hits.size) {
-        if (pager.currentPage >= hits.size - 3) onNeedMore()
+    LaunchedEffect(pager.currentPage, items.size) {
+        if (pager.currentPage >= items.size - 3) onNeedMore()
     }
 
     LaunchedEffect(hits.size) { if (hits.isEmpty()) onClose() }
@@ -2728,12 +2763,13 @@ internal fun PhotoViewer(
                 userScrollEnabled = scale <= 1.01f && !videoControls,
                 modifier = Modifier.fillMaxSize(),
             ) { page ->
-                val hit = hits.getOrNull(page) ?: return@HorizontalPager
+                val hit = hitAt(page) ?: return@HorizontalPager
                 val cloudFile = com.opensolr.photos.storage.CloudFiles.model(context, hit.id)
-                val model: Any = remember(hit.mediaId, cloudFile, hit.kind) { cloudFile?.let { android.net.Uri.fromFile(it) } ?: com.opensolr.photos.ui.Images.model(context, hit) }
+                // keyed by the id too: the pages of one PDF share their file, and a page arrow swaps the page in place
+                val model: Any = remember(hit.id, hit.mediaId, cloudFile, hit.kind) { cloudFile?.let { android.net.Uri.fromFile(it) } ?: com.opensolr.photos.ui.Images.model(context, hit) }
                 val uri: Uri = (model as? Uri) ?: hit.uri
                 val edited = EditedPhotos.stamp(hit.mediaId)
-                var baseSize by remember(hit.mediaId, edited) { mutableStateOf<androidx.compose.ui.geometry.Size?>(null) }
+                var baseSize by remember(hit.id, hit.mediaId, edited) { mutableStateOf<androidx.compose.ui.geometry.Size?>(null) }
                 // a clip on this phone plays; one only the backend has shows its first frame like a photo
                 val playable = hit.isVideo && cloudFile == null
                 Box(Modifier.fillMaxSize()) {
@@ -2944,8 +2980,25 @@ internal fun PhotoViewer(
                 }
             }
 
-            val hit = hits.getOrNull(pager.currentPage)
+            val hit = hitAt(pager.currentPage)
 
+            if (showActions && hit != null && hit.isPdfPage) {
+                // which page of the document is on screen (changes with the page arrows), the file's name under it on one line
+                Column(
+                    Modifier.align(Alignment.TopCenter).padding(top = maxOf(topInset, 24.dp) + 8.dp, start = 24.dp + sideLeft, end = 24.dp + sideRight)
+                        .background(Color(0x99000000), androidx.compose.foundation.shape.RoundedCornerShape(2.dp)).padding(horizontal = 10.dp, vertical = 4.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        "${Actions.formatCount(hit.page.toLong())} / ${Actions.formatCount(hit.pages.coerceAtLeast(hit.page).toLong())}",
+                        style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.8f),
+                    )
+                    Text(
+                        hit.fileName, style = MaterialTheme.typography.labelSmall, color = Color.White.copy(alpha = 0.6f),
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
             if (showActions && hit != null && !clipFull) {
 
                 if (scale <= 1.01f) {
@@ -3002,12 +3055,16 @@ internal fun PhotoViewer(
                     if (!hit.isPdfPage) ViewerIconAction(stringResource(R.string.fc_people), Icons.Filled.Face, on) { facesOn = !facesOn }
                     ViewerAction(stringResource(R.string.act_tag), R.drawable.ic_tag, on) { editFor = hit }
                     if (hit.isPdfPage) {
-                        // the pages of the same file, as far as they are in the list
-                        val at = pager.currentPage
-                        val previous = hits.getOrNull(at - 1)?.takeIf { it.parentId == hit.parentId && it.page == hit.page - 1 }
-                        val next = hits.getOrNull(at + 1)?.takeIf { it.parentId == hit.parentId && it.page == hit.page + 1 }
-                        ViewerIconAction(stringResource(R.string.act_prev_page), Icons.AutoMirrored.Filled.KeyboardArrowLeft, previous != null) { scope.launch { pager.animateScrollToPage(at - 1) } }
-                        ViewerIconAction(stringResource(R.string.act_next_page), Icons.AutoMirrored.Filled.KeyboardArrowRight, next != null) { scope.launch { pager.animateScrollToPage(at + 1) } }
+                        // the pages of the file: turned here only, a swipe goes to the next item
+                        val item = items.getOrNull(pager.currentPage).orEmpty()
+                        val at = item.indexOfFirst { it.id == hit.id }
+                        fun turn(to: Int) {
+                            val parent = hit.parentId ?: return
+                            pageOf[parent] = to
+                            shownId = item.getOrNull(to)?.id ?: shownId
+                        }
+                        ViewerIconAction(stringResource(R.string.act_prev_page), Icons.AutoMirrored.Filled.KeyboardArrowLeft, at > 0) { turn(at - 1) }
+                        ViewerIconAction(stringResource(R.string.act_next_page), Icons.AutoMirrored.Filled.KeyboardArrowRight, at in 0 until item.size - 1) { turn(at + 1) }
                         if (!cloud) ViewerAction(stringResource(R.string.act_open_pdf), R.drawable.ic_pdf, on) { Actions.openFile(context, hit.uri, "application/pdf") }
                     }
                     if (cloud) {
@@ -3022,7 +3079,8 @@ internal fun PhotoViewer(
                         ViewerAction(stringResource(R.string.act_map), R.drawable.ic_map, on) { onClose(); viewModel.openMap(MapFocus(lat, lon, 19.0)) }
                         ViewerIconAction(stringResource(R.string.act_nearby), Icons.Filled.LocationOn, on) { onClose(); viewModel.searchNear(lat, lon, 5.0) }
                     }
-                    if (!cloud) ViewerAction(stringResource(R.string.act_delete), R.drawable.ic_delete, on) { if (hit.isPdfPage) confirmPdfDelete = hit else confirmOneDelete = hit }
+                    // here or only in the backup: delete takes it off this phone, the index, the other devices and the backup
+                    ViewerAction(stringResource(R.string.act_delete), R.drawable.ic_delete, on) { if (hit.isPdfPage) confirmPdfDelete = hit else confirmOneDelete = hit }
                 }
             }
 
