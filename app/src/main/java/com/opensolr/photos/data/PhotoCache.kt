@@ -916,8 +916,16 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
             while (c.moveToNext()) rows += c.getLong(7) to incomingJson(c)
         }
         if (rows.size == 1) return listOf(rows[0].second)
-        return rows.sortedByDescending { it.first }.take(limit.coerceAtLeast(1)).map { it.second }
+        // the pages of one PDF share their file's date: among equal dates they go file by file, page 1 first
+        return rows.sortedWith(compareByDescending<Pair<Long, String>> { it.first }.thenBy { pdfParent(it.second) }.thenBy { pdfPage(it.second) })
+            .take(limit.coerceAtLeast(1)).map { it.second }
     }
+
+    private val parentField = Regex("\"parent_s\"\\s*:\\s*\"([^\"]*)\"")
+    private val pageField = Regex("\"page_i\"\\s*:\\s*(\\d+)")
+    /** The PDF a document is a page of ("" for a photo or a clip), read straight from its stored JSON. */
+    private fun pdfParent(json: String): String = parentField.find(json)?.groupValues?.get(1).orEmpty()
+    private fun pdfPage(json: String): Int = pageField.find(json)?.groupValues?.get(1)?.toIntOrNull() ?: 0
 
     /** Every document of the clone, [batch] at a time, in id order; never all in memory. */
     fun forEachDocJson(batch: Int, from: String = "", block: suspend (docs: List<String>, lastId: String) -> Unit) = kotlinx.coroutines.runBlocking {
