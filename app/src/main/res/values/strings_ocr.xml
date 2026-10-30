@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="ocr_zone">Printed text</string>
+    <string name="ocr_text">The text printed in your photos (receipts, labels, documents, screenshots) is what makes them findable by their words. Choose where it is read.</string>
+    <string name="ocr_on_phone">On this phone</string>
+    <string name="ocr_on_server">On Opensolr</string>
+    <string name="ocr_on_phone_text">Read here, from the photo itself, before it is sent: small print reads best. Syncing takes a little longer on slower phones. Photos already indexed keep the text they have.</string>
+    <string name="ocr_on_server_text">Read by Opensolr from the smaller copy the phone sends: syncing is lighter on the phone, small print reads less well. Photos already indexed keep the text they have.</string>
+</resources>

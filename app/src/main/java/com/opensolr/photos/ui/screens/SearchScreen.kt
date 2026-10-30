@@ -263,6 +263,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
 
     var bulkTagging by remember { mutableStateOf(false) }
     var shareFor by remember { mutableStateOf<List<PhotoHit>?>(null) }
+    var albumLink by remember { mutableStateOf<Pair<org.json.JSONObject, String>?>(null) }
+    var shareLinkFor by remember { mutableStateOf<List<PhotoHit>?>(null) }
     var pdfFor by remember { mutableStateOf<List<PhotoHit>?>(null) }
     val gridState = rememberLazyGridState()
 
@@ -642,6 +644,19 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 onClick = { viewModel.forceRefresh() },
             )
 
+            // while selecting: a link of the chosen items; otherwise what is shown (the words and filters) as an
+            // album that keeps up with new photos, only for a search or a filter (never the whole library)
+            if (viewModel.canLink && !state.duplicatesMode && !state.skippedMode && (state.selecting || state.searchedQuery.isNotBlank() || state.filters.count > 0)) {
+                IconAction(
+                    icon = R.drawable.ic_link,
+                    label = stringResource(R.string.sl_toolbar),
+                    onClick = {
+                        if (state.selecting) shareLinkFor = viewModel.photosToTag().takeIf { it.isNotEmpty() }
+                        else viewModel.albumSpec()?.let { albumLink = it to viewModel.albumTitle() }
+                    },
+                )
+            }
+
             val headingKeys = remember(rows) { rows.filterIsInstance<GridRow.Heading>().map { it.key }.toSet() }
             if (headingKeys.isNotEmpty()) {
                 val anyCollapsed = state.collapsedHeadings.any { it in headingKeys }
@@ -907,6 +922,23 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                     color = onBand,
                                     modifier = Modifier.weight(1f),
                                 )
+                                // the group as an album link (a date, a place, a person, a tag)
+                                if (!state.selecting && row.part != null && viewModel.canLink && !state.duplicatesMode && !state.skippedMode) {
+                                    val spec = remember(row.part, state.filters, state.searchedQuery) { viewModel.albumSpec(row.part) }
+                                    if (spec != null) {
+                                        Icon(
+                                            painterResource(R.drawable.ic_link),
+                                            contentDescription = stringResource(R.string.sl_album_title),
+                                            tint = p.ink,
+                                            modifier = Modifier
+                                                .padding(end = FAST_SCROLL_WIDTH)
+                                                .size(36.dp)
+                                                .clip(Corner)
+                                                .clickable { Haptics.tap(view); albumLink = spec to row.title }
+                                                .padding(8.dp),
+                                        )
+                                    }
+                                }
                                 if (state.selecting && row.selectable) {
 
                                     PickTick(
@@ -1118,7 +1150,14 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         BulkTagSheet(state = state, viewModel = viewModel, onDismiss = { bulkTagging = false })
     }
 
-    shareFor?.let { photos -> com.opensolr.photos.ui.ShareChooser(photos) { shareFor = null } }
+    shareFor?.let { photos -> com.opensolr.photos.ui.ShareChooser(photos, viewModel = viewModel) { shareFor = null } }
+    // an album link of what is shown, or of one group: the spec and the name it starts with
+    albumLink?.let { (spec, name) -> com.opensolr.photos.ui.ShareLinkDialog(spec, name, live = true, viewModel = viewModel) { albumLink = null } }
+    shareLinkFor?.let { picked ->
+        val once = remember(picked) { Actions.shareItems(picked) }
+        val name = if (once.size == 1) once[0].fileName.ifBlank { stringResource(R.string.sl_default_name) } else pluralStringResource(R.plurals.sl_items, once.size, Actions.formatCount(once.size.toLong()))
+        com.opensolr.photos.ui.ShareLinkDialog(viewModel.itemsSpec(picked), name, live = false, viewModel = viewModel) { shareLinkFor = null }
+    }
     pdfFor?.let { photos -> com.opensolr.photos.ui.PdfExport(photos) { pdfFor = null } }
 
     viewing?.let { hit ->
@@ -1389,6 +1428,10 @@ private sealed interface GridRow {
         val exact: Boolean = false,
 
         val missing: Boolean = false,
+
+        /** The group as a filter, for an album link of it; [title] is its name without the count. */
+        val part: com.opensolr.photos.ui.AlbumPart? = null,
+        val title: String = text,
     ) : GridRow {
         override val key: String get() = "h:$name"
 
@@ -1460,6 +1503,8 @@ private fun buildSkeletonRows(
             level = group.level,
             range = group.from to group.to,
             count = group.count,
+            part = com.opensolr.photos.ui.AlbumPart(span = group.from to group.to),
+            title = group.text,
         )
         if (folded) return@forEach
 
@@ -1494,6 +1539,8 @@ private fun buildResultGroupRows(
             count = group.ids.size,
             exact = true,
             missing = !folded && leaf && photos.size < group.ids.size,
+            part = group.part,
+            title = group.text,
         )
         rows.addPhotos(photos, group.name)
     }
@@ -2615,15 +2662,16 @@ private fun FilterSwitch(title: String, hint: String, checked: Boolean, onChange
 }
 
 /** The viewer's items: one per photo or clip, one per PDF with its pages in order (those in the list). */
-private fun viewerItems(hits: List<PhotoHit>): List<List<PhotoHit>> {
+private fun viewerItems(hits: List<PhotoHit>, allPages: Map<String, List<PhotoHit>>): List<List<PhotoHit>> {
+    // the pages of one PDF are one item where its first page in the list stands, wherever the others are
+    val pagesOf = hits.filter { it.isPdfPage && it.parentId != null }.groupBy { it.parentId!! }
     val out = ArrayList<List<PhotoHit>>()
-    var i = 0
-    while (i < hits.size) {
-        val first = hits[i]
-        var j = i + 1
-        if (first.isPdfPage && first.parentId != null) while (j < hits.size && hits[j].parentId == first.parentId) j++
-        out += if (j - i > 1) hits.subList(i, j).sortedBy { it.page } else listOf(first)
-        i = j
+    val placed = HashSet<String>()
+    for (hit in hits) {
+        val parent = hit.parentId
+        if (!hit.isPdfPage || parent == null) { out += listOf(hit); continue }
+        if (!placed.add(parent)) continue
+        out += allPages[parent] ?: pagesOf.getValue(parent).sortedBy { it.page }
     }
     return out
 }
@@ -2647,9 +2695,19 @@ internal fun PhotoViewer(
 ) {
     val context = LocalContext.current
     // one swipe = one item: the pages of a PDF are one item, turned only by the page arrows of the toolbar
-    val items = remember(hits) { viewerItems(hits) }
+    // a search hands over only the pages that matched: every page of the file is read, so the arrows turn through all of it
+    var allPages by remember { mutableStateOf<Map<String, List<PhotoHit>>>(emptyMap()) }
+    val items = remember(hits, allPages) { viewerItems(hits, allPages) }
     // the page shown of each PDF, by its file's id
     val pageOf = remember { androidx.compose.runtime.mutableStateMapOf<String, Int>() }
+    LaunchedEffect(hits) {
+        val more = viewModel.pdfPagesOf(hits, allPages.keys)
+        if (more.isEmpty()) return@LaunchedEffect
+        // the page on screen stays on screen: its place in the whole file is set with the file's pages
+        val shown = items.associate { item -> item[0].parentId to item.getOrNull(item[0].parentId?.let { pageOf[it] } ?: 0)?.id }
+        more.forEach { (parent, pages) -> pages.indexOfFirst { it.id == shown[parent] }.takeIf { it >= 0 }?.let { pageOf[parent] = it } }
+        allPages = allPages + more
+    }
     fun hitAt(i: Int): PhotoHit? = items.getOrNull(i)?.let { item -> item[(item[0].parentId?.let { pageOf[it] } ?: 0).coerceIn(0, item.size - 1)] }
     fun itemOf(id: String?): Int = if (id == null) -1 else items.indexOfFirst { item -> item.any { it.id == id } }
     // the item opened, on the page that was tapped
@@ -3123,7 +3181,7 @@ internal fun PhotoViewer(
             }
 
             // composed inside the viewer's window, so the choice shows above the photo
-            viewerShare?.let { one -> com.opensolr.photos.ui.ShareChooser(listOf(one), fullScreen = true) { viewerShare = null } }
+            viewerShare?.let { one -> com.opensolr.photos.ui.ShareChooser(listOf(one), fullScreen = true, viewModel = viewModel) { viewerShare = null } }
             wallpaperFor?.let { one ->
                 com.opensolr.photos.ui.WallpaperChooser(ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, one.mediaId)) { wallpaperFor = null }
             }
@@ -3284,6 +3342,9 @@ private fun FacetSearch(
         if (needle.isEmpty()) all.sortedByDescending { it.count }
         else all.filterIndexed { i, _ -> folded[i].contains(needle) }
     }
+    // the box only when there are more values than the list shows; the list is always there
+    val searchable = all.size > FACET_SEARCH_OVER
+    val listCap = minOf(cap, FACET_SEARCH_OVER)
     if (selected.isNotEmpty()) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             selected.forEach { value ->
@@ -3299,7 +3360,7 @@ private fun FacetSearch(
         }
         Spacer(Modifier.height(8.dp))
     }
-    Row(
+    if (searchable) Row(
         Modifier
             .fillMaxWidth()
             .border(1.dp, if (open) p.accent else p.hairline, Corner)
@@ -3334,8 +3395,8 @@ private fun FacetSearch(
             )
         }
     }
-    if (open) {
-        Spacer(Modifier.height(6.dp))
+    run {
+        if (searchable) Spacer(Modifier.height(6.dp))
         Column(
             Modifier
                 .fillMaxWidth()
@@ -3348,7 +3409,7 @@ private fun FacetSearch(
                 Text(stringResource(R.string.no_value), style = MaterialTheme.typography.bodySmall, color = p.muted, modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
             }
 
-            matches.take(cap).forEach { facet ->
+            matches.take(listCap).forEach { facet ->
                 val on = facet.value in selected
                 Row(
                     Modifier
@@ -3375,9 +3436,9 @@ private fun FacetSearch(
                     }
                 }
             }
-            if (matches.size > cap) {
+            if (matches.size > listCap) {
                 Text(
-                    stringResource(R.string.more_values, Actions.formatCount((matches.size - cap).toLong())),
+                    stringResource(R.string.more_values, Actions.formatCount((matches.size - listCap).toLong())),
                     style = MaterialTheme.typography.bodySmall, color = p.muted,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
                 )
@@ -3629,7 +3690,8 @@ internal fun PickTick(selected: Boolean, onClick: () -> Unit, modifier: Modifier
 
 private const val FACET_PREVIEW = 10
 
-private const val FACET_SEARCH_OVER = 50
+/** Up to this many values are listed; over it a search box finds the rest. */
+private const val FACET_SEARCH_OVER = 500
 
 /** Only the meaning list is cut: its words run into the thousands. */
 private const val MEANING_ROWS = 500

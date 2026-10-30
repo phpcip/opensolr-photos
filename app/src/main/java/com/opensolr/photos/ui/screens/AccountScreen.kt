@@ -40,6 +40,7 @@ import com.opensolr.photos.BuildConfig
 import com.opensolr.photos.data.SearchCache
 import com.opensolr.photos.ui.AccentButton
 import com.opensolr.photos.ui.Actions
+import kotlinx.coroutines.launch
 import com.opensolr.photos.ui.AppViewModel
 import com.opensolr.photos.ui.GhostButton
 import com.opensolr.photos.ui.InfoRow
@@ -171,9 +172,41 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                 Spacer(Modifier.height(18.dp))
             }
         }
+        // the read-only album links of the index: copy or remove each
+        if (state.storage != null) {
+            FilterGroup(stringResource(R.string.sl_zone), 0, "links" in state.meZonesOpen, { viewModel.toggleMeZone("links") }) {
+                AlbumLinks(viewModel)
+            }
+        }
         FilterGroup(stringResource(R.string.acc_zone_settings), 0, "settings" in state.meZonesOpen, { viewModel.toggleMeZone("settings") }) {
             Column {
 
+                // where the printed text of new photos is read: on this phone from the picture itself, or by Opensolr
+                SubZone(stringResource(R.string.ocr_zone), "set_ocr" in state.meZonesOpen, { viewModel.toggleMeZone("set_ocr") }) {
+                    Column {
+                        Spacer(Modifier.height(10.dp))
+                        Text(stringResource(R.string.ocr_text), style = MaterialTheme.typography.bodySmall, color = p.muted)
+                        Spacer(Modifier.height(10.dp))
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            listOf(true to stringResource(R.string.ocr_on_phone), false to stringResource(R.string.ocr_on_server)).forEach { (onPhone, name) ->
+                                val on = state.ocrOnPhone == onPhone
+                                Text(
+                                    name,
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = if (on) p.accent else p.ink,
+                                    modifier = Modifier
+                                        .border(if (on) 1.5.dp else 1.dp, if (on) p.accent else p.hairline, androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
+                                        .background(if (on) p.paper else p.chip, androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
+                                        .clickable { Haptics.tap(view); viewModel.setOcrOnPhone(onPhone) }
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text(stringResource(if (state.ocrOnPhone) R.string.ocr_on_phone_text else R.string.ocr_on_server_text), style = MaterialTheme.typography.bodySmall, color = p.muted)
+                        Spacer(Modifier.height(16.dp))
+                    }
+                }
                 SubZone(stringResource(R.string.stg_zone), "set_backup" in state.meZonesOpen, { viewModel.toggleMeZone("set_backup") }) {
                     Column {
                         Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -518,5 +551,80 @@ private fun UpdateButton(state: UiState, newer: com.opensolr.photos.net.UpdateCh
     state.updateInstallError?.let {
         Spacer(Modifier.height(8.dp))
         Text(it, style = MaterialTheme.typography.bodySmall, color = LocalPalette.current.muted)
+    }
+}
+
+/** The album links of the index, read when the zone opens: each with its name, kind, end, address, Copy and Remove. */
+@Composable
+private fun AlbumLinks(viewModel: AppViewModel) {
+    val p = LocalPalette.current
+    val context = LocalContext.current
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
+    var links by remember { mutableStateOf<List<com.opensolr.photos.net.OpensolrApi.ShareLink>?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var removing by remember { mutableStateOf<com.opensolr.photos.net.OpensolrApi.ShareLink?>(null) }
+    var reload by remember { mutableStateOf(0) }
+    LaunchedEffect(reload) {
+        error = null
+        try {
+            links = viewModel.shareLinks()
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            error = context.getString(R.string.sl_could_not_read, e.message ?: e.javaClass.simpleName)
+        }
+    }
+    Column {
+        Text(stringResource(R.string.sl_zone_text), style = MaterialTheme.typography.bodySmall, color = p.muted)
+        Spacer(Modifier.height(10.dp))
+        error?.let { Notice(it, title = stringResource(R.string.sl_zone)); Spacer(Modifier.height(10.dp)) }
+        val list = links
+        when {
+            list == null && error == null -> Text(stringResource(R.string.sl_loading), style = MaterialTheme.typography.bodyMedium, color = p.muted)
+            list != null && list.isEmpty() -> Text(stringResource(R.string.sl_none), style = MaterialTheme.typography.bodyMedium, color = p.muted)
+            list != null -> list.forEach { link ->
+                val now = System.currentTimeMillis()
+                val ends = when {
+                    link.expiresAt <= 0 -> stringResource(R.string.sl_never)
+                    link.expiresAt * 1000 < now -> stringResource(R.string.sl_expired, Actions.formatDate(link.expiresAt * 1000))
+                    else -> stringResource(R.string.sl_expires, Actions.formatDate(link.expiresAt * 1000))
+                }
+                Column(Modifier.fillMaxWidth().padding(vertical = 10.dp)) {
+                    Text(link.title, style = MaterialTheme.typography.bodyLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, color = p.ink)
+                    Text(stringResource(if (link.album) R.string.sl_kind_album else R.string.sl_kind_items) + " · " + ends, style = MaterialTheme.typography.bodySmall, color = p.muted)
+                    Text(link.url, style = MaterialTheme.typography.bodySmall, color = p.accent)
+                    Spacer(Modifier.height(8.dp))
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        GhostButton(stringResource(R.string.sl_copy), onClick = { com.opensolr.photos.ui.copyLink(context, link.url) }, modifier = Modifier.weight(1f))
+                        GhostButton(stringResource(R.string.sl_remove), onClick = { removing = link }, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+        }
+        Spacer(Modifier.height(18.dp))
+    }
+    removing?.let { link ->
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { removing = null },
+            title = { Text(stringResource(R.string.sl_remove_q)) },
+            text = { Text(stringResource(R.string.sl_remove_text, link.title)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    removing = null
+                    scope.launch {
+                        try {
+                            viewModel.removeShareLink(link.token)
+                            reload++
+                        } catch (e: kotlinx.coroutines.CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            error = context.getString(R.string.sl_could_not_remove, e.message ?: e.javaClass.simpleName)
+                        }
+                    }
+                }) { Text(stringResource(R.string.sl_remove), color = p.accent) }
+            },
+            dismissButton = { TextButton(onClick = { removing = null }) { Text(stringResource(R.string.acc_cancel), color = p.ink) } },
+            containerColor = p.paper,
+        )
     }
 }

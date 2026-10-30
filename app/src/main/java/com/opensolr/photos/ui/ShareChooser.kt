@@ -31,9 +31,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Share [hits] as the original files or as 1024 px copies; the copies are made here, with progress, and can be cancelled. */
+/**
+ * Share [hits] as the original files or as 1024 px copies; the copies are made here, with progress, and can be
+ * cancelled. With [viewModel] and a backup backend, also as a read-only link (Copy link).
+ */
 @Composable
-fun ShareChooser(hits: List<PhotoHit>, fullScreen: Boolean = false, onDismiss: () -> Unit) {
+fun ShareChooser(hits: List<PhotoHit>, fullScreen: Boolean = false, viewModel: AppViewModel? = null, onDismiss: () -> Unit) {
     val context = LocalContext.current.applicationContext
     val p = LocalPalette.current
     val scope = rememberCoroutineScope()
@@ -43,8 +46,15 @@ fun ShareChooser(hits: List<PhotoHit>, fullScreen: Boolean = false, onDismiss: (
     fun close() { job?.cancel(); onDismiss() }
     val items = remember(hits) { Actions.shareItems(hits) }
     val photoCount = items.count { it.mediaKind == com.opensolr.photos.media.Kind.PHOTO }
-    // no photo in it: clips and PDFs go as their files, nothing to choose
-    if (photoCount == 0) {
+    val linkable = viewModel != null && viewModel.canLink
+    var linking by remember { mutableStateOf(false) }
+    if (linking && viewModel != null) {
+        val linkTitle = remember(items) { if (items.size == 1) items[0].fileName.ifBlank { context.getString(R.string.sl_default_name) } else context.resources.getQuantityString(R.plurals.sl_items, items.size, Actions.formatCount(items.size.toLong())) }
+        ShareLinkDialog(viewModel.itemsSpec(hits), linkTitle, live = false, viewModel = viewModel, fullScreen = fullScreen, onDismiss = onDismiss)
+        return
+    }
+    // no photo in it and no link to offer: clips and PDFs go as their files, nothing to choose
+    if (photoCount == 0 && !linkable) {
         androidx.compose.runtime.LaunchedEffect(items) {
             withContext(Dispatchers.IO) { Actions.sharePhotos(context, items) }
             onDismiss()
@@ -70,6 +80,17 @@ fun ShareChooser(hits: List<PhotoHit>, fullScreen: Boolean = false, onDismiss: (
                         trackColor = p.hairline,
                     )
                 }
+            } else if (photoCount == 0) {
+                // clips and PDFs: their files, or a link
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ChoiceOption(stringResource(R.string.sl_files), stringResource(R.string.sl_files_sub)) {
+                        scope.launch {
+                            withContext(Dispatchers.IO) { Actions.sharePhotos(context, items) }
+                            onDismiss()
+                        }
+                    }
+                    ChoiceOption(stringResource(R.string.sl_copy_link), stringResource(R.string.sl_copy_link_sub)) { linking = true }
+                }
             } else {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     ChoiceOption(stringResource(R.string.sh_original), stringResource(R.string.sh_original_sub)) {
@@ -86,6 +107,7 @@ fun ShareChooser(hits: List<PhotoHit>, fullScreen: Boolean = false, onDismiss: (
                             onDismiss()
                         }
                     }
+                    if (linkable) ChoiceOption(stringResource(R.string.sl_copy_link), stringResource(R.string.sl_copy_link_sub)) { linking = true }
                 }
             }
         },

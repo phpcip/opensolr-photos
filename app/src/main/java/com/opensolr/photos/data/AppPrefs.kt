@@ -291,6 +291,11 @@ class AppPrefs(context: Context) {
         get() = prefs.getBoolean(KEY_MOBILE_DATA, false)
         set(value) = prefs.edit().putBoolean(KEY_MOBILE_DATA, value).commit().let {}
 
+    /** The text printed in photos read on this phone, from the picture itself (true), or by Opensolr from the copy sent (false). */
+    var ocrOnPhone: Boolean
+        get() = prefs.getBoolean(KEY_OCR_ON_PHONE, true)
+        set(value) = prefs.edit().putBoolean(KEY_OCR_ON_PHONE, value).commit().let {}
+
     /** The backend of this index as the platform holds it, kept here sealed so a run needs no call first. */
     var storage: StorageConfig?
         get() = prefs.getString(KEY_STORAGE, null)?.let { SecureStore.decrypt(it) }?.let { runCatching { StorageConfig.fromJson(JSONObject(it)) }.getOrNull() }
@@ -398,6 +403,7 @@ class AppPrefs(context: Context) {
         private const val KEY_CHOSEN_INDEX = "chosen_index"
         private const val KEY_NOTICE = "notice"
         private const val KEY_MOBILE_DATA = "use_mobile_data"
+        private const val KEY_OCR_ON_PHONE = "ocr_on_phone"
         private const val KEY_VIDEOS = "include_videos"
         private const val KEY_PDFS = "include_pdfs"
         private const val KEY_PDF_MAX_PAGES = "pdf_max_pages"

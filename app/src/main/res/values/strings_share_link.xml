@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sl_copy_link">Copy link</string>
+    <string name="sl_copy_link_sub">A read-only page with these, for anyone who has the link</string>
+    <string name="sl_files">The files</string>
+    <string name="sl_files_sub">The clips and PDFs as they are</string>
+    <string name="sl_album_title">Album link</string>
+    <string name="sl_items_title">Link to %1$s</string>
+    <string name="sl_album_text">Anyone with the link sees what this shows, by its words and filters, and the new photos that match later. They can only look.</string>
+    <string name="sl_items_text">Anyone with the link sees these items. They can only look.</string>
+    <string name="sl_name">Name</string>
+    <string name="sl_never">Never expires</string>
+    <string name="sl_never_lc">never expires</string>
+    <string name="sl_after">Expires after</string>
+    <string name="sl_days">days</string>
+    <string name="sl_copied">Link copied</string>
+    <string name="sl_made_text">%1$s, %2$s. Paste it anywhere.</string>
+    <plurals name="sl_items">
+        <item quantity="one">%1$s item</item>
+        <item quantity="other">%1$s items</item>
+    </plurals>
+    <plurals name="sl_for_days">
+        <item quantity="one">for %1$s day</item>
+        <item quantity="other">for %1$s days</item>
+    </plurals>
+    <string name="sl_copy_again">Copy again</string>
+    <string name="sl_done">Done</string>
+    <string name="sl_failed">Could not make the link: %1$s</string>
+    <string name="sl_no_address">the account sent no address</string>
+    <string name="sl_default_name">Photos</string>
+    <string name="sl_toolbar">Album link</string>
+    <string name="sl_zone">Album links</string>
+    <string name="sl_zone_text">Read-only links anyone who has them can open. Removing one stops it at once.</string>
+    <string name="sl_loading">Loading</string>
+    <string name="sl_none">No links yet. Use Copy link when sharing, the link button above the photos, or the one on a group.</string>
+    <string name="sl_kind_album">Album</string>
+    <string name="sl_kind_items">Items</string>
+    <string name="sl_expires">Expires %1$s</string>
+    <string name="sl_expired">Expired %1$s</string>
+    <string name="sl_copy">Copy</string>
+    <string name="sl_remove">Remove</string>
+    <string name="sl_remove_q">Remove this link?</string>
+    <string name="sl_remove_text">Whoever has it can no longer open %1$s.</string>
+    <string name="sl_could_not_read">Could not read the links: %1$s</string>
+    <string name="sl_could_not_remove">Could not remove the link: %1$s</string>
+</resources>

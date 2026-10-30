@@ -381,6 +381,10 @@ class SyncEngine(private val context: Context) {
                     var names = edits?.persons ?: xmp?.persons ?: emptyList()
                     // the faces, read once here for a new or changed picture, go up with it and stay in the index
                     // a page of a document is not a photo of people: no faces are looked for in it
+                    // the printed text, read here from the picture itself when the owner chose so; the server then reads it no more
+                    // on every plan: only the reading made by Opensolr depends on the plan
+                    val ocrPhone = prefs.ocrOnPhone && !read.noRead && read.upright != null
+                    val ocrText = if (ocrPhone) try { textReader().read(read.upright!!) } catch (e: CancellationException) { throw e } catch (e: Throwable) { android.util.Log.w("SyncEngine", "text not read", e); null } else null
                     val faces = try { if (photo.kind == com.opensolr.photos.media.Kind.PDF) null else readFaces(photo, people, read.upright) } finally { read.upright?.recycle() }
                     if (faces != null && edits == null && names.isEmpty()) {
                         names = cache.facesOf(photo.id).mapNotNull { it.person }.distinctBy { it.lowercase() }
@@ -393,6 +397,8 @@ class SyncEngine(private val context: Context) {
                         measured, jpeg, tags, meaning, weighed[photo.id] ?: read.md5, names, resetWording = cleared || photo.id in wordingReset,
                         ownerTags = edits != null, ownerPersons = edits?.persons != null, ownerMeaning = !edits?.meaning.isNullOrEmpty(),
                         faces = faces, pixelHash = read.pixelHash, noRead = read.noRead,
+                        // a reading that failed on the phone leaves the photo to the server, as before
+                        ocrPhone = ocrText != null, ocrText = ocrText.orEmpty(),
                     )
                 }
                 if (items.isNotEmpty()) {
@@ -698,8 +704,14 @@ class SyncEngine(private val context: Context) {
                 cache.pruneIncoming(onPhone)
             } catch (e: Exception) {
             }
+            runCatching { reader?.close() }
+            reader = null
         }
     }
+
+    // the text reader of this run, loaded on the first photo that needs it
+    private var reader: com.opensolr.photos.media.TextReader? = null
+    private fun textReader(): com.opensolr.photos.media.TextReader = reader ?: com.opensolr.photos.media.TextReader(context).also { reader = it }
 
     private fun takenForList(photo: LocalPhoto, exact: Boolean): Long =
         (if (exact) PhotoReader.takenAsIndexed(context, photo.uri) else null)

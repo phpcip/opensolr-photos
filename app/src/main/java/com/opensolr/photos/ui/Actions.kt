@@ -36,6 +36,16 @@ data class ResultGroup(
     val name: String,
     val text: String,
     val ids: List<String>,
+    /** What the group is as a filter (a date span, a place, a person, a tag), for an album link of it; null when it is none. */
+    val part: AlbumPart? = null,
+)
+
+/** A group as an album: the dates it spans, a field and its value, a place (country, region, city; "" = none), or the undated items. */
+data class AlbumPart(
+    val span: Pair<Long, Long>? = null,
+    val field: Pair<String, String>? = null,
+    val place: Triple<String, String?, String?>? = null,
+    val undated: Boolean = false,
 )
 
 enum class GroupBy(val key: String, val labelRes: Int) {

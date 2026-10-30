@@ -1246,9 +1246,9 @@ class SearchRepository(private val context: Context) {
         private const val FRESH_BIAS = "recip(max(0,ms(NOW,taken_at)),3.16e-11,1,1)"
 
         /** Minimum match for flexible, balanced and strict. */
-        private val MM_LEVELS = listOf("2<65% 4<50% 8<40%", "2<90% 5<75% 8<60% 12<50%", "2<95% 5<90% 8<80%")
+        val MM_LEVELS = listOf("2<65% 4<50% 8<40%", "2<90% 5<75% 8<60% 12<50%", "2<95% 5<90% 8<80%")
 
-        private const val QF = "custom_tags_text^2 meaning^1 labels_t^1 ocr_t^4 persons_t^3 camera_text place_text^1"
+        private const val QF = "custom_tags_text^2 meaning^1 labels_t^1 ocr_t^4 persons_t^3 camera_text place_text^1 file_name_text^0.1"
         private const val LEGACY_QF = "meaning^3 text file_name_text folder_text camera_text"
         private const val LEGACY_FIELDS = "score,id,media_id,path,file_name,folder,mime,taken_at,camera_make,camera_model,lens,iso,exposure,f_number,focal_length,width,height,meaning,location,labels"
 

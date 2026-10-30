@@ -93,13 +93,16 @@ class StorageEngine(private val context: Context) {
 
             // items deleted on any device: their files in the backend go, and this phone's manifest stops listing them
             var ownGone = false
+            var removed = 0
             while (true) {
                 val gone = cache.deletedInRemote(BATCH)
                 if (gone.isEmpty()) break
                 for (r in gone) {
                     guard()
+                    onProgress(Progress(AppText.s(R.string.stg_removing), removed, 0))
                     runCatching { backend.delete(layout.restoreCopy(r.id)) }
                     runCatching { backend.delete(layout.webThumb(r.id)) }
+                    removed++
                 }
                 cache.removeRemote(gone.map { it.id })
                 // a PDF's file goes with its last page
@@ -112,6 +115,7 @@ class StorageEngine(private val context: Context) {
             if (ownGone) writeManifest(backend, layout, device)
 
             // a run cut short (reinstall, killed app) can leave a half-written file pending in MediaStore: it goes
+            onProgress(Progress(AppText.s(R.string.stg_checking), 0, 0))
             dropPendingWrites()
             dropOwnDuplicates()
             // whatever runs cut short left behind on this phone

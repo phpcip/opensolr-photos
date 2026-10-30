@@ -29,7 +29,7 @@ class MagicEraser(context: Context) {
      * The text in [photo], as boxes in its pixels, grown a little past the letters so erasing them leaves no
      * edges behind.
      */
-    fun findText(photo: Bitmap): List<RectF> {
+    fun findText(photo: Bitmap, reading: Boolean = false): List<RectF> {
         val net = finder ?: Interpreter(model(app, "eraser/text.tflite"), options(FIND_THREADS)).also { finder = it }
         val k = FIND_SIZE.toFloat() / max(photo.width, photo.height)
         val w = max(1, (photo.width * k).roundToInt())
@@ -85,7 +85,8 @@ class MagicEraser(context: Context) {
             val bw = (x1 - x0 + 1).toFloat()
             val bh = (y1 - y0 + 1).toFloat()
             // plus a share of the line's height, for accents, commas under letters and punctuation at the ends
-            val grow = bw * bh * UNCLIP / (2f * (bw + bh)) + TEXT_MARGIN + min(bw, bh) * TEXT_EXTRA
+            // for reading, only PP-OCR's own growth: the extra margin would reach into the next line
+            val grow = if (reading) bw * bh * UNCLIP / (2f * (bw + bh)) else bw * bh * UNCLIP / (2f * (bw + bh)) + TEXT_MARGIN + min(bw, bh) * TEXT_EXTRA
             boxes += RectF(
                 ((x0 - grow) / k).coerceAtLeast(0f),
                 ((y0 - grow) / k).coerceAtLeast(0f),
@@ -368,16 +369,16 @@ class MagicEraser(context: Context) {
         private const val STD_G = 0.224f
         private const val STD_B = 0.229f
 
-        private fun options(threads: Int): Interpreter.Options {
+        internal fun options(threads: Int): Interpreter.Options {
             val o = Interpreter.Options().setNumThreads(threads)
             val emulator = android.os.Build.HARDWARE.let { it.contains("ranchu") || it.contains("goldfish") }
             if (emulator) o.setUseXNNPACK(false)
             return o
         }
 
-        private fun direct(floats: Int): ByteBuffer = ByteBuffer.allocateDirect(floats * 4).order(ByteOrder.nativeOrder())
+        internal fun direct(floats: Int): ByteBuffer = ByteBuffer.allocateDirect(floats * 4).order(ByteOrder.nativeOrder())
 
-        private fun model(context: Context, name: String): ByteBuffer {
+        internal fun model(context: Context, name: String): ByteBuffer {
             val bytes = context.assets.open(name).use { it.readBytes() }
             return ByteBuffer.allocateDirect(bytes.size).order(ByteOrder.nativeOrder()).apply { put(bytes); rewind() }
         }

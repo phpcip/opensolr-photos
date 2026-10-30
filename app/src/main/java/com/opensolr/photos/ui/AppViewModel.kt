@@ -214,6 +214,7 @@ data class UiState(
     val hapticsEnabled: Boolean = true,
 
     val useMobileData: Boolean = false,
+    val ocrOnPhone: Boolean = true,
     val storage: com.opensolr.photos.data.StorageConfig? = null,
     val storageReport: com.opensolr.photos.data.StorageReport? = null,
     val storageStatus: com.opensolr.photos.storage.StorageStatus = com.opensolr.photos.storage.StorageStatus(false, false, "", 0, 0),
@@ -934,6 +935,97 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    // ---- album links: https://photos.opensolr.com/s/<token>, read only, for anyone who has the link ----
+
+    /** Album links need the backend: the page reads the pictures from it. */
+    val canLink: Boolean get() = _state.value.storage != null
+
+    /**
+     * What is shown now as a live album: the words (matched by words) and every filter, applied again on each
+     * visit; with [part], narrowed to one group. Null when the group cannot be one with the filters.
+     */
+    fun albumSpec(part: AlbumPart? = null): org.json.JSONObject? {
+        val s = _state.value
+        val f = s.filters
+        val spec = org.json.JSONObject()
+        val text = s.searchedQuery.trim()
+        if (text.isNotEmpty()) {
+            spec.put("q", text.take(300))
+            spec.put("mm", SearchRepository.MM_LEVELS[prefs.matchLevel.coerceIn(0, SearchRepository.MM_LEVELS.size - 1)])
+        }
+        val fields = LinkedHashMap<String, List<String>>()
+        f.fields.forEach { (field, values) -> values.filter { '|' !in it }.takeIf { it.isNotEmpty() }?.let { fields[field] = it } }
+        part?.field?.let { (field, value) ->
+            val have = fields[field]
+            if (have != null && value !in have) return null
+            fields[field] = listOf(value)
+        }
+        if (fields.isNotEmpty()) spec.put("fields", org.json.JSONObject().apply { fields.forEach { (k, v) -> put(k, org.json.JSONArray(v)) } })
+        if (f.kinds.isNotEmpty()) spec.put("kinds", org.json.JSONArray(f.kinds.toList()))
+        val has = ArrayList<String>()
+        if (f.withLocation) has += "location"
+        f.tagged?.let { has += if (it) "tagged" else "-tagged" }
+        f.hasOcr?.let { has += if (it) "ocr" else "-ocr" }
+        f.hasPeople?.let { has += if (it) "people" else "-people" }
+        f.documents?.let { has += if (it) "documents" else "-documents" }
+        if (has.isNotEmpty()) spec.put("has", org.json.JSONArray(has))
+        val roots = SearchFilters.folderRoots(prefs.folders).filter { it in f.folders }
+        if (roots.isNotEmpty()) spec.put("folders", org.json.JSONArray(roots))
+        f.near?.let { spec.put("near", org.json.JSONArray(listOf(it.lat, it.lon, it.radiusKm))) }
+        var spans: List<Pair<Long, Long>>? = f.taken?.let { listOf(isoMs(it.fromSolr) to isoMs(it.toSolr)) }
+        part?.span?.let { g -> spans = spans?.mapNotNull { x -> maxOf(x.first, g.first).let { a -> minOf(x.second, g.second).let { b -> if (a <= b) a to b else null } } } ?: listOf(g) }
+        if (spans?.isEmpty() == true) return null
+        if (part?.undated == true) {
+            if (spans != null) return null
+            spec.put("undated", true)
+        }
+        spans?.let { list -> spec.put("spans", org.json.JSONArray(list.map { org.json.JSONArray(listOf(isoOf(it.first), isoOf(it.second))) })) }
+        part?.place?.let { (country, region, city) -> spec.put("place", org.json.JSONArray(listOf(country, region ?: org.json.JSONObject.NULL, city ?: org.json.JSONObject.NULL))) }
+        // nothing in it would be the whole library
+        return spec.takeIf { it.length() > 0 }
+    }
+
+    /** The name an album of what is shown gets: the words and the chosen values. */
+    fun albumTitle(): String {
+        val s = _state.value
+        val parts = ArrayList<String>()
+        s.searchedQuery.trim().takeIf { it.isNotEmpty() }?.let { parts += it }
+        s.filters.fields.values.forEach { parts += it }
+        s.filters.taken?.let { parts += it.label }
+        return parts.joinToString(", ").take(160).ifBlank { AppText.s(R.string.sl_default_name) }
+    }
+
+    /** Chosen items as a link: the items themselves, a PDF by its file (every page of it). */
+    fun itemsSpec(hits: List<PhotoHit>): org.json.JSONObject {
+        val ids = LinkedHashSet<String>()
+        val parents = LinkedHashSet<String>()
+        hits.forEach { if (it.isPdfPage && it.parentId != null) parents += it.parentId else ids += it.id }
+        return org.json.JSONObject().put("ids", org.json.JSONArray(ids.toList())).put("parents", org.json.JSONArray(parents.toList()))
+    }
+
+    /** The link made: its address and how many items it shows now. Throws on any failure (nothing is assumed made). */
+    suspend fun makeShareLink(spec: org.json.JSONObject, title: String, days: Int): Pair<String, Int> {
+        val session = prefs.session ?: throw IllegalStateException(AppText.s(R.string.vm_signed_out))
+        val index = prefs.connection?.indexName ?: throw IllegalStateException(AppText.s(R.string.vm_signed_out))
+        return com.opensolr.photos.net.OpensolrApi().photosShareAdd(session, index, spec, title.trim().ifBlank { AppText.s(R.string.sl_default_name) }, days)
+    }
+
+    suspend fun shareLinks(): List<com.opensolr.photos.net.OpensolrApi.ShareLink> {
+        val session = prefs.session ?: return emptyList()
+        val index = prefs.connection?.indexName ?: return emptyList()
+        return com.opensolr.photos.net.OpensolrApi().photosShareList(session, index)
+    }
+
+    suspend fun removeShareLink(token: String) {
+        val session = prefs.session ?: return
+        val index = prefs.connection?.indexName ?: return
+        com.opensolr.photos.net.OpensolrApi().photosShareDelete(session, index, token)
+    }
+
+    private fun isoOf(ms: Long): String = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.format(java.util.Date(ms))
+
+    private fun isoMs(iso: String): Long = java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", java.util.Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.parse(iso)?.time ?: 0L
+
     /** The ticked photos in the order they were ticked (the PDF's pages follow it). */
     fun photosToTag(): List<PhotoHit> {
         val state = _state.value
@@ -1294,6 +1386,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             meZonesOpen = prefs.meZonesOpen,
             groupBy = GroupBy.of(prefs.groupBy),
             useMobileData = prefs.useMobileData,
+            ocrOnPhone = prefs.ocrOnPhone,
             storage = prefs.storage,
             storageReport = prefs.storageReport,
         )
@@ -1305,6 +1398,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         _state.update { it.copy(storageReport = prefs.storageReport, storage = prefs.storage) }
         if (_state.value.screen == Screen.Storage) refreshStorageStats()
         if (_state.value.screen == Screen.Search) refresh()
+    }
+
+    /** Where the printed text of new photos is read: on this phone, or by Opensolr. Photos already indexed keep theirs. */
+    fun setOcrOnPhone(on: Boolean) {
+        prefs.ocrOnPhone = on
+        _state.update { it.copy(ocrOnPhone = on) }
     }
 
     fun setUseMobileData(on: Boolean) {
@@ -1916,17 +2015,25 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                             .getOrPut(Actions.dayKey(at)) { Actions.dayHeading(at) to ArrayList() }.second += hit.id
                     }
                 }
-                recent.forEach { (heading, ids) -> out += ResultGroup(0, "date:$heading", heading, ids) }
+                // a moment of each heading: its day, month or year span for an album link of it
+                val at = HashMap<String, Long>()
+                dated.forEach { hit ->
+                    val ms = hit.takenMs!!
+                    if (Actions.isRecentDay(ms)) at.putIfAbsent("r:" + Actions.dateHeading(ms), ms)
+                    else { at.putIfAbsent("y:" + Actions.yearHeading(ms), ms); at.putIfAbsent("m:" + Actions.monthKey(ms), ms); at.putIfAbsent("d:" + Actions.dayKey(ms), ms) }
+                }
+                fun span(key: String, of: (Long) -> Pair<Long, Long>) = at[key]?.let { AlbumPart(span = of(it)) }
+                recent.forEach { (heading, ids) -> out += ResultGroup(0, "date:$heading", heading, ids, span("r:$heading", Actions::daySpan)) }
                 years.forEach { (year, yearValue) ->
                     val months = yearValue.second
-                    out += ResultGroup(0, "date:$year", yearValue.first, months.values.flatMap { m -> m.second.values.flatMap { it.second } })
+                    out += ResultGroup(0, "date:$year", yearValue.first, months.values.flatMap { m -> m.second.values.flatMap { it.second } }, span("y:$year", Actions::yearSpan))
                     months.forEach { (monthKey, monthValue) ->
-                        out += ResultGroup(1, "date:$monthKey", monthValue.first, monthValue.second.values.flatMap { it.second })
-                        monthValue.second.forEach { (dayKey, dayValue) -> out += ResultGroup(2, "date:$dayKey", dayValue.first, dayValue.second) }
+                        out += ResultGroup(1, "date:$monthKey", monthValue.first, monthValue.second.values.flatMap { it.second }, span("m:$monthKey", Actions::monthSpan))
+                        monthValue.second.forEach { (dayKey, dayValue) -> out += ResultGroup(2, "date:$dayKey", dayValue.first, dayValue.second, span("d:$dayKey", Actions::daySpan)) }
                     }
                 }
                 val undated = found.filter { it.takenMs == null }.map { it.id }
-                if (undated.isNotEmpty()) out += ResultGroup(0, "date:none", AppText.s(R.string.vm_no_date), undated)
+                if (undated.isNotEmpty()) out += ResultGroup(0, "date:none", AppText.s(R.string.vm_no_date), undated, AlbumPart(undated = true))
             }
             GroupBy.PLACE -> {
                 val countries = LinkedHashMap<String, LinkedHashMap<String, LinkedHashMap<String, MutableList<String>>>>()
@@ -1943,16 +2050,16 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 val fold = com.opensolr.photos.data.Words::fold
                 countries.forEach { (country, regions) ->
-                    out += ResultGroup(0, "place:$country", country, regions.values.flatMap { r -> r.values.flatten() })
+                    out += ResultGroup(0, "place:$country", country, regions.values.flatMap { r -> r.values.flatten() }, AlbumPart(place = Triple(country, null, null)))
                     regions.forEach { (region, places) ->
 
                         val regionShown = region.isNotEmpty() && fold(region) != fold(country)
                         val parent = if (regionShown) region else country
-                        if (regionShown) out += ResultGroup(1, "place:$country/$region", region, places.values.flatten())
+                        if (regionShown) out += ResultGroup(1, "place:$country/$region", region, places.values.flatten(), AlbumPart(place = Triple(country, region, null)))
 
                         val redundant = places.size == 1 && fold(places.keys.first()) == fold(parent) && (regionShown || regions.size == 1)
                         if (!redundant) places.forEach { (place, ids) ->
-                            out += ResultGroup(if (regionShown) 2 else 1, "place:$country/$region/$place", place.ifEmpty { parent }, ids)
+                            out += ResultGroup(if (regionShown) 2 else 1, "place:$country/$region/$place", place.ifEmpty { parent }, ids, AlbumPart(place = Triple(country, region, place)))
                         }
                     }
                 }
@@ -1969,7 +2076,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 }
                 val prefix = if (how == GroupBy.PEOPLE) "people" else "tag"
-                byValue.forEach { (key, value) -> out += ResultGroup(0, "$prefix:$key", value.first, value.second.distinct()) }
+                byValue.forEach { (key, value) -> out += ResultGroup(0, "$prefix:$key", value.first, value.second.distinct(), AlbumPart(field = (if (how == GroupBy.PEOPLE) "persons_ss" else "custom_tags") to value.first)) }
                 if (without.isNotEmpty()) out += ResultGroup(0, "$prefix:none", if (how == GroupBy.PEOPLE) AppText.s(R.string.vm_no_one) else AppText.s(R.string.vm_no_tags), without)
             }
 
@@ -2029,6 +2136,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (at.children.isEmpty() || level >= FOLDER_LEVELS - 1) return
         if (at.own.isNotEmpty()) out += ResultGroup(level + 1, "folder:$key/.", label, at.own)
         at.children.values.forEach { child -> addFolderGroups(out, child, "$key/${child.name}", child.name, level + 1) }
+    }
+
+    /** Every page of each PDF in [hits] that came with only some of its pages (a search's matches), by the file's id. */
+    suspend fun pdfPagesOf(hits: List<PhotoHit>, known: Set<String>): Map<String, List<PhotoHit>> {
+        val partial = hits.filter { it.isPdfPage && it.parentId != null && it.parentId !in known }
+            .groupBy { it.parentId!! }
+            .filter { (_, pages) -> pages.size < pages.maxOf { it.pages } }
+        if (partial.isEmpty()) return emptyMap()
+        val wanted = partial.mapValues { (parent, pages) -> (1..pages.maxOf { it.pages }).map { com.opensolr.photos.media.MediaScanner.pageId(parent, it) } }
+        val ids = wanted.values.flatten()
+        val local = withContext(Dispatchers.IO) { photoCache.docsByIds(ids).map { searches.hitOf(org.json.JSONObject(it)) } }.associateBy { it.id }
+        val stillMissing = ids.toSet() - local.keys
+        val remote = if (stillMissing.isEmpty()) emptyMap() else runCatching { searches.hitsByIds(stillMissing) }.getOrDefault(emptyList()).associateBy { it.id }
+        return partial.mapValues { (parent, given) ->
+            val byId = given.associateBy { it.id }
+            wanted.getValue(parent).mapNotNull { id -> byId[id] ?: local[id] ?: remote[id] }.sortedBy { it.page }
+        }
     }
 
     fun loadResultGroup(name: String, ids: List<String>) {

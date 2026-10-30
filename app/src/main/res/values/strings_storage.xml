@@ -70,6 +70,9 @@
     <string name="stg_preparing">Preparing</string>
     <string name="stg_connecting">Connecting to the backend</string>
     <string name="stg_reading_manifests">Reading what the backend holds</string>
+    <string name="stg_deletions">Syncing deletions with your other devices</string>
+    <string name="stg_removing">Removing deleted items from the backend</string>
+    <string name="stg_checking">Checking the files on this phone</string>
     <string name="stg_restoring">Bringing photos from the backend</string>
     <string name="stg_backing_up">Backing up</string>
     <string name="stg_downloading_originals">Downloading originals</string>

@@ -29,6 +29,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 class StorageWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
     private var lastNotified = 0L
+    private var lastPhase = ""
 
     override suspend fun doWork(): Result {
         val prefs = AppPrefs(applicationContext)
@@ -36,18 +37,21 @@ class StorageWorker(context: Context, params: WorkerParameters) : CoroutineWorke
         if (!running.compareAndSet(false, true)) return Result.success()
         stopRequested.set(false)
         try {
-            promote(AppText.s(R.string.stg_preparing), 0, 0)
+            promote(AppText.s(R.string.stg_deletions), 0, 0)
             runCatching { Deletions.push(applicationContext); Deletions.pull(applicationContext) }
             val report = StorageEngine(applicationContext).run { progress ->
                 setProgress(workDataOf(KEY_PHASE to progress.phase, KEY_DONE to progress.done, KEY_TOTAL to progress.total))
                 val now = System.currentTimeMillis()
-                if (now - lastNotified > 1500) {
+                // a new phase shows at once; counts within a phase at most every 1.5 s
+                if (progress.phase != lastPhase || now - lastNotified > 1500) {
                     lastNotified = now
+                    lastPhase = progress.phase
                     val text = if (progress.total > 0) "${progress.phase}: ${progress.done} of ${progress.total}" else progress.phase
                     promote(text, progress.done, progress.total)
                 }
             }
             prefs.storageReport = report
+            promote(AppText.s(R.string.stg_checking), 0, 0)
             runCatching { LocalFiles.refresh(applicationContext) }
             when (report.status) {
                 "waiting_battery" -> StorageScheduler.runLater(applicationContext, BATTERY_RETRY_MS)

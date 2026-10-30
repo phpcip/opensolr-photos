@@ -65,8 +65,10 @@ object LocalFiles {
                 if (found.second != d.mediaId || found.first != d.path) fixes += Triple(id, found.second, found.first)
             }
             fixes.forEach { (id, mid, path) -> runCatching { cache.relocateDoc(id, mid, path) } }
-            ids.keys.retainAll(present.keys)
-            present.forEach { (k, v) -> ids[k] = v }
+            // only what changed, added in one write: a write per file into the screen's state costs seconds on a big library
+            ids.keys.filter { it !in present }.forEach { ids.remove(it) }
+            val changed = present.filter { (k, v) -> ids[k] != v }
+            if (changed.isNotEmpty()) ids.putAll(changed)
             ready.value = true
         }
     }

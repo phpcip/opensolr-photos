@@ -32,6 +32,8 @@ data class IngestItem(
     val faces: String? = null, val pixelHash: String? = null,
     /** The phone could not decode the picture: the server indexes the file by its facts and reads nothing. */
     val noRead: Boolean = false,
+    /** The printed text was read on this phone ([ocrText], "" when there was none): the server does not read it again. */
+    val ocrPhone: Boolean = false, val ocrText: String = "",
 )
 
 data class WordsItem(
@@ -449,6 +451,7 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
                     else -> Unit
                 }
                 if (item.noRead) put("no_read", true)
+                if (item.ocrPhone) { put("ocr_phone", true); put("ocr_text", item.ocrText) }
                 put("image", Base64.encodeToString(item.jpeg, Base64.NO_WRAP))
 
                 item.tags?.let { put("tags", JSONArray(it)) }
@@ -585,6 +588,37 @@ class OpensolrApi(private val http: OkHttpClient = Http.client) {
 
     suspend fun photosStorageDelete(session: Session, name: String) = withContext(Dispatchers.IO) {
         storageAnswer(post(MANAGEMENT + "photos_storage_delete", form(session) { add("core_name", name) }))
+        Unit
+    }
+
+    /** A read-only album link of [name] anyone with it can open: (address, items it shows now). [days] 0 = never runs out. */
+    suspend fun photosShareAdd(session: Session, name: String, spec: JSONObject, title: String, days: Int): Pair<String, Int> = withContext(Dispatchers.IO) {
+        val json = storageAnswer(post(MANAGEMENT + "photos_share_add", form(session) {
+            add("core_name", name)
+            // base64: the site's input filter would cut "2<65%" and the like out of the album's words
+            add("spec", android.util.Base64.encodeToString(spec.toString().toByteArray(), android.util.Base64.NO_WRAP))
+            add("title", title)
+            add("days", days.toString())
+        }))
+        val msg = json.optJSONObject("msg") ?: JSONObject()
+        msg.optString("url") to msg.optInt("count")
+    }
+
+    data class ShareLink(val token: String, val url: String, val title: String, val album: Boolean, val expiresAt: Long)
+
+    /** The album links of [name], newest first. */
+    suspend fun photosShareList(session: Session, name: String): List<ShareLink> = withContext(Dispatchers.IO) {
+        val json = storageAnswer(post(MANAGEMENT + "photos_share_list", form(session) { add("core_name", name) }))
+        val links = json.optJSONObject("msg")?.optJSONArray("links") ?: org.json.JSONArray()
+        (0 until links.length()).map { i ->
+            val l = links.getJSONObject(i)
+            ShareLink(l.optString("token"), l.optString("url"), l.optString("title"), l.optString("kind") == "album", l.optLong("expires_at"))
+        }
+    }
+
+    /** An album link removed: it stops opening at once. */
+    suspend fun photosShareDelete(session: Session, name: String, token: String) = withContext(Dispatchers.IO) {
+        storageAnswer(post(MANAGEMENT + "photos_share_delete", form(session) { add("core_name", name); add("token", token) }))
         Unit
     }
 

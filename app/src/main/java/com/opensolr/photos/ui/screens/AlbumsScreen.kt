@@ -239,7 +239,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
         }
     }
 
-    shareFor?.let { photos -> com.opensolr.photos.ui.ShareChooser(photos) { shareFor = null } }
+    shareFor?.let { photos -> com.opensolr.photos.ui.ShareChooser(photos, viewModel = viewModel) { shareFor = null } }
 
     if (confirmDelete && selecting) {
         AlertDialog(
