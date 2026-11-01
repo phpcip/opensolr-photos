@@ -90,7 +90,7 @@ private fun ExternalView(uri: Uri, video: Boolean) {
 
 /** The photo at full size, pinch to zoom and pan, double tap to zoom in or back. */
 @Composable
-private fun ExternalPhoto(uri: Uri) {
+internal fun ExternalPhoto(uri: Any) {
     val context = LocalContext.current
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
@@ -151,7 +151,7 @@ private fun ExternalPhoto(uri: Uri) {
 
 /** The clip in the app's player, with its controls. */
 @Composable
-private fun ExternalClip(uri: Uri) {
+internal fun ExternalClip(uri: Uri) {
     val context = LocalContext.current
     var failed by remember(uri) { mutableStateOf(false) }
     val player = remember(uri) {

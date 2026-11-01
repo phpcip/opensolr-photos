@@ -89,6 +89,20 @@
             </intent-filter>
         </activity>
 
+        <!-- album links (https://photos.opensolr.com/s/<token>) open here when the app is installed -->
+        <activity
+            android:name=".ui.SharedAlbumActivity"
+            android:exported="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@style/Theme.OpensolrPhotos">
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="photos.opensolr.com" android:pathPrefix="/s/" />
+            </intent-filter>
+        </activity>
+
         <activity
             android:name=".ui.ExternalViewActivity"
             android:exported="true"
