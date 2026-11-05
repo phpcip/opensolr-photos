@@ -96,7 +96,7 @@ object DocumentScan {
             source.recycle()
             throw java.io.IOException("corners do not make a page")
         }
-        Canvas(page).drawBitmap(source, matrix, Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG))
+        Canvas(page).drawBitmap(source, matrix, Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG).apply { levels(source, matrix, outW, outH)?.let { colorFilter = it } })
         source.recycle()
 
         val encoded = File(captureDir(context), "page-" + System.nanoTime() + ".jpg")
@@ -121,6 +121,50 @@ object DocumentScan {
             if (!page.isRecycled) page.recycle()
             encoded.delete()
         }
+    }
+
+    /**
+     * Auto levels for the page: per channel, the darkest ink goes to black and the paper to white (which also takes
+     * out the colour cast of the light), read from a grid of points inside the page only. Null when the page has too
+     * little contrast to stretch safely.
+     */
+    private fun levels(source: Bitmap, toPage: Matrix, outW: Int, outH: Int): android.graphics.ColorMatrixColorFilter? {
+        val back = Matrix()
+        if (!toPage.invert(back)) return null
+        val hist = Array(3) { IntArray(256) }
+        val pt = FloatArray(2)
+        var n = 0
+        for (gy in 0 until LEVEL_GRID) for (gx in 0 until LEVEL_GRID) {
+            pt[0] = (gx + 0.5f) * outW / LEVEL_GRID
+            pt[1] = (gy + 0.5f) * outH / LEVEL_GRID
+            back.mapPoints(pt)
+            val x = pt[0].toInt()
+            val y = pt[1].toInt()
+            if (x < 0 || y < 0 || x >= source.width || y >= source.height) continue
+            val c = source.getPixel(x, y)
+            hist[0][(c shr 16) and 0xFF]++
+            hist[1][(c shr 8) and 0xFF]++
+            hist[2][c and 0xFF]++
+            n++
+        }
+        if (n == 0) return null
+        fun at(h: IntArray, share: Double): Int {
+            val want = (n * share).toInt()
+            var sum = 0
+            for (v in 0..255) { sum += h[v]; if (sum > want) return v }
+            return 255
+        }
+        val m = FloatArray(20)
+        for (ch in 0 until 3) {
+            val lo = at(hist[ch], INK_SHARE)
+            val hi = at(hist[ch], PAPER_SHARE)
+            if (hi - lo < MIN_RANGE) return null
+            val scale = 255f / (hi - lo)
+            m[ch * 5 + ch] = scale
+            m[ch * 5 + 4] = -lo * scale
+        }
+        m[18] = 1f
+        return android.graphics.ColorMatrixColorFilter(android.graphics.ColorMatrix(m))
     }
 
     // the first folder Android takes a photo in; photos may only go to DCIM and Pictures from Android 10 on
@@ -196,6 +240,10 @@ object DocumentScan {
     private const val MIME = "image/jpeg"
     private const val DETECT_EDGE = 480
     private const val QUALITY = 95
+    private const val LEVEL_GRID = 160
+    private const val INK_SHARE = 0.01
+    private const val PAPER_SHARE = 0.97
+    private const val MIN_RANGE = 24
     private const val BUFFER = 64 * 1024
     private const val BYTES_PER_PIXEL = 4L
     private const val WORKING_COPIES = 2L

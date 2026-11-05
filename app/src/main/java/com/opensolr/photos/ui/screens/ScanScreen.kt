@@ -13,7 +13,15 @@ import android.view.Surface
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CaptureRequest
+import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.camera2.interop.Camera2Interop
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.FocusMeteringAction
+import androidx.camera.core.SurfaceOrientedMeteringPointFactory
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
@@ -117,6 +125,7 @@ import kotlin.math.min
  * to adjust, then the page straightened and saved as a new photo in a synced folder. Page after page until closed.
  */
 @Composable
+@androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
 internal fun ScanDialog(folders: Set<String>, topInset: Dp, bottomInset: Dp, onClose: () -> Unit) {
     val context = LocalContext.current
     val app = context.applicationContext
@@ -132,6 +141,19 @@ internal fun ScanDialog(folders: Set<String>, topInset: Dp, bottomInset: Dp, onC
     val frameAspect = remember { mutableFloatStateOf(FALLBACK_ASPECT) }
     var cameraFailed by remember { mutableStateOf(false) }
     var imageCapture by remember { mutableStateOf<ImageCapture?>(null) }
+    // the bound camera and the analysis stream: the page seen in it is what gets focused before a shot
+    var camera by remember { mutableStateOf<Camera?>(null) }
+    var analysisCase by remember { mutableStateOf<ImageAnalysis?>(null) }
+    val frameDegrees = remember { java.util.concurrent.atomic.AtomicInteger(0) }
+    // 2x unless the owner picks 1x (held twice as far, so all of a receipt is in focus); the choice is kept
+    val zoomPrefs = remember { app.getSharedPreferences(ZOOM_PREFS, android.content.Context.MODE_PRIVATE) }
+    var zoom by remember { mutableFloatStateOf(zoomPrefs.getFloat(ZOOM_KEY, 2f)) }
+    var maxZoom by remember { mutableFloatStateOf(1f) }
+    LaunchedEffect(camera, zoom) {
+        val c = camera ?: return@LaunchedEffect
+        maxZoom = c.cameraInfo.zoomState.value?.maxZoomRatio ?: 1f
+        runCatching { c.cameraControl.setZoomRatio(zoom.coerceIn(1f, maxOf(1f, maxZoom))) }
+    }
 
     fun toast(text: String) = Toast.makeText(app, text, Toast.LENGTH_LONG).show()
 
@@ -193,15 +215,7 @@ internal fun ScanDialog(folders: Set<String>, topInset: Dp, bottomInset: Dp, onC
         val main = ContextCompat.getMainExecutor(app)
         val wide = ResolutionSelector.Builder().setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
         val preview = Preview.Builder().setResolutionSelector(wide.build()).build()
-        val photo = ImageCapture.Builder()
-            .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
-            .setResolutionSelector(
-                ResolutionSelector.Builder()
-                    .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
-                    .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
-                    .build()
-            )
-            .build()
+        var photo: ImageCapture? = null
         val analysis = ImageAnalysis.Builder()
             .setResolutionSelector(
                 ResolutionSelector.Builder()
@@ -221,6 +235,7 @@ internal fun ScanDialog(folders: Set<String>, topInset: Dp, bottomInset: Dp, onC
                 if (now - lastAt >= ANALYZE_EVERY_MS) {
                     lastAt = now
                     val degrees = image.imageInfo.rotationDegrees
+                    frameDegrees.set(degrees)
                     val found = framePage(image, before?.let { DocumentEdges.turn(it, 360 - degrees) })?.let { DocumentEdges.turn(it, degrees) }
                     before = found
                     val aspect = if (degrees % 180 == 0) image.width.toFloat() / image.height else image.height.toFloat() / image.width
@@ -246,12 +261,15 @@ internal fun ScanDialog(folders: Set<String>, topInset: Dp, bottomInset: Dp, onC
             try {
                 val p = future.get()
                 val turned = previewView.display?.rotation ?: Surface.ROTATION_0
-                photo.targetRotation = turned
+                val shot = sharpCapture(CameraSelector.DEFAULT_BACK_CAMERA.filter(p.availableCameraInfos).firstOrNull())
+                photo = shot
+                shot.targetRotation = turned
                 analysis.targetRotation = turned
                 preview.setSurfaceProvider(previewView.surfaceProvider)
-                p.bindToLifecycle(lifecycle, CameraSelector.DEFAULT_BACK_CAMERA, preview, photo, analysis)
+                camera = p.bindToLifecycle(lifecycle, CameraSelector.DEFAULT_BACK_CAMERA, preview, shot, analysis)
                 provider = p
-                imageCapture = photo
+                imageCapture = shot
+                analysisCase = analysis
                 cameraFailed = false
             } catch (e: Exception) {
                 cameraFailed = true
@@ -260,23 +278,22 @@ internal fun ScanDialog(folders: Set<String>, topInset: Dp, bottomInset: Dp, onC
         onDispose {
             disposed = true
             imageCapture = null
+            camera = null
+            analysisCase = null
             live.value = null
             analysis.clearAnalyzer()
-            provider?.unbind(preview, photo, analysis)
+            provider?.unbind(*listOfNotNull(preview, photo, analysis).toTypedArray())
             executor.shutdown()
         }
     }
 
-    fun shoot() {
-        val photo = imageCapture ?: return
-        if (busy) return
-        busy = true
-        Haptics.tick(view, true)
-        val seen = live.value
+    // the picture itself, once the lens has settled on the page
+    fun fire(photo: ImageCapture, seen: FloatArray?) {
         val file = File(DocumentScan.captureDir(app), "capture-" + System.nanoTime() + ".jpg")
         photo.targetRotation = previewView.display?.rotation ?: Surface.ROTATION_0
         photo.takePicture(ImageCapture.OutputFileOptions.Builder(file).build(), ContextCompat.getMainExecutor(app), object : ImageCapture.OnImageSavedCallback {
             override fun onImageSaved(output: ImageCapture.OutputFileResults) {
+                camera?.cameraControl?.cancelFocusAndMetering()
                 scope.launch {
                     val ready = withContext(Dispatchers.IO) {
                         val bitmap = PhotoReader.uprightBitmap(app, Uri.fromFile(file), REVIEW_EDGE)
@@ -295,11 +312,47 @@ internal fun ScanDialog(folders: Set<String>, topInset: Dp, bottomInset: Dp, onC
             }
 
             override fun onError(exception: ImageCaptureException) {
+                camera?.cameraControl?.cancelFocusAndMetering()
                 file.delete()
                 busy = false
                 toast(AppText.s(R.string.scan_capture_failed))
             }
         })
+    }
+
+
+    fun shoot() {
+        val photo = imageCapture ?: return
+        if (busy) return
+        busy = true
+        Haptics.tick(view, true)
+        val seen = live.value
+        val control = camera?.cameraControl
+        val surface = analysisCase
+        if (control == null || surface == null) return fire(photo, seen)
+        // focus on the whole page seen in the frame (or the middle when none is), then shoot; a focus that fails or
+        // takes too long still shoots
+        val page = seen?.let { DocumentEdges.turn(it, 360 - frameDegrees.get()) }
+        val point = SurfaceOrientedMeteringPointFactory(1f, 1f, surface).let { factory ->
+            if (page == null) factory.createPoint(0.5f, 0.5f)
+            else {
+                val xs = floatArrayOf(page[0], page[2], page[4], page[6])
+                val ys = floatArrayOf(page[1], page[3], page[5], page[7])
+                val size = maxOf(xs.max() - xs.min(), ys.max() - ys.min()).coerceIn(FOCUS_MIN, 1f)
+                factory.createPoint(xs.average().toFloat().coerceIn(0f, 1f), ys.average().toFloat().coerceIn(0f, 1f), size)
+            }
+        }
+        val action = FocusMeteringAction.Builder(point, FocusMeteringAction.FLAG_AF).disableAutoCancel().build()
+        var fired = false
+        val main = ContextCompat.getMainExecutor(app)
+        val go = Runnable {
+            if (fired) return@Runnable
+            fired = true
+            fire(photo, seen)
+        }
+        val focusing = runCatching { control.startFocusAndMetering(action) }.getOrNull() ?: return fire(photo, seen)
+        focusing.addListener(go, main)
+        view.postDelayed(go, FOCUS_WAIT_MS)
     }
 
     fun save() {
@@ -377,6 +430,19 @@ internal fun ScanDialog(folders: Set<String>, topInset: Dp, bottomInset: Dp, onC
                     else -> {
                         AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
                         LiveOutline(live, frameAspect.floatValue)
+                        if (camera != null && maxZoom >= ZOOMS.last()) {
+                            Row(
+                                Modifier.align(Alignment.BottomCenter).padding(bottom = 16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                ZOOMS.forEach { ratio ->
+                                    ZoomPill(ratio, selected = zoom == ratio) {
+                                        zoom = ratio
+                                        zoomPrefs.edit().putFloat(ZOOM_KEY, ratio).apply()
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -558,6 +624,27 @@ private fun Shutter(enabled: Boolean, onClick: () -> Unit) {
     )
 }
 
+// one zoom choice over the preview: filled when it is the one in use
+@Composable
+private fun ZoomPill(ratio: Float, selected: Boolean, onClick: () -> Unit) {
+    val view = LocalView.current
+    val source = remember { MutableInteractionSource() }
+    val label = (if (ratio % 1f == 0f) ratio.toInt().toString() else ratio.toString()) + "x"
+    Box(
+        Modifier
+            .size(48.dp)
+            .scale(pressedScale(source))
+            .clip(CircleShape)
+            .background(if (selected) White else Black.copy(alpha = DIM))
+            .border(1.dp, White, CircleShape)
+            .clickable(interactionSource = source, indication = null) { Haptics.tap(view); onClick() }
+            .semantics { contentDescription = label; role = Role.Button },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(label, color = if (selected) Black else White, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+    }
+}
+
 // the light-on-dark outline button of the scanner (the app's ghost button is dark on light)
 @Composable
 private fun LightGhostButton(text: String, enabled: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
@@ -602,6 +689,32 @@ private fun smooth(previous: FloatArray?, found: FloatArray): FloatArray {
     return FloatArray(8) { previous[it] + (found[it] - previous[it]) * SMOOTHING }
 }
 
+/**
+ * The still at the sensor's full size with the camera's slowest, finest processing: high-quality sharpening and noise
+ * reduction and optical stabilisation, each only where this camera offers it.
+ */
+@androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
+private fun sharpCapture(info: androidx.camera.core.CameraInfo?): ImageCapture {
+    val builder = ImageCapture.Builder()
+        .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+        .setResolutionSelector(
+            ResolutionSelector.Builder()
+                .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+                .setResolutionStrategy(ResolutionStrategy.HIGHEST_AVAILABLE_STRATEGY)
+                .build()
+        )
+    val chars = info?.let { runCatching { Camera2CameraInfo.from(it) }.getOrNull() } ?: return builder.build()
+    val extender = Camera2Interop.Extender(builder)
+    fun offers(key: CameraCharacteristics.Key<IntArray>, mode: Int) = chars.getCameraCharacteristic(key)?.contains(mode) == true
+    if (offers(CameraCharacteristics.EDGE_AVAILABLE_EDGE_MODES, CaptureRequest.EDGE_MODE_HIGH_QUALITY))
+        extender.setCaptureRequestOption(CaptureRequest.EDGE_MODE, CaptureRequest.EDGE_MODE_HIGH_QUALITY)
+    if (offers(CameraCharacteristics.NOISE_REDUCTION_AVAILABLE_NOISE_REDUCTION_MODES, CaptureRequest.NOISE_REDUCTION_MODE_HIGH_QUALITY))
+        extender.setCaptureRequestOption(CaptureRequest.NOISE_REDUCTION_MODE, CaptureRequest.NOISE_REDUCTION_MODE_HIGH_QUALITY)
+    if (offers(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION, CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE_ON))
+        extender.setCaptureRequestOption(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE, CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE_ON)
+    return builder.build()
+}
+
 private val Black = Color(0xFF000000)
 private val White = Color(0xFFFFFFFF)
 private val SHUTTER = 72.dp
@@ -611,6 +724,11 @@ private val HANDLE_MARGIN = 20.dp
 private const val ANALYSIS_W = 640
 private const val ANALYSIS_H = 480
 private const val ANALYZE_EVERY_MS = 50L
+private const val FOCUS_WAIT_MS = 2500L
+private val ZOOMS = listOf(1f, 2f)
+private const val ZOOM_PREFS = "opensolr_photos"
+private const val ZOOM_KEY = "scan_zoom"
+private const val FOCUS_MIN = 0.15f
 private const val LIVE_EDGE = 320
 private const val REVIEW_EDGE = 1600
 private const val MISSES_TO_HIDE = 6
