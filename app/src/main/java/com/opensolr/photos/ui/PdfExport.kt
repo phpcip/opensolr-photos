@@ -141,15 +141,17 @@ private suspend fun writePdf(context: Context, hits: List<PhotoHit>, fileName: S
     }
     pulled.deleteRecursively()
     if (pages == 0) { target.discard(); toast(context, AppText.s(R.string.ac_photos_gone)); return }
-    target.done()
+    // the name Android really gave the file: a deletion of that name before it no longer holds
+    val written = target.done()
+    com.opensolr.photos.storage.Deletions.writtenHere(context, target.folder, written, pages)
     // the folder it went into is synced, so the PDF is indexed and shows in the grid
     val prefs = com.opensolr.photos.data.AppPrefs(context)
     val folderKey = com.opensolr.photos.media.MediaScanner.folderKey(target.folder)
     if (prefs.folders.none { folderKey.startsWith(com.opensolr.photos.media.MediaScanner.folderKey(it), ignoreCase = true) }) prefs.folders = prefs.folders + folderKey
     // the sync finds it right away: indexed, it is the newest item and shows first
     com.opensolr.photos.sync.SyncScheduler.runNow(context)
-    if (pages < hits.size) toast(context, AppText.s(R.string.pdf_saved_some, target.shownName, Actions.formatCount(pages.toLong()), Actions.formatCount(hits.size.toLong())))
-    else toast(context, AppText.s(R.string.pdf_saved, target.shownName))
+    if (pages < hits.size) toast(context, AppText.s(R.string.pdf_saved_some, written, Actions.formatCount(pages.toLong()), Actions.formatCount(hits.size.toLong())))
+    else toast(context, AppText.s(R.string.pdf_saved, written))
 }
 
 /**
@@ -183,7 +185,7 @@ private fun pdfSources(context: Context, hits: List<PhotoHit>, into: java.io.Fil
 }
 
 /** Where the PDF is written, and how it is finished or dropped. */
-private class PdfTarget(val shownName: String, val folder: String, val open: () -> java.io.OutputStream, val done: () -> Unit, val discard: () -> Unit)
+private class PdfTarget(val shownName: String, val folder: String, val open: () -> java.io.OutputStream, val done: () -> String, val discard: () -> Unit)
 
 @Suppress("DEPRECATION")
 private fun newTarget(context: Context, folder: String, fileName: String): PdfTarget? {
@@ -197,6 +199,7 @@ private fun newTarget(context: Context, folder: String, fileName: String): PdfTa
         val f = file
         return PdfTarget(f.name, folder, { java.io.FileOutputStream(f) }, {
             android.media.MediaScannerConnection.scanFile(context, arrayOf(f.absolutePath), arrayOf(PDF_MIME), null)
+            f.name
         }, { f.delete() })
     }
     val resolver = context.contentResolver
@@ -210,6 +213,9 @@ private fun newTarget(context: Context, folder: String, fileName: String): PdfTa
     val uri = runCatching { resolver.insert(android.provider.MediaStore.Files.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY), values) }.getOrNull() ?: return null
     return PdfTarget(fileName, relative, { resolver.openOutputStream(uri, "wt") ?: throw java.io.IOException("no output stream") }, {
         resolver.update(uri, android.content.ContentValues().apply { put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+        runCatching {
+            resolver.query(uri, arrayOf(android.provider.MediaStore.MediaColumns.DISPLAY_NAME), null, null, null)?.use { c -> if (c.moveToFirst()) c.getString(0) else null }
+        }.getOrNull()?.takeIf { it.isNotBlank() } ?: fileName
     }, { runCatching { resolver.delete(uri, null, null) } })
 }
 

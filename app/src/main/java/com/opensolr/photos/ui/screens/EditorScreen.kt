@@ -358,6 +358,7 @@ internal fun PhotoEditorScreen(hit: PhotoHit, synced: Set<String>, topInset: Dp,
                             val folder = where.substringBeforeLast('/', "")
                             val copyId = com.opensolr.photos.media.MediaScanner.photoId(com.opensolr.photos.media.MediaScanner.folderKey(folder) + where.substringAfterLast('/'))
                             com.opensolr.photos.search.FaceMatcher.linkCopy(app, copyId, hit.id)
+                            com.opensolr.photos.storage.Deletions.writtenHere(app, folder, where.substringAfterLast('/'))
                         }
                     }
                 }

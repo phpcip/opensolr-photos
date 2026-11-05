@@ -30,6 +30,12 @@ object Deletions {
         runCatching { push(context) }
     }
 
+    /** A file this app just wrote in [folder] as [name] is a new item: an earlier deletion of that name (and of its PDF pages) no longer holds. */
+    fun writtenHere(context: Context, folder: String, name: String, pages: Int = 0) {
+        val id = com.opensolr.photos.media.MediaScanner.photoId(com.opensolr.photos.media.MediaScanner.folderKey(folder) + name)
+        PhotoCache.of(context).forgetDeleted(listOf(id) + (1..pages).map { com.opensolr.photos.media.MediaScanner.pageId(id, it) })
+    }
+
     /** Deletions not yet told to the account, sent now. */
     suspend fun push(context: Context) {
         val prefs = AppPrefs(context)
