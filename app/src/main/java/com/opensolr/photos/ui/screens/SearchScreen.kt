@@ -1014,7 +1014,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                 }
                                 if (hit.pending && !state.skippedMode) {
                                     SyncingMark(Modifier.align(Alignment.TopEnd).padding(4.dp))
-                                } else if (!state.selecting && !state.skippedMode) {
+                                } else if (!state.skippedMode) {
+                                    // while picking, the marks stay, under the tick
                                     PhotoMarks(
                                         hasPlace = !hit.location.isNullOrBlank(),
                                         hasPeople = hit.persons.isNotBlank(),
@@ -1027,7 +1028,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                             else -> null
                                         },
                                         labelIcon = when { hit.isPdfPage -> R.drawable.ic_pdf; hit.isVideo -> R.drawable.ic_play; else -> null },
-                                        modifier = Modifier.align(Alignment.TopEnd).padding(4.dp),
+                                        modifier = Modifier.align(Alignment.TopEnd).padding(start = 4.dp, end = 4.dp, bottom = 4.dp, top = if (state.selecting) TICK_CLEARANCE else 4.dp),
                                     )
                                 }
                                 if (anchor) {
@@ -3687,6 +3688,9 @@ internal fun PickTick(selected: Boolean, onClick: () -> Unit, modifier: Modifier
         }
     }
 }
+
+// the tick of a cell (22 dp and its 6 dp padding) plus a small gap: the marks sit under it while picking
+private val TICK_CLEARANCE = 36.dp
 
 private const val FACET_PREVIEW = 10
 
