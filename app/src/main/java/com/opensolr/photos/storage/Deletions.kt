@@ -7,6 +7,7 @@ import com.opensolr.photos.auth.AuthFlow
 import com.opensolr.photos.data.AppPrefs
 import com.opensolr.photos.data.PhotoCache
 import com.opensolr.photos.net.OpensolrApi
+import com.opensolr.photos.net.SolrClient
 import java.io.File
 
 /**
@@ -34,6 +35,37 @@ object Deletions {
     fun writtenHere(context: Context, folder: String, name: String, pages: Int = 0) {
         val id = com.opensolr.photos.media.MediaScanner.photoId(com.opensolr.photos.media.MediaScanner.folderKey(folder) + name)
         PhotoCache.of(context).forgetDeleted(listOf(id) + (1..pages).map { com.opensolr.photos.media.MediaScanner.pageId(id, it) })
+    }
+
+    /**
+     * Deleted items the index holds again, written after their deletion: the same name saved anew (a PDF made again
+     * on the web, a file another phone put back). Those are new items: no longer deleted here, their documents read
+     * into the clone. Returns them. An index that cannot be read throws: nothing is decided on an answer not had.
+     */
+    suspend fun revive(context: Context, deleted: Map<String, Long>): Set<String> {
+        if (deleted.isEmpty()) return emptySet()
+        val prefs = AppPrefs(context)
+        val connection = prefs.connection ?: return emptySet()
+        val solr = SolrClient(connection)
+        val back = HashSet<String>()
+        deleted.keys.chunked(200).forEach { batch ->
+            val docs = solr.select(listOf(
+                "q" to "*:*", "fq" to "{!terms f=id}" + batch.joinToString(","), "fl" to "id,indexed_at", "rows" to batch.size.toString(),
+            )).optJSONObject("response")?.optJSONArray("docs") ?: throw java.io.IOException("index answer without documents")
+            for (i in 0 until docs.length()) {
+                val d = docs.optJSONObject(i) ?: continue
+                val id = d.optString("id")
+                val at = deleted[id] ?: continue
+                val written = com.opensolr.photos.ui.Actions.solrDateMillis(d.optString("indexed_at")) ?: continue
+                if (written > at) back += id
+            }
+        }
+        if (back.isEmpty()) return back
+        PhotoCache.of(context).forgetDeleted(back)
+        com.opensolr.photos.search.EditRepository(context).readDocsIntoCache(back)
+        // what the backend holds of them is listed again from the manifests
+        prefs.manifestsReadAt = 0L
+        return back
     }
 
     /** Deletions not yet told to the account, sent now. */
@@ -64,7 +96,10 @@ object Deletions {
         val cache = PhotoCache.of(context)
         val api = OpensolrApi()
         while (true) {
-            val (rows, next, more) = api.photosDeletedSince(session, index, since)
+            val (all, next, more) = api.photosDeletedSince(session, index, since)
+            // an item saved again under the same name after its deletion is not deleted
+            val alive = revive(context, all.toMap())
+            val rows = all.filter { it.first !in alive }
             if (rows.isNotEmpty()) {
                 val byTime = rows.groupBy({ it.second }, { it.first })
                 byTime.forEach { (at, ids) -> cache.markDeleted(ids, at, sent = true) }

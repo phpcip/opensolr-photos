@@ -32,6 +32,11 @@ object IndexChanges {
         }
         val cache = PhotoCache.of(context)
         val edits = EditRepository(context)
+        // once: items kept as deleted although they were saved again under the same name come back
+        if (!sp.getBoolean("deleted_checked", false)) {
+            com.opensolr.photos.storage.Deletions.revive(context, cache.deletedAll())
+            sp.edit().putBoolean("deleted_checked", true).apply()
+        }
         while (true) {
             val answer = solr.select(listOf(
                 "q" to "*:*", "fq" to "{!frange l=$cursor incl=false}_version_",
@@ -46,6 +51,8 @@ object IndexChanges {
                 d.optString("id").takeIf { it.isNotEmpty() }?.let { ids += it }
                 top = maxOf(top, d.optLong("_version_"))
             }
+            // a deleted name written again after its deletion is a new item
+            com.opensolr.photos.storage.Deletions.revive(context, cache.deletedAmong(ids))
             val waiting = cache.pendingAmong(ids)
             edits.readDocsIntoCache(ids.filter { it !in waiting })
             cursor = top

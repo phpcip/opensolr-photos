@@ -781,18 +781,19 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         }
 
         var pulled by remember { mutableStateOf(false) }
-        LaunchedEffect(state.searching) { if (!state.searching) pulled = false }
+        val pullBusy = state.pulling || state.searching
+        LaunchedEffect(pullBusy) { if (!pullBusy) pulled = false }
         val pullState = rememberPullToRefreshState()
         PullToRefreshBox(
-            isRefreshing = pulled && state.searching,
+            isRefreshing = pulled && pullBusy,
 
-            onRefresh = { Haptics.thud(view); pulled = true; viewModel.forceRefresh(toTop = true); viewModel.syncNow() },
+            onRefresh = { Haptics.thud(view); pulled = true; viewModel.pullRefresh() },
             state = pullState,
             modifier = Modifier.fillMaxSize(),
             indicator = {
                 PullToRefreshDefaults.Indicator(
                     state = pullState,
-                    isRefreshing = pulled && state.searching,
+                    isRefreshing = pulled && pullBusy,
                     modifier = Modifier.align(Alignment.TopCenter),
                     containerColor = p.paper,
                     color = p.accent,

@@ -95,8 +95,11 @@ class StorageEngine(private val context: Context) {
             var ownGone = false
             var removed = 0
             while (true) {
-                val gone = cache.deletedInRemote(BATCH)
-                if (gone.isEmpty()) break
+                val listed = cache.deletedInRemote(BATCH)
+                if (listed.isEmpty()) break
+                // a name saved again after its deletion is a new item: its files stay
+                val alive = Deletions.revive(context, cache.deletedAmong(listed.map { it.id }))
+                val gone = listed.filter { it.id !in alive }
                 for (r in gone) {
                     guard()
                     onProgress(Progress(AppText.s(R.string.stg_removing), removed, 0))
@@ -110,7 +113,7 @@ class StorageEngine(private val context: Context) {
                     runCatching { backend.delete(layout.main(path.substringBeforeLast('/', ""), path.substringAfterLast('/'))) }
                 }
                 if (gone.any { it.device == device }) ownGone = true
-                if (gone.size < BATCH) break
+                if (listed.size < BATCH) break
             }
             if (ownGone) writeManifest(backend, layout, device)
 

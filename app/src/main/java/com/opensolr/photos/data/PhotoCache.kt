@@ -1678,6 +1678,13 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         return out
     }
 
+    /** Every deleted item and when it was deleted. */
+    fun deletedAll(): Map<String, Long> {
+        val out = HashMap<String, Long>()
+        readableDatabase.rawQuery("SELECT id, at FROM deleted", null).use { c -> while (c.moveToNext()) out[c.getString(0)] = c.getLong(1) }
+        return out
+    }
+
     /** A file of that name came back after the deletion: it is a new one, no longer deleted. */
     fun forgetDeleted(ids: Collection<String>) = deleteByIds("deleted", ids)
 

@@ -77,6 +77,7 @@ data class UiState(
     val numFound: Long = 0,
     val facets: Map<String, List<FacetValue>> = emptyMap(),
     val searching: Boolean = false,
+    val pulling: Boolean = false,
     val searchNotice: String? = null,
     val searchError: String? = null,
     val smart: Boolean = false,
@@ -2718,6 +2719,23 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
             _state.value.duplicatesMode -> loadDuplicates(debounceMs = 0, keepPages = true)
             else -> search(reset = true, keepPosition = true, keepLoaded = true)
+        }
+    }
+
+    /** Pulled down: what the other devices added or deleted comes first, so the list read after it already has it. */
+    fun pullRefresh() {
+        if (_state.value.pulling) return
+        _state.update { it.copy(pulling = true) }
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { com.opensolr.photos.storage.Deletions.pull(context) }
+                runCatching { com.opensolr.photos.search.IndexChanges.pull(context) }
+                searches.clearCache()
+            }
+            _state.update { it.copy(cachedCount = 0) }
+            if (!_state.value.duplicatesMode && !_state.value.skippedMode) search(reset = true, keepLoaded = true) else refresh()
+            _state.update { it.copy(pulling = false) }
+            syncNow()
         }
     }
 
