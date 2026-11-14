@@ -384,7 +384,9 @@ class SyncEngine(private val context: Context) {
                     // the printed text, read here from the picture itself when the owner chose so; the server then reads it no more
                     // on every plan: only the reading made by Opensolr depends on the plan
                     val ocrPhone = prefs.ocrOnPhone && !read.noRead && read.upright != null
-                    val ocrText = if (ocrPhone) try { textReader().read(read.upright!!) } catch (e: CancellationException) { throw e } catch (e: Throwable) { android.util.Log.w("SyncEngine", "text not read", e); null } else null
+                    // a page that carries its own text is not read from its picture: the text is taken as written
+                    val written = if (photo.kind == com.opensolr.photos.media.Kind.PDF && !read.noRead) com.opensolr.photos.media.PdfPages.text(context, photo.uri, photo.page) else null
+                    val ocrText = if (written != null) written else if (ocrPhone) try { textReader().read(read.upright!!) } catch (e: CancellationException) { throw e } catch (e: Throwable) { android.util.Log.w("SyncEngine", "text not read", e); null } else null
                     val faces = try { if (photo.kind == com.opensolr.photos.media.Kind.PDF) null else readFaces(photo, people, read.upright) } finally { read.upright?.recycle() }
                     if (faces != null && edits == null && names.isEmpty()) {
                         names = cache.facesOf(photo.id).mapNotNull { it.person }.distinctBy { it.lowercase() }

@@ -200,6 +200,15 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         if (oldVersion < 34) {
             db.execSQL(DELETED_TABLE)
         }
+        if (oldVersion < 35) {
+            // what a waiting file is (a clip, a page of a PDF): the rows written without it are listed again by the next sync
+            addColumnIfMissing(db, "incoming", "kind", "TEXT NOT NULL DEFAULT ''")
+            addColumnIfMissing(db, "incoming", "duration_ms", "INTEGER NOT NULL DEFAULT 0")
+            addColumnIfMissing(db, "incoming", "page", "INTEGER NOT NULL DEFAULT 0")
+            addColumnIfMissing(db, "incoming", "pages", "INTEGER NOT NULL DEFAULT 0")
+            addColumnIfMissing(db, "incoming", "parent", "TEXT NOT NULL DEFAULT ''")
+            db.execSQL("DELETE FROM incoming")
+        }
         if (oldVersion < 24) {
             // who named a face: 0 the owner, 1 learned from the photos' tags, 2 the matcher on its own
             addColumnIfMissing(db, "faces", "how", "INTEGER NOT NULL DEFAULT 0")
@@ -990,7 +999,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         val db = writableDatabase
         db.beginTransaction()
         try {
-            db.compileStatement("INSERT OR IGNORE INTO incoming (id, media_id, path, folder, file_name, mime, size_bytes, taken_ms, width, height, at) VALUES (?,?,?,?,?,?,?,?,?,?,?)").use { st ->
+            db.compileStatement("INSERT OR IGNORE INTO incoming (id, media_id, path, folder, file_name, mime, size_bytes, taken_ms, width, height, at, kind, duration_ms, page, pages, parent) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)").use { st ->
                 val now = System.currentTimeMillis()
                 photos.forEach { p ->
                     st.clearBindings()
@@ -1005,6 +1014,11 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
                     st.bindLong(9, p.width.toLong())
                     st.bindLong(10, p.height.toLong())
                     st.bindLong(11, now)
+                    st.bindString(12, when (p.kind) { com.opensolr.photos.media.Kind.VIDEO -> "video"; com.opensolr.photos.media.Kind.PDF -> "pdf_page"; else -> "" })
+                    st.bindLong(13, p.durationMs)
+                    st.bindLong(14, p.page.toLong())
+                    st.bindLong(15, p.pages.toLong())
+                    st.bindString(16, p.parentId.orEmpty())
                     st.executeInsert()
                 }
             }
@@ -1045,6 +1059,14 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
             .apply { if (taken > 0) put("taken_at", isoUtc(taken)) }
             .put("width", c.getInt(8))
             .put("height", c.getInt(9))
+            .apply {
+                // a clip or a page of a PDF is listed as what it is while it waits
+                val kind = c.getString(10)
+                if (kind.isNotEmpty()) put("kind_s", kind)
+                if (c.getLong(11) > 0) put("duration_l", c.getLong(11))
+                if (c.getInt(12) > 0) put("page_i", c.getInt(12)).put("pages_i", c.getInt(13))
+                if (c.getString(14).isNotEmpty()) put("parent_s", c.getString(14))
+            }
             .put("pending", true)
             .toString()
     }
@@ -2289,7 +2311,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
     companion object {
         private const val NAME = "photo_cache.db"
-        private const val VERSION = 34
+        private const val VERSION = 35
 
         @Volatile private var shared: PhotoCache? = null
 
@@ -2357,9 +2379,9 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         private val EDIT_COLUMNS = arrayOf("tags_json", "meaning", "persons_json")
         private const val EDITS_TABLE = "CREATE TABLE IF NOT EXISTS edits (id TEXT PRIMARY KEY NOT NULL, tags_json TEXT NOT NULL, meaning TEXT, updated INTEGER NOT NULL, persons_json TEXT, pending INTEGER NOT NULL DEFAULT 0, tags_mode TEXT, persons_mode TEXT)"
         private const val SKIPPED_TABLE = "CREATE TABLE IF NOT EXISTS skipped (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, media_id INTEGER NOT NULL, path TEXT NOT NULL, folder TEXT NOT NULL, file_name TEXT NOT NULL, mime TEXT NOT NULL, taken_ms INTEGER NOT NULL, reason TEXT NOT NULL, at INTEGER NOT NULL)"
-        private const val INCOMING_TABLE = "CREATE TABLE IF NOT EXISTS incoming (id TEXT PRIMARY KEY NOT NULL, media_id INTEGER NOT NULL, path TEXT NOT NULL, folder TEXT NOT NULL, file_name TEXT NOT NULL, mime TEXT NOT NULL, size_bytes INTEGER NOT NULL, taken_ms INTEGER NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL, at INTEGER NOT NULL)"
+        private const val INCOMING_TABLE = "CREATE TABLE IF NOT EXISTS incoming (id TEXT PRIMARY KEY NOT NULL, media_id INTEGER NOT NULL, path TEXT NOT NULL, folder TEXT NOT NULL, file_name TEXT NOT NULL, mime TEXT NOT NULL, size_bytes INTEGER NOT NULL, taken_ms INTEGER NOT NULL, width INTEGER NOT NULL, height INTEGER NOT NULL, at INTEGER NOT NULL, kind TEXT NOT NULL DEFAULT '', duration_ms INTEGER NOT NULL DEFAULT 0, page INTEGER NOT NULL DEFAULT 0, pages INTEGER NOT NULL DEFAULT 0, parent TEXT NOT NULL DEFAULT '')"
         private const val INCOMING_TAKEN_INDEX = "CREATE INDEX IF NOT EXISTS incoming_taken_ms ON incoming (taken_ms)"
-        private const val INCOMING_COLUMNS = "id, media_id, path, folder, file_name, mime, size_bytes, taken_ms, width, height"
+        private const val INCOMING_COLUMNS = "id, media_id, path, folder, file_name, mime, size_bytes, taken_ms, width, height, kind, duration_ms, page, pages, parent"
         private const val INCOMING_TAKEN = "SELECT taken_ms FROM incoming WHERE taken_ms > 0 AND id NOT IN (SELECT id FROM docs)"
         private const val PARKED_DOCS_TABLE = "CREATE TABLE IF NOT EXISTS parked_docs (id TEXT PRIMARY KEY NOT NULL, size_bytes INTEGER NOT NULL, indexed_at INTEGER NOT NULL, taken_at TEXT, tags_json TEXT, persons_json TEXT, meaning TEXT, ocr TEXT, city TEXT, country TEXT, json TEXT, modified INTEGER NOT NULL DEFAULT 0, taken_ms INTEGER NOT NULL DEFAULT 0, embed_model TEXT, file_hash TEXT, region TEXT, folder TEXT, camera TEXT, camera_model TEXT)"
         private const val PARKED_WORDS_TABLE = "CREATE TABLE IF NOT EXISTS parked_words (id TEXT NOT NULL, kind TEXT NOT NULL, word TEXT NOT NULL, PRIMARY KEY (id, kind, word))"

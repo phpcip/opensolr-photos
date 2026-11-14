@@ -28,6 +28,21 @@ object PdfPages {
         return pages
     }
 
+    /** The text page [page] (1-based) carries in the file itself; null when it has none (a scan) or this Android cannot read it. */
+    fun text(context: Context, uri: Uri, page: Int): String? {
+        if (android.os.Build.VERSION.SDK_INT < 35) return null
+        return try {
+            context.contentResolver.openFileDescriptor(uri, "r")?.use { fd ->
+                PdfRenderer(fd).use { renderer ->
+                    if (page < 1 || page > renderer.pageCount) return null
+                    renderer.openPage(page - 1).use { p -> p.textContents.joinToString("\n") { it.text }.trim().ifEmpty { null } }
+                }
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     /** Page [page] (1-based) of the PDF at [uri], white background, long edge at most [edge] px; null when it cannot be rendered. */
     fun render(context: Context, uri: Uri, page: Int, edge: Int): Bitmap? = try {
         context.contentResolver.openFileDescriptor(uri, "r")?.use { fd ->
