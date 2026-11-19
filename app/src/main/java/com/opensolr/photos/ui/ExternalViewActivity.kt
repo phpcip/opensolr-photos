@@ -49,8 +49,8 @@ import coil.request.ImageRequest
 import com.opensolr.photos.R
 
 /**
- * A photo or a clip opened from another app (a file manager, a camera, a chat): shown on its own, over that app,
- * whether or not it is in the library. Back returns to the app it came from.
+ * A photo, a clip or a sound opened from another app (a file manager, a camera, a chat): shown on its own, over that
+ * app, whether or not it is in the library. Back returns to the app it came from.
  */
 class ExternalViewActivity : ComponentActivity() {
 
@@ -62,20 +62,45 @@ class ExternalViewActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         val uri = intent?.data ?: run { finish(); return }
-        val mime = intent.type ?: runCatching { contentResolver.getType(uri) }.getOrNull().orEmpty()
-        setContent { ExternalView(uri, mime.startsWith("video/")) }
+        val name = displayName(uri)
+        val mime = listOf(
+            intent.type,
+            runCatching { contentResolver.getType(uri) }.getOrNull(),
+            android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(name.substringAfterLast('.', "").lowercase()),
+        ).firstOrNull { it != null && isMedia(it) }.orEmpty()
+        setContent { ExternalView(uri, mime, name) }
     }
+
+    private fun displayName(uri: Uri): String =
+        runCatching {
+            contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+                if (it.moveToFirst()) it.getString(0) else null
+            }
+        }.getOrNull() ?: uri.lastPathSegment.orEmpty()
 }
 
+private fun isMedia(mime: String) = mime.startsWith("image/") || isPlayed(mime)
+
+private fun isPlayed(mime: String) = mime.startsWith("video/") || mime.startsWith("audio/") || mime == "application/ogg"
+
 @Composable
-private fun ExternalView(uri: Uri, video: Boolean) {
+private fun ExternalView(uri: Uri, mime: String, name: String) {
     val context = LocalContext.current
+    // a file whose type says nothing useful is tried as a photo, then in the player
+    var played by remember(uri) { mutableStateOf(isPlayed(mime)) }
+    var tried by remember(uri) { mutableStateOf(false) }
+    var failed by remember(uri) { mutableStateOf(false) }
+    val other = { if (tried) failed = true else { tried = true; played = !played } }
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        if (video) ExternalClip(uri) else ExternalPhoto(uri)
+        when {
+            failed -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.ext_cannot_open), color = Color.White) }
+            played -> ExternalClip(uri, name, other)
+            else -> ExternalPhoto(uri, other)
+        }
         IconButton(
             onClick = {
                 val send = Intent(Intent.ACTION_SEND).apply {
-                    type = context.contentResolver.getType(uri) ?: if (video) "video/*" else "image/*"
+                    type = context.contentResolver.getType(uri) ?: mime.ifEmpty { "*/*" }
                     putExtra(Intent.EXTRA_STREAM, uri)
                     addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
@@ -90,11 +115,10 @@ private fun ExternalView(uri: Uri, video: Boolean) {
 
 /** The photo at full size, pinch to zoom and pan, double tap to zoom in or back. */
 @Composable
-private fun ExternalPhoto(uri: Uri) {
+private fun ExternalPhoto(uri: Uri, onFail: () -> Unit) {
     val context = LocalContext.current
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
-    var failed by remember { mutableStateOf(false) }
     val request = remember(uri) { ImageRequest.Builder(context).data(uri).size(PHOTO_EDGE).build() }
     val scope = rememberCoroutineScope()
     var glide by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
@@ -142,33 +166,32 @@ private fun ExternalPhoto(uri: Uri) {
             model = request,
             contentDescription = null,
             contentScale = ContentScale.Fit,
-            onError = { failed = true },
+            onError = { onFail() },
             modifier = Modifier.fillMaxSize().graphicsLayer { scaleX = scale; scaleY = scale; translationX = offset.x; translationY = offset.y },
         )
-        if (failed) Text(stringResource(R.string.ext_cannot_open), color = Color.White)
     }
 }
 
-/** The clip in the app's player, with its controls. */
+/** The clip or the sound in the app's player, with its controls; a sound keeps them on screen, under its name. */
 @Composable
-private fun ExternalClip(uri: Uri) {
+private fun ExternalClip(uri: Uri, name: String, onFail: () -> Unit) {
     val context = LocalContext.current
-    var failed by remember(uri) { mutableStateOf(false) }
+    var sound by remember(uri) { mutableStateOf(false) }
     val player = remember(uri) {
         androidx.media3.exoplayer.ExoPlayer.Builder(context).build().apply {
+            setAudioAttributes(androidx.media3.common.AudioAttributes.DEFAULT, true)
             setMediaItem(androidx.media3.common.MediaItem.fromUri(uri))
             addListener(object : androidx.media3.common.Player.Listener {
-                override fun onPlayerError(error: androidx.media3.common.PlaybackException) { failed = true }
+                override fun onPlayerError(error: androidx.media3.common.PlaybackException) { onFail() }
+                override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                    sound = !tracks.isEmpty && !tracks.containsType(androidx.media3.common.C.TRACK_TYPE_VIDEO)
+                }
             })
             playWhenReady = true
             prepare()
         }
     }
     DisposableEffect(player) { onDispose { player.release() } }
-    if (failed) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Text(stringResource(R.string.ext_cannot_open), color = Color.White) }
-        return
-    }
     AndroidView(
         factory = { ctx ->
             androidx.media3.ui.PlayerView(ctx).apply {
@@ -179,8 +202,23 @@ private fun ExternalClip(uri: Uri) {
                 setBackgroundColor(android.graphics.Color.BLACK)
             }
         },
+        update = { view ->
+            view.controllerHideOnTouch = !sound
+            view.controllerShowTimeoutMs = if (sound) 0 else androidx.media3.ui.PlayerControlView.DEFAULT_SHOW_TIMEOUT_MS
+            if (sound) view.showController()
+        },
         modifier = Modifier.fillMaxSize().navigationBarsPadding(),
     )
+    if (sound && name.isNotEmpty()) {
+        Text(
+            name,
+            color = Color.White,
+            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+            maxLines = 2,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.statusBarsPadding().padding(start = 16.dp, top = 20.dp, end = 64.dp),
+        )
+    }
 }
 
 private const val PHOTO_EDGE = 4096
