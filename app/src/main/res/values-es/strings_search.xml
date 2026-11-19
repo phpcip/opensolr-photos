@@ -102,6 +102,7 @@
     <string name="act_delete">Eliminar</string>
     <string name="dock_delete">Borr</string>
     <string name="show_fewer">Mostrar menos</string>
+    <string name="text_show_all">Mostrar todo</string>
     <string name="show_all">Mostrar todo (%1$s)</string>
     <string name="search_values">Buscar entre %1$s valores</string>
     <string name="done">Listo</string>

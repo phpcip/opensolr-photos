@@ -96,7 +96,7 @@ fun SubZone(title: String, open: Boolean, onToggle: () -> Unit, content: @Compos
     val view = androidx.compose.ui.platform.LocalView.current
     Column(Modifier.fillMaxWidth()) {
         Row(
-            Modifier.fillMaxWidth().clickable { Haptics.tick(view, strong = false); onToggle() }.padding(vertical = 12.dp),
+            Modifier.fillMaxWidth().padding(vertical = 4.dp).glass(ButtonShape, p.chip, p.hairline, 0.7f).clickable { Haptics.tick(view, strong = false); onToggle() }.padding(horizontal = 8.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
@@ -113,7 +113,6 @@ fun SubZone(title: String, open: Boolean, onToggle: () -> Unit, content: @Compos
         ) {
             Column(Modifier.padding(start = 26.dp, bottom = 8.dp)) { content() }
         }
-        HorizontalDivider(color = p.hairline, thickness = 1.dp)
     }
 }
 

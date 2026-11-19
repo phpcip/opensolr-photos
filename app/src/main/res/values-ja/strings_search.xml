@@ -102,6 +102,7 @@
     <string name="act_delete">削除</string>
     <string name="dock_delete">削除</string>
     <string name="show_fewer">少なく表示</string>
+    <string name="text_show_all">すべて表示</string>
     <string name="show_all">すべて表示 (%1$s)</string>
     <string name="search_values">%1$s 件の値を検索</string>
     <string name="done">完了</string>

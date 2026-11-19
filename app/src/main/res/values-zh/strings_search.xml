@@ -102,6 +102,7 @@
     <string name="act_delete">删除</string>
     <string name="dock_delete">删除</string>
     <string name="show_fewer">收起</string>
+    <string name="text_show_all">显示全部</string>
     <string name="show_all">显示全部（%1$s）</string>
     <string name="search_values">在 %1$s 个值中搜索</string>
     <string name="done">完成</string>

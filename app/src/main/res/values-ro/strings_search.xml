@@ -102,6 +102,7 @@
     <string name="act_delete">Șterge</string>
     <string name="dock_delete">Șterg</string>
     <string name="show_fewer">Arată mai puține</string>
+    <string name="text_show_all">Arată tot</string>
     <string name="show_all">Arată toate (%1$s)</string>
     <string name="search_values">Caută între %1$s valori</string>
     <string name="done">Gata</string>

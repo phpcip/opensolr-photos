@@ -1,5 +1,6 @@
 package com.opensolr.photos.ui.screens
 
+import com.opensolr.photos.ui.glass
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import android.content.ContentUris
@@ -210,17 +211,12 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
     if (selecting) {
 
         val shareEnabled = state.selectedSections.isEmpty() && state.selectedAlbums.size == 1 && !state.albumsWorking
-        Row(
+        com.opensolr.photos.ui.Dock(
             Modifier
                 .align(Alignment.BottomCenter)
                 .padding(horizontal = 24.dp)
                 .navigationBarsPadding()
-                .padding(bottom = 14.dp)
-                .clip(Corner)
-                .background(p.paper)
-                .border(1.dp, p.hairline, Corner)
-                .padding(horizontal = 6.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
+                .padding(bottom = 14.dp),
         ) {
             DockAction(R.drawable.ic_share, stringResource(R.string.al_share), enabled = shareEnabled) {
 
@@ -312,8 +308,7 @@ private fun AlbumSectionHeading(
         Modifier
             .fillMaxWidth()
             .padding(top = 10.dp)
-            .clip(Corner)
-            .background(band)
+            .glass(com.opensolr.photos.ui.ButtonShape, band, p.hairline)
             .combinedClickable(onClick = onClick, onLongClick = onLongClick)
             .padding(start = 8.dp, end = 10.dp, top = 7.dp, bottom = 7.dp),
         verticalAlignment = Alignment.CenterVertically,

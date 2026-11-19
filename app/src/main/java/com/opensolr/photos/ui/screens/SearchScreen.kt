@@ -865,8 +865,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                     Modifier
                                         .fillMaxWidth()
                                         .padding(start = 8.dp + (row.level * 12).dp, end = 8.dp, top = if (row.level > 0) 5.dp else 10.dp, bottom = 5.dp)
-                                        .clip(Corner)
-                                        .background(headingBand(row.level))
+                                        .glass(com.opensolr.photos.ui.ButtonShape, headingBand(row.level), p.hairline)
                                         .padding(start = 8.dp, end = 10.dp, top = 9.dp, bottom = 9.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
@@ -891,8 +890,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                         top = if (row.level > 0) 5.dp else 10.dp,
                                         bottom = 5.dp,
                                     )
-                                    .clip(Corner)
-                                    .background(band)
+                                    .glass(com.opensolr.photos.ui.ButtonShape, band, p.hairline)
                                     .combinedClickable(
 
                                         onClick = {
@@ -1360,17 +1358,12 @@ private fun SelectionDock(
     onTag: () -> Unit,
     onMove: () -> Unit,
 ) {
-    val p = LocalPalette.current
-    Row(
+    com.opensolr.photos.ui.Dock(
         modifier
+            .fillMaxWidth()
             .padding(horizontal = 12.dp)
             .navigationBarsPadding()
-            .padding(bottom = 14.dp)
-            .clip(Corner)
-            .background(p.paper)
-            .border(1.dp, p.hairline, Corner)
-            .padding(horizontal = 6.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .padding(bottom = 14.dp),
     ) {
 
         DockAction(R.drawable.ic_tag, stringResource(R.string.dock_tag_n, Actions.formatCompact(count.toLong())), enabled = count > 0, padX = DOCK_PAD_X, onClick = onTag)
@@ -1387,28 +1380,19 @@ private fun SelectionDock(
 }
 
 @Composable
-internal fun androidx.compose.foundation.layout.RowScope.DockAction(icon: Int, label: String, enabled: Boolean, accent: Boolean = false, padX: androidx.compose.ui.unit.Dp = 12.dp, onClick: () -> Unit) {
+internal fun DockAction(icon: Int, label: String, enabled: Boolean, accent: Boolean = false, padX: androidx.compose.ui.unit.Dp = 12.dp, onClick: () -> Unit) {
     val p = LocalPalette.current
     val tint = when {
         !enabled -> p.hairline
         accent -> p.accent
         else -> p.ink
     }
-    Column(
-        Modifier
-            .weight(1f)
-            .padding(horizontal = 3.dp)
-            .clip(Corner)
-
-            .background(p.dockFill)
-            .border(1.dp, p.hairline, Corner)
-            .then(if (enabled) Modifier.combinedClickableCompat(onClick = onClick) else Modifier)
-            .padding(horizontal = padX, vertical = 6.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(painterResource(icon), contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.size(4.dp))
-        Text(label, style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1)
+    com.opensolr.photos.ui.DockCell(enabled = enabled, onClick = onClick) {
+        Column(Modifier.padding(horizontal = 2.dp, vertical = 10.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(painterResource(icon), contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.size(4.dp))
+            Text(label, style = MaterialTheme.typography.labelSmall, color = tint, maxLines = 1, softWrap = false)
+        }
     }
 }
 
@@ -2017,9 +2001,7 @@ private fun Chip(label: String, selected: Boolean, onClick: () -> Unit, trailing
     val view = LocalView.current
     Row(
         Modifier
-            .clip(Corner)
-            .background(if (selected) p.paper else p.chip)
-            .border(1.dp, if (selected) p.accent else p.hairline, Corner)
+            .glass(com.opensolr.photos.ui.DockSoloShape, if (selected) p.paper else p.chip, if (selected) p.accent else p.hairline)
             .combinedClickableCompat(haptic = false) { Haptics.toggle(view, !selected); onClick() }
             .padding(horizontal = 10.dp, vertical = 7.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -2037,9 +2019,7 @@ private fun PlaceButton(label: String, onClick: () -> Unit) {
     val p = LocalPalette.current
     Row(
         Modifier
-            .clip(Corner)
-            .background(p.paper)
-            .border(1.5.dp, p.accent, Corner)
+            .glass(com.opensolr.photos.ui.ButtonShape, p.paper, p.accent)
             .combinedClickableCompat(onClick = onClick)
             .padding(start = 8.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -2149,9 +2129,9 @@ private fun FilterActions(count: Long, onClear: () -> Unit, onDone: () -> Unit) 
     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.End)) {
         OutlinedButton(
             onClick = { Haptics.tick(view, strong = false); onClear() },
-            modifier = Modifier.height(34.dp),
-            shape = Corner,
-            border = BorderStroke(1.dp, p.hairline),
+            modifier = Modifier.height(36.dp).glass(com.opensolr.photos.ui.ButtonShape, p.buttonFill, p.hairline),
+            shape = com.opensolr.photos.ui.ButtonShape,
+            border = null,
             colors = ButtonDefaults.outlinedButtonColors(contentColor = p.ink),
             contentPadding = PaddingValues(horizontal = 12.dp),
         ) {
@@ -2161,9 +2141,9 @@ private fun FilterActions(count: Long, onClear: () -> Unit, onDone: () -> Unit) 
         }
         Button(
             onClick = { Haptics.tick(view, strong = true); onDone() },
-            modifier = Modifier.height(34.dp),
-            shape = Corner,
-            colors = ButtonDefaults.buttonColors(containerColor = p.accentFill, contentColor = p.onAccentFill),
+            modifier = Modifier.height(36.dp).glass(com.opensolr.photos.ui.ButtonShape, p.accentFill, p.accentFill, 1.4f),
+            shape = com.opensolr.photos.ui.ButtonShape,
+            colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, contentColor = p.onAccentFill),
             contentPadding = PaddingValues(horizontal = 12.dp),
             elevation = null,
         ) {
@@ -2315,8 +2295,7 @@ internal fun FilterGroup(title: String, active: Int, open: Boolean, onToggle: ()
             Modifier
                 .fillMaxWidth()
                 .padding(top = 10.dp, bottom = 4.dp)
-                .clip(Corner)
-                .background(headingBand(0))
+                .glass(com.opensolr.photos.ui.ButtonShape, headingBand(0), p.hairline)
                 .combinedClickableCompat { onToggle() }
                 .padding(start = 8.dp, end = 10.dp, top = 7.dp, bottom = 7.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -3281,7 +3260,21 @@ private fun FacetValues(
     }
 
     var expanded by remember(values) { mutableStateOf(false) }
-    val shown = if (expanded || all.size <= FACET_PREVIEW) all else all.take(FACET_PREVIEW) + all.drop(FACET_PREVIEW).filter { it.value in selected }
+    // more values than the preview shows: a box narrows them as it is typed in, Show all still lists every one
+    var text by remember(values) { mutableStateOf("") }
+    val long = all.size > FACET_PREVIEW
+    val folded = remember(all) { if (long) all.map { com.opensolr.photos.data.Words.fold(label(it.value)) } else emptyList() }
+    val needle = if (long) com.opensolr.photos.data.Words.fold(text) else ""
+    val shown = when {
+        needle.isNotEmpty() -> all.filterIndexed { i, facet -> folded[i].contains(needle) || facet.value in selected }
+        expanded || !long -> all
+        else -> all.take(FACET_PREVIEW) + all.drop(FACET_PREVIEW).filter { it.value in selected }
+    }
+    if (long) {
+        FacetBox(text, all.size) { text = it }
+        Spacer(Modifier.height(8.dp))
+        if (shown.isEmpty()) Text(stringResource(R.string.no_value), style = MaterialTheme.typography.bodySmall, color = LocalPalette.current.muted, modifier = Modifier.padding(vertical = 6.dp))
+    }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         shown.forEach { facet ->
             Chip(
@@ -3292,7 +3285,7 @@ private fun FacetValues(
                 },
             )
         }
-        if (all.size > FACET_PREVIEW) {
+        if (long && needle.isEmpty()) {
             Chip(label = if (expanded) stringResource(R.string.show_fewer) else stringResource(R.string.show_all, Actions.formatCount(all.size.toLong())), selected = false, onClick = { expanded = !expanded })
         }
     }
@@ -3327,8 +3320,6 @@ private fun FacetSearch(
             dismissButton = { TextButton(onClick = { removing = null }) { Text(stringResource(R.string.cancel), color = p.muted) } },
         )
     }
-    var open by remember { mutableStateOf(false) }
-
     val folded = remember(all) { all.map { com.opensolr.photos.data.Words.fold(label(it.value)) } }
 
     val matches = remember(all, text) {
@@ -3354,49 +3345,16 @@ private fun FacetSearch(
         }
         Spacer(Modifier.height(8.dp))
     }
-    if (searchable) Row(
-        Modifier
-            .fillMaxWidth()
-            .border(1.dp, if (open) p.accent else p.hairline, Corner)
-            .padding(horizontal = 10.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(Icons.Filled.Search, contentDescription = null, tint = p.muted, modifier = Modifier.size(16.dp))
-        Spacer(Modifier.size(8.dp))
-        Box(Modifier.weight(1f)) {
-            if (text.isEmpty()) {
-                Text(stringResource(R.string.search_values, Actions.formatCount(all.size.toLong())), style = MaterialTheme.typography.bodySmall, color = p.muted)
-            }
-            com.opensolr.photos.ui.TextBox(
-                value = text,
-                onValueChange = { text = it },
-                singleLine = true,
-                textStyle = MaterialTheme.typography.bodySmall.copy(color = p.ink),
-                cursorBrush = androidx.compose.ui.graphics.SolidColor(p.accent),
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                onImeAction = { focus.clearFocus() },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .onFocusChanged { open = it.isFocused },
-            )
-        }
-        if (open) {
-            Text(
-                stringResource(R.string.done),
-                style = MaterialTheme.typography.labelSmall,
-                color = p.accent,
-                modifier = Modifier.clickable { Haptics.tap(view); text = ""; focus.clearFocus() }.padding(start = 8.dp),
-            )
-        }
-    }
+    if (searchable) FacetBox(text, all.size) { text = it }
     run {
         if (searchable) Spacer(Modifier.height(6.dp))
         Column(
             Modifier
                 .fillMaxWidth()
                 .heightIn(max = 300.dp)
-                .background(p.paper, Corner)
-                .border(1.dp, p.hairline, Corner)
+                .clip(com.opensolr.photos.ui.ButtonShape)
+                .background(p.paper)
+                .border(1.dp, p.hairline, com.opensolr.photos.ui.ButtonShape)
                 .verticalScroll(rememberScrollState()),
         ) {
             if (matches.isEmpty()) {
@@ -3442,6 +3400,50 @@ private fun FacetSearch(
     Spacer(Modifier.height(18.dp))
 }
 
+/** The box that narrows a long list of values to the ones holding what is typed. */
+@Composable
+private fun FacetBox(text: String, count: Int, onText: (String) -> Unit) {
+    val p = LocalPalette.current
+    val view = LocalView.current
+    val focus = androidx.compose.ui.platform.LocalFocusManager.current
+    var open by remember { mutableStateOf(false) }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .glass(com.opensolr.photos.ui.ButtonShape, p.paper, if (open) p.accent else p.hairline, 0.6f)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(Icons.Filled.Search, contentDescription = null, tint = p.muted, modifier = Modifier.size(16.dp))
+        Spacer(Modifier.size(8.dp))
+        Box(Modifier.weight(1f)) {
+            if (text.isEmpty()) {
+                Text(stringResource(R.string.search_values, Actions.formatCount(count.toLong())), style = MaterialTheme.typography.bodySmall, color = p.muted)
+            }
+            com.opensolr.photos.ui.TextBox(
+                value = text,
+                onValueChange = onText,
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodySmall.copy(color = p.ink),
+                cursorBrush = androidx.compose.ui.graphics.SolidColor(p.accent),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                onImeAction = { focus.clearFocus() },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .onFocusChanged { open = it.isFocused },
+            )
+        }
+        if (open) {
+            Text(
+                stringResource(R.string.done),
+                style = MaterialTheme.typography.labelSmall,
+                color = p.accent,
+                modifier = Modifier.clickable { Haptics.tap(view); onText(""); focus.clearFocus() }.padding(start = 8.dp),
+            )
+        }
+    }
+}
+
 /** The X beside a name: a bordered square that fills with the accent colour while the finger is on it. */
 @Composable
 private fun RemoveX(onClick: () -> Unit) {
@@ -3452,9 +3454,7 @@ private fun RemoveX(onClick: () -> Unit) {
     Box(
         Modifier
             .size(32.dp)
-            .clip(Corner)
-            .background(if (pressed) p.accentFill else p.chip)
-            .border(1.dp, if (pressed) p.accentFill else p.hairline, Corner)
+            .glass(com.opensolr.photos.ui.DockSoloShape, if (pressed) p.accentFill else p.chip, if (pressed) p.accentFill else p.hairline)
             .clickable(interactionSource = interaction, indication = null) { Haptics.tick(view, strong = true); onClick() },
         contentAlignment = Alignment.Center,
     ) {
@@ -3651,7 +3651,15 @@ internal fun DetailsSheet(
 
             if (hit.ocrText.isNotBlank()) {
                 SectionLabel(stringResource(R.string.sec_printed))
-                Text(hit.ocrText, style = MaterialTheme.typography.bodyMedium, color = p.muted, modifier = Modifier.padding(vertical = 12.dp))
+                // a long text shows its start, the rest on demand
+                var whole by remember(hit.id) { mutableStateOf(false) }
+                val long = hit.ocrText.length > PRINTED_PREVIEW
+                val start = if (long && !whole) hit.ocrText.take(PRINTED_PREVIEW).let { if (it.last().isHighSurrogate()) it.dropLast(1) else it }.trimEnd() + "\u2026" else hit.ocrText
+                Text(start, style = MaterialTheme.typography.bodyMedium, color = p.muted, modifier = Modifier.padding(vertical = 12.dp))
+                if (long) {
+                    GhostButton(stringResource(if (whole) R.string.show_fewer else R.string.text_show_all), onClick = { whole = !whole })
+                    Spacer(Modifier.height(12.dp))
+                }
             }
             Spacer(Modifier.height(24.dp))
         }
@@ -3686,6 +3694,9 @@ internal fun PickTick(selected: Boolean, onClick: () -> Unit, modifier: Modifier
 private val TICK_CLEARANCE = 36.dp
 
 private const val FACET_PREVIEW = 10
+
+/** How much of the text read from a photo its details show before Show all. */
+private const val PRINTED_PREVIEW = 2000
 
 /** Up to this many values are listed; over it a search box finds the rest. */
 private const val FACET_SEARCH_OVER = 500
