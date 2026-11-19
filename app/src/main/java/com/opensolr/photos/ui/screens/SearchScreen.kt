@@ -3327,8 +3327,8 @@ private fun FacetSearch(
         if (needle.isEmpty()) all.sortedByDescending { it.count }
         else all.filterIndexed { i, _ -> folded[i].contains(needle) }
     }
-    // the box only when there are more values than the list shows; the list is always there
-    val searchable = all.size > FACET_SEARCH_OVER
+    // the box from the same number of values as everywhere else; the list is always there
+    val searchable = all.size > FACET_PREVIEW
     val listCap = minOf(cap, FACET_SEARCH_OVER)
     if (selected.isNotEmpty()) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
