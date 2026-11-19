@@ -129,7 +129,7 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
             Spacer(Modifier.height(20.dp))
         }
 
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        com.opensolr.photos.ui.Dock(Modifier.fillMaxWidth()) {
             HeaderItem(stringResource(R.string.sync_btn_resync), onClick = { viewModel.forceResync() }) {
                 Icon(painterResource(R.drawable.ic_sync), contentDescription = null, tint = p.accent, modifier = Modifier.size(20.dp))
             }

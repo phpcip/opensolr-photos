@@ -118,6 +118,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
         if (state.albums.isNotEmpty()) {
             val anyFolded = state.albums.any { it.title in folded }
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 2.dp), horizontalArrangement = Arrangement.End) {
+              com.opensolr.photos.ui.Dock(fill = false) {
 
                 val allPicked = state.albums.all { it.title in state.selectedSections }
                 IconAction(
@@ -135,6 +136,7 @@ fun AlbumsScreen(state: UiState, viewModel: AppViewModel) {
                         viewModel.setAlbumSections(if (anyFolded) emptySet() else state.albums.map { it.title }.toSet())
                     },
                 )
+              }
             }
         }
 

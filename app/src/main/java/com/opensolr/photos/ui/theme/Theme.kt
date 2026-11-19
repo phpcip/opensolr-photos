@@ -73,7 +73,7 @@ private val DarkPalette = Palette(
     onAccent = Color(0xFFFFFFFF),
     accentFill = Color(0xFFB4551F),
     onAccentFill = Color(0xFFFFFFFF),
-    buttonFill = Color(0xFF111111),
+    buttonFill = Color(0xFF1C1B19),
     toolFill = Color(0xFF1A1917),
     dockFill = Color(0xFF26231F),
 )

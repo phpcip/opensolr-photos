@@ -93,6 +93,8 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import com.opensolr.photos.ui.Haptics
+import dev.chrisbanes.haze.haze
+import com.opensolr.photos.ui.glass
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.mutableIntStateOf
@@ -409,9 +411,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     Box(with(outside) { Modifier.fillMaxSize().root() }) {
     Column(Modifier.fillMaxSize()) {
 
-        Row(
+        com.opensolr.photos.ui.Dock(
             Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
         ) {
 
             HeaderItem(stringResource(R.string.nav_me), onClick = { viewModel.open(Screen.Account) }) {
@@ -602,71 +603,73 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                 Spacer(Modifier.width(2.dp))
             }
 
-            if (!state.skippedMode && (!state.duplicatesMode || state.similarToId != null)) {
-                val browsing = !state.duplicatesMode && state.query.isBlank() && state.filters.count == 0
-                GroupByButton(
-                    current = if (browsing && state.groupBy == com.opensolr.photos.ui.GroupBy.RELEVANCE) com.opensolr.photos.ui.GroupBy.DATE else state.groupBy,
-                    options = if (browsing) com.opensolr.photos.ui.GroupBy.entries - com.opensolr.photos.ui.GroupBy.RELEVANCE else com.opensolr.photos.ui.GroupBy.entries,
-                    onPick = { viewModel.setGroupBy(it) },
-                )
-            }
+            com.opensolr.photos.ui.Dock(Modifier.padding(start = 8.dp), fill = false) {
+                if (!state.skippedMode && (!state.duplicatesMode || state.similarToId != null)) {
+                    val browsing = !state.duplicatesMode && state.query.isBlank() && state.filters.count == 0
+                    GroupByButton(
+                        current = if (browsing && state.groupBy == com.opensolr.photos.ui.GroupBy.RELEVANCE) com.opensolr.photos.ui.GroupBy.DATE else state.groupBy,
+                        options = if (browsing) com.opensolr.photos.ui.GroupBy.entries - com.opensolr.photos.ui.GroupBy.RELEVANCE else com.opensolr.photos.ui.GroupBy.entries,
+                        onPick = { viewModel.setGroupBy(it) },
+                    )
+                }
 
-            IconAction(
-                icon = R.drawable.ic_filters,
-                label = stringResource(R.string.filters),
-                active = state.filters.count > 0,
-                badge = state.filters.count,
-                onClick = { showFilters = true },
-            )
-
-            IconAction(
-                icon = R.drawable.ic_duplicates,
-                label = if (!state.duplicatesMode) stringResource(R.string.dup_open) else stringResource(R.string.back_all),
-                active = state.duplicatesMode,
-                onClick = { viewModel.showDuplicates() },
-            )
-
-            if (state.skippedCount > 0 || state.skippedMode) {
                 IconAction(
-                    icon = R.drawable.ic_skipped,
-                    label = if (!state.skippedMode) stringResource(R.string.skipped_open) else stringResource(R.string.back_all),
-                    active = state.skippedMode,
-                    danger = true,
-                    onClick = { viewModel.showSkipped() },
+                    icon = R.drawable.ic_filters,
+                    label = stringResource(R.string.filters),
+                    active = state.filters.count > 0,
+                    badge = state.filters.count,
+                    onClick = { showFilters = true },
                 )
-            }
 
-            IconAction(
-                icon = R.drawable.ic_reload,
-                label = stringResource(R.string.reload),
-                accent = true,
-                enabled = !state.searching,
-                onClick = { viewModel.forceRefresh() },
-            )
-
-            // while selecting: a link of the chosen items; otherwise what is shown (the words and filters) as an
-            // album that keeps up with new photos, only for a search or a filter (never the whole library)
-            if (viewModel.canLink && !state.duplicatesMode && !state.skippedMode && (state.selecting || state.searchedQuery.isNotBlank() || state.filters.count > 0)) {
                 IconAction(
-                    icon = R.drawable.ic_link,
-                    label = stringResource(R.string.sl_toolbar),
-                    onClick = {
-                        if (state.selecting) shareLinkFor = viewModel.photosToTag().takeIf { it.isNotEmpty() }
-                        else viewModel.albumSpec()?.let { albumLink = it to viewModel.albumTitle() }
-                    },
+                    icon = R.drawable.ic_duplicates,
+                    label = if (!state.duplicatesMode) stringResource(R.string.dup_open) else stringResource(R.string.back_all),
+                    active = state.duplicatesMode,
+                    onClick = { viewModel.showDuplicates() },
                 )
-            }
 
-            val headingKeys = remember(rows) { rows.filterIsInstance<GridRow.Heading>().map { it.key }.toSet() }
-            if (headingKeys.isNotEmpty()) {
-                val anyCollapsed = state.collapsedHeadings.any { it in headingKeys }
+                if (state.skippedCount > 0 || state.skippedMode) {
+                    IconAction(
+                        icon = R.drawable.ic_skipped,
+                        label = if (!state.skippedMode) stringResource(R.string.skipped_open) else stringResource(R.string.back_all),
+                        active = state.skippedMode,
+                        danger = true,
+                        onClick = { viewModel.showSkipped() },
+                    )
+                }
+
                 IconAction(
-                    icon = if (anyCollapsed) R.drawable.ic_expand_all else R.drawable.ic_collapse_all,
-                    label = if (anyCollapsed) stringResource(R.string.expand_all) else stringResource(R.string.collapse_all),
-                    onClick = {
-                        viewModel.setAllHeadings(if (anyCollapsed) emptySet() else headingKeys)
-                    },
+                    icon = R.drawable.ic_reload,
+                    label = stringResource(R.string.reload),
+                    accent = true,
+                    enabled = !state.searching,
+                    onClick = { viewModel.forceRefresh() },
                 )
+
+                // while selecting: a link of the chosen items; otherwise what is shown (the words and filters) as an
+                // album that keeps up with new photos, only for a search or a filter (never the whole library)
+                if (viewModel.canLink && !state.duplicatesMode && !state.skippedMode && (state.selecting || state.searchedQuery.isNotBlank() || state.filters.count > 0)) {
+                    IconAction(
+                        icon = R.drawable.ic_link,
+                        label = stringResource(R.string.sl_toolbar),
+                        onClick = {
+                            if (state.selecting) shareLinkFor = viewModel.photosToTag().takeIf { it.isNotEmpty() }
+                            else viewModel.albumSpec()?.let { albumLink = it to viewModel.albumTitle() }
+                        },
+                    )
+                }
+
+                val headingKeys = remember(rows) { rows.filterIsInstance<GridRow.Heading>().map { it.key }.toSet() }
+                if (headingKeys.isNotEmpty()) {
+                    val anyCollapsed = state.collapsedHeadings.any { it in headingKeys }
+                    IconAction(
+                        icon = if (anyCollapsed) R.drawable.ic_expand_all else R.drawable.ic_collapse_all,
+                        label = if (anyCollapsed) stringResource(R.string.expand_all) else stringResource(R.string.collapse_all),
+                        onClick = {
+                            viewModel.setAllHeadings(if (anyCollapsed) emptySet() else headingKeys)
+                        },
+                    )
+                }
             }
         }
 
@@ -1779,16 +1782,11 @@ private const val MIN_BEST_MATCHES = 3
 private const val ALSO_SIMILAR_SHARE = 0.6
 
 @Composable
-internal fun RowScope.HeaderItem(label: String, active: Boolean = false, onClick: () -> Unit, icon: @Composable () -> Unit) {
+internal fun HeaderItem(label: String, active: Boolean = false, onClick: () -> Unit, icon: @Composable () -> Unit) {
     val p = LocalPalette.current
+    com.opensolr.photos.ui.DockCell(wash = if (active) p.accent.copy(alpha = 0.12f) else Color.Transparent, onClick = onClick) {
     Column(
-        Modifier
-            .weight(1f)
-            .clip(Corner)
-            .background(p.buttonFill)
-            .border(1.dp, if (active) p.accent else p.hairline, Corner)
-            .combinedClickableCompat { onClick() }
-            .padding(vertical = 6.dp),
+        Modifier.padding(vertical = 8.dp, horizontal = 2.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) { icon() }
@@ -1803,6 +1801,7 @@ internal fun RowScope.HeaderItem(label: String, active: Boolean = false, onClick
             softWrap = false,
             overflow = TextOverflow.Clip,
         )
+    }
     }
 }
 
@@ -1940,17 +1939,19 @@ internal fun IconAction(
         active || accent -> p.accent
         else -> p.ink
     }
-    Box(
-        Modifier
+    val docked = com.opensolr.photos.ui.LocalDock.current
+    val lit = if (danger) SkippedRed else p.accent
+    com.opensolr.photos.ui.DockCell(
+        modifier = if (docked) Modifier.size(width = 40.dp, height = 38.dp)
+        else Modifier
             .padding(start = 6.dp)
-            .size(36.dp)
-            .clip(Corner)
-
-            .background(p.toolFill)
-            .border(1.dp, if (active) (if (danger) SkippedRed else p.accent) else p.hairline, Corner)
-            .combinedClickableCompat { if (enabled) onClick() },
-        contentAlignment = Alignment.Center,
+            .size(38.dp)
+            .glass(com.opensolr.photos.ui.DockSoloShape, p.buttonFill, if (active) lit else p.hairline),
+        enabled = enabled,
+        wash = if (active) lit.copy(alpha = 0.12f) else Color.Transparent,
+        onClick = onClick,
     ) {
+        Box(Modifier.size(36.dp), contentAlignment = Alignment.Center) {
         Icon(painterResource(icon), contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
         if (badge > 0) {
             Text(
@@ -1962,6 +1963,7 @@ internal fun IconAction(
                     .background(p.accentFill, Corner)
                     .padding(horizontal = 3.dp),
             )
+        }
         }
     }
 }
@@ -2818,11 +2820,12 @@ internal fun PhotoViewer(
 
             val shade = (1f - (kotlin.math.abs(dismiss.value) / (closeAt * 2f))).coerceIn(0.35f, 1f)
             Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = shade))) {
+            val glass = remember { dev.chrisbanes.haze.HazeState() }
             HorizontalPager(
                 state = pager,
 
                 userScrollEnabled = scale <= 1.01f && !videoControls,
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize().haze(glass),
             ) { page ->
                 val hit = hitAt(page) ?: return@HorizontalPager
                 val cloudFile = com.opensolr.photos.storage.CloudFiles.model(context, hit.id)
@@ -3097,19 +3100,16 @@ internal fun PhotoViewer(
                     )
                 }
                 }
-                Row(
+                com.opensolr.photos.ui.Dock(
                     Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .background(Color(0xCC000000))
-
                         .padding(
                             start = 12.dp + sideLeft,
                             end = 12.dp + sideRight,
-                            top = 12.dp,
                             bottom = maxOf(bottomInset, VIEWER_MIN_BOTTOM) + overflow + 12.dp,
                         ),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    glass = glass,
                 ) {
 
                     // a photo still syncing shows its actions greyed out until its document is back;
@@ -3242,32 +3242,24 @@ internal fun PhotoViewer(
 }
 
 @Composable
-private fun RowScope.ViewerAction(label: String, icon: Int, enabled: Boolean = true, onClick: () -> Unit) {
+private fun ViewerAction(label: String, icon: Int, enabled: Boolean = true, onClick: () -> Unit) {
     ViewerActionFrame(enabled, onClick) {
         Icon(painterResource(icon), contentDescription = label, tint = Color.White, modifier = Modifier.size(26.dp))
     }
 }
 
 @Composable
-private fun RowScope.ViewerIconAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, enabled: Boolean = true, onClick: () -> Unit) {
+private fun ViewerIconAction(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector, enabled: Boolean = true, onClick: () -> Unit) {
     ViewerActionFrame(enabled, onClick) {
         Icon(icon, contentDescription = label, tint = Color.White, modifier = Modifier.size(26.dp))
     }
 }
 
 @Composable
-private fun RowScope.ViewerActionFrame(enabled: Boolean, onClick: () -> Unit, content: @Composable () -> Unit) {
-    Box(
-        Modifier
-            .weight(1f)
-            .alpha(if (enabled) 1f else 0.3f)
-            .clip(Corner)
-
-            .border(1.dp, Color.White.copy(alpha = 0.45f), Corner)
-            .then(if (enabled) Modifier.combinedClickableCompat(onClick = onClick) else Modifier)
-            .padding(vertical = 10.dp),
-        contentAlignment = Alignment.Center,
-    ) { content() }
+private fun ViewerActionFrame(enabled: Boolean, onClick: () -> Unit, content: @Composable () -> Unit) {
+    com.opensolr.photos.ui.DockCell(Modifier.alpha(if (enabled) 1f else 0.3f), enabled = enabled, onClick = onClick) {
+        Box(Modifier.padding(vertical = 13.dp), contentAlignment = Alignment.Center) { content() }
+    }
 }
 
 @OptIn(ExperimentalLayoutApi::class)

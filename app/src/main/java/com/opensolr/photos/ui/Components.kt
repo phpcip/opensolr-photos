@@ -132,15 +132,15 @@ fun AccentButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifie
     val p = LocalPalette.current
     val source = remember { MutableInteractionSource() }
     val pressed by source.collectIsPressedAsState()
-    val fill by androidx.compose.animation.animateColorAsState(if (pressed) p.ink else p.accentFill, label = "accentfill")
+    val fill by androidx.compose.animation.animateColorAsState(if (!enabled) p.chip else if (pressed) p.ink else p.accentFill, label = "accentfill")
     val view = androidx.compose.ui.platform.LocalView.current
     Button(
         onClick = { Haptics.tick(view, true); onClick() },
         enabled = enabled,
         interactionSource = source,
-        modifier = modifier.height(52.dp).scale(pressedScale(source)),
-        shape = Corner,
-        colors = ButtonDefaults.buttonColors(containerColor = fill, contentColor = p.onAccentFill, disabledContainerColor = p.chip, disabledContentColor = p.muted),
+        modifier = modifier.height(52.dp).scale(pressedScale(source)).glass(ButtonShape, fill, fill, if (enabled) 1.4f else 0.5f),
+        shape = ButtonShape,
+        colors = ButtonDefaults.buttonColors(containerColor = androidx.compose.ui.graphics.Color.Transparent, contentColor = p.onAccentFill, disabledContainerColor = androidx.compose.ui.graphics.Color.Transparent, disabledContentColor = p.muted),
         contentPadding = PaddingValues(horizontal = 24.dp),
         elevation = null,
     ) {
@@ -158,9 +158,9 @@ fun GhostButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier
         onClick = { Haptics.tap(view); onClick() },
         enabled = enabled,
         interactionSource = source,
-        modifier = modifier.height(52.dp).scale(pressedScale(source)),
-        shape = Corner,
-        border = BorderStroke(if (pressed) 2.dp else 1.dp, if (!enabled) p.hairline else if (pressed) p.accent else p.ink),
+        modifier = modifier.height(52.dp).scale(pressedScale(source)).glass(ButtonShape, p.buttonFill, if (pressed) p.accent else p.hairline, if (enabled) 1f else 0.4f),
+        shape = ButtonShape,
+        border = null,
         colors = ButtonDefaults.outlinedButtonColors(contentColor = p.ink, containerColor = pressedTint(source)),
         contentPadding = PaddingValues(horizontal = 24.dp),
     ) {
@@ -188,7 +188,7 @@ fun TextButton(
         modifier = modifier.scale(if (enabled) pressedScale(source) else 1f),
         enabled = enabled,
         interactionSource = source,
-        shape = Corner,
+        shape = ButtonShape,
         colors = ButtonDefaults.textButtonColors(containerColor = pressedTint(source)),
         contentPadding = contentPadding,
         content = content,

@@ -153,4 +153,5 @@ dependencies {
     implementation(libs.slf4j.nop)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
+    implementation(libs.haze)
 }

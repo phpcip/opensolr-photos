@@ -1,5 +1,6 @@
 package com.opensolr.photos.ui.screens
 
+import com.opensolr.photos.ui.glass
 import android.app.Activity
 import android.net.Uri
 import android.os.Build
@@ -857,7 +858,7 @@ internal fun PhotoEditorScreen(hit: PhotoHit, synced: Set<String>, topInset: Dp,
                 }
             }
 
-            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            com.opensolr.photos.ui.Dock(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), dark = true) {
                 ToolButton(stringResource(R.string.ed_crop), R.drawable.ic_crop, tool == Tool.Crop) { pick(Tool.Crop) }
                 ToolButton(stringResource(R.string.ed_rotate), R.drawable.ic_rotate_right, tool == Tool.Rotate) { pick(Tool.Rotate) }
                 ToolButton(stringResource(R.string.ed_resize), R.drawable.ic_resize, tool == Tool.Resize) { pick(Tool.Resize) }
@@ -921,21 +922,15 @@ internal fun PhotoEditorScreen(hit: PhotoHit, synced: Set<String>, topInset: Dp,
 }
 
 @Composable
-private fun RowScope.ToolButton(label: String, icon: Int, selected: Boolean, onClick: () -> Unit) {
+private fun ToolButton(label: String, icon: Int, selected: Boolean, onClick: () -> Unit) {
     val p = LocalPalette.current
     val tint = if (selected) p.accent else Color.White
-    Column(
-        Modifier
-            .weight(1f)
-            .clip(Corner)
-            .border(if (selected) 2.dp else 1.dp, if (selected) p.accent else Color.White.copy(alpha = 0.45f), Corner)
-            .tapClickable(onClick = onClick)
-            .padding(vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Icon(painterResource(icon), contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.height(4.dp))
-        Text(label, color = tint, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+    com.opensolr.photos.ui.DockCell(wash = if (selected) p.accent.copy(alpha = 0.22f) else Color.Transparent, onClick = onClick) {
+        Column(Modifier.padding(vertical = 9.dp, horizontal = 2.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Icon(painterResource(icon), contentDescription = label, tint = tint, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.height(4.dp))
+            Text(label, color = tint, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+        }
     }
 }
 
@@ -950,9 +945,12 @@ private fun RowScope.PanelButton(label: String, icon: Int? = null, enabled: Bool
     Row(
         Modifier
             .weight(1f)
-            .clip(Corner)
-            .background(if (accent && enabled) p.accentFill else Color.Transparent)
-            .border(1.dp, if (accent && enabled) p.accentFill else Color.White.copy(alpha = if (enabled) 0.45f else 0.2f), Corner)
+            .glass(
+                com.opensolr.photos.ui.ButtonShape,
+                if (accent && enabled) p.accentFill else Color.White.copy(alpha = 0.10f),
+                if (accent && enabled) p.accentFill else Color.White.copy(alpha = if (enabled) 0.30f else 0.12f),
+                if (enabled) 1f else 0.4f,
+            )
             .tapClickable(enabled = enabled, onClick = onClick)
             .padding(vertical = 12.dp),
         horizontalArrangement = Arrangement.Center,

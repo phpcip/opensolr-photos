@@ -110,6 +110,7 @@ import com.opensolr.photos.ui.AccentButton
 import com.opensolr.photos.ui.Haptics
 import com.opensolr.photos.ui.IconButton
 import com.opensolr.photos.ui.pressedScale
+import com.opensolr.photos.ui.glass
 import com.opensolr.photos.ui.pressedTint
 import com.opensolr.photos.ui.theme.LocalPalette
 import kotlinx.coroutines.Dispatchers
@@ -654,9 +655,9 @@ private fun LightGhostButton(text: String, enabled: Boolean, modifier: Modifier 
         onClick = { Haptics.tap(view); onClick() },
         enabled = enabled,
         interactionSource = source,
-        modifier = modifier.height(52.dp).scale(pressedScale(source)),
-        shape = RoundedCornerShape(2.dp),
-        border = BorderStroke(1.dp, if (enabled) White else White.copy(alpha = DISABLED)),
+        modifier = modifier.height(52.dp).scale(pressedScale(source)).glass(com.opensolr.photos.ui.ButtonShape, White.copy(alpha = 0.10f), White.copy(alpha = if (enabled) 0.30f else 0.12f)),
+        shape = com.opensolr.photos.ui.ButtonShape,
+        border = null,
         colors = ButtonDefaults.outlinedButtonColors(contentColor = White, containerColor = pressedTint(source), disabledContentColor = White.copy(alpha = DISABLED)),
     ) {
         Text(text, style = MaterialTheme.typography.labelLarge)
