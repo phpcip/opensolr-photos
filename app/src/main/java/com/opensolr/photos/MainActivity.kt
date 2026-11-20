@@ -53,6 +53,7 @@ class MainActivity : ComponentActivity() {
             intent.removeExtra(EXTRA_DESTINATION)
             if (it == DESTINATION_SYNC) viewModel.openIfSignedIn(Screen.Sync)
             if (it == DESTINATION_STORAGE) viewModel.openIfSignedIn(Screen.Storage)
+            if (it == DESTINATION_BACKUP) viewModel.openBackupSettings()
         }
     }
 
@@ -61,5 +62,6 @@ class MainActivity : ComponentActivity() {
         const val EXTRA_DESTINATION = "com.opensolr.photos.DESTINATION"
         const val DESTINATION_SYNC = "sync"
         const val DESTINATION_STORAGE = "storage"
+        const val DESTINATION_BACKUP = "backup"
     }
 }

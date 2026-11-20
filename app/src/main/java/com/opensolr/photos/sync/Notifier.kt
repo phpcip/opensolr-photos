@@ -56,7 +56,8 @@ object Notifier {
             .setContentText(AppText.s(R.string.stg_wait_wifi_text))
             .setOnlyAlertOnce(true)
             .setSilent(true)
-            .setContentIntent(openApp(context, MainActivity.DESTINATION_SYNC))
+            .setAutoCancel(true)
+            .setContentIntent(openApp(context, MainActivity.DESTINATION_BACKUP))
             .build()
     )
 

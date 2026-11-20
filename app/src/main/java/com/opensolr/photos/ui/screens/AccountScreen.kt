@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
@@ -51,7 +52,7 @@ import com.opensolr.photos.ui.UiState
 import com.opensolr.photos.ui.UsageRow
 import com.opensolr.photos.ui.theme.LocalPalette
 
-@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
 fun AccountScreen(state: UiState, viewModel: AppViewModel) {
     val view = androidx.compose.ui.platform.LocalView.current
@@ -208,7 +209,15 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                     }
                 }
                 SubZone(stringResource(R.string.stg_zone), "set_backup" in state.meZonesOpen, { viewModel.toggleMeZone("set_backup") }) {
-                    Column {
+                    val backupSpot = remember { androidx.compose.foundation.relocation.BringIntoViewRequester() }
+                    LaunchedEffect(state.meFocus) {
+                        if (state.meFocus == "set_backup") {
+                            repeat(12) { androidx.compose.runtime.withFrameNanos { } }
+                            runCatching { backupSpot.bringIntoView() }
+                            viewModel.meFocusDone()
+                        }
+                    }
+                    Column(Modifier.bringIntoViewRequester(backupSpot)) {
                         Row(Modifier.fillMaxWidth().padding(vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text(stringResource(R.string.stg_mobile_data), style = MaterialTheme.typography.bodyLarge, color = p.ink)

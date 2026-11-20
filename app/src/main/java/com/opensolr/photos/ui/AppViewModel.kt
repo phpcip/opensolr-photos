@@ -164,6 +164,7 @@ data class UiState(
     val skeleton: List<com.opensolr.photos.ui.DateGroup> = emptyList(),
 
     val meZonesOpen: Set<String> = emptySet(),
+    val meFocus: String? = null,
 
     val statsOpen: Set<String> = emptySet(),
 
@@ -2940,6 +2941,17 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (screen == Screen.Account) refreshAccount()
         if (screen == Screen.Sync) refreshFolderCounts()
     }
+
+    /** Me › Settings › Backup, opened and brought into view: where "Use mobile data" is. */
+    fun openBackupSettings() {
+        if (prefs.session == null || prefs.connection == null) return
+        val zones = _state.value.meZonesOpen + "settings" + "set_backup"
+        prefs.meZonesOpen = zones
+        _state.update { it.copy(meZonesOpen = zones, meFocus = "set_backup") }
+        open(Screen.Account)
+    }
+
+    fun meFocusDone() = _state.update { it.copy(meFocus = null) }
 
     fun openIfSignedIn(screen: Screen) {
         if (prefs.session != null && prefs.connection != null) open(screen)
