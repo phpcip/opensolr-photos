@@ -22,7 +22,7 @@ import com.opensolr.photos.R
 import com.opensolr.photos.data.AppPrefs
 import com.opensolr.photos.sync.Notifier
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -97,7 +97,7 @@ class StorageWorker(context: Context, params: WorkerParameters) : CoroutineWorke
     }
 }
 
-data class StorageStatus(val running: Boolean, val queued: Boolean, val phase: String, val done: Int, val total: Int) {
+data class StorageStatus(val running: Boolean, val queued: Boolean, val phase: String, val done: Int, val total: Int, val waiting: Boolean = false) {
     val busy: Boolean get() = running || queued
 }
 
@@ -174,11 +174,13 @@ object StorageScheduler {
     }
 
     fun status(context: Context): Flow<StorageStatus> =
-        WorkManager.getInstance(context).getWorkInfosByTagFlow(TAG).map { infos ->
+        WorkManager.getInstance(context).getWorkInfosByTagFlow(TAG).combine(com.opensolr.photos.data.NetHold.held) { infos, held ->
             val running = infos.firstOrNull { it.state == WorkInfo.State.RUNNING }
+            val queuedNow = infos.any { it.state == WorkInfo.State.ENQUEUED && NOW in it.tags }
             StorageStatus(
                 running = running != null,
-                queued = infos.any { it.state == WorkInfo.State.ENQUEUED && NOW in it.tags },
+                queued = queuedNow && !held,
+                waiting = queuedNow && held,
                 phase = running?.progress?.getString(StorageWorker.KEY_PHASE) ?: "",
                 done = running?.progress?.getInt(StorageWorker.KEY_DONE, 0) ?: 0,
                 total = running?.progress?.getInt(StorageWorker.KEY_TOTAL, 0) ?: 0,

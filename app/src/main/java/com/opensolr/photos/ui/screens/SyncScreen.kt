@@ -86,6 +86,7 @@ fun SyncScreen(state: UiState, viewModel: AppViewModel) {
                 }
             }
 
+            sync.waiting -> Text(stringResource(R.string.stg_rs_wifi), style = MaterialTheme.typography.titleMedium, color = p.ink)
             sync.queued -> Text(stringResource(R.string.sync_queued), style = MaterialTheme.typography.titleMedium, color = p.ink)
             else -> Text(statusLine(state), style = MaterialTheme.typography.titleMedium, color = p.ink)
         }

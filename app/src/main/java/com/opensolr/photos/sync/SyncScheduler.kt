@@ -14,7 +14,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.opensolr.photos.data.SyncSchedule
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.combine
 import java.util.concurrent.TimeUnit
 
 data class SyncStatus(
@@ -23,6 +23,7 @@ data class SyncStatus(
     val phase: String,
     val done: Int,
     val total: Int,
+    val waiting: Boolean = false,
 ) {
 
     val busy: Boolean get() = running || queued
@@ -95,7 +96,7 @@ object SyncScheduler {
         val request = OneTimeWorkRequestBuilder<SyncWorker>()
             .setConstraints(
                 Constraints.Builder()
-                    .setRequiredNetworkType(network(context))
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
                     .addContentUriTrigger(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, true)
                     .apply {
                         val prefs = com.opensolr.photos.data.AppPrefs(context)
@@ -170,13 +171,13 @@ object SyncScheduler {
     }
 
     fun status(context: Context): Flow<SyncStatus> =
-        WorkManager.getInstance(context).getWorkInfosByTagFlow(TAG).map { infos ->
+        WorkManager.getInstance(context).getWorkInfosByTagFlow(TAG).combine(com.opensolr.photos.data.NetHold.held) { infos, held ->
             val running = infos.firstOrNull { it.state == WorkInfo.State.RUNNING }
-
             val queuedNow = infos.any { it.state == WorkInfo.State.ENQUEUED && NOW in it.tags }
             SyncStatus(
                 running = running != null,
-                queued = queuedNow,
+                queued = queuedNow && !held,
+                waiting = queuedNow && held,
                 phase = running?.progress?.getString(SyncWorker.KEY_PHASE) ?: "",
                 done = running?.progress?.getInt(SyncWorker.KEY_DONE, 0) ?: 0,
                 total = running?.progress?.getInt(SyncWorker.KEY_TOTAL, 0) ?: 0,

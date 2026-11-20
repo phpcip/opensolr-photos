@@ -312,6 +312,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             var lastStep = -1 to -1
             SyncScheduler.status(context).collect { status ->
                 _state.update { it.copy(sync = status) }
+                if (status.waiting) com.opensolr.photos.sync.Notifier.waitingWifi(context)
                 if (wasBusy && !status.busy) onSyncFinished()
                 wasBusy = status.busy
                 // every batch the sync sends shows up in the list as it lands, not at the end
@@ -1072,7 +1073,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     )
                 }
                 flash(AppText.p(R.plurals.vm_saved_n, ids.size, Actions.formatCount(ids.size.toLong())))
-                _state.update { it.copy(sync = it.sync.copy(queued = true)) }
+                if (!com.opensolr.photos.data.NetHold.held.value) _state.update { it.copy(sync = it.sync.copy(queued = true)) }
                 SyncScheduler.runNow(context)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -1133,7 +1134,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 flash(AppText.p(R.plurals.vm_saved_n, ids.size, Actions.formatCount(ids.size.toLong())))
                 // the sync shows as started straight away; the real status replaces this in a moment
-                _state.update { it.copy(sync = it.sync.copy(queued = true)) }
+                if (!com.opensolr.photos.data.NetHold.held.value) _state.update { it.copy(sync = it.sync.copy(queued = true)) }
                 SyncScheduler.runNow(context)
             } catch (e: kotlinx.coroutines.CancellationException) {
                 throw e
@@ -1420,6 +1421,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     fun setUseMobileData(on: Boolean) {
         prefs.useMobileData = on
         _state.update { it.copy(useMobileData = on) }
+        com.opensolr.photos.data.NetHold.check(context)
         // the queued runs take the new network rule
         SyncScheduler.applySchedule(context, prefs.schedule)
         com.opensolr.photos.storage.StorageScheduler.applySchedule(context)
@@ -2737,15 +2739,18 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         if (_state.value.pulling) return
         _state.update { it.copy(pulling = true) }
         viewModelScope.launch {
+            val held = com.opensolr.photos.data.NetHold.held.value
             withContext(Dispatchers.IO) {
-                runCatching { com.opensolr.photos.storage.Deletions.pull(context) }
-                runCatching { com.opensolr.photos.search.IndexChanges.pull(context) }
+                if (!held) {
+                    runCatching { com.opensolr.photos.storage.Deletions.pull(context) }
+                    runCatching { com.opensolr.photos.search.IndexChanges.pull(context) }
+                }
                 searches.clearCache()
             }
             _state.update { it.copy(cachedCount = 0) }
             if (!_state.value.duplicatesMode && !_state.value.skippedMode) search(reset = true, keepLoaded = true) else refresh()
             _state.update { it.copy(pulling = false) }
-            syncNow()
+            if (!held) syncNow()
         }
     }
 

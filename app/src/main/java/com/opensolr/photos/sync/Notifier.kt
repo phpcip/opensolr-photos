@@ -19,6 +19,7 @@ object Notifier {
     const val CHANNEL_ALERTS = "alerts"
     const val PROGRESS_ID = 1001
     const val STORAGE_ID = 1002
+    private const val WAIT_WIFI_ID = 1003
     private const val ALERT_SIGN_IN = 2001
     private const val ALERT_LIMIT = 2002
     private const val ACCOUNT_URL = "https://opensolr.com/admin/solr_manager/dashboard"
@@ -46,6 +47,20 @@ object Notifier {
             .setProgress(total, done, total <= 0)
             .setContentIntent(openApp(context, if (id == STORAGE_ID) MainActivity.DESTINATION_STORAGE else MainActivity.DESTINATION_SYNC))
             .build()
+
+    fun waitingWifi(context: Context) = post(
+        context, WAIT_WIFI_ID,
+        NotificationCompat.Builder(context, CHANNEL_SYNC)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(AppText.s(R.string.stg_wait_wifi))
+            .setContentText(AppText.s(R.string.stg_wait_wifi_text))
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setContentIntent(openApp(context, MainActivity.DESTINATION_SYNC))
+            .build()
+    )
+
+    fun waitingWifiDone(context: Context) = NotificationManagerCompat.from(context).cancel(WAIT_WIFI_ID)
 
     fun signInRequired(context: Context) = post(
         context, ALERT_SIGN_IN,

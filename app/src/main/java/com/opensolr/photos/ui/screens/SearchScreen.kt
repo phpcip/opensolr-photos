@@ -305,6 +305,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         Thread { com.opensolr.photos.storage.Deletions.promptsDone(context, done) }.start()
     }
     val cloneTick by com.opensolr.photos.data.CloneChanges.tick.collectAsState()
+    val netHeld by com.opensolr.photos.data.NetHold.held.collectAsState()
     LaunchedEffect(cloneTick) {
         if (askIds.isNotEmpty()) return@LaunchedEffect
         val waiting = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opensolr.photos.data.PhotoCache.of(context).promptDeleted() }
@@ -1020,7 +1021,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                     )
                                 }
                                 if (hit.pending && !state.skippedMode) {
-                                    SyncingMark(Modifier.align(Alignment.TopEnd).padding(4.dp))
+                                    if (netHeld) WaitingMark(Modifier.align(Alignment.TopEnd).padding(4.dp)) else SyncingMark(Modifier.align(Alignment.TopEnd).padding(4.dp))
                                 } else if (!state.skippedMode) {
                                     // while picking, the marks stay, under the tick
                                     PhotoMarks(
@@ -3084,7 +3085,7 @@ internal fun PhotoViewer(
                         )
                     }
                     Text(
-                        stringResource(if (hit.pending) R.string.still_syncing else R.string.details),
+                        stringResource(if (hit.pending) (if (com.opensolr.photos.data.NetHold.held.collectAsState().value) R.string.stg_rs_wifi else R.string.still_syncing) else R.string.details),
                         style = MaterialTheme.typography.labelSmall,
                         color = Color.White.copy(alpha = 0.55f),
                         modifier = Modifier.padding(top = 8.dp),
@@ -3786,6 +3787,13 @@ private fun SyncingMark(modifier: Modifier = Modifier) {
                 modifier = Modifier.size(12.dp).graphicsLayer { rotationZ = turn },
             )
         }
+    }
+}
+
+@Composable
+private fun WaitingMark(modifier: Modifier = Modifier) {
+    Box(modifier) {
+        PhotoMark { Icon(painterResource(R.drawable.ic_wifi_wait), contentDescription = stringResource(R.string.stg_rs_wifi), tint = Color.White, modifier = Modifier.size(12.dp)) }
     }
 }
 

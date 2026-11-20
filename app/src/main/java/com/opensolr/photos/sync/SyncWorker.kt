@@ -26,6 +26,12 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
             if (SyncScheduler.isWatchRun(tags)) {
 
                 if (!touchesChosenFolders(prefs)) return Result.success()
+                // new photos on mobile data with it switched off: said once, synced when Wi-Fi is back
+                if (com.opensolr.photos.data.NetHold.heldNow(applicationContext)) {
+                    Notifier.waitingWifi(applicationContext)
+                    SyncScheduler.runNow(applicationContext)
+                    return Result.success()
+                }
                 val since = System.currentTimeMillis() - prefs.lastWatchSyncAt
                 if (since < SyncScheduler.WATCH_MIN_INTERVAL_MS) {
                     SyncScheduler.runLater(applicationContext, SyncScheduler.WATCH_MIN_INTERVAL_MS - since)
@@ -33,6 +39,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                 }
                 prefs.lastWatchSyncAt = System.currentTimeMillis()
             }
+            Notifier.waitingWifiDone(applicationContext)
             promote("Preparing", 0, 0)
             // deletions first: this phone's are told to the account, the other devices' are removed here
             runCatching { com.opensolr.photos.storage.Deletions.push(applicationContext); com.opensolr.photos.storage.Deletions.pull(applicationContext) }

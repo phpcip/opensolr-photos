@@ -106,6 +106,7 @@ private fun StorageOverview(state: UiState, viewModel: AppViewModel, storage: St
                 Text(stringResource(R.string.stg_x_of_y, Actions.formatCount(status.done.toLong()), Actions.formatCount(status.total.toLong())), style = MaterialTheme.typography.bodyMedium, color = p.muted)
             }
         }
+        status.waiting -> Text(stringResource(R.string.stg_rs_wifi), style = MaterialTheme.typography.titleMedium, color = p.ink)
         status.queued -> Text(stringResource(R.string.stg_queued), style = MaterialTheme.typography.titleMedium, color = p.ink)
         else -> state.storageReport?.let { report ->
             val parts = buildList {

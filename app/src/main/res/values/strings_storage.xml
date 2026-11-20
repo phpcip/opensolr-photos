@@ -9,6 +9,10 @@
     <string name="stg_quality_1080">1080p</string>
     <string name="stg_open">Storage backend</string>
     <string name="stg_open_text">Your photos backed up to your own S3 bucket or WebDAV folder, and brought back on a new phone.</string>
+    <string name="stg_open_set">Backup and backend</string>
+    <string name="stg_open_set_text">Open it to see the backup, or to change to another S3 bucket or WebDAV folder.</string>
+    <string name="stg_wait_wifi">Waiting for Wi-Fi to sync</string>
+    <string name="stg_wait_wifi_text">Use mobile data is off. Your new photos sync when this phone is on Wi-Fi.</string>
     <string name="stg_none">No backend yet</string>
     <string name="stg_none_text">Pick where your photos are kept. Only you have the credentials; they are sealed in your Opensolr account so a new phone finds the backup by itself.</string>
     <string name="stg_kind_s3">S3 bucket</string>

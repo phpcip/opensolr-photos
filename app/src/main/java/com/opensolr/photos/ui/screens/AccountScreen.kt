@@ -241,10 +241,12 @@ fun AccountScreen(state: UiState, viewModel: AppViewModel) {
                             }
                             Spacer(Modifier.height(12.dp))
                         }
-                        Text(stringResource(R.string.stg_open_text), style = MaterialTheme.typography.bodySmall, color = p.muted)
+                        val backend = state.storage
+                        if (backend != null) InfoRow(kindLabel(backend.kind), backend.label.ifBlank { backend.host })
+                        Text(stringResource(if (backend != null) R.string.stg_open_set_text else R.string.stg_open_text), style = MaterialTheme.typography.bodySmall, color = p.muted)
                         Spacer(Modifier.height(10.dp))
                         GhostButton(
-                            state.storage?.let { it.label.ifBlank { it.host } } ?: stringResource(R.string.stg_open),
+                            stringResource(if (backend != null) R.string.stg_open_set else R.string.stg_open),
                             onClick = { viewModel.openStorage() },
                             modifier = Modifier.fillMaxWidth(),
                         )
