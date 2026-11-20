@@ -788,7 +788,8 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
     fun backupCandidates(local: Set<String>, limit: Int): List<ToBackup> {
         val out = ArrayList<ToBackup>()
         readableDatabase.rawQuery(
-            "SELECT id, folder, path, media_id, size_bytes, taken_ms FROM docs WHERE id NOT IN (SELECT id FROM remote) ORDER BY taken_ms DESC",
+            // an item deleted on any device whose file still waits here to be removed is never sent up again
+            "SELECT id, folder, path, media_id, size_bytes, taken_ms FROM docs WHERE id NOT IN (SELECT id FROM remote) AND id NOT IN (SELECT id FROM deleted) ORDER BY taken_ms DESC",
             null,
         ).use { c ->
             while (c.moveToNext() && out.size < limit) {
@@ -803,7 +804,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
     fun backupPendingCount(local: Set<String>): Int {
         var n = 0
-        readableDatabase.rawQuery("SELECT id FROM docs WHERE id NOT IN (SELECT id FROM remote)", null).use { c -> while (c.moveToNext()) if (c.getString(0) in local) n++ }
+        readableDatabase.rawQuery("SELECT id FROM docs WHERE id NOT IN (SELECT id FROM remote) AND id NOT IN (SELECT id FROM deleted)", null).use { c -> while (c.moveToNext()) if (c.getString(0) in local) n++ }
         return n
     }
 
@@ -1009,6 +1010,10 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
     fun docCount(): Int =
         readableDatabase.rawQuery("SELECT COUNT(*) FROM docs", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
+
+    /** Clone entries kept only until their deleted item's file is removed from this phone. */
+    fun deletedDocCount(): Int =
+        readableDatabase.rawQuery("SELECT COUNT(*) FROM docs WHERE id IN (SELECT id FROM deleted)", null).use { if (it.moveToFirst()) it.getInt(0) else 0 }
 
     /** How many documents come before and including [id] in id order: where a refill that stopped there stands. */
     fun docCountUpTo(id: String): Int =

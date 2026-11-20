@@ -55,6 +55,7 @@ object IndexChanges {
             com.opensolr.photos.storage.Deletions.revive(context, cache.deletedAmong(ids))
             val waiting = cache.pendingAmong(ids)
             edits.readDocsIntoCache(ids.filter { it !in waiting })
+            com.opensolr.photos.data.CloneChanges.changed()
             cursor = top
             sp.edit().putLong(key, cursor).apply()
             if (docs.length() < PAGE) break

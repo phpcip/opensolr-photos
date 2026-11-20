@@ -503,7 +503,7 @@ class SyncEngine(private val context: Context) {
                     migrateIds()
                 }
                 // the index against the clone: an emptied index is filled back from the clone, a short one is reported
-                val inClone = cache.docCount() + cache.parkedCount()
+                val inClone = cache.docCount() + cache.parkedCount() - cache.deletedDocCount()
                 val inIndex = withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { solr.count() }
                 if (inIndex == 0L && inClone > 0) {
                     prefs.restoreFromClone = true
@@ -823,6 +823,7 @@ class SyncEngine(private val context: Context) {
             cache.removeIncoming(listOf(photo.id))
             out += photo.id
         }
+        if (out.isNotEmpty()) com.opensolr.photos.data.CloneChanges.changed()
         return out
     }
 
@@ -898,6 +899,7 @@ class SyncEngine(private val context: Context) {
         val waiting = cache.pendingAmong(absent)
         val ghosts = absent.filter { it !in waiting }
         ghosts.chunked(500).forEach { cache.removeDocs(it) }
+        if (ghosts.isNotEmpty()) com.opensolr.photos.data.CloneChanges.changed()
         return ghosts.size + parkedGone.size
     }
 

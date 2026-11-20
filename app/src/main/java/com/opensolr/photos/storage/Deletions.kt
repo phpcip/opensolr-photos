@@ -19,6 +19,7 @@ object Deletions {
 
     private const val SP = "opensolr_photos"
     private const val CURSOR = "deleted_cursor"
+    private const val WAITING = "delete_waiting"
     // a file written this long after its deletion is a new one with the same name, never removed
     private const val NEWER_MS = 60_000L
 
@@ -66,6 +67,7 @@ object Deletions {
         com.opensolr.photos.search.EditRepository(context).readDocsIntoCache(back)
         // what the backend holds of them is listed again from the manifests
         prefs.manifestsReadAt = 0L
+        com.opensolr.photos.data.CloneChanges.changed()
         return back
     }
 
@@ -107,9 +109,11 @@ object Deletions {
                 // an item that went because its file was moved or renamed on another phone lives on under its new
                 // name: this phone's file of it stays, as that item's file
                 val moved = keptAsMoved(context, rows.toMap())
-                // a file this phone must ask to remove keeps its clone entry until then: the path is needed
-                val waiting = removeFiles(context, rows.toMap().filterKeys { it !in moved })
-                dropHere(context, rows.map { it.first }.filter { it !in waiting })
+                // a file this phone must ask to remove is remembered by its place alone: the item itself is gone
+                // from this phone at once, like everywhere else
+                removeFiles(context, rows.toMap().filterKeys { it !in moved })
+                dropHere(context, rows.map { it.first })
+                com.opensolr.photos.data.CloneChanges.changed()
             }
             if (next <= since) break
             since = next
@@ -194,6 +198,7 @@ object Deletions {
         val direct = Build.VERSION.SDK_INT < Build.VERSION_CODES.Q ||
             (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && android.os.Environment.isExternalStorageManager())
         val ask = ArrayList<String>()
+        val askMedia = HashMap<String, Long>()
         val done = HashSet<String>()
         // only an item this phone has had as its own file: another phone's item can share a path with a file here
         val seen = cache.seenIds()
@@ -211,15 +216,34 @@ object Deletions {
             }
             val id2 = LocalFiles.mediaId(id) ?: mediaId
             val removed = id2 > 0 && runCatching { context.contentResolver.delete(android.content.ContentUris.withAppendedId(MediaStore.Files.getContentUri("external"), id2), null, null) > 0 }.getOrDefault(false)
-            if (!removed) ask += id
+            if (!removed) { ask += id; if (id2 > 0) askMedia[id] = id2 }
         }
-        if (ask.isNotEmpty()) cache.setDeletePrompt(ask, true)
+        if (ask.isNotEmpty()) {
+            cache.setDeletePrompt(ask, true)
+            val sp = context.getSharedPreferences(SP, Context.MODE_PRIVATE)
+            val had = runCatching { org.json.JSONObject(sp.getString(WAITING, "{}") ?: "{}") }.getOrDefault(org.json.JSONObject())
+            val kept = org.json.JSONObject()
+            // only what is still to be asked: an item that came back since is not on the list any more
+            cache.promptDeleted().forEach { id -> if (had.has(id)) kept.put(id, had.optLong(id)) }
+            askMedia.forEach { (id, media) -> kept.put(id, media) }
+            sp.edit().putString(WAITING, kept.toString()).apply()
+        }
         return ask.toSet()
+    }
+
+    /** The files waiting for the owner's yes to be removed: item id -> this phone's MediaStore id of the file. */
+    fun waitingMedia(context: Context): Map<String, Long> {
+        val kept = runCatching { org.json.JSONObject(context.getSharedPreferences(SP, Context.MODE_PRIVATE).getString(WAITING, "{}") ?: "{}") }.getOrDefault(org.json.JSONObject())
+        return kept.keys().asSequence().associateWith { kept.optLong(it) }.filterValues { it > 0 }
     }
 
     /** Asked and removed (or the owner said no): the waiting items are dropped either way, never asked again. */
     fun promptsDone(context: Context, ids: Collection<String>) {
         PhotoCache.of(context).setDeletePrompt(ids, false)
+        val sp = context.getSharedPreferences(SP, Context.MODE_PRIVATE)
+        val kept = runCatching { org.json.JSONObject(sp.getString(WAITING, "{}") ?: "{}") }.getOrDefault(org.json.JSONObject())
+        ids.forEach { kept.remove(it) }
+        sp.edit().putString(WAITING, kept.toString()).apply()
         dropHere(context, ids)
     }
 }

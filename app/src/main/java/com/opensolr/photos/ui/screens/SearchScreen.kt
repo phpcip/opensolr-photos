@@ -304,12 +304,14 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
         askIds = emptyList()
         Thread { com.opensolr.photos.storage.Deletions.promptsDone(context, done) }.start()
     }
-    LaunchedEffect(Unit) {
+    val cloneTick by com.opensolr.photos.data.CloneChanges.tick.collectAsState()
+    LaunchedEffect(cloneTick) {
+        if (askIds.isNotEmpty()) return@LaunchedEffect
         val waiting = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { com.opensolr.photos.data.PhotoCache.of(context).promptDeleted() }
         if (waiting.isEmpty()) return@LaunchedEffect
         val sender = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-            val where = com.opensolr.photos.data.PhotoCache.of(context).mediaFor(waiting)
-            val uris = waiting.mapNotNull { id -> (com.opensolr.photos.storage.LocalFiles.mediaId(id) ?: where[id]?.first)?.takeIf { it > 0 }?.let { android.content.ContentUris.withAppendedId(android.provider.MediaStore.Files.getContentUri("external"), it) } }.distinct()
+            val where = com.opensolr.photos.storage.Deletions.waitingMedia(context)
+            val uris = waiting.mapNotNull { id -> where[id]?.takeIf { it > 0 }?.let { android.content.ContentUris.withAppendedId(android.provider.MediaStore.Files.getContentUri("external"), it) } }.distinct()
             Actions.deleteRequest(context, uris)
         }
         if (sender != null) { askIds = waiting; askLauncher.launch(IntentSenderRequest.Builder(sender).build()) }
@@ -366,9 +368,11 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     LaunchedEffect(state.restoreGeneration) {
         if (rows.isEmpty()) return@LaunchedEffect
 
-        val byKey = state.gridKey?.let { key -> rows.indexOfFirst { it.key == key } }?.takeIf { it >= 0 }
+        // the very top stays the very top: what came in above the row that was first is shown, not skipped
+        val wasTop = state.gridIndex == 0 && state.gridOffset == 0
+        val byKey = if (wasTop) null else state.gridKey?.let { key -> rows.indexOfFirst { it.key == key } }?.takeIf { it >= 0 }
 
-        val target = byKey ?: state.gridIndex.takeIf { it <= rows.lastIndex } ?: 0
+        val target = if (wasTop) 0 else byKey ?: state.gridIndex.takeIf { it <= rows.lastIndex } ?: 0
         gridState.scrollToItem(target.coerceAtLeast(0), if (byKey != null) state.gridOffset else 0)
         restored = true
     }
@@ -383,7 +387,8 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     }
     val firstKey = rows.firstOrNull()?.key
     LaunchedEffect(firstKey) {
-        if (pinnedTop && gridState.firstVisibleItemIndex != 0) gridState.scrollToItem(0)
+        // asked for whatever the grid says of itself: it has not been laid out with the new rows yet
+        if (pinnedTop) gridState.scrollToItem(0)
     }
 
     val currentRows by rememberUpdatedState(rows)

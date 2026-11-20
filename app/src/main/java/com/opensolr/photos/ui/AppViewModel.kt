@@ -41,6 +41,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -302,6 +303,10 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     init {
+        // what another device changed or deleted reached this phone: the list on screen is read again
+        viewModelScope.launch {
+            com.opensolr.photos.data.CloneChanges.tick.drop(1).collect { refreshLocalQuietly() }
+        }
         viewModelScope.launch {
             var wasBusy = false
             var lastStep = -1 to -1
@@ -410,9 +415,14 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     private var quietRefreshAgain = false
 
     // The local list re-read in place: same position, no spinner.
+    private var quietRefreshOwed = false
+
     private fun refreshLocalQuietly() {
         val s = _state.value
-        if (s.screen != Screen.Search || !browsingLocally()) return
+        // another screen is open: the list is read again as soon as it is back
+        if (s.screen != Screen.Search) { quietRefreshOwed = true; return }
+        quietRefreshOwed = false
+        if (!browsingLocally()) return
         if (quietRefreshJob?.isActive == true) { quietRefreshAgain = true; return }
         quietRefreshJob = viewModelScope.launch {
             do {
@@ -2941,6 +2951,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 }
                 _state.update { it.copy(screen = Screen.Search) }
                 targetScroll()
+                if (quietRefreshOwed) refreshLocalQuietly()
             }
 
             Screen.Sync, Screen.Account -> {

@@ -260,9 +260,34 @@ object Actions {
     const val SHARE_EDGE_PX = 1024
     private const val SHARE_DIR = "share"
 
+    /** Addresses given by plain file id become photo or clip addresses where the file is one: Android asks about those only. */
+    private fun typed(context: Context, uris: List<Uri>): List<Uri> {
+        val plain = uris.filter { u -> u.pathSegments.none { it == "images" || it == "video" } }
+        if (plain.isEmpty()) return uris
+        val ids = plain.mapNotNull { runCatching { android.content.ContentUris.parseId(it) }.getOrNull() }
+        val kinds = HashMap<Long, Int>()
+        ids.chunked(400).forEach { batch ->
+            runCatching {
+                context.contentResolver.query(
+                    MediaStore.Files.getContentUri("external"), arrayOf(MediaStore.MediaColumns._ID, MediaStore.Files.FileColumns.MEDIA_TYPE),
+                    "${MediaStore.MediaColumns._ID} IN (${batch.joinToString(",") { "?" }})", batch.map { it.toString() }.toTypedArray(), null,
+                )?.use { c -> while (c.moveToNext()) kinds[c.getLong(0)] = c.getInt(1) }
+            }
+        }
+        return uris.map { u ->
+            if (u !in plain) return@map u
+            val id = runCatching { android.content.ContentUris.parseId(u) }.getOrNull() ?: return@map u
+            when (kinds[id]) {
+                MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE -> android.content.ContentUris.withAppendedId(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, id)
+                MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO -> android.content.ContentUris.withAppendedId(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, id)
+                else -> u
+            }
+        }
+    }
+
     fun deleteRequest(context: Context, all: List<Uri>): IntentSender? {
         // only files on this phone are asked about; a 720p copy or another phone's item goes from the index alone
-        val uris = all.filter { it.authority == MediaStore.AUTHORITY }
+        val uris = typed(context, all.filter { it.authority == MediaStore.AUTHORITY })
         if (uris.isEmpty()) return null
         // Android's delete prompt takes photos and clips only; a PDF (a plain file) is removed here directly,
         // which this app may do for its own files and, with All files access, for any
