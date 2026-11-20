@@ -46,7 +46,8 @@ fun ShareChooser(hits: List<PhotoHit>, fullScreen: Boolean = false, viewModel: A
     fun close() { job?.cancel(); onDismiss() }
     val items = remember(hits) { Actions.shareItems(hits) }
     val photoCount = items.count { it.mediaKind == com.opensolr.photos.media.Kind.PHOTO }
-    val linkable = viewModel != null && viewModel.canLink
+    // a link shows what the index holds: not offered while one of them is still on its way there
+    val linkable = viewModel != null && viewModel.canLink && hits.none { it.pending }
     var linking by remember { mutableStateOf(false) }
     if (linking && viewModel != null) {
         val linkTitle = remember(items) { if (items.size == 1) items[0].fileName.ifBlank { context.getString(R.string.sl_default_name) } else context.resources.getQuantityString(R.plurals.sl_items, items.size, Actions.formatCount(items.size.toLong())) }

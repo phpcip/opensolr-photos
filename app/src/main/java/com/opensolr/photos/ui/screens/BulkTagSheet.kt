@@ -77,7 +77,7 @@ private val Corner = RoundedCornerShape(2.dp)
 @Composable
 fun BulkTagSheet(state: UiState, viewModel: AppViewModel, onDismiss: () -> Unit) {
     val p = LocalPalette.current
-    val targets = remember(state.hits, state.selectedIds, state.selectedOffscreen) { viewModel.photosToTag() }
+    val targets = remember(state.hits, state.selectedIds, state.selectedOffscreen) { viewModel.photosSynced() }
     val count = targets.size
     var tags by remember { mutableStateOf(emptyList<String>()) }
     var newTag by remember { mutableStateOf("") }

@@ -1047,6 +1047,9 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         return state.selectedIds.mapNotNull { id -> onScreen[id] ?: state.selectedOffscreen[id] }
     }
 
+    /** The ticked items the index already holds: words, people, places and re-reading need its document. */
+    fun photosSynced(): List<PhotoHit> = photosToTag().filter { !it.pending }
+
     /** A name gone from the whole library: off every photo and face, the filters and the results follow at once. */
     fun removePerson(name: String) {
         if (_state.value.bulkTagging) return
@@ -2475,11 +2478,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     private var dragAnchor: Pair<String, Boolean>? = null
 
-    // a photo still on its way to the index takes no actions, so it cannot be picked either
-    private fun pendingIds(): Set<String> = _state.value.hits.filter { it.pending }.mapTo(HashSet()) { it.id }
-
     fun beginDragSelect(id: String) {
-        if (id in pendingIds()) return
         val current = _state.value
         val base = if (current.selecting) current.selectedIds else emptySet()
         val unselecting = id in base
@@ -2503,7 +2502,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     // A drag that starts on a ticked photo unticks the range it covers; on an unticked one it ticks it.
     private fun applyDragSelection(base: Set<String>, ids: Collection<String>, unselecting: Boolean) {
-        val next = if (unselecting) base - ids.toSet() else base + (ids - pendingIds())
+        val next = if (unselecting) base - ids.toSet() else base + ids
         _state.update { it.copy(selecting = true, selectedIds = next) }
     }
 
@@ -2512,7 +2511,6 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun toggleSelected(id: String) {
-        if (id !in _state.value.selectedIds && id in pendingIds()) return
         _state.update {
             val next = if (id in it.selectedIds) it.selectedIds - id else it.selectedIds + id
             if (next.isEmpty()) it.copy(selecting = false, selectedIds = emptySet(), selectedOffscreen = emptyMap(), selectedGroups = emptyMap())
@@ -2522,17 +2520,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** One item (a photo, a clip, a PDF with all its pages) checked or unchecked as a whole, never half of it. */
     fun setSelected(ids: List<String>, on: Boolean) {
-        val waiting = pendingIds()
         _state.update {
-            val next = if (on) it.selectedIds + ids.filter { id -> id !in waiting } else it.selectedIds - ids.toSet()
+            val next = if (on) it.selectedIds + ids else it.selectedIds - ids.toSet()
             if (next.isEmpty()) it.copy(selecting = false, selectedIds = emptySet(), selectedOffscreen = emptyMap(), selectedGroups = emptyMap())
             else it.copy(selecting = true, selectedIds = next)
         }
     }
 
     fun toggleSelectedGroup(key: String, allIds: List<String>, range: Pair<Long, Long>? = null) {
-        val waiting = pendingIds()
-        val ids = allIds.filter { it !in waiting }
+        val ids = allIds
         val current = _state.value
         val already = current.selectedGroups[key]
         if (already != null) {
@@ -2566,7 +2562,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                     }
                 } else {
                     searches.photosBetween(s.searchedQuery, s.filters, range.first, range.second, s.freshBias, s.wordsOnly)
-                }.filter { !it.pending }
+                }
                 val onScreen = _state.value.hits.map { it.id }.toSet()
                 _state.update { st ->
                     st.copy(
@@ -2806,6 +2802,8 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 listOf(id) + (1..hit.pages.coerceAtLeast(1)).map { com.opensolr.photos.media.MediaScanner.pageId(parent, it) }
             } else listOf(id)
         }.toSet()
+        // not synced yet: nothing of it is in the index or the backup, so nothing is asked of either
+        val waiting = (_state.value.hits.asSequence() + _state.value.selectedOffscreen.values.asSequence()).filter { it.pending && it.id in ids }.mapTo(HashSet()) { it.id }
         _state.update {
             it.copy(
                 hits = it.hits.filterNot { hit -> hit.id in ids },
@@ -2816,11 +2814,15 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
         }
         viewModelScope.launch {
             try {
-                val connection = prefs.connection ?: return@launch
-
-                com.opensolr.photos.net.SolrClient(connection).delete(ids, now = true)
-                // deleted everywhere: every other device of the index removes it too, and the backend's copy goes
-                withContext(Dispatchers.IO) { com.opensolr.photos.storage.Deletions.deletedHere(context, ids); photoCache.clearActions(ids) }
+                // one the sync reached in the meantime is in the index after all
+                val local = if (waiting.isEmpty()) emptySet() else withContext(Dispatchers.IO) { (waiting - photoCache.docIdsAmong(waiting)).also { photoCache.removeIncoming(it) } }
+                val synced = ids - local
+                if (synced.isNotEmpty()) {
+                    val connection = prefs.connection ?: return@launch
+                    com.opensolr.photos.net.SolrClient(connection).delete(synced, now = true)
+                    // deleted everywhere: every other device of the index removes it too, and the backend's copy goes
+                    withContext(Dispatchers.IO) { com.opensolr.photos.storage.Deletions.deletedHere(context, synced); photoCache.clearActions(synced) }
+                }
             } catch (e: Exception) {
 
             }
@@ -2835,12 +2837,12 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
 
     /** A photo saved by the editor: written over, it is read again first; a new copy comes in with the sync started now. */
     fun photoEdited(overwrittenId: String?) {
-        if (overwrittenId != null) prefs.resyncIds = prefs.resyncIds + overwrittenId
+        if (overwrittenId != null && _state.value.hits.none { it.id == overwrittenId && it.pending }) prefs.resyncIds = prefs.resyncIds + overwrittenId
         afterStoppingEverything { true }
     }
 
     fun resyncSelected() {
-        val ids = _state.value.selectedIds
+        val ids = photosSynced().mapTo(HashSet()) { it.id }
         if (ids.isEmpty()) return
         prefs.resyncIds = prefs.resyncIds + ids
         _state.update { it.copy(selecting = false, selectedIds = emptySet()) }

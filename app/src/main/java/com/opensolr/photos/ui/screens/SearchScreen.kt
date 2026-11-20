@@ -659,7 +659,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                         icon = R.drawable.ic_link,
                         label = stringResource(R.string.sl_toolbar),
                         onClick = {
-                            if (state.selecting) shareLinkFor = viewModel.photosToTag().takeIf { it.isNotEmpty() }
+                            if (state.selecting) shareLinkFor = viewModel.photosSynced().takeIf { it.isNotEmpty() }
                             else viewModel.albumSpec()?.let { albumLink = it to viewModel.albumTitle() }
                         },
                     )
@@ -1052,7 +1052,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                             .padding(horizontal = 6.dp, vertical = 2.dp),
                                     )
                                 }
-                                if (state.selecting && !hit.pending) {
+                                if (state.selecting) {
                                     PickTick(
                                         selected = selected,
                                         onClick = { if (!touch.blocked) viewModel.setSelected(row.all.map { it.id }, !selected) },
@@ -1100,6 +1100,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
     if (state.selecting) {
         SelectionDock(
             count = state.selectedIds.size,
+            synced = remember(state.selectedIds, state.hits, state.selectedOffscreen) { viewModel.photosSynced().size },
             modifier = Modifier.align(Alignment.BottomCenter),
             canMove = state.movable.isNotEmpty(),
             onShare = { shareFor = viewModel.photosToTag() },
@@ -1355,6 +1356,8 @@ private fun Pill(label: String, onClick: () -> Unit, accent: Boolean = false, tr
 @Composable
 private fun SelectionDock(
     count: Int,
+    // how many of them the index already holds: words and re-reading are for those
+    synced: Int,
     modifier: Modifier = Modifier,
     canMove: Boolean,
     onShare: () -> Unit,
@@ -1372,10 +1375,10 @@ private fun SelectionDock(
             .padding(bottom = 14.dp),
     ) {
 
-        DockAction(R.drawable.ic_tag, stringResource(R.string.dock_tag_n, Actions.formatCompact(count.toLong())), enabled = count > 0, padX = DOCK_PAD_X, onClick = onTag)
+        DockAction(R.drawable.ic_tag, stringResource(R.string.dock_tag_n, Actions.formatCompact(synced.toLong())), enabled = synced > 0, padX = DOCK_PAD_X, onClick = onTag)
         DockAction(R.drawable.ic_share, stringResource(R.string.act_share), enabled = count > 0, padX = DOCK_PAD_X, onClick = onShare)
         DockAction(R.drawable.ic_pdf, stringResource(R.string.dock_pdf), enabled = count > 0, padX = DOCK_PAD_X, onClick = onPdf)
-        DockAction(R.drawable.ic_sync, if (count > 0) stringResource(R.string.dock_resync_n, Actions.formatCompact(count.toLong())) else stringResource(R.string.dock_resync), enabled = count > 0, accent = true, padX = DOCK_PAD_X, onClick = onResync)
+        DockAction(R.drawable.ic_sync, if (synced > 0) stringResource(R.string.dock_resync_n, Actions.formatCompact(synced.toLong())) else stringResource(R.string.dock_resync), enabled = synced > 0, accent = true, padX = DOCK_PAD_X, onClick = onResync)
 
         // only when every ticked item is a photo the backup already holds and that still sits here at full size
         if (canMove) {
@@ -3104,7 +3107,7 @@ internal fun PhotoViewer(
                     glass = glass,
                 ) {
 
-                    // a photo still syncing shows its actions greyed out until its document is back;
+                    // a photo still syncing keeps what is done on the phone alone (edit, share, delete); what needs its document waits;
                     // one only the backend has keeps its words and sharing, the file itself comes with Download
                     val on = !hit.pending
                     val cloud = com.opensolr.photos.storage.CloudFiles.has(hit.id) || absentHere(hit)
@@ -3122,22 +3125,22 @@ internal fun PhotoViewer(
                         }
                         ViewerIconAction(stringResource(R.string.act_prev_page), Icons.AutoMirrored.Filled.KeyboardArrowLeft, at > 0) { turn(at - 1) }
                         ViewerIconAction(stringResource(R.string.act_next_page), Icons.AutoMirrored.Filled.KeyboardArrowRight, at in 0 until item.size - 1) { turn(at + 1) }
-                        if (!cloud) ViewerAction(stringResource(R.string.act_open_pdf), R.drawable.ic_pdf, on) { Actions.openFile(context, hit.uri, "application/pdf") }
+                        if (!cloud) ViewerAction(stringResource(R.string.act_open_pdf), R.drawable.ic_pdf) { Actions.openFile(context, hit.uri, "application/pdf") }
                     }
                     if (cloud) {
                         ViewerAction(stringResource(R.string.stg_download), R.drawable.ic_open, on && hit.id !in viewerState.downloading) { viewModel.downloadOriginal(hit) }
                     } else if (photo) {
-                        ViewerAction(stringResource(R.string.act_edit), R.drawable.ic_edit, on) { editing = hit }
+                        ViewerAction(stringResource(R.string.act_edit), R.drawable.ic_edit) { editing = hit }
                         ViewerAction(stringResource(R.string.act_wallpaper), R.drawable.ic_wallpaper) { wallpaperFor = hit }
                     }
                     ViewerAction(stringResource(R.string.act_similar), R.drawable.ic_duplicates, on) { onClose(); viewModel.showSimilar(hit) }
-                    ViewerAction(stringResource(R.string.act_share), R.drawable.ic_share, on) { viewerShare = hit }
+                    ViewerAction(stringResource(R.string.act_share), R.drawable.ic_share) { viewerShare = hit }
                     hit.latLon?.let { (lat, lon) ->
                         ViewerAction(stringResource(R.string.act_map), R.drawable.ic_map, on) { onClose(); viewModel.openMap(MapFocus(lat, lon, 19.0)) }
                         ViewerIconAction(stringResource(R.string.act_nearby), Icons.Filled.LocationOn, on) { onClose(); viewModel.searchNear(lat, lon, 5.0) }
                     }
                     // here or only in the backup: delete takes it off this phone, the index, the other devices and the backup
-                    ViewerAction(stringResource(R.string.act_delete), R.drawable.ic_delete, on) { if (hit.isPdfPage) confirmPdfDelete = hit else confirmOneDelete = hit }
+                    ViewerAction(stringResource(R.string.act_delete), R.drawable.ic_delete) { if (hit.isPdfPage) confirmPdfDelete = hit else confirmOneDelete = hit }
                 }
             }
 
