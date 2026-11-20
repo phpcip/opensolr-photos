@@ -255,10 +255,10 @@ class EditRepository(private val context: Context) {
         )
     }
 
-    private companion object {
+    companion object {
 
-        const val WORDS_BATCH = 50
-        const val CLONE_PAGE = 10000
+        private const val WORDS_BATCH = 50
+        private const val CLONE_PAGE = 10000
 
         const val CLONE_FIELDS = "id,media_id,path,file_name,folder,mime,size_bytes,file_hash," +
             "taken_at,indexed_at,modified_at,year,month,width,height,orientation," +

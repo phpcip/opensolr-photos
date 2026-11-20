@@ -338,7 +338,11 @@ class SyncEngine(private val context: Context) {
 
             var expected = 0
             suspend fun progress(phase: String) = onProgress(Progress(phase, added + failed, maxOf(total, expected)))
-            suspend fun ingest(batch: List<LocalPhoto>) {
+            suspend fun ingest(all: List<LocalPhoto>) {
+                // the very same file may have reached another phone too, and been indexed there a moment ago:
+                // its document is taken as it is, and nothing is read or sent a second time
+                val taken = takeFromIndex(solr, all)
+                val batch = if (taken.isEmpty()) all else all.filter { it.id !in taken }
 
                 if (batteryPercent() < BATTERY_PAUSE_PERCENT) {
                     throw LowBatteryException((maxOf(expected, total) - added).coerceAtLeast(0))
@@ -489,6 +493,7 @@ class SyncEngine(private val context: Context) {
             }
 
             val toDelete = ArrayList<String>(500)
+            var movedAway = false
             var indexedIds: Set<String> = emptySet()
             var indexShort = ""
             if (!rebuilt) {
@@ -545,7 +550,10 @@ class SyncEngine(private val context: Context) {
                     if (moved.isNotEmpty()) {
                         carryOver(moved, local.values.filter { it.id !in known })
                         moved.chunked(500).forEach { batch -> solr.delete(batch) }
-                        com.opensolr.photos.storage.Deletions.deletedHere(context, moved)
+                        // the other phones hear of it only once the new name is in the index, so each keeps its
+                        // own file of the item under that name
+                        com.opensolr.photos.storage.Deletions.deletedHere(context, moved, tell = false)
+                        movedAway = true
                         deleted += moved.size
                     }
                 }
@@ -632,6 +640,7 @@ class SyncEngine(private val context: Context) {
             }
 
             solr.commit()
+            if (movedAway) runCatching { com.opensolr.photos.storage.Deletions.push(context) }
 
             try {
                 edits.sendWords { done, all ->
@@ -781,6 +790,42 @@ class SyncEngine(private val context: Context) {
      * people, wording and place are given to the new name before it is read, so they are sent and written again.
      */
     /** Of [leaving], those whose file is on the phone under another name: same size and same md5 as one of [arriving]. */
+    /**
+     * Of [batch], the new files another phone has indexed already (asked of the index as it is this instant): the
+     * same id and the same bytes. Their documents go into the clone with this phone's place of the file. An index
+     * that does not answer changes nothing: the files are read and sent as usual.
+     */
+    private suspend fun takeFromIndex(solr: SolrClient, batch: List<LocalPhoto>): Set<String> {
+        val fresh = batch.filter { cache.doc(it.id) == null }
+        if (fresh.isEmpty()) return emptySet()
+        val docs = try {
+            solr.byIds(fresh.map { it.id }, com.opensolr.photos.search.EditRepository.CLONE_FIELDS)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return emptySet()
+        }
+        if (docs.isEmpty()) return emptySet()
+        val byId = fresh.associateBy { it.id }
+        val hashes = HashMap<String, String?>()
+        val out = HashSet<String>()
+        for (d in docs) {
+            val photo = byId[d.optString("id")] ?: continue
+            if (d.optLong("size_bytes") != photo.sizeBytes) continue
+            val theirs = d.optString("file_hash")
+            if (theirs.isBlank()) continue
+            val ours = hashes.getOrPut(photo.absolutePath) { PhotoReader.fileMd5(context, photo) }
+            val same = theirs == ours || (photo.kind == com.opensolr.photos.media.Kind.VIDEO && theirs == PhotoReader.fileMd5(context, photo.uri))
+            if (!same) continue
+            edits.storeDoc(photo.id, d, indexedAt = Actions.solrDateMillis(d.optString("indexed_at")) ?: System.currentTimeMillis())
+            cache.relocateDoc(photo.id, photo.mediaId, photo.absolutePath)
+            cache.clearActions(listOf(photo.id))
+            cache.removeIncoming(listOf(photo.id))
+            out += photo.id
+        }
+        return out
+    }
+
     /**
      * A file here that is, byte for byte, an item the library already holds under another name or folder (a copy an
      * earlier install brought down, "name (1)" beside "name", the same file kept where Android allowed it) is that

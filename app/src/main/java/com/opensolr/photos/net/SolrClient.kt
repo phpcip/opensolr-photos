@@ -232,6 +232,18 @@ class SolrClient(private var connection: IndexConnection, private val http: OkHt
         execute(request(query).post(body.toRequestBody(JSON)).build())
     }
 
+    /** The documents of [ids] as the index holds them this instant, written moments ago included (no commit awaited). */
+    suspend fun byIds(ids: Collection<String>, fields: String): List<JSONObject> = withContext(Dispatchers.IO) {
+        val out = ArrayList<JSONObject>()
+        ids.chunked(100).forEach { batch ->
+            val form = FormBody.Builder().add("ids", batch.joinToString(",")).add("fl", fields).add("wt", "json").build()
+            val docs = JSONObject(execute(request("/get").post(form).build())).optJSONObject("response")?.optJSONArray("docs")
+                ?: throw java.io.IOException("index answer without documents")
+            for (i in 0 until docs.length()) docs.optJSONObject(i)?.let { out += it }
+        }
+        out
+    }
+
     suspend fun commit() = withContext(Dispatchers.IO) {
         execute(request("/update?commit=true&wt=json").post("{\"commit\":{}}".toRequestBody(JSON)).build())
     }

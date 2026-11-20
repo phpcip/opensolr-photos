@@ -254,8 +254,9 @@ class StorageEngine(private val context: Context) {
                     guard()
                     val photo = local[item.id] ?: continue
                     try {
-                        val sent = upload(backend, layout, photo, quality)
-                        if (Changed.has(context, item.id)) {
+                        val changed = Changed.has(context, item.id)
+                        val sent = upload(backend, layout, photo, quality, changed)
+                        if (changed) {
                             runCatching { backend.delete(layout.webThumb(item.id)) }
                             Changed.done(context, item.id)
                         }
@@ -410,7 +411,7 @@ class StorageEngine(private val context: Context) {
     // the files sent up in this run: the pages of one PDF share their file, which goes up once
     private val sentFiles = HashMap<String, Pair<Long, String?>>()
 
-    private fun upload(backend: Backend, layout: Layout, photo: LocalPhoto, quality: String): Triple<String, Long, String?> {
+    private fun upload(backend: Backend, layout: Layout, photo: LocalPhoto, quality: String, changed: Boolean): Triple<String, Long, String?> {
         val mainPath = layout.main(photo.folder, photo.fileName)
         val resolver = context.contentResolver
         val small = File.createTempFile("restore", ".jpg", context.cacheDir)
@@ -425,6 +426,7 @@ class StorageEngine(private val context: Context) {
             val smallBytes = made ?: PhotoReader.placeholderJpeg(photo.kind, 1280)
             small.writeBytes(smallBytes)
             val result: Triple<String, Long, String?>
+            var held = false
             val already = sentFiles[mainPath]
             if (already != null) {
                 result = Triple(StorageConfig.QUALITY_ORIGINAL, already.first, already.second)
@@ -435,9 +437,12 @@ class StorageEngine(private val context: Context) {
             } else {
                 val size = resolver.openFileDescriptor(photo.uri, "r")?.use { it.statSize } ?: throw UnreadableException()
                 if (size <= 0) throw UnreadableException()
-                // a file another page of it (or an earlier run) already put there, whole, is not sent again
-                if (photo.kind == com.opensolr.photos.media.Kind.PDF && backend.stat(mainPath) == size) {
-                    result = Triple(StorageConfig.QUALITY_ORIGINAL, size, PhotoReader.fileMd5(context, photo))
+                // a file another page of it, an earlier run or another phone holding the very same file already put
+                // there, whole, is not sent again; a file that changed on this phone always is
+                if (!changed && backend.stat(mainPath) == size) {
+                    val md5 = if (photo.kind == com.opensolr.photos.media.Kind.PDF) PhotoReader.fileMd5(context, photo) else PhotoReader.fileMd5(context, photo.uri)
+                    result = Triple(StorageConfig.QUALITY_ORIGINAL, size, md5)
+                    held = true
                 } else {
                     var digest: MessageDigest? = null
                     backend.put(mainPath, size) {
@@ -448,7 +453,8 @@ class StorageEngine(private val context: Context) {
                 }
                 sentFiles[mainPath] = result.second to result.third
             }
-            backend.put(layout.restoreCopy(photo.id), small.length()) { small.inputStream() }
+            // the 720 px copy too, when the full file was already there with it
+            if (!held || (backend.stat(layout.restoreCopy(photo.id)) ?: 0L) <= 0L) backend.put(layout.restoreCopy(photo.id), small.length()) { small.inputStream() }
             return result
         } finally {
             small.delete()

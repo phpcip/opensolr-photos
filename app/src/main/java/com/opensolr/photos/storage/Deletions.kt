@@ -23,12 +23,13 @@ object Deletions {
     private const val NEWER_MS = 60_000L
 
     /** Deleted here: remembered, every trace on this phone removed, the account told when it can be. */
-    suspend fun deletedHere(context: Context, ids: Collection<String>) {
+    /** [tell] false: the account is told later (by [push]), once what replaces the items is in the index. */
+    suspend fun deletedHere(context: Context, ids: Collection<String>, tell: Boolean = true) {
         if (ids.isEmpty()) return
         val cache = PhotoCache.of(context)
         cache.markDeleted(ids, System.currentTimeMillis(), sent = false)
         dropHere(context, ids)
-        runCatching { push(context) }
+        if (tell) runCatching { push(context) }
     }
 
     /** A file this app just wrote in [folder] as [name] is a new item: an earlier deletion of that name (and of its PDF pages) no longer holds. */
@@ -103,8 +104,11 @@ object Deletions {
             if (rows.isNotEmpty()) {
                 val byTime = rows.groupBy({ it.second }, { it.first })
                 byTime.forEach { (at, ids) -> cache.markDeleted(ids, at, sent = true) }
+                // an item that went because its file was moved or renamed on another phone lives on under its new
+                // name: this phone's file of it stays, as that item's file
+                val moved = keptAsMoved(context, rows.toMap())
                 // a file this phone must ask to remove keeps its clone entry until then: the path is needed
-                val waiting = removeFiles(context, rows.toMap())
+                val waiting = removeFiles(context, rows.toMap().filterKeys { it !in moved })
                 dropHere(context, rows.map { it.first }.filter { it !in waiting })
             }
             if (next <= since) break
@@ -112,6 +116,59 @@ object Deletions {
             sp.edit().putLong(key, since).apply()
             if (!more) break
         }
+    }
+
+    /**
+     * Of the [deleted] items this phone holds a file of, those the index still holds under another id with the very
+     * same bytes (the file was moved or renamed elsewhere) and no file of here: this phone's file becomes that
+     * item's file, where it is. Returns the deleted ids so kept. An index that cannot be asked throws: nothing is
+     * removed on an answer not had.
+     */
+    private suspend fun keptAsMoved(context: Context, deleted: Map<String, Long>): Set<String> {
+        val cache = PhotoCache.of(context)
+        val connection = AppPrefs(context).connection ?: return emptySet()
+        val seen = cache.seenIds()
+        val where = cache.mediaFor(deleted.keys.filter { it in seen })
+        data class Old(val id: String, val mediaId: Long, val path: String, val hash: String, val size: Long, val page: Int)
+        val olds = where.mapNotNull { (id, place) ->
+            val (mediaId, path) = place
+            if (path.isEmpty() || path.contains("/files/cloud/") || !(LocalFiles.has(id) || File(path).exists())) return@mapNotNull null
+            val doc = cache.doc(id) ?: return@mapNotNull null
+            val hash = doc.fileHash ?: return@mapNotNull null
+            val page = doc.json?.let { runCatching { org.json.JSONObject(it).optInt("page_i") }.getOrNull() } ?: 0
+            Old(id, LocalFiles.mediaId(id) ?: mediaId, path, hash, doc.sizeBytes, page)
+        }
+        if (olds.isEmpty()) return emptySet()
+        val solr = SolrClient(connection)
+        val live = ArrayList<org.json.JSONObject>()
+        olds.map { it.hash }.distinct().chunked(100).forEach { batch ->
+            solr.forEachDoc(com.opensolr.photos.search.EditRepository.CLONE_FIELDS, filters = listOf("fq" to "{!terms f=file_hash}" + batch.joinToString(","))) { live += it }
+        }
+        if (live.isEmpty()) return emptySet()
+        val edits = com.opensolr.photos.search.EditRepository(context)
+        @Suppress("DEPRECATION")
+        val root = android.os.Environment.getExternalStorageDirectory().absolutePath.trimEnd('/') + "/"
+        val out = HashSet<String>()
+        val given = HashSet<String>()
+        for (old in olds) {
+            val now = live.firstOrNull { d ->
+                val id = d.optString("id")
+                id != old.id && id !in deleted && id !in given && d.optString("file_hash") == old.hash &&
+                    d.optLong("size_bytes") == old.size && d.optInt("page_i") == old.page && !LocalFiles.has(id)
+            } ?: continue
+            val id = now.optString("id")
+            given += id
+            edits.storeDoc(id, now, indexedAt = com.opensolr.photos.ui.Actions.solrDateMillis(now.optString("indexed_at")) ?: System.currentTimeMillis())
+            cache.relocateDoc(id, old.mediaId, old.path)
+            // the file's own name on this phone answers to the item's id from now on
+            val name = old.path.substringAfterLast('/')
+            val folder = com.opensolr.photos.media.MediaScanner.folderKey(old.path.removePrefix(root).substringBeforeLast('/', ""))
+            val file = com.opensolr.photos.media.MediaScanner.photoId(folder + name)
+            cache.putAlias(if (old.page > 0) com.opensolr.photos.media.MediaScanner.pageId(file, old.page) else file, id)
+            if (old.mediaId > 0) LocalFiles.add(mapOf(id to old.mediaId))
+            out += old.id
+        }
+        return out
     }
 
     /** The clone entry, the 720 px copy, the kept clip picture and the on-phone record of each item. */
