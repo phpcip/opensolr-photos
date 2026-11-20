@@ -227,47 +227,7 @@ class SyncEngine(private val context: Context) {
             onProgress(Progress(AppText.s(R.string.sy_looking), 0, 0))
 
             val foldersBefore = MediaScanner.folderStamp(context, prefs.folders)
-            // Android not answering is not "no photos": nothing is compared, nothing is removed
-            var local = MediaScanner.scan(context, prefs.folders, cache.aliases(), com.opensolr.photos.media.ScanOptions.of(context))
-                ?: return report("failed", message = AppText.s(R.string.sy_cannot_read))
-            // Another phone's file under the same folder and name (WhatsApp, screenshots) is a different photo:
-            // this phone's file gets an id of its own, so neither replaces the other in the index or the backup.
-            // a clip brought down from the backup once got an id of its own here, as if it were another clip
-            if (!prefs.clipAliasesChecked) {
-                if (dropFalseClipAliases(local, solr)) {
-                    local = MediaScanner.scan(context, prefs.folders, cache.aliases(), com.opensolr.photos.media.ScanOptions.of(context))
-                        ?: return report("failed", message = AppText.s(R.string.sy_cannot_read))
-                }
-                prefs.clipAliasesChecked = true
-            }
-            val seenBefore = cache.seenIds()
-            if (adoptCopies(local, seenBefore)) {
-                local = MediaScanner.scan(context, prefs.folders, cache.aliases(), com.opensolr.photos.media.ScanOptions.of(context))
-                    ?: return report("failed", message = AppText.s(R.string.sy_cannot_read))
-            }
-            val clashes = local.values.filter { it.id !in seenBefore && it.page <= 1 }.mapNotNull { photo ->
-                val doc = cache.doc(photo.id) ?: return@mapNotNull null
-                if (sameFile(doc, photo)) null else photo
-            }
-            if (clashes.isNotEmpty()) {
-                val device = com.opensolr.photos.auth.AuthFlow.deviceId(context)
-                for (photo in clashes) {
-                    val fileId = photo.parentId ?: photo.id
-                    val ownFile = MediaScanner.photoId(MediaScanner.folderKey(photo.folder) + photo.fileName + "@" + device)
-                    if (photo.parentId == null) cache.putAlias(photo.id, ownFile)
-                    else for (n in 1..photo.pages) cache.putAlias(MediaScanner.pageId(fileId, n), MediaScanner.pageId(ownFile, n))
-                }
-                local = MediaScanner.scan(context, prefs.folders, cache.aliases(), com.opensolr.photos.media.ScanOptions.of(context))
-                    ?: return report("failed", message = AppText.s(R.string.sy_cannot_read))
-            }
-            // items deleted on any device: a file of theirs still here (waiting for the owner's yes) is never indexed
-            // again; a file of that name written well after the deletion is a new item
-            val dead = cache.deletedAmong(local.keys)
-            if (dead.isNotEmpty()) {
-                val renewed = dead.filter { (id, at) -> (local[id]?.modifiedSec ?: 0L) * 1000L > at + 60_000L }.keys
-                if (renewed.isNotEmpty()) cache.forgetDeleted(renewed)
-                local = local.filterKeys { it !in dead || it in renewed }
-            }
+            var local = settledFiles(solr) ?: return report("failed", message = AppText.s(R.string.sy_cannot_read))
             localCount = local.size
             onPhone = local.keys
 
@@ -288,19 +248,10 @@ class SyncEngine(private val context: Context) {
             // prefs.restoreFromClone) is filled again from it, and no photo is sent again.
             var refill = false
             if (rebuild) {
-                // the clone is read before the index goes, so the index comes back from it and nothing is sent again
-                if (edits.cloneMissing()) {
-                    onProgress(Progress(AppText.s(R.string.sy_reading_once), 0, 0))
-                    withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { edits.readIndexIntoCache() }
-                    migrateIds()
-                }
-                onProgress(Progress(AppText.s(R.string.sy_resetting), 0, 0))
-                solr.deleteAll()
-                prefs.restoreAfter = ""
-                indexes.applyConfig(session, connection) { onProgress(Progress(it, 0, 0)) }
-                noteIndexChecked(connection)
-                prefs.rebuildApproved = false
-                refill = cache.docCount() > 0
+                val emptied = emptyForRebuild(session, connection, onProgress)
+                connection = emptied.first
+                solr = SolrClient(connection)
+                refill = emptied.second
             }
             if (prefs.restoreFromClone) refill = true
             if (refill) {
@@ -312,19 +263,7 @@ class SyncEngine(private val context: Context) {
             }
             val rebuilt = rebuild && !refill
 
-            // 3.23.0 reads more kinds of clips: what an earlier version could not read is tried once again
-            val sp = context.getSharedPreferences("opensolr_photos", Context.MODE_PRIVATE)
-            if (!sp.getBoolean("skipped_retry_3232", false)) {
-                cache.skipped().forEach { cache.clearSkipped(it.id) }
-                sp.edit().putBoolean("skipped_retry_3232", true).apply()
-            }
-            // clips indexed without picture, length or date (Android could not read them) are read once more:
-            // the app now reads such files itself
-            if (!sp.getBoolean("noread_retry_3240", false)) {
-                val unread = cache.docIdsWhere("json LIKE '%\"no_picture_b\":true%'")
-                if (unread.isNotEmpty()) prefs.resyncIds = prefs.resyncIds + unread
-                sp.edit().putBoolean("noread_retry_3240", true).apply()
-            }
+            retryOnce()
             val forced = prefs.resyncIds
             val wordingReset = prefs.wordingResetIds
             forced.forEach { cache.clearWordRetry(it); cache.clearSkipped(it) }
@@ -497,112 +436,15 @@ class SyncEngine(private val context: Context) {
             var indexedIds: Set<String> = emptySet()
             var indexShort = ""
             if (!rebuilt) {
-                if (edits.cloneMissing()) {
-                    onProgress(Progress(AppText.s(R.string.sy_reading_once), 0, 0))
-                    withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { edits.readIndexIntoCache() }
-                    migrateIds()
-                }
-                // the index against the clone: an emptied index is filled back from the clone, a short one is reported
-                val inClone = cache.docCount() + cache.parkedCount() - cache.deletedDocCount()
-                val inIndex = withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { solr.count() }
-                if (inIndex == 0L && inClone > 0) {
-                    prefs.restoreFromClone = true
-                    prefs.restoreAfter = ""
-                    withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { restoreFromClone(session, connection, onProgress) }
-                    prefs.restoreFromClone = false
-                } else if (inIndex < inClone) {
-                    val left = inClone - dropGhosts(solr, local.keys)
-                    if (inIndex < left) indexShort = AppText.s(R.string.sy_index_short, Actions.formatCount(inIndex), Actions.formatCount(left.toLong()))
-                }
-                // a folder added back brings its kept photos back as they were: nothing is read again
-                val roots = com.opensolr.photos.search.SearchFilters.folderRoots(prefs.folders)
-                cache.unparkInside(roots)
-                cache.parkOutside(roots)
-                dropGoneParked(solr)
-                val known = cache.docSizes()
-                indexedIds = known.keys
-                indexCount = known.size
-                onProgress(Progress(AppText.s(R.string.sy_comparing), 0, 0))
-
-                // many photos gone at once is a phone that cannot see them, not an owner who deleted them:
-                // they stay in the index until the owner says otherwise on the Sync screen
-                // a photo the storage backend holds (restored as a 720 px copy, or about to be) is not missing
-                val cloud = cache.cloudIds() + cache.remoteIds()
-                // only a file this phone once had can be missing here; what other phones indexed is theirs
-                val seen = cache.seenIds()
-                val missing = known.keys.filter { it !in local && it !in cloud && it in seen }
-                if (missing.size * 2 > known.size && !prefs.removeMissingApproved) {
-                    prefs.missingHeld = missing.size
-                    shortAllowance = AppText.s(R.string.sy_missing_many, Actions.formatCount(missing.size.toLong()))
-                } else {
-                    prefs.missingHeld = 0
-                    prefs.removeMissingApproved = false
-                    toDelete += missing
-                }
-
-                // a backed-up photo moved or renamed on this phone: the very same file (same md5) under a new name.
-                // The old entry goes everywhere, as a deletion (index, backend, the other phones), and what the owner
-                // put on it goes to the new name, which is read and backed up as a new photo: no duplicate is left.
-                val keptHere = cache.cloudIds()
-                val strays = known.keys.filter { it !in local && it in cloud && it in seen && it !in keptHere }
-                if (strays.isNotEmpty()) {
-                    val moved = movedTo(strays, local.values.filter { it.id !in known })
-                    if (moved.isNotEmpty()) {
-                        carryOver(moved, local.values.filter { it.id !in known })
-                        moved.chunked(500).forEach { batch -> solr.delete(batch) }
-                        // the other phones hear of it only once the new name is in the index, so each keeps its
-                        // own file of the item under that name
-                        com.opensolr.photos.storage.Deletions.deletedHere(context, moved, tell = false)
-                        movedAway = true
-                        deleted += moved.size
-                    }
-                }
-
-                val waiting = cache.wordRetriesWaiting(System.currentTimeMillis())
-
-                val toIndex = ArrayList<String>()
-                val needWords = if (!aiAvailable) emptySet() else cache.docsWithoutWords().toSet() - waiting
-                val reread = if (rereadSince > 0) cache.docsIndexedBefore(rereadSince).toSet() else emptySet()
-                // a known photo whose clone entry points at another phone's file (or an old MediaStore row) takes
-                // this phone's id and path, in the clone only: the shared index is never rewritten for it
-                val where = cache.docMedia()
-                val remoteNow = cache.remoteIds()
-
-                local.values.forEach { photo ->
-                    val stamp = known[photo.id]
-                    if (stamp != null) {
-                        val was = where[photo.id]
-                        if (was != null && (was.first != photo.mediaId || was.second != photo.absolutePath)) {
-                            cache.relocateDoc(photo.id, photo.mediaId, photo.absolutePath)
-                        }
-                    }
-
-                    val changed = stamp == null || stamp.first != photo.sizeBytes ||
-                        (stamp.second > 0 && stamp.second != photo.modifiedSec)
-                    if (changed && stamp != null) {
-                        // the file changed: the same picture (its pixels) means only the metadata did, and a photo
-                        // is sent again only when the picture itself changed
-                        val now = PhotoReader.fileMd5(context, photo)
-                        if (now != null) weighed[photo.id] = now
-                        val wasPixels = cache.doc(photo.id)?.json?.let { runCatching { org.json.JSONObject(it).optString("pixel_hash") }.getOrNull() }?.ifBlank { null }
-                        val nowPixels = if (wasPixels == null) null else PhotoReader.pixelHash(context, photo.uri)
-                        val samePicture = (cache.docFileHash(photo.id)?.let { it == now } ?: false) || (wasPixels != null && wasPixels == nowPixels)
-                        if (samePicture) {
-                            cache.updateDocSize(photo.id, photo.sizeBytes, photo.modifiedSec, now)
-                            if (wasPixels != null) takeWordsFromFile(photo)
-                            if (photo.id !in forced && photo.id !in needWords && photo.id !in reread) return@forEach
-                        } else if (photo.id in remoteNow) {
-                            // the picture itself changed (an edit): the backup's full copy and 720 px copy are sent again
-                            com.opensolr.photos.storage.Changed.mark(context, listOf(photo.id))
-                            cache.removeRemote(listOf(photo.id))
-                        }
-                    }
-                    if (changed || photo.id in forced || photo.id in needWords || photo.id in reread) {
-                        toIndex += photo.id
-                    }
-                }
-
-                cache.queueActions(toIndex, PhotoCache.ACTION_INDEX)
+                val checkedIndex = indexAgainstClone(session, connection, local.keys, onProgress)
+                connection = checkedIndex.first
+                solr = SolrClient(connection)
+                indexShort = checkedIndex.second
+                val compared = compare(solr, local, aiAvailable, rereadSince, forced, weighed, onProgress)
+                indexedIds = compared.known
+                indexCount = compared.known.size
+                toDelete += compared.gone
+                if (compared.moved > 0) { movedAway = true; deleted += compared.moved }
             } else {
                 indexCount = 0
 
@@ -659,17 +501,7 @@ class SyncEngine(private val context: Context) {
             cache.removeAllExcept(local.keys)
             cache.keepSkippedOnly(local.keys)
             refreshAccount(session, connection)
-            var message = ""
-            if (indexShort.isNotEmpty()) message = indexShort
-            else if (shortAllowance.isNotEmpty()) message = shortAllowance
-            else if (withoutWords > 0) {
-
-                val n = AppText.p(R.plurals.sy_n_photos, withoutWords, Actions.formatCount(withoutWords.toLong()))
-                message = if (!vectorAllowed)
-                    AppText.s(R.string.sy_no_recognition, n)
-                else
-                    AppText.s(R.string.sy_no_words, n)
-            }
+            val message = endMessage(indexShort, vectorAllowed)
             val indexAfter = cache.docCount()
             cache.addSeen(local.keys)
             prefs.folderStamp = foldersBefore
@@ -723,6 +555,228 @@ class SyncEngine(private val context: Context) {
             runCatching { reader?.close() }
             reader = null
         }
+    }
+
+    /**
+     * The files of the chosen folders, with what settles which item each one is: a clip once given an id of its own,
+     * a copy of an item the library holds, a file that only shares its name with another phone's, and the files of
+     * items deleted elsewhere. Null when Android does not answer.
+     */
+    private suspend fun settledFiles(solr: SolrClient): Map<String, LocalPhoto>? {
+        // Android not answering is not "no photos": nothing is compared, nothing is removed
+        var local = MediaScanner.scan(context, prefs.folders, cache.aliases(), com.opensolr.photos.media.ScanOptions.of(context))
+            ?: return null
+        // Another phone's file under the same folder and name (WhatsApp, screenshots) is a different photo:
+        // this phone's file gets an id of its own, so neither replaces the other in the index or the backup.
+        // a clip brought down from the backup once got an id of its own here, as if it were another clip
+        if (!prefs.clipAliasesChecked) {
+            if (dropFalseClipAliases(local, solr)) {
+                local = MediaScanner.scan(context, prefs.folders, cache.aliases(), com.opensolr.photos.media.ScanOptions.of(context))
+                    ?: return null
+            }
+            prefs.clipAliasesChecked = true
+        }
+        val seenBefore = cache.seenIds()
+        if (adoptCopies(local, seenBefore)) {
+            local = MediaScanner.scan(context, prefs.folders, cache.aliases(), com.opensolr.photos.media.ScanOptions.of(context))
+                ?: return null
+        }
+        val clashes = local.values.filter { it.id !in seenBefore && it.page <= 1 }.mapNotNull { photo ->
+            val doc = cache.doc(photo.id) ?: return@mapNotNull null
+            if (sameFile(doc, photo)) null else photo
+        }
+        if (clashes.isNotEmpty()) {
+            val device = com.opensolr.photos.auth.AuthFlow.deviceId(context)
+            for (photo in clashes) {
+                val fileId = photo.parentId ?: photo.id
+                val ownFile = MediaScanner.photoId(MediaScanner.folderKey(photo.folder) + photo.fileName + "@" + device)
+                if (photo.parentId == null) cache.putAlias(photo.id, ownFile)
+                else for (n in 1..photo.pages) cache.putAlias(MediaScanner.pageId(fileId, n), MediaScanner.pageId(ownFile, n))
+            }
+            local = MediaScanner.scan(context, prefs.folders, cache.aliases(), com.opensolr.photos.media.ScanOptions.of(context))
+                ?: return null
+        }
+        // items deleted on any device: a file of theirs still here (waiting for the owner's yes) is never indexed
+        // again; a file of that name written well after the deletion is a new item
+        val dead = cache.deletedAmong(local.keys)
+        if (dead.isNotEmpty()) {
+            val renewed = dead.filter { (id, at) -> (local[id]?.modifiedSec ?: 0L) * 1000L > at + 60_000L }.keys
+            if (renewed.isNotEmpty()) cache.forgetDeleted(renewed)
+            local = local.filterKeys { it !in dead || it in renewed }
+        }
+        return local
+    }
+
+    // What an earlier version could not read is tried once again, once.
+    private fun retryOnce() {
+        // 3.23.0 reads more kinds of clips: what an earlier version could not read is tried once again
+        val sp = context.getSharedPreferences("opensolr_photos", Context.MODE_PRIVATE)
+        if (!sp.getBoolean("skipped_retry_3232", false)) {
+            cache.skipped().forEach { cache.clearSkipped(it.id) }
+            sp.edit().putBoolean("skipped_retry_3232", true).apply()
+        }
+        // clips indexed without picture, length or date (Android could not read them) are read once more:
+        // the app now reads such files itself
+        if (!sp.getBoolean("noread_retry_3240", false)) {
+            val unread = cache.docIdsWhere("json LIKE '%\"no_picture_b\":true%'")
+            if (unread.isNotEmpty()) prefs.resyncIds = prefs.resyncIds + unread
+            sp.edit().putBoolean("noread_retry_3240", true).apply()
+        }
+    }
+
+    private fun endMessage(indexShort: String, vectorAllowed: Boolean): String = when {
+        indexShort.isNotEmpty() -> indexShort
+        shortAllowance.isNotEmpty() -> shortAllowance
+        withoutWords > 0 -> {
+            val n = AppText.p(R.plurals.sy_n_photos, withoutWords, Actions.formatCount(withoutWords.toLong()))
+            if (!vectorAllowed) AppText.s(R.string.sy_no_recognition, n) else AppText.s(R.string.sy_no_words, n)
+        }
+        else -> ""
+    }
+
+    /** A rebuild: the clone is read first when it is missing, then the index is emptied and given its configuration. The connection in use, and whether the clone has documents to put back. */
+    private suspend fun emptyForRebuild(session: Session, from: IndexConnection, onProgress: suspend (Progress) -> Unit): Pair<IndexConnection, Boolean> {
+        var connection = from
+        var solr = SolrClient(connection)
+        // the clone is read before the index goes, so the index comes back from it and nothing is sent again
+        if (edits.cloneMissing()) {
+            onProgress(Progress(AppText.s(R.string.sy_reading_once), 0, 0))
+            withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { edits.readIndexIntoCache() }
+            migrateIds()
+        }
+        onProgress(Progress(AppText.s(R.string.sy_resetting), 0, 0))
+        solr.deleteAll()
+        prefs.restoreAfter = ""
+        indexes.applyConfig(session, connection) { onProgress(Progress(it, 0, 0)) }
+        noteIndexChecked(connection)
+        prefs.rebuildApproved = false
+        return connection to (cache.docCount() > 0)
+    }
+
+    /** The index against the clone: an emptied index is filled back from the clone, a short one is reported. The connection in use, and what to say when the index is short. */
+    private suspend fun indexAgainstClone(session: Session, from: IndexConnection, onPhone: Set<String>, onProgress: suspend (Progress) -> Unit): Pair<IndexConnection, String> {
+        var connection = from
+        var solr = SolrClient(connection)
+        var indexShort = ""
+        if (edits.cloneMissing()) {
+            onProgress(Progress(AppText.s(R.string.sy_reading_once), 0, 0))
+            withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { edits.readIndexIntoCache() }
+            migrateIds()
+        }
+        val inClone = cache.docCount() + cache.parkedCount() - cache.deletedDocCount()
+        val inIndex = withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { solr.count() }
+        if (inIndex == 0L && inClone > 0) {
+            prefs.restoreFromClone = true
+            prefs.restoreAfter = ""
+            withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { restoreFromClone(session, connection, onProgress) }
+            prefs.restoreFromClone = false
+        } else if (inIndex < inClone) {
+            val left = inClone - dropGhosts(solr, onPhone)
+            if (inIndex < left) indexShort = AppText.s(R.string.sy_index_short, Actions.formatCount(inIndex), Actions.formatCount(left.toLong()))
+        }
+        return connection to indexShort
+    }
+
+    private class Compared(val known: Set<String>, val gone: List<String>, val moved: Int)
+
+    /**
+     * The files against what the index holds: what is gone from this phone, what moved to a new name (taken out as a
+     * deletion, its words carried over), and what is new or changed, queued to be read.
+     */
+    private suspend fun compare(
+        solr: SolrClient, local: Map<String, LocalPhoto>, aiAvailable: Boolean, rereadSince: Long, forced: Set<String>,
+        weighed: MutableMap<String, String>, onProgress: suspend (Progress) -> Unit,
+    ): Compared {
+        val gone = ArrayList<String>()
+        var movedCount = 0
+        // a folder added back brings its kept photos back as they were: nothing is read again
+        val roots = com.opensolr.photos.search.SearchFilters.folderRoots(prefs.folders)
+        cache.unparkInside(roots)
+        cache.parkOutside(roots)
+        dropGoneParked(solr)
+        val known = cache.docSizes()
+        
+        onProgress(Progress(AppText.s(R.string.sy_comparing), 0, 0))
+
+        // many photos gone at once is a phone that cannot see them, not an owner who deleted them:
+        // they stay in the index until the owner says otherwise on the Sync screen
+        // a photo the storage backend holds (restored as a 720 px copy, or about to be) is not missing
+        val cloud = cache.cloudIds() + cache.remoteIds()
+        // only a file this phone once had can be missing here; what other phones indexed is theirs
+        val seen = cache.seenIds()
+        val missing = known.keys.filter { it !in local && it !in cloud && it in seen }
+        if (missing.size * 2 > known.size && !prefs.removeMissingApproved) {
+            prefs.missingHeld = missing.size
+            shortAllowance = AppText.s(R.string.sy_missing_many, Actions.formatCount(missing.size.toLong()))
+        } else {
+            prefs.missingHeld = 0
+            prefs.removeMissingApproved = false
+            gone += missing
+        }
+
+        // a backed-up photo moved or renamed on this phone: the very same file (same md5) under a new name.
+        // The old entry goes everywhere, as a deletion (index, backend, the other phones), and what the owner
+        // put on it goes to the new name, which is read and backed up as a new photo: no duplicate is left.
+        val keptHere = cache.cloudIds()
+        val strays = known.keys.filter { it !in local && it in cloud && it in seen && it !in keptHere }
+        if (strays.isNotEmpty()) {
+            val moved = movedTo(strays, local.values.filter { it.id !in known })
+            if (moved.isNotEmpty()) {
+                carryOver(moved, local.values.filter { it.id !in known })
+                moved.chunked(500).forEach { batch -> solr.delete(batch) }
+                // the other phones hear of it only once the new name is in the index, so each keeps its
+                // own file of the item under that name
+                com.opensolr.photos.storage.Deletions.deletedHere(context, moved, tell = false)
+                movedCount += moved.size
+            }
+        }
+
+        val waiting = cache.wordRetriesWaiting(System.currentTimeMillis())
+
+        val toIndex = ArrayList<String>()
+        val needWords = if (!aiAvailable) emptySet() else cache.docsWithoutWords().toSet() - waiting
+        val reread = if (rereadSince > 0) cache.docsIndexedBefore(rereadSince).toSet() else emptySet()
+        // a known photo whose clone entry points at another phone's file (or an old MediaStore row) takes
+        // this phone's id and path, in the clone only: the shared index is never rewritten for it
+        val where = cache.docMedia()
+        val remoteNow = cache.remoteIds()
+
+        local.values.forEach { photo ->
+            val stamp = known[photo.id]
+            if (stamp != null) {
+                val was = where[photo.id]
+                if (was != null && (was.first != photo.mediaId || was.second != photo.absolutePath)) {
+                    cache.relocateDoc(photo.id, photo.mediaId, photo.absolutePath)
+                }
+            }
+
+            val changed = stamp == null || stamp.first != photo.sizeBytes ||
+                (stamp.second > 0 && stamp.second != photo.modifiedSec)
+            if (changed && stamp != null) {
+                // the file changed: the same picture (its pixels) means only the metadata did, and a photo
+                // is sent again only when the picture itself changed
+                val now = PhotoReader.fileMd5(context, photo)
+                if (now != null) weighed[photo.id] = now
+                val wasPixels = cache.doc(photo.id)?.json?.let { runCatching { org.json.JSONObject(it).optString("pixel_hash") }.getOrNull() }?.ifBlank { null }
+                val nowPixels = if (wasPixels == null) null else PhotoReader.pixelHash(context, photo.uri)
+                val samePicture = (cache.docFileHash(photo.id)?.let { it == now } ?: false) || (wasPixels != null && wasPixels == nowPixels)
+                if (samePicture) {
+                    cache.updateDocSize(photo.id, photo.sizeBytes, photo.modifiedSec, now)
+                    if (wasPixels != null) takeWordsFromFile(photo)
+                    if (photo.id !in forced && photo.id !in needWords && photo.id !in reread) return@forEach
+                } else if (photo.id in remoteNow) {
+                    // the picture itself changed (an edit): the backup's full copy and 720 px copy are sent again
+                    com.opensolr.photos.storage.Changed.mark(context, listOf(photo.id))
+                    cache.removeRemote(listOf(photo.id))
+                }
+            }
+            if (changed || photo.id in forced || photo.id in needWords || photo.id in reread) {
+                toIndex += photo.id
+            }
+        }
+
+        cache.queueActions(toIndex, PhotoCache.ACTION_INDEX)
+        return Compared(known.keys, gone, movedCount)
     }
 
     // the text reader of this run, loaded on the first photo that needs it
