@@ -630,6 +630,18 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         return out
     }
 
+    /** The documents whose file has one of [sizes]: size -> (id, path). One pass per 400 sizes, never per file. */
+    fun docsOfSizes(sizes: Collection<Long>): Map<Long, List<Pair<String, String>>> {
+        val out = HashMap<Long, MutableList<Pair<String, String>>>()
+        sizes.distinct().chunked(400).forEach { batch ->
+            val marks = batch.joinToString(",") { "?" }
+            readableDatabase.rawQuery("SELECT id, size_bytes, path FROM docs WHERE size_bytes IN ($marks)", batch.map { it.toString() }.toTypedArray()).use { c ->
+                while (c.moveToNext()) out.getOrPut(c.getLong(1)) { ArrayList() } += c.getString(0) to (if (c.isNull(2)) "" else c.getString(2))
+            }
+        }
+        return out
+    }
+
     fun parkedIds(): List<String> {
         val out = ArrayList<String>()
         readableDatabase.query("parked_docs", arrayOf("id"), null, null, null, null, null).use { c -> while (c.moveToNext()) out += c.getString(0) }

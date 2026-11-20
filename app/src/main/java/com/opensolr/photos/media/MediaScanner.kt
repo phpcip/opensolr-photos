@@ -368,6 +368,20 @@ object MediaScanner {
     /** A folder as the id is made of it: relative to the volume, no leading slash, one trailing slash. */
     fun folderKey(folder: String): String = normalizeFolder(folder)
 
+    private val copyMark = Regex("^(.*) \\(\\d+\\)(\\.[^./]+)?$")
+
+    /** The names [name] can be a copy of: "a (1) (2).pdf" gives "a (1).pdf", then "a.pdf". Empty when it carries no copy mark. */
+    fun copyOrigins(name: String): List<String> {
+        val out = ArrayList<String>(2)
+        var now = name
+        while (true) {
+            val m = copyMark.matchEntire(now) ?: break
+            now = m.groupValues[1] + m.groupValues[2]
+            out += now
+        }
+        return out
+    }
+
     private fun normalizeFolder(folder: String): String {
         val trimmed = folder.trim().trimStart('/')
         return if (trimmed.isEmpty() || trimmed.endsWith("/")) trimmed else "$trimmed/"

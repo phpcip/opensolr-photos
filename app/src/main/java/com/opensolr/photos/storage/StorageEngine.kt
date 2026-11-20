@@ -126,6 +126,7 @@ class StorageEngine(private val context: Context) {
             onProgress(Progress(AppText.s(R.string.stg_checking), 0, 0))
             dropPendingWrites()
             dropOwnDuplicates()
+            dropBackedUpCopies()
             // whatever runs cut short left behind on this phone
             Residue.sweep(context)
 
@@ -558,6 +559,47 @@ class StorageEngine(private val context: Context) {
                 if (r === kept || pathOf(r) in known) continue
                 val uri = android.content.ContentUris.withAppendedId(collection, r.id)
                 if (PhotoReader.fileMd5(context, uri) == keptMd5) runCatching { resolver.delete(uri, null, null) }
+            }
+        }
+    }
+
+    /**
+     * "name (1).ext" beside "name.ext", whoever wrote it (an earlier install of this app is another owner to
+     * Android): removed when it is byte for byte the file the backend holds for "name.ext" and that file is here.
+     * Only where every file can be seen; nothing that is an item of its own is touched.
+     */
+    private fun dropBackedUpCopies() {
+        if (!anyFolder() || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        val resolver = context.contentResolver
+        @Suppress("DEPRECATION")
+        val root = android.os.Environment.getExternalStorageDirectory().absolutePath.trimEnd('/') + "/"
+        data class Row(val folder: String, val name: String, val size: Long)
+        val rows = ArrayList<Row>()
+        runCatching {
+            resolver.query(MediaStore.Files.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY),
+                arrayOf(MediaStore.MediaColumns.RELATIVE_PATH, MediaStore.MediaColumns.DISPLAY_NAME, MediaStore.MediaColumns.SIZE),
+                "${MediaStore.MediaColumns.DISPLAY_NAME} LIKE ?", arrayOf("% (%)%"), null)?.use { c ->
+                while (c.moveToNext()) rows += Row(c.getString(0).orEmpty(), c.getString(1).orEmpty(), c.getLong(2))
+            }
+        }
+        for (r in rows) {
+            if (r.size <= 0) continue
+            val folder = MediaScanner.folderKey(r.folder)
+            val own = MediaScanner.photoId(folder + r.name)
+            // an item of its own (indexed or backed up under this very name) is never a copy
+            if (cache.remote(own) != null || cache.remote(MediaScanner.pageId(own, 1)) != null || cache.doc(own) != null || cache.doc(MediaScanner.pageId(own, 1)) != null) continue
+            for (origin in MediaScanner.copyOrigins(r.name)) {
+                val fileId = MediaScanner.photoId(folder + origin)
+                val held = cache.remote(fileId) ?: cache.remote(MediaScanner.pageId(fileId, 1)) ?: continue
+                val md5 = held.md5
+                if (held.bytes != r.size || md5.isNullOrBlank()) break
+                val original = File(root + folder + origin)
+                val copy = File(root + folder + r.name)
+                if (!original.isFile || original.length() != r.size || !copy.isFile) break
+                if (runCatching { md5Of(copy) }.getOrNull() == md5 && runCatching { md5Of(original) }.getOrNull() == md5) {
+                    if (copy.delete()) android.media.MediaScannerConnection.scanFile(context, arrayOf(copy.absolutePath), null, null)
+                }
+                break
             }
         }
     }

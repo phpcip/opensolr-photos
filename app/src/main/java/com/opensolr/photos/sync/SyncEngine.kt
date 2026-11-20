@@ -241,6 +241,10 @@ class SyncEngine(private val context: Context) {
                 prefs.clipAliasesChecked = true
             }
             val seenBefore = cache.seenIds()
+            if (adoptCopies(local, seenBefore)) {
+                local = MediaScanner.scan(context, prefs.folders, cache.aliases(), com.opensolr.photos.media.ScanOptions.of(context))
+                    ?: return report("failed", message = AppText.s(R.string.sy_cannot_read))
+            }
             val clashes = local.values.filter { it.id !in seenBefore && it.page <= 1 }.mapNotNull { photo ->
                 val doc = cache.doc(photo.id) ?: return@mapNotNull null
                 if (sameFile(doc, photo)) null else photo
@@ -777,6 +781,55 @@ class SyncEngine(private val context: Context) {
      * people, wording and place are given to the new name before it is read, so they are sent and written again.
      */
     /** Of [leaving], those whose file is on the phone under another name: same size and same md5 as one of [arriving]. */
+    /**
+     * A file here that is, byte for byte, an item the library already holds under another name or folder (a copy an
+     * earlier install brought down, "name (1)" beside "name", the same file kept where Android allowed it) is that
+     * item on this phone: it takes the item's id, so it is never indexed or backed up a second time. A file this
+     * phone itself once had under the item's own name is left to the moved-file rule. True when any was taken.
+     */
+    private fun adoptCopies(local: Map<String, LocalPhoto>, seen: Set<String>): Boolean {
+        val known = cache.docSizes()
+        val strangers = local.values.filter { it.page <= 1 && it.id !in known }
+        if (strangers.isEmpty()) return false
+        val bySize = cache.docsOfSizes(strangers.map { it.sizeBytes })
+        if (bySize.isEmpty()) return false
+        @Suppress("DEPRECATION")
+        val root = android.os.Environment.getExternalStorageDirectory().absolutePath.trimEnd('/') + "/"
+        var taken = false
+        for (photo in strangers) {
+            val rows = bySize[photo.sizeBytes] ?: continue
+            val names = HashSet<String>().apply { add(photo.fileName); addAll(MediaScanner.copyOrigins(photo.fileName)) }
+            val isPdf = photo.kind == com.opensolr.photos.media.Kind.PDF
+            val tried = HashSet<String>()
+            for ((rowId, path) in rows) {
+                val name = path.substringAfterLast('/')
+                if (name !in names || !tried.add(path)) continue
+                val folder = MediaScanner.folderKey(path.removePrefix(root).substringBeforeLast('/', ""))
+                // the item's own id: a page's file is known by the id of its first page
+                val fileId = if (isPdf) MediaScanner.photoId(folder + name) else rowId
+                val itemId = if (isPdf) MediaScanner.pageId(fileId, 1) else rowId
+                if (itemId == photo.id) continue
+                val doc = cache.doc(itemId) ?: continue
+                val here = itemId in local
+                // the item's own file was on this phone and is gone: a move or a rename, handled as such
+                if (!here && itemId in seen) continue
+                // the item's own file is here too: only a copy of it in its own folder is the same item
+                if (here && (name == photo.fileName || folder != MediaScanner.folderKey(photo.folder))) continue
+                if (!sameFile(doc, photo)) continue
+                if (isPdf) {
+                    val own = photo.parentId ?: continue
+                    cache.putAlias(own, fileId)
+                    for (n in 1..photo.pages) cache.putAlias(MediaScanner.pageId(own, n), MediaScanner.pageId(fileId, n))
+                } else {
+                    cache.putAlias(photo.id, itemId)
+                }
+                taken = true
+                break
+            }
+        }
+        return taken
+    }
+
     /**
      * Clone entries of items that are nowhere any more: not in the index, not a file of this phone, not held by
      * the backend, nothing of the owner's waiting on them. Only the clone entry goes. An index that cannot be
