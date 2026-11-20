@@ -621,9 +621,18 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
     }
 
     /** Videos and PDF pages that an older version brought back as 720 px copies: they come back as their files. */
-    fun cloudVideosAndPages(): List<String> {
+    fun cloudVideosAndPages(videos: Boolean, pages: Boolean): List<String> {
+        val kinds = listOfNotNull("video".takeIf { videos }, "pdf_page".takeIf { pages })
+        if (kinds.isEmpty()) return emptyList()
         val out = ArrayList<String>()
-        readableDatabase.rawQuery("SELECT c.id FROM cloud c INNER JOIN docs d ON d.id = c.id WHERE d.json LIKE '%\"kind_s\":\"video\"%' OR d.json LIKE '%\"kind_s\":\"pdf_page\"%'", null).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        val where = kinds.joinToString(" OR ") { "d.json LIKE ?" }
+        readableDatabase.rawQuery("SELECT c.id FROM cloud c INNER JOIN docs d ON d.id = c.id WHERE $where", kinds.map { "%\"kind_s\":\"$it\"%" }.toTypedArray()).use { c -> while (c.moveToNext()) out += c.getString(0) }
+        return out
+    }
+
+    fun parkedIds(): List<String> {
+        val out = ArrayList<String>()
+        readableDatabase.query("parked_docs", arrayOf("id"), null, null, null, null, null).use { c -> while (c.moveToNext()) out += c.getString(0) }
         return out
     }
 

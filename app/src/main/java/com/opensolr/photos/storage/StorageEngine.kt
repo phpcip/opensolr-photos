@@ -130,7 +130,12 @@ class StorageEngine(private val context: Context) {
             Residue.sweep(context)
 
             // videos and PDF pages an older version brought back as pictures come back as their files
-            val oldCopies = cache.cloudVideosAndPages()
+            // a file comes down on its own only where this phone can tell whether it is already here: a PDF another
+            // app (or an earlier install) wrote is hidden without access to every file, a clip without the clips
+            // permission. Where it cannot tell, the item stays a 720 px copy and Download brings the file when asked.
+            val clipFiles = anyFolder() || seesClips()
+            val pageFiles = anyFolder()
+            val oldCopies = cache.cloudVideosAndPages(clipFiles, pageFiles)
             oldCopies.forEach { id -> cache.removeCloud(id); CloudFiles.remove(context, id) }
 
             // the whole backed-up library is this phone's, whatever folders it syncs: hidden photos come back
@@ -192,7 +197,7 @@ class StorageEngine(private val context: Context) {
                     // videos and PDFs come back as the original file; photos as 720 px copies
                     val doc = cache.doc(remote.id)?.json?.let { runCatching { JSONObject(it) }.getOrNull() }
                     val kind = doc?.optString("kind_s").orEmpty()
-                    if (kind == "video" || kind == "pdf_page") {
+                    if ((kind == "video" && clipFiles) || (kind == "pdf_page" && pageFiles)) {
                         try {
                             downloadOriginal(backend, layout, remote.id)
                             restored++
@@ -648,6 +653,11 @@ class StorageEngine(private val context: Context) {
         }
         latch.await(10, java.util.concurrent.TimeUnit.SECONDS)
         return if (id > 0) id else MediaScanner.findByPath(context, path)?.mediaId ?: 0L
+    }
+
+    private fun seesClips(): Boolean {
+        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) android.Manifest.permission.READ_MEDIA_VIDEO else android.Manifest.permission.READ_EXTERNAL_STORAGE
+        return androidx.core.content.ContextCompat.checkSelfPermission(context, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED
     }
 
     private fun guard() {

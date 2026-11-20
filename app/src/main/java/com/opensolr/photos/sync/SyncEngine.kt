@@ -129,7 +129,10 @@ class SyncEngine(private val context: Context) {
         val doc = JSONObject(json)
         val folder = doc.optString("folder")
         val name = doc.optString("file_name")
-        if (name.isBlank()) null else MediaScanner.photoId(MediaScanner.folderKey(folder) + name)
+        // only an id made the old way (from the folder as Android wrote it) is moved: a PDF page, another phone's
+        // own copy of a name and a file sent from the web have ids of their own, and stay as they are
+        if (name.isBlank() || doc.optString("id") != MediaScanner.photoId(folder + name)) null
+        else MediaScanner.photoId(MediaScanner.folderKey(folder) + name)
     }.getOrNull()
 
     /** The clone moved to the path-inside-the-volume ids: once for what the phone holds, and after every read of an index. */
@@ -789,13 +792,15 @@ class SyncEngine(private val context: Context) {
             return 0
         }
         if (inIndex.isEmpty()) return 0
+        val parkedGone = cache.parkedIds().filter { it !in inIndex }
+        parkedGone.chunked(500).forEach { cache.dropParked(it) }
         val backed = cache.remoteIds()
         val absent = cache.docSizes().keys.filter { it !in inIndex && it !in onPhone && it !in backed }
-        if (absent.isEmpty()) return 0
+        if (absent.isEmpty()) return parkedGone.size
         val waiting = cache.pendingAmong(absent)
         val ghosts = absent.filter { it !in waiting }
         ghosts.chunked(500).forEach { cache.removeDocs(it) }
-        return ghosts.size
+        return ghosts.size + parkedGone.size
     }
 
     private fun movedTo(leaving: Collection<String>, arriving: List<LocalPhoto>): List<String> {
