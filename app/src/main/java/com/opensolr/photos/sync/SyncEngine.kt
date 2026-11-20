@@ -425,7 +425,7 @@ class SyncEngine(private val context: Context) {
                                 added++
                                 cache.clearSkipped(item.photo.id)
 
-                                result.doc?.let { edits.storeDoc(item.photo.id, it) }
+                                result.doc?.let { edits.storeDoc(item.photo.id, it, ownPlace = true) }
                                 cache.clearActions(listOf(item.photo.id))
 
                                 if (item.photo.id in placed) cache.markPlacesSynced(listOf(item.photo.id))
@@ -499,7 +499,8 @@ class SyncEngine(private val context: Context) {
                     withFreshPassword(session, { connection = it; solr = SolrClient(it) }) { restoreFromClone(session, connection, onProgress) }
                     prefs.restoreFromClone = false
                 } else if (inIndex < inClone) {
-                    indexShort = AppText.s(R.string.sy_index_short, Actions.formatCount(inIndex), Actions.formatCount(inClone.toLong()))
+                    val left = inClone - dropGhosts(solr, local.keys)
+                    if (inIndex < left) indexShort = AppText.s(R.string.sy_index_short, Actions.formatCount(inIndex), Actions.formatCount(left.toLong()))
                 }
                 // a folder added back brings its kept photos back as they were: nothing is read again
                 val roots = com.opensolr.photos.search.SearchFilters.folderRoots(prefs.folders)
@@ -547,10 +548,9 @@ class SyncEngine(private val context: Context) {
                 val toIndex = ArrayList<String>()
                 val needWords = if (!aiAvailable) emptySet() else cache.docsWithoutWords().toSet() - waiting
                 val reread = if (rereadSince > 0) cache.docsIndexedBefore(rereadSince).toSet() else emptySet()
-                // a known photo whose document points at another phone's file (or an old MediaStore row): the
-                // document takes this phone's id and path, as data, with the next words batch
+                // a known photo whose clone entry points at another phone's file (or an old MediaStore row) takes
+                // this phone's id and path, in the clone only: the shared index is never rewritten for it
                 val where = cache.docMedia()
-                val relocated = ArrayList<String>()
                 val remoteNow = cache.remoteIds()
 
                 local.values.forEach { photo ->
@@ -559,7 +559,6 @@ class SyncEngine(private val context: Context) {
                         val was = where[photo.id]
                         if (was != null && (was.first != photo.mediaId || was.second != photo.absolutePath)) {
                             cache.relocateDoc(photo.id, photo.mediaId, photo.absolutePath)
-                            relocated += photo.id
                         }
                     }
 
@@ -589,7 +588,6 @@ class SyncEngine(private val context: Context) {
                 }
 
                 cache.queueActions(toIndex, PhotoCache.ACTION_INDEX)
-                cache.queueActions(relocated.filter { it !in toIndex }, PhotoCache.ACTION_WORDS)
             } else {
                 indexCount = 0
 
@@ -776,6 +774,30 @@ class SyncEngine(private val context: Context) {
      * people, wording and place are given to the new name before it is read, so they are sent and written again.
      */
     /** Of [leaving], those whose file is on the phone under another name: same size and same md5 as one of [arriving]. */
+    /**
+     * Clone entries of items that are nowhere any more: not in the index, not a file of this phone, not held by
+     * the backend, nothing of the owner's waiting on them. Only the clone entry goes. An index that cannot be
+     * walked whole changes nothing. Returns how many went.
+     */
+    private suspend fun dropGhosts(solr: SolrClient, onPhone: Set<String>): Int {
+        val inIndex = HashSet<String>()
+        try {
+            solr.forEachDoc("id", pageSize = 10000) { d -> d.optString("id").takeIf { it.isNotEmpty() }?.let { inIndex += it } }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return 0
+        }
+        if (inIndex.isEmpty()) return 0
+        val backed = cache.remoteIds()
+        val absent = cache.docSizes().keys.filter { it !in inIndex && it !in onPhone && it !in backed }
+        if (absent.isEmpty()) return 0
+        val waiting = cache.pendingAmong(absent)
+        val ghosts = absent.filter { it !in waiting }
+        ghosts.chunked(500).forEach { cache.removeDocs(it) }
+        return ghosts.size
+    }
+
     private fun movedTo(leaving: Collection<String>, arriving: List<LocalPhoto>): List<String> {
         if (arriving.isEmpty()) return emptyList()
         val byHash = HashMap<String, String>()

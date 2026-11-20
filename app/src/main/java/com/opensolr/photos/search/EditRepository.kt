@@ -142,9 +142,6 @@ class EditRepository(private val context: Context) {
                     location = places[id]?.let { it.lat to it.lon },
                     // the faces travel with the words: a name put on one changes both
                     faces = cache.facesForIndex(id, doc?.sizeBytes ?: 0L),
-                    // where the file is on this phone, so another phone's document opens here
-                    mediaId = doc?.json?.let { runCatching { JSONObject(it).optLong("media_id", 0L) }.getOrNull() }?.takeIf { it > 0 },
-                    path = doc?.json?.let { runCatching { JSONObject(it).optString("path") }.getOrNull() }?.takeIf { it.isNotBlank() },
                 )
             }
             val results = api.photosWords(session, connection.indexName, items)
@@ -215,7 +212,7 @@ class EditRepository(private val context: Context) {
         }
     }
 
-    fun storeDoc(id: String, answered: JSONObject, indexedAt: Long = System.currentTimeMillis()) {
+    fun storeDoc(id: String, answered: JSONObject, indexedAt: Long = System.currentTimeMillis(), ownPlace: Boolean = false) {
         // the document alone is kept: what the server said about the call travels no further
         val answer = JSONObject(answered.toString()).apply { PhotoCache.ANSWER_KEYS.forEach { remove(it) } }
         // the faces the index keeps for this photo: taken as they are when this phone has none for this file
@@ -253,7 +250,8 @@ class EditRepository(private val context: Context) {
                 modified = modified ?: had?.modified ?: 0L,
                 embedModel = answer.optString("embed_model").ifBlank { null },
                 fileHash = answer.optString("file_hash").ifBlank { null },
-            )
+            ),
+            ownPlace,
         )
     }
 

@@ -65,6 +65,11 @@ class StorageEngine(private val context: Context) {
             kotlin.run {
                 val sp = context.getSharedPreferences("opensolr_photos", Context.MODE_PRIVATE)
                 val known = runCatching { JSONObject(sp.getString("manifest_sizes", "{}") ?: "{}") }.getOrDefault(JSONObject())
+                // once: rows earlier versions kept after another device's manifest stopped listing them are swept
+                if (!sp.getBoolean("manifest_sweep_3350", false)) {
+                    prefs.manifestsReadAt = 0L
+                    sp.edit().putBoolean("manifest_sweep_3350", true).apply()
+                }
                 val names = backend.list(layout.home).filter { it.startsWith("manifest-") && it.endsWith(".jsonl") }
                 val sizes = names.associateWith { backend.stat(layout.home + "/" + it) ?: -1L }
                 val full = prefs.manifestsReadAt == 0L || System.currentTimeMillis() - prefs.manifestsReadAt > MANIFEST_MAX_AGE_MS
@@ -72,7 +77,7 @@ class StorageEngine(private val context: Context) {
                 val changed = if (full) names else names.filter { it != own && sizes[it] != known.optLong(it, -2L) }
                 if (changed.isNotEmpty()) {
                     onProgress(Progress(AppText.s(R.string.stg_reading_manifests), 0, 0))
-                    readManifests(backend, layout, changed)
+                    readManifests(backend, layout, changed, device)
                     sp.edit().putString("manifest_sizes", JSONObject(sizes as Map<*, *>).toString()).apply()
                     if (full) prefs.manifestsReadAt = System.currentTimeMillis()
                 }
@@ -336,17 +341,19 @@ class StorageEngine(private val context: Context) {
     }
 
     /** Every manifest in the index's folder read into the clone, line by line. */
-    private fun readManifests(backend: Backend, layout: Layout, names: List<String>) {
+    private fun readManifests(backend: Backend, layout: Layout, names: List<String>, own: String) {
         val tmp = File.createTempFile("manifest", ".jsonl", context.cacheDir)
         try {
             for (name in names) {
                 val device = name.removePrefix("manifest-").removeSuffix(".jsonl")
                 tmp.outputStream().use { backend.get(layout.home + "/" + name, it) }
                 val rows = ArrayList<PhotoCache.Remote>(500)
+                val listed = HashSet<String>()
                 tmp.bufferedReader().useLines { lines ->
                     for (line in lines) {
                         val row = parseLine(line, device) ?: continue
                         rows += row
+                        listed += row.id
                         if (rows.size >= 500) {
                             putLive(rows)
                             rows.clear()
@@ -354,6 +361,9 @@ class StorageEngine(private val context: Context) {
                     }
                 }
                 putLive(rows)
+                // read whole: what another device's manifest stopped listing is no longer held by the backend.
+                // This phone's own rows are the source of its manifest, never the other way round.
+                if (device != own) cache.keepRemoteOfDevice(device, listed)
             }
         } finally {
             tmp.delete()

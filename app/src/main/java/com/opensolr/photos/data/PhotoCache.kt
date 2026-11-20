@@ -547,7 +547,12 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         val labels: List<String>? = null,
     )
 
-    fun putDoc(doc: Doc) {
+    /** [ownPlace]: the document was just read from this phone's file, so the place it names is this phone's. */
+    fun putDoc(doc: Doc, ownPlace: Boolean = false) {
+        // the index names the file's place on whichever phone wrote it: this phone's own place, once known, stays
+        val kept = if (ownPlace) null else readableDatabase.query("docs", arrayOf("media_id", "path"), "id = ?", arrayOf(doc.id), null, null, null, "1").use { c ->
+            if (c.moveToFirst() && c.getLong(0) > 0) c.getLong(0) to (if (c.isNull(1)) "" else c.getString(1)) else null
+        }
         val values = ContentValues().apply {
             put("id", doc.id)
             put("size_bytes", doc.sizeBytes)
@@ -570,8 +575,8 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
             if (doc.embedModel == null) putNull("embed_model") else put("embed_model", doc.embedModel)
             if (doc.fileHash == null) putNull("file_hash") else put("file_hash", doc.fileHash)
             val where = runCatching { org.json.JSONObject(doc.json ?: "{}") }.getOrNull()
-            put("media_id", where?.optLong("media_id", 0L) ?: 0L)
-            put("path", where?.optString("path").orEmpty())
+            put("media_id", kept?.first ?: where?.optLong("media_id", 0L) ?: 0L)
+            put("path", kept?.second ?: where?.optString("path").orEmpty())
         }
         writableDatabase.beginTransaction()
         try {
@@ -669,7 +674,7 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
         return out
     }
 
-    /** The file is here, under this id and path: the document (and its json, which travels to the index) says so now. */
+    /** The file is here, under this id and path: this phone's clone says so now; the index is not told. */
     fun relocateDoc(id: String, mediaId: Long, path: String) {
         val json = readableDatabase.query("docs", arrayOf("json"), "id = ?", arrayOf(id), null, null, null, "1").use { c ->
             if (c.moveToFirst() && !c.isNull(0)) c.getString(0) else null
@@ -703,6 +708,15 @@ class PhotoCache private constructor(context: Context) : SQLiteOpenHelper(contex
 
     fun remote(id: String): Remote? =
         readableDatabase.query("remote", REMOTE_COLUMNS, "id = ?", arrayOf(id), null, null, null, "1").use { c -> if (c.moveToFirst()) readRemote(c) else null }
+
+    /** The backend's rows of [device] that its manifest no longer lists are dropped: that device took them out. */
+    fun keepRemoteOfDevice(device: String, listed: Set<String>) {
+        val gone = ArrayList<String>()
+        readableDatabase.query("remote", arrayOf("id"), "device = ?", arrayOf(device), null, null, null).use { c ->
+            while (c.moveToNext()) c.getString(0).let { if (it !in listed) gone += it }
+        }
+        deleteByIds("remote", gone)
+    }
 
     fun remoteIds(): Set<String> {
         val out = HashSet<String>()

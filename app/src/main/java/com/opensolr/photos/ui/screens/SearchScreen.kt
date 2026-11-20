@@ -866,7 +866,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                         .fillMaxWidth()
                                         .padding(start = 8.dp + (row.level * 12).dp, end = 8.dp, top = if (row.level > 0) 5.dp else 10.dp, bottom = 5.dp)
                                         .glass(com.opensolr.photos.ui.ButtonShape, headingBand(row.level), p.hairline)
-                                        .padding(start = 8.dp, end = 10.dp, top = 9.dp, bottom = 9.dp),
+                                        .padding(start = 8.dp, end = 10.dp, top = 5.dp, bottom = 5.dp),
                                     verticalAlignment = Alignment.CenterVertically,
                                 ) {
                                     Spacer(Modifier.size(if (row.level > 0) 20.dp else 22.dp))
@@ -907,7 +907,7 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                         },
                                     )
 
-                                    .padding(start = 8.dp, end = 10.dp, top = 9.dp, bottom = 9.dp),
+                                    .padding(start = 8.dp, end = 10.dp, top = 5.dp, bottom = 5.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Icon(
@@ -934,10 +934,10 @@ fun SearchScreen(state: UiState, viewModel: AppViewModel) {
                                             tint = p.ink,
                                             modifier = Modifier
                                                 .padding(end = FAST_SCROLL_WIDTH)
-                                                .size(36.dp)
+                                                .size(32.dp)
                                                 .clip(Corner)
                                                 .clickable { Haptics.tap(view); albumLink = spec to row.title }
-                                                .padding(8.dp),
+                                                .padding(6.dp),
                                         )
                                     }
                                 }
@@ -2480,18 +2480,25 @@ private fun BoxScope.FastScroller(gridState: LazyGridState, rows: List<GridRow>)
             scrollJob = scope.launch { gridState.scrollToItem(target, into.roundToInt()) }
         }
 
-        Box(
+        // only the visible handle answers the finger; the rest of the edge belongs to the grid
+        if (dragging || alpha > 0f) Box(
             Modifier
-                .align(Alignment.CenterEnd)
-                .fillMaxHeight()
+                .align(Alignment.TopEnd)
+                .offset { IntOffset(0, (travelPx * fraction.value).roundToInt()) }
                 .width(com.opensolr.photos.ui.SCROLL_TRACK)
+                .height(FAST_SCROLL_THUMB)
                 .pointerInput(travelPx) {
+                    var fingerY = 0f
                     try {
                         detectVerticalDragGestures(
-                            onDragStart = { offset -> dragging = true; aimAt(offset.y) },
+                            onDragStart = { offset ->
+                                fingerY = travelPx * fraction.value + offset.y
+                                dragging = true
+                                aimAt(fingerY)
+                            },
                             onDragEnd = { dragging = false; aimed = -1 },
                             onDragCancel = { dragging = false; aimed = -1 },
-                            onVerticalDrag = { change, _ -> aimAt(change.position.y) },
+                            onVerticalDrag = { change, amount -> change.consume(); fingerY += amount; aimAt(fingerY) },
                         )
                     } finally {
 
@@ -3723,7 +3730,7 @@ private const val PANEL_MS = 180
 
 private const val SNAP_ROWS = 4
 
-private val HEADING_HEIGHTS = listOf(46.dp, 40.dp, 38.dp)
+private val HEADING_HEIGHTS = listOf(38.dp, 32.dp, 30.dp)
 
 private fun headingLabel(row: GridRow.Heading): String =
     row.text.substringBefore(" \u00b7 ").substringBefore(" (").trim().ifBlank { row.name }

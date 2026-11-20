@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -352,15 +353,30 @@ private fun androidx.compose.foundation.layout.BoxScope.GridScroller(state: andr
             val target = ((at * last).roundToInt() / columns) * columns
             scope.launch { state.scrollToItem(target) }
         }
-        Box(
-            Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(com.opensolr.photos.ui.SCROLL_TRACK).pointerInput(travelPx) {
-                detectVerticalDragGestures(
-                    onDragStart = { o -> dragging = true; com.opensolr.photos.ui.Haptics.tap(view); aimAt(o.y) },
-                    onDragEnd = { dragging = false },
-                    onDragCancel = { dragging = false },
-                    onVerticalDrag = { change, _ -> change.consume(); aimAt(change.position.y) },
-                )
-            },
+        val fractionNow by androidx.compose.runtime.rememberUpdatedState(fraction)
+        // only the visible handle answers the finger; the rest of the edge belongs to the grid
+        if (dragging || alpha > 0f) Box(
+            Modifier.align(Alignment.TopEnd)
+                .offset { androidx.compose.ui.unit.IntOffset(0, (travelPx * fractionNow).roundToInt()) }
+                .width(com.opensolr.photos.ui.SCROLL_TRACK).height(com.opensolr.photos.ui.SCROLL_THUMB_HEIGHT)
+                .pointerInput(travelPx) {
+                    var fingerY = 0f
+                    try {
+                        detectVerticalDragGestures(
+                            onDragStart = { o ->
+                                fingerY = travelPx * fractionNow + o.y
+                                dragging = true
+                                com.opensolr.photos.ui.Haptics.tap(view)
+                                aimAt(fingerY)
+                            },
+                            onDragEnd = { dragging = false },
+                            onDragCancel = { dragging = false },
+                            onVerticalDrag = { change, amount -> change.consume(); fingerY += amount; aimAt(fingerY) },
+                        )
+                    } finally {
+                        dragging = false
+                    }
+                },
         )
         com.opensolr.photos.ui.ScrollThumb(
             dragging, alpha,
