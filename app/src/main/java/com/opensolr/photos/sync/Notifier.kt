@@ -20,6 +20,9 @@ object Notifier {
     const val PROGRESS_ID = 1001
     const val STORAGE_ID = 1002
     private const val WAIT_WIFI_ID = 1003
+    const val SYNC_STATE_ID = 1004
+    const val STORAGE_STATE_ID = 1005
+    const val FACES_ID = 1006
     private const val ALERT_SIGN_IN = 2001
     private const val ALERT_LIMIT = 2002
     private const val ACCOUNT_URL = "https://opensolr.com/admin/solr_manager/dashboard"
@@ -36,17 +39,37 @@ object Notifier {
         )
     }
 
-    fun progress(context: Context, title: String, text: String, done: Int, total: Int, id: Int = PROGRESS_ID): Notification =
+    /** What a run is doing now; [steps] are the steps it went through, shown when the notification is opened out. */
+    fun progress(context: Context, title: String, text: String, done: Int, total: Int, id: Int = PROGRESS_ID, steps: List<String> = emptyList()): Notification =
         NotificationCompat.Builder(context, CHANNEL_SYNC)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(text)
+            .apply { if (steps.isNotEmpty()) setStyle(NotificationCompat.BigTextStyle().bigText((steps + text).joinToString("\n"))) }
             .setOnlyAlertOnce(true)
             .setOngoing(true)
             .setSilent(true)
             .setProgress(total, done, total <= 0)
             .setContentIntent(openApp(context, if (id == STORAGE_ID) MainActivity.DESTINATION_STORAGE else MainActivity.DESTINATION_SYNC))
             .build()
+
+    /** A run that is not at work: why it waits, why it was stopped, or that it was left alone. */
+    fun state(context: Context, id: Int, title: String, text: String, done: Int = 0, total: Int = 0) = post(
+        context, id,
+        NotificationCompat.Builder(context, CHANNEL_SYNC)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setAutoCancel(true)
+            .apply { if (total > 0) setProgress(total, done, false) }
+            .setContentIntent(openApp(context, if (id == STORAGE_STATE_ID) MainActivity.DESTINATION_STORAGE else MainActivity.DESTINATION_SYNC))
+            .build()
+    )
+
+    fun clearState(context: Context, id: Int) = NotificationManagerCompat.from(context).cancel(id)
 
     fun waitingWifi(context: Context) = post(
         context, WAIT_WIFI_ID,

@@ -23,35 +23,39 @@ import com.opensolr.photos.data.AppPrefs
 import com.opensolr.photos.sync.Notifier
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 class StorageWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
-    private var lastNotified = 0L
-    private var lastPhase = ""
+    private val notice by lazy { com.opensolr.photos.sync.RunNotice(this, AppText.s(R.string.stg_title), Notifier.STORAGE_ID, Notifier.STORAGE_STATE_ID) }
 
-    override suspend fun doWork(): Result {
+    // the work, with a watch beside it that speaks up in the notification when nothing moves
+    override suspend fun doWork(): Result = kotlinx.coroutines.coroutineScope {
+        val watch = launch { notice.watch() }
+        try { work() } finally { watch.cancel() }
+    }
+
+    private suspend fun work(): Result {
         val prefs = AppPrefs(applicationContext)
         if (prefs.storagePaused || prefs.session == null) return Result.success()
+        // stopped again and again: left alone, said once, never round and round
+        if (notice.triesUsedUp) { notice.gaveUp(); return Result.failure() }
         if (!running.compareAndSet(false, true)) return Result.success()
         stopRequested.set(false)
+        var ended = false
         try {
-            promote(AppText.s(R.string.stg_deletions), 0, 0)
+            notice.began()
+            notice.step(AppText.s(R.string.stg_deletions))
             runCatching { Deletions.push(applicationContext); Deletions.pull(applicationContext) }
             val report = StorageEngine(applicationContext).run { progress ->
                 setProgress(workDataOf(KEY_PHASE to progress.phase, KEY_DONE to progress.done, KEY_TOTAL to progress.total))
-                val now = System.currentTimeMillis()
-                // a new phase shows at once; counts within a phase at most every 1.5 s
-                if (progress.phase != lastPhase || now - lastNotified > 1500) {
-                    lastNotified = now
-                    lastPhase = progress.phase
-                    val text = if (progress.total > 0) "${progress.phase}: ${progress.done} of ${progress.total}" else progress.phase
-                    promote(text, progress.done, progress.total)
-                }
+                notice.step(progress.phase, progress.done, progress.total)
             }
             prefs.storageReport = report
-            promote(AppText.s(R.string.stg_checking), 0, 0)
+            ended = true
+            notice.step(AppText.s(R.string.stg_checking))
             runCatching { LocalFiles.refresh(applicationContext) }
             when (report.status) {
                 "waiting_battery" -> StorageScheduler.runLater(applicationContext, BATTERY_RETRY_MS)
@@ -61,26 +65,12 @@ class StorageWorker(context: Context, params: WorkerParameters) : CoroutineWorke
             return Result.success(workDataOf(KEY_STATUS to report.status))
         } finally {
             running.set(false)
+            // ended by the system, not by the owner and not by its own end: said, with the reason
+            if (!ended && isStopped && !stopRequested.get()) notice.stopped()
         }
     }
 
-    override suspend fun getForegroundInfo(): ForegroundInfo = foregroundInfo(AppText.s(R.string.stg_preparing), 0, 0)
-
-    private fun foregroundInfo(text: String, done: Int, total: Int): ForegroundInfo {
-        val notification = Notifier.progress(applicationContext, AppText.s(R.string.stg_title), text, done, total, id = Notifier.STORAGE_ID)
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ForegroundInfo(Notifier.STORAGE_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        } else {
-            ForegroundInfo(Notifier.STORAGE_ID, notification)
-        }
-    }
-
-    private suspend fun promote(text: String, done: Int, total: Int) {
-        try {
-            setForeground(foregroundInfo(text, done, total))
-        } catch (e: IllegalStateException) {
-        }
-    }
+    override suspend fun getForegroundInfo(): ForegroundInfo = notice.info(AppText.s(R.string.stg_preparing))
 
     companion object {
         const val KEY_PHASE = "phase"
@@ -97,7 +87,7 @@ class StorageWorker(context: Context, params: WorkerParameters) : CoroutineWorke
     }
 }
 
-data class StorageStatus(val running: Boolean, val queued: Boolean, val phase: String, val done: Int, val total: Int, val waiting: Boolean = false) {
+data class StorageStatus(val running: Boolean, val queued: Boolean, val phase: String, val done: Int, val total: Int, val waiting: Boolean = false, val attempt: Int = 0, val nextAt: Long = 0L) {
     val busy: Boolean get() = running || queued
 }
 
@@ -176,11 +166,14 @@ object StorageScheduler {
     fun status(context: Context): Flow<StorageStatus> =
         WorkManager.getInstance(context).getWorkInfosByTagFlow(TAG).combine(com.opensolr.photos.data.NetHold.held) { infos, held ->
             val running = infos.firstOrNull { it.state == WorkInfo.State.RUNNING }
-            val queuedNow = infos.any { it.state == WorkInfo.State.ENQUEUED && NOW in it.tags }
+            val waitingRun = infos.firstOrNull { it.state == WorkInfo.State.ENQUEUED && NOW in it.tags }
+            val queuedNow = waitingRun != null
             StorageStatus(
                 running = running != null,
                 queued = queuedNow && !held,
                 waiting = queuedNow && held,
+                attempt = waitingRun?.runAttemptCount ?: 0,
+                nextAt = waitingRun?.nextScheduleTimeMillis?.takeIf { it != Long.MAX_VALUE } ?: 0L,
                 phase = running?.progress?.getString(StorageWorker.KEY_PHASE) ?: "",
                 done = running?.progress?.getInt(StorageWorker.KEY_DONE, 0) ?: 0,
                 total = running?.progress?.getInt(StorageWorker.KEY_TOTAL, 0) ?: 0,

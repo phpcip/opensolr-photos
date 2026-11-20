@@ -49,6 +49,13 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         return if (inputData.getBoolean(SCAN_ALL, false)) scanAll(ctx, prefs, cache, edits, local.values) else learn(ctx, cache, edits, local.values)
     }
 
+    private var saidAt = 0L
+
+    private fun say(ctx: Context, done: Int, total: Int) = Notifier.state(
+        ctx, Notifier.FACES_ID, com.opensolr.photos.AppText.s(com.opensolr.photos.R.string.run_faces),
+        com.opensolr.photos.AppText.s(com.opensolr.photos.R.string.run_faces_text, com.opensolr.photos.ui.Actions.formatCount(done.toLong()), com.opensolr.photos.ui.Actions.formatCount(total.toLong())), done, total,
+    )
+
     private fun learn(ctx: Context, cache: PhotoCache, edits: EditRepository, photos: Collection<com.opensolr.photos.media.LocalPhoto>): Result {
         val undone = forgetGuesses(ctx, cache, edits)
         // people already on photos are put on their faces, on the phone only
@@ -88,11 +95,13 @@ class FaceWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                 done++
                 _progress.value = Progress(true, done, total)
                 setProgress(workDataOf(KEY_DONE to done, KEY_TOTAL to total))
+                val now = System.currentTimeMillis()
+                if (now - saidAt > 1500) { saidAt = now; say(ctx, done, total) }
             }
             SyncScheduler.runNow(ctx)
             return Result.success()
         } finally {
-            if (isStopped || done >= total) _progress.value = Progress(false, done, total)
+            if (isStopped || done >= total) { _progress.value = Progress(false, done, total); Notifier.clearState(ctx, Notifier.FACES_ID) } else say(ctx, done, total)
             if (!isStopped && done < total) SyncScheduler.runNow(ctx)
         }
     }

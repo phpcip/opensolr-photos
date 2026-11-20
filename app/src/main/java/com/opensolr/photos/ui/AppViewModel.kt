@@ -314,6 +314,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             SyncScheduler.status(context).collect { status ->
                 _state.update { it.copy(sync = status) }
                 if (status.waiting) com.opensolr.photos.sync.Notifier.waitingWifi(context)
+                sayWaiting(com.opensolr.photos.sync.Notifier.SYNC_STATE_ID, R.string.run_sync_waits, status.queued, status.running, status.attempt, status.nextAt)
                 if (wasBusy && !status.busy) onSyncFinished()
                 wasBusy = status.busy
                 // every batch the sync sends shows up in the list as it lands, not at the end
@@ -327,6 +328,7 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
             var lastStep = -1 to -1
             com.opensolr.photos.storage.StorageScheduler.status(context).collect { status ->
                 _state.update { it.copy(storageStatus = status) }
+                sayWaiting(com.opensolr.photos.sync.Notifier.STORAGE_STATE_ID, R.string.run_backup_waits, status.queued, status.running, status.attempt, status.nextAt)
                 if (wasBusy && !status.busy) onStorageFinished()
                 wasBusy = status.busy
                 val step = status.done to status.total
@@ -383,6 +385,24 @@ class AppViewModel(application: Application) : AndroidViewModel(application) {
                 // photos deleted before they were synced bring the folders back to where the last sync left them
                 noteIncoming()
             }
+        }
+    }
+
+    private val waitingSay = HashMap<Int, Job>()
+
+    // A run that waits longer than a moment says why in the notifications; one at work has its own, with every step.
+    private fun sayWaiting(id: Int, title: Int, queued: Boolean, running: Boolean, attempt: Int, nextAt: Long) {
+        waitingSay.remove(id)?.cancel()
+        if (running) { com.opensolr.photos.sync.Notifier.clearState(context, id); return }
+        if (!queued) return
+        waitingSay[id] = viewModelScope.launch {
+            kotlinx.coroutines.delay(2000)
+            val text = when {
+                !Actions.online(context) -> AppText.s(R.string.run_wait_net)
+                attempt > 0 && nextAt > 0 -> AppText.s(R.string.run_wait_retry, attempt.toString(), java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).format(java.util.Date(nextAt)))
+                else -> AppText.s(R.string.run_wait_start)
+            }
+            com.opensolr.photos.sync.Notifier.state(context, id, AppText.s(title), text)
         }
     }
 

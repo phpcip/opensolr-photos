@@ -24,6 +24,9 @@ data class SyncStatus(
     val done: Int,
     val total: Int,
     val waiting: Boolean = false,
+    // of the run that waits: how many times it was stopped or put off so far, and when it is due next
+    val attempt: Int = 0,
+    val nextAt: Long = 0L,
 ) {
 
     val busy: Boolean get() = running || queued
@@ -173,11 +176,14 @@ object SyncScheduler {
     fun status(context: Context): Flow<SyncStatus> =
         WorkManager.getInstance(context).getWorkInfosByTagFlow(TAG).combine(com.opensolr.photos.data.NetHold.held) { infos, held ->
             val running = infos.firstOrNull { it.state == WorkInfo.State.RUNNING }
-            val queuedNow = infos.any { it.state == WorkInfo.State.ENQUEUED && NOW in it.tags }
+            val waitingRun = infos.firstOrNull { it.state == WorkInfo.State.ENQUEUED && NOW in it.tags }
+            val queuedNow = waitingRun != null
             SyncStatus(
                 running = running != null,
                 queued = queuedNow && !held,
                 waiting = queuedNow && held,
+                attempt = waitingRun?.runAttemptCount ?: 0,
+                nextAt = waitingRun?.nextScheduleTimeMillis?.takeIf { it != Long.MAX_VALUE } ?: 0L,
                 phase = running?.progress?.getString(SyncWorker.KEY_PHASE) ?: "",
                 done = running?.progress?.getInt(SyncWorker.KEY_DONE, 0) ?: 0,
                 total = running?.progress?.getInt(SyncWorker.KEY_TOTAL, 0) ?: 0,

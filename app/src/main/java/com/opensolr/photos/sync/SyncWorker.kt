@@ -11,16 +11,26 @@ import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.opensolr.photos.data.AppPrefs
 import com.opensolr.photos.media.MediaScanner
+import kotlinx.coroutines.launch
 import java.util.concurrent.atomic.AtomicBoolean
 
 class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(context, params) {
 
-    private var lastNotified = 0L
+    private val notice by lazy { RunNotice(this, AppText.s(R.string.sy_syncing_photos), Notifier.PROGRESS_ID, Notifier.SYNC_STATE_ID) }
 
-    override suspend fun doWork(): Result {
+    // the work, with a watch beside it that speaks up in the notification when nothing moves
+    override suspend fun doWork(): Result = kotlinx.coroutines.coroutineScope {
+        val watch = launch { notice.watch() }
+        try { work() } finally { watch.cancel() }
+    }
+
+    private suspend fun work(): Result {
         if (AppPrefs(applicationContext).syncPaused) return Result.success()
+        // stopped again and again: left alone, said once, never round and round
+        if (notice.triesUsedUp) { notice.gaveUp(); return Result.failure() }
         if (!running.compareAndSet(false, true)) return Result.success()
         stopRequested.set(false)
+        var ended = false
         try {
             val prefs = AppPrefs(applicationContext)
             if (SyncScheduler.isWatchRun(tags)) {
@@ -40,28 +50,29 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
                 prefs.lastWatchSyncAt = System.currentTimeMillis()
             }
             Notifier.waitingWifiDone(applicationContext)
-            promote("Preparing", 0, 0)
+            notice.began()
+            notice.step(AppText.s(R.string.stg_preparing))
             // deletions first: this phone's are told to the account, the other devices' are removed here
+            notice.step(AppText.s(R.string.stg_deletions))
             runCatching { com.opensolr.photos.storage.Deletions.push(applicationContext); com.opensolr.photos.storage.Deletions.pull(applicationContext) }
             // and what the other devices changed in the index comes into this phone's copy before anything is sent
+            notice.step(AppText.s(R.string.run_other_devices))
             runCatching { com.opensolr.photos.search.IndexChanges.pull(applicationContext) }
             val report = SyncEngine(applicationContext).run { progress ->
                 setProgress(workDataOf(KEY_PHASE to progress.phase, KEY_DONE to progress.done, KEY_TOTAL to progress.total))
-                val now = System.currentTimeMillis()
-                if (now - lastNotified > 1500) {
-                    lastNotified = now
-                    val text = if (progress.total > 0) "${progress.phase}: ${progress.done} of ${progress.total}" else progress.phase
-                    promote(text, progress.done, progress.total)
-                }
+                notice.step(progress.phase, progress.done, progress.total)
             }
             prefs.lastReport = report
+            ended = true
 
-            if (report.status == "retry_later") return Result.retry()
+            if (report.status == "retry_later") { notice.retrying(report.message); return Result.retry() }
 
             if (report.status == "waiting_battery") SyncScheduler.runLater(applicationContext, SyncScheduler.BATTERY_RETRY_MS)
             return Result.success(workDataOf(KEY_STATUS to report.status))
         } finally {
             running.set(false)
+            // ended by the system, not by the owner and not by its own end: said, with the reason
+            if (!ended && isStopped && !stopRequested.get()) notice.stopped()
 
             if (AppPrefs(applicationContext).session != null) SyncScheduler.watchMedia(applicationContext)
             runCatching { com.opensolr.photos.storage.LocalFiles.refresh(applicationContext) }
@@ -76,23 +87,7 @@ class SyncWorker(context: Context, params: WorkerParameters) : CoroutineWorker(c
         MediaScanner.touchesFolders(applicationContext, triggeredContentUris, prefs.folders, prefs.folderStamp)
 
     // expedited runs on Android 11 and older start as a foreground service with this
-    override suspend fun getForegroundInfo(): ForegroundInfo = foregroundInfo("Preparing", 0, 0)
-
-    private fun foregroundInfo(text: String, done: Int, total: Int): ForegroundInfo {
-        val notification = Notifier.progress(applicationContext, AppText.s(R.string.sy_syncing_photos), text, done, total)
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            ForegroundInfo(Notifier.PROGRESS_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
-        } else {
-            ForegroundInfo(Notifier.PROGRESS_ID, notification)
-        }
-    }
-
-    private suspend fun promote(text: String, done: Int, total: Int) {
-        try {
-            setForeground(foregroundInfo(text, done, total))
-        } catch (e: IllegalStateException) {
-        }
-    }
+    override suspend fun getForegroundInfo(): ForegroundInfo = notice.info(AppText.s(R.string.stg_preparing))
 
     companion object {
         const val KEY_PHASE = "phase"

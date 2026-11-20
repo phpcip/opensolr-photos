@@ -508,6 +508,13 @@ object Actions {
         return if (level < 0 || scale <= 0) 100 else (level * 100 / scale)
     }
 
+    /** True when the phone has a network that reaches the internet. */
+    fun online(context: Context): Boolean {
+        val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return false
+        val caps = manager.getNetworkCapabilities(manager.activeNetwork ?: return false) ?: return false
+        return caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET) && caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+    }
+
     /** True on mobile data (or any network the phone counts as metered); false on Wi-Fi and when there is no network. */
     fun onMeteredNetwork(context: Context): Boolean {
         val manager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager ?: return false
